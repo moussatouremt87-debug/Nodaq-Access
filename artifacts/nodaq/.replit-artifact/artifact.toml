@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "NODAQ"
+description = "NODAQ — AI-powered business management platform for French SMEs. A cockpit for business owners featuring KPI dashboards with treasury charts, affaires/projects management, recurring contracts, invoice tracking, morning brief generation, AI chat agent, document classifier, and prospect CRM. Full fintech redesign with motion design."
+version = "1.0.0"
+id = "artifacts/nodaq"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 20306
+
+[services.development]
+run = "pnpm --filter @workspace/nodaq run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/nodaq", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/nodaq/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "20306"
+BASE_PATH = "/"

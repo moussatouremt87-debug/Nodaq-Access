@@ -3,20 +3,27 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: NODAQ API — AI-powered business management for French SMEs
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
-    description: Health operations
+  - name: cockpit
+  - name: affaires
+  - name: contrats
+  - name: factures
+  - name: prospects
+  - name: brief
+  - name: pending-actions
+  - name: chat
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,13 +31,1012 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ── Cockpit ─────────────────────────────────────────────────────────────
+  /cockpit/kpis:
+    get:
+      operationId: getCockpitKpis
+      tags: [cockpit]
+      summary: Dashboard KPIs
+      responses:
+        "200":
+          description: KPI snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CockpitKpis"
+
+  /cockpit/activity:
+    get:
+      operationId: getCockpitActivity
+      tags: [cockpit]
+      summary: Recent activity feed
+      responses:
+        "200":
+          description: Activity list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityItem"
+
+  # ── Affaires ─────────────────────────────────────────────────────────────
+  /affaires:
+    get:
+      operationId: listAffaires
+      tags: [affaires]
+      summary: List affaires
+      parameters:
+        - in: query
+          name: statut
+          schema:
+            type: string
+        - in: query
+          name: inclureArchivees
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: List of affaires
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AffaireList"
+    post:
+      operationId: createAffaire
+      tags: [affaires]
+      summary: Create an affaire
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AffaireInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Affaire"
+
+  /affaires/{id}:
+    get:
+      operationId: getAffaire
+      tags: [affaires]
+      summary: Get a single affaire
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Affaire detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Affaire"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateAffaire
+      tags: [affaires]
+      summary: Update an affaire
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AffaireUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Affaire"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteAffaire
+      tags: [affaires]
+      summary: Delete an affaire
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
+  /affaires/stats:
+    get:
+      operationId: getAffaireStats
+      tags: [affaires]
+      summary: Affaire pipeline stats by status
+      responses:
+        "200":
+          description: Pipeline breakdown
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AffaireStats"
+
+  # ── Contrats ──────────────────────────────────────────────────────────────
+  /contrats:
+    get:
+      operationId: listContrats
+      tags: [contrats]
+      summary: List recurring contracts
+      responses:
+        "200":
+          description: List of contrats
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Contrat"
+    post:
+      operationId: createContrat
+      tags: [contrats]
+      summary: Create a contrat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContratInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Contrat"
+
+  /contrats/{id}:
+    patch:
+      operationId: updateContrat
+      tags: [contrats]
+      summary: Update a contrat
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContratUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Contrat"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteContrat
+      tags: [contrats]
+      summary: Delete a contrat
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
+  # ── Factures / Invoices ───────────────────────────────────────────────────
+  /factures:
+    get:
+      operationId: listFactures
+      tags: [factures]
+      summary: List invoices
+      parameters:
+        - in: query
+          name: settled
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Invoice list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FactureList"
+    post:
+      operationId: createFacture
+      tags: [factures]
+      summary: Create an invoice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FactureInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Facture"
+
+  /factures/{id}:
+    patch:
+      operationId: updateFacture
+      tags: [factures]
+      summary: Update invoice (mark settled, etc.)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FactureUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Facture"
+        "404":
+          description: Not found
+
+  # ── Prospects ────────────────────────────────────────────────────────────
+  /prospects:
+    get:
+      operationId: listProspects
+      tags: [prospects]
+      summary: List prospects
+      parameters:
+        - in: query
+          name: stage
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of prospects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Prospect"
+    post:
+      operationId: createProspect
+      tags: [prospects]
+      summary: Create a prospect
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProspectInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Prospect"
+
+  /prospects/{id}:
+    patch:
+      operationId: updateProspect
+      tags: [prospects]
+      summary: Update a prospect
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProspectUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Prospect"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteProspect
+      tags: [prospects]
+      summary: Delete a prospect
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  # ── Brief matin ──────────────────────────────────────────────────────────
+  /brief:
+    get:
+      operationId: getBrief
+      tags: [brief]
+      summary: Get today's morning brief
+      responses:
+        "200":
+          description: Morning brief
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Brief"
+
+  # ── Pending actions ───────────────────────────────────────────────────────
+  /pending-actions:
+    get:
+      operationId: listPendingActions
+      tags: [pending-actions]
+      summary: List pending actions
+      responses:
+        "200":
+          description: List of pending actions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PendingAction"
+
+  /pending-actions/{id}/approve:
+    post:
+      operationId: approvePendingAction
+      tags: [pending-actions]
+      summary: Approve a pending action
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ActionDecision"
+      responses:
+        "200":
+          description: Approved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PendingAction"
+
+  /pending-actions/{id}/reject:
+    post:
+      operationId: rejectPendingAction
+      tags: [pending-actions]
+      summary: Reject a pending action
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ActionDecision"
+      responses:
+        "200":
+          description: Rejected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PendingAction"
+
+  # ── Chat ─────────────────────────────────────────────────────────────────
+  /chat/messages:
+    get:
+      operationId: getChatHistory
+      tags: [chat]
+      summary: Get chat history
+      parameters:
+        - in: query
+          name: conversationId
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Chat messages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatHistory"
+    post:
+      operationId: sendChatMessage
+      tags: [chat]
+      summary: Send a chat message to the AI agent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatMessageInput"
+      responses:
+        "200":
+          description: Agent reply
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatReply"
+
 components:
   schemas:
     HealthStatus:
       type: object
+      required: [status]
       properties:
         status:
           type: string
-      required:
-        - status
 
+    # ── Cockpit ──────────────────────────────────────────────────────────────
+    CockpitKpis:
+      type: object
+      required: [affairesEnCours, chiffreAffairesMois, facturesEnAttente, totalImpayeCents, prospectsPipeline, contratsActifs, pendingActionsCount]
+      properties:
+        affairesEnCours:
+          type: number
+        chiffreAffairesMois:
+          type: number
+          description: Revenue this month in cents
+        facturesEnAttente:
+          type: number
+        totalImpayeCents:
+          type: number
+          description: Total overdue in cents
+        prospectsPipeline:
+          type: number
+        contratsActifs:
+          type: number
+        pendingActionsCount:
+          type: number
+        treasuryBalanceCents:
+          type: ["number", "null"]
+        monthlySeries:
+          type: array
+          items:
+            $ref: "#/components/schemas/MonthlyRevenue"
+
+    MonthlyRevenue:
+      type: object
+      required: [month, revenueCents, invoiceCount]
+      properties:
+        month:
+          type: string
+          description: "YYYY-MM"
+        revenueCents:
+          type: number
+        invoiceCount:
+          type: number
+
+    ActivityItem:
+      type: object
+      required: [id, type, label, createdAt]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          description: "affaire_created | facture_paid | prospect_added | contrat_signed | action_approved"
+        label:
+          type: string
+        meta:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    # ── Affaires ──────────────────────────────────────────────────────────────
+    Affaire:
+      type: object
+      required: [id, label, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        reference:
+          type: ["string", "null"]
+        label:
+          type: string
+        clientName:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [PROSPECT, DEVIS_ENVOYE, ACCEPTEE, EN_COURS, TERMINEE, PERDUE, ARCHIVEE]
+        quotedAmountCents:
+          type: ["number", "null"]
+        invoicedAmountCents:
+          type: ["number", "null"]
+        marginCents:
+          type: ["number", "null"]
+        notes:
+          type: ["string", "null"]
+        startDate:
+          type: ["string", "null"]
+          format: date
+        completedAt:
+          type: ["string", "null"]
+          format: date
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AffaireList:
+      type: object
+      required: [affaires, total]
+      properties:
+        affaires:
+          type: array
+          items:
+            $ref: "#/components/schemas/Affaire"
+        total:
+          type: number
+        totalQuotedCents:
+          type: number
+
+    AffaireInput:
+      type: object
+      required: [label]
+      properties:
+        label:
+          type: string
+          minLength: 1
+        clientName:
+          type: string
+        quotedAmountCents:
+          type: number
+        status:
+          type: string
+        notes:
+          type: string
+        startDate:
+          type: string
+          format: date
+
+    AffaireUpdate:
+      type: object
+      properties:
+        label:
+          type: string
+          minLength: 1
+        clientName:
+          type: string
+        status:
+          type: string
+        quotedAmountCents:
+          type: number
+        invoicedAmountCents:
+          type: number
+        marginCents:
+          type: number
+        notes:
+          type: string
+        startDate:
+          type: string
+          format: date
+        completedAt:
+          type: string
+          format: date
+
+    AffaireStats:
+      type: object
+      required: [byStatus]
+      properties:
+        byStatus:
+          type: array
+          items:
+            $ref: "#/components/schemas/StatusCount"
+        totalPipelineValueCents:
+          type: number
+
+    StatusCount:
+      type: object
+      required: [status, count]
+      properties:
+        status:
+          type: string
+        count:
+          type: number
+        totalCents:
+          type: ["number", "null"]
+
+    # ── Contrats ──────────────────────────────────────────────────────────────
+    Contrat:
+      type: object
+      required: [id, label, cadence, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        clientName:
+          type: ["string", "null"]
+        cadence:
+          type: string
+          enum: [mensuel, trimestriel, semestriel, annuel]
+        amountCents:
+          type: ["number", "null"]
+        status:
+          type: string
+          enum: [ACTIF, SUSPENDU, TERMINE]
+        startDate:
+          type: ["string", "null"]
+          format: date
+        endDate:
+          type: ["string", "null"]
+          format: date
+        notes:
+          type: ["string", "null"]
+        nextOccurrenceDate:
+          type: ["string", "null"]
+          format: date
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ContratInput:
+      type: object
+      required: [label, cadence]
+      properties:
+        label:
+          type: string
+          minLength: 1
+        clientName:
+          type: string
+        cadence:
+          type: string
+          enum: [mensuel, trimestriel, semestriel, annuel]
+        amountCents:
+          type: number
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        notes:
+          type: string
+
+    ContratUpdate:
+      type: object
+      properties:
+        label:
+          type: string
+        clientName:
+          type: string
+        cadence:
+          type: string
+        amountCents:
+          type: number
+        status:
+          type: string
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        notes:
+          type: string
+
+    # ── Factures ──────────────────────────────────────────────────────────────
+    Facture:
+      type: object
+      required: [id, customerName, number, issuedDate, dueDate, amountCents, settled, createdAt]
+      properties:
+        id:
+          type: string
+        customerName:
+          type: string
+        number:
+          type: string
+        issuedDate:
+          type: string
+          format: date
+        dueDate:
+          type: string
+          format: date
+        amountCents:
+          type: number
+        residualCents:
+          type: number
+        settled:
+          type: boolean
+        affaireId:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    FactureList:
+      type: object
+      required: [factures, totalAmountCents, totalOverdueCents]
+      properties:
+        factures:
+          type: array
+          items:
+            $ref: "#/components/schemas/Facture"
+        totalAmountCents:
+          type: number
+        totalOverdueCents:
+          type: number
+
+    FactureInput:
+      type: object
+      required: [customerName, number, issuedDate, dueDate, amountCents]
+      properties:
+        customerName:
+          type: string
+          minLength: 1
+        number:
+          type: string
+          minLength: 1
+        issuedDate:
+          type: string
+          format: date
+        dueDate:
+          type: string
+          format: date
+        amountCents:
+          type: number
+        affaireId:
+          type: string
+
+    FactureUpdate:
+      type: object
+      properties:
+        settled:
+          type: boolean
+        residualCents:
+          type: number
+        affaireId:
+          type: string
+
+    # ── Prospects ────────────────────────────────────────────────────────────
+    Prospect:
+      type: object
+      required: [id, name, stage, source, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        companyName:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        stage:
+          type: string
+          enum: [NOUVEAU, CONTACTE, QUALIFIE, PROPOSE, NEGOCIE, GAGNE, PERDU]
+        source:
+          type: string
+          enum: [BOUCHE_A_OREILLE, LINKEDIN, SITE_WEB, PARTENAIRE, AUTRE]
+        estimatedValueCents:
+          type: ["number", "null"]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ProspectInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        companyName:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        stage:
+          type: string
+        source:
+          type: string
+        estimatedValueCents:
+          type: number
+        notes:
+          type: string
+
+    ProspectUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        companyName:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        stage:
+          type: string
+        source:
+          type: string
+        estimatedValueCents:
+          type: number
+        notes:
+          type: string
+
+    # ── Brief ─────────────────────────────────────────────────────────────────
+    Brief:
+      type: object
+      required: [date, sections]
+      properties:
+        date:
+          type: string
+          format: date
+        greeting:
+          type: ["string", "null"]
+        sections:
+          type: array
+          items:
+            $ref: "#/components/schemas/BriefSection"
+
+    BriefSection:
+      type: object
+      required: [type, title, items]
+      properties:
+        type:
+          type: string
+          description: "overdue | deadlines | actions | prospects | summary"
+        title:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/BriefItem"
+
+    BriefItem:
+      type: object
+      required: [label]
+      properties:
+        label:
+          type: string
+        meta:
+          type: ["string", "null"]
+        urgent:
+          type: boolean
+        link:
+          type: ["string", "null"]
+
+    # ── Pending actions ───────────────────────────────────────────────────────
+    PendingAction:
+      type: object
+      required: [id, type, status, createdAt]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        status:
+          type: string
+          enum: [EN_ATTENTE, APPROUVE, REJETE]
+        label:
+          type: string
+        description:
+          type: ["string", "null"]
+        affaireId:
+          type: ["string", "null"]
+        affaireLabel:
+          type: ["string", "null"]
+        amountCents:
+          type: ["number", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        decidedAt:
+          type: ["string", "null"]
+          format: date-time
+
+    ActionDecision:
+      type: object
+      properties:
+        note:
+          type: string
+
+    # ── Chat ─────────────────────────────────────────────────────────────────
+    ChatMessage:
+      type: object
+      required: [id, role, content, createdAt]
+      properties:
+        id:
+          type: string
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    ChatHistory:
+      type: object
+      required: [conversationId, messages]
+      properties:
+        conversationId:
+          type: string
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChatMessage"
+
+    ChatMessageInput:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+          minLength: 1
+        conversationId:
+          type: ["string", "null"]
+
+    ChatReply:
+      type: object
+      required: [conversationId, message]
+      properties:
+        conversationId:
+          type: string
+        message:
+          $ref: "#/components/schemas/ChatMessage"
