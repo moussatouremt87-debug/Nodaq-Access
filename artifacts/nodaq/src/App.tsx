@@ -1,5 +1,6 @@
 import { Switch, Route } from 'wouter';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ThemeProvider } from '@/contexts/theme-context';
 import { AppShell } from '@/components/app-shell';
 import { Toaster } from '@/components/ui/toaster';
 import NotFound from '@/pages/not-found';
@@ -85,9 +86,11 @@ function AppRouter() {
 
 export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <AppRouter />
-      <Toaster />
-    </QueryClientProvider>
+    <ThemeProvider>
+      <QueryClientProvider client={queryClient}>
+        <AppRouter />
+        <Toaster />
+      </QueryClientProvider>
+    </ThemeProvider>
   );
 }

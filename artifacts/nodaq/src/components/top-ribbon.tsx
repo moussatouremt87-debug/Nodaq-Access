@@ -3,33 +3,42 @@ import { Link, useLocation } from 'wouter';
 import { ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { NAV_SECTIONS, navIsActive, type NavSection } from '@/lib/nav';
+import { ThemeToggle } from './theme-toggle';
 
 /** Desktop-only horizontal ribbon. Hidden on mobile (MobileNav handles that). */
 export function TopRibbon() {
   const [location] = useLocation();
 
   return (
+    // Outer bar: full width, no overflow — keeps the toggle always in view
     <div
       className={cn(
         'hidden md:flex items-stretch shrink-0',
         'sticky top-0 z-30 h-11',
         'border-b border-sidebar-border bg-sidebar',
-        'overflow-x-auto',
       )}
     >
-      {NAV_SECTIONS.map(section => {
-        const sectionActive = section.items.some(item =>
-          navIsActive(item.href, location),
-        );
-        return (
-          <SectionTab
-            key={section.label}
-            section={section}
-            sectionActive={sectionActive}
-            location={location}
-          />
-        );
-      })}
+      {/* Scrollable section tabs — overflow here, not on the outer bar */}
+      <div className="flex items-stretch flex-1 min-w-0 overflow-x-auto">
+        {NAV_SECTIONS.map(section => {
+          const sectionActive = section.items.some(item =>
+            navIsActive(item.href, location),
+          );
+          return (
+            <SectionTab
+              key={section.label}
+              section={section}
+              sectionActive={sectionActive}
+              location={location}
+            />
+          );
+        })}
+      </div>
+
+      {/* Theme toggle — structurally outside the scroll area, always visible */}
+      <div className="flex items-center px-3 shrink-0 border-l border-sidebar-border/50">
+        <ThemeToggle />
+      </div>
     </div>
   );
 }
