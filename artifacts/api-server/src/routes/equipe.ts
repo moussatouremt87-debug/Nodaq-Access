@@ -1,7 +1,6 @@
 import { Router, type IRouter } from "express";
 import { withTenant, DrizzleTx, teamMembersTable, affairesTable, facturesTable, settingsTable } from "@workspace/db";
 import { eq, asc, sql } from "drizzle-orm";
-import { getDefaultTenantId } from "../lib/defaultTenant";
 import { z } from "zod";
 import {
   buildSemaines,
@@ -66,8 +65,8 @@ const WEEK_COUNT = 10;
 
 // ── Members ────────────────────────────────────────────────────────────────
 
-router.get("/equipe", async (_req, res): Promise<void> => {
-  const tenantId = await getDefaultTenantId();
+router.get("/equipe", async (req, res): Promise<void> => {
+  const tenantId = req.tenantId!;
   await ensureDefaultMembers(tenantId);
 
   const members = await withTenant(tenantId, async (tx) =>
@@ -86,7 +85,7 @@ router.post("/equipe", async (req, res): Promise<void> => {
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
   const { name, role = "Collaborateur", email, availability = "DISPONIBLE", schedule = [] } = parsed.data;
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
 
   const [member] = await withTenant(tenantId, async (tx) =>
     tx.insert(teamMembersTable).values({
@@ -104,7 +103,7 @@ router.patch("/equipe/:id", async (req, res): Promise<void> => {
   const parsed = UpdateMemberBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
 
   const updated = await withTenant(tenantId, async (tx) => {
     const [existing] = await tx.select().from(teamMembersTable).where(eq(teamMembersTable.id, id));
@@ -130,7 +129,7 @@ router.patch("/equipe/:id", async (req, res): Promise<void> => {
 
 router.delete("/equipe/:id", async (req, res): Promise<void> => {
   const { id } = req.params as { id: string };
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
 
   const [deleted] = await withTenant(tenantId, async (tx) =>
     tx.delete(teamMembersTable).where(eq(teamMembersTable.id, id)).returning()
@@ -166,8 +165,8 @@ async function fetchPlanningData(tenantId: string) {
   });
 }
 
-router.get("/equipe/plannings", async (_req, res): Promise<void> => {
-  const tenantId = await getDefaultTenantId();
+router.get("/equipe/plannings", async (req, res): Promise<void> => {
+  const tenantId = req.tenantId!;
   await ensureDefaultMembers(tenantId);
 
   const { tauxJourFacture, coutJourCharge, rawMembers, absences, rawAffaires, invoices } =
@@ -229,7 +228,7 @@ router.post("/equipe/plannings/simuler", async (req, res): Promise<void> => {
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.flatten() }); return; }
 
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
   const { tauxJourFacture, coutJourCharge, rawMembers, absences, rawAffaires } =
     await fetchPlanningData(tenantId);
 
@@ -270,7 +269,7 @@ router.patch("/equipe/plannings/taux", async (req, res): Promise<void> => {
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.flatten() }); return; }
 
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
 
   const { tauxJourFacture, coutJourCharge } = await withTenant(tenantId, async (tx) => {
     if (parsed.data.tauxJourFacture !== undefined)
@@ -298,8 +297,8 @@ const AbsenceBody = z.object({
   dateFin:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "dateFin must be YYYY-MM-DD"),
 }).refine(d => d.dateDebut <= d.dateFin, { message: "dateFin must be >= dateDebut", path: ["dateFin"] });
 
-router.get("/equipe/absences", async (_req, res): Promise<void> => {
-  const tenantId = await getDefaultTenantId();
+router.get("/equipe/absences", async (req, res): Promise<void> => {
+  const tenantId = req.tenantId!;
   const result = await withTenant(tenantId, async (tx) =>
     tx.execute(sql`
       SELECT id, membre_id AS "membreId", type,
@@ -316,7 +315,7 @@ router.post("/equipe/absences", async (req, res): Promise<void> => {
   if (!parsed.success) { res.status(400).json({ error: parsed.error.flatten() }); return; }
 
   const { membreId, type, dateDebut, dateFin } = parsed.data;
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
 
   const row = await withTenant(tenantId, async (tx) => {
     const [member] = await tx.select().from(teamMembersTable).where(eq(teamMembersTable.id, membreId));

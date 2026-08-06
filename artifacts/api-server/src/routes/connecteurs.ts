@@ -2,7 +2,6 @@ import { Router, type IRouter } from "express";
 import { withTenant, connectorsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { getDefaultTenantId } from "../lib/defaultTenant";
 
 const router: IRouter = Router();
 
@@ -24,8 +23,8 @@ function redactConfig(config: Record<string, string>): Record<string, string> {
   return Object.fromEntries(Object.keys(config).map(k => [k, "***"]));
 }
 
-router.get("/connecteurs", async (_req, res): Promise<void> => {
-  const tenantId = await getDefaultTenantId();
+router.get("/connecteurs", async (req, res): Promise<void> => {
+  const tenantId = req.tenantId!;
 
   const connectors = await withTenant(tenantId, async (tx) => {
     let existing = await tx.select().from(connectorsTable);
@@ -50,7 +49,7 @@ router.patch("/connecteurs/:type", async (req, res): Promise<void> => {
   const { type } = req.params;
   const parsed = UpdateConnectorBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
 
   const updated = await withTenant(tenantId, async (tx) => {
     const [existing] = await tx.select().from(connectorsTable).where(eq(connectorsTable.type, type));

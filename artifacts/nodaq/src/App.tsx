@@ -25,6 +25,7 @@ import Connecteurs from '@/pages/connecteurs';
 import Parametres from '@/pages/parametres';
 import VotreMetier from '@/pages/votre-metier';
 import Login from '@/pages/login';
+import Register from '@/pages/register';
 import { useAuth } from '@/hooks/use-auth';
 
 /** HOC: redirects to /login if not authenticated */
@@ -81,25 +82,29 @@ function AppRouter() {
             transition={reducedMotion ? { duration: 0 } : { duration: 0.18, ease: [0.25, 0.1, 0.25, 1] }}
           >
             <Switch>
-              <Route path="/" component={Cockpit} />
-              <Route path="/affaires/:id" component={AffaireDetail} />
-              <Route path="/affaires" component={Affaires} />
-              <Route path="/contrats" component={Contrats} />
-              <Route path="/factures" component={Factures} />
-              <Route path="/prospects" component={Prospects} />
-              <Route path="/brief" component={Brief} />
-              <Route path="/chat" component={Chat} />
-              <Route path="/devis" component={Devis} />
-              <Route path="/classeur" component={Classeur} />
-              <Route path="/marge" component={Marge} />
-              <Route path="/rapports" component={Rapports} />
-              <Route path="/compte-resultat" component={CompteResultat} />
-              <Route path="/echeancier" component={Echeancier} />
+              {/* Public routes — no auth required */}
+              <Route path="/login" component={Login} />
+              <Route path="/register" component={Register} />
+
+              {/* All business routes require authentication */}
+              <Route path="/" component={PlatformRoute(Cockpit)} />
+              <Route path="/affaires/:id" component={PlatformRoute(AffaireDetail)} />
+              <Route path="/affaires" component={PlatformRoute(Affaires)} />
+              <Route path="/contrats" component={PlatformRoute(Contrats)} />
+              <Route path="/factures" component={PlatformRoute(Factures)} />
+              <Route path="/prospects" component={PlatformRoute(Prospects)} />
+              <Route path="/brief" component={PlatformRoute(Brief)} />
+              <Route path="/chat" component={PlatformRoute(Chat)} />
+              <Route path="/devis" component={PlatformRoute(Devis)} />
+              <Route path="/classeur" component={PlatformRoute(Classeur)} />
+              <Route path="/marge" component={PlatformRoute(Marge)} />
+              <Route path="/rapports" component={PlatformRoute(Rapports)} />
+              <Route path="/compte-resultat" component={PlatformRoute(CompteResultat)} />
+              <Route path="/echeancier" component={PlatformRoute(Echeancier)} />
               <Route path="/equipe" component={PlatformRoute(Equipe)} />
               <Route path="/votre-metier" component={PlatformRoute(VotreMetier)} />
               <Route path="/connecteurs" component={PlatformRoute(Connecteurs)} />
               <Route path="/parametres" component={PlatformRoute(Parametres)} />
-              <Route path="/login" component={Login} />
               <Route component={NotFound} />
             </Switch>
           </motion.div>

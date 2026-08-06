@@ -8,7 +8,6 @@ import {
   UpdateEcheanceBody,
   DeleteEcheanceParams,
 } from "@workspace/api-zod";
-import { getDefaultTenantId } from "../lib/defaultTenant";
 
 const router: IRouter = Router();
 
@@ -29,7 +28,7 @@ function computeStatus(dueDate: string, currentStatus: string): string {
 router.get("/echeances", async (req, res): Promise<void> => {
   const parsed = ListEcheancesQueryParams.safeParse(req.query);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
 
   let all = await withTenant(tenantId, async (tx) =>
     tx.select().from(echeancesTable).orderBy(asc(echeancesTable.dueDate))
@@ -44,7 +43,7 @@ router.post("/echeances", async (req, res): Promise<void> => {
   const parsed = CreateEcheanceBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const dueDate = toDateStr(parsed.data.dueDate as unknown as Date | string);
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
 
   const insertData: Record<string, unknown> = {
     tenantId,
@@ -67,7 +66,7 @@ router.patch("/echeances/:id", async (req, res): Promise<void> => {
   const body = UpdateEcheanceBody.safeParse(req.body);
   if (!params.success || !body.success) { res.status(400).json({ error: "Invalid input" }); return; }
 
-  const [existing] = await withTenant(await getDefaultTenantId(), async (tx) =>
+  const [existing] = await withTenant(req.tenantId!, async (tx) =>
     tx.select().from(echeancesTable).where(eq(echeancesTable.id, params.data.id))
   );
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
@@ -85,7 +84,7 @@ router.patch("/echeances/:id", async (req, res): Promise<void> => {
     }
   }
 
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
   const [updated] = await withTenant(tenantId, async (tx) =>
     tx.update(echeancesTable).set(updateData as any).where(eq(echeancesTable.id, params.data.id)).returning()
   );
@@ -95,7 +94,7 @@ router.patch("/echeances/:id", async (req, res): Promise<void> => {
 router.delete("/echeances/:id", async (req, res): Promise<void> => {
   const parsed = DeleteEcheanceParams.safeParse(req.params);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
 
   const [existing] = await withTenant(tenantId, async (tx) =>
     tx.select().from(echeancesTable).where(eq(echeancesTable.id, parsed.data.id))

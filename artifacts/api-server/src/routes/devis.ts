@@ -10,7 +10,6 @@ import {
   DeleteDevisParams,
   ConvertDevisToAffaireParams,
 } from "@workspace/api-zod";
-import { getDefaultTenantId } from "../lib/defaultTenant";
 
 const router: IRouter = Router();
 
@@ -36,7 +35,7 @@ router.get("/devis", async (req, res): Promise<void> => {
   const parsed = ListDevisQueryParams.safeParse(req.query);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const { statut, search } = parsed.data;
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
 
   let all = await withTenant(tenantId, async (tx) =>
     tx.select().from(devisTable).orderBy(desc(devisTable.createdAt))
@@ -57,7 +56,7 @@ router.post("/devis", async (req, res): Promise<void> => {
   const { clientName, lines = [], tvaRate = 20, remise = 0, notes, validUntil } = parsed.data;
   const { totalHTCents, totalTTCCents } = calcTotals(lines, tvaRate, remise);
   const linesWithId = lines.map(l => ({ ...l, id: crypto.randomUUID() }));
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
 
   const created = await withTenant(tenantId, async (tx) => {
     const count = (await tx.select().from(devisTable)).length;
@@ -83,7 +82,7 @@ router.post("/devis", async (req, res): Promise<void> => {
 router.get("/devis/:id", async (req, res): Promise<void> => {
   const parsed = GetDevisParams.safeParse(req.params);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
   const [d] = await withTenant(tenantId, async (tx) =>
     tx.select().from(devisTable).where(eq(devisTable.id, parsed.data.id))
   );
@@ -95,7 +94,7 @@ router.patch("/devis/:id", async (req, res): Promise<void> => {
   const params = UpdateDevisParams.safeParse(req.params);
   const body = UpdateDevisBody.safeParse(req.body);
   if (!params.success || !body.success) { res.status(400).json({ error: "Invalid input" }); return; }
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
 
   const updated = await withTenant(tenantId, async (tx) => {
     const [existing] = await tx.select().from(devisTable).where(eq(devisTable.id, params.data.id));
@@ -125,7 +124,7 @@ router.patch("/devis/:id", async (req, res): Promise<void> => {
 router.delete("/devis/:id", async (req, res): Promise<void> => {
   const parsed = DeleteDevisParams.safeParse(req.params);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
   await withTenant(tenantId, async (tx) =>
     tx.delete(devisTable).where(eq(devisTable.id, parsed.data.id))
   );
@@ -135,7 +134,7 @@ router.delete("/devis/:id", async (req, res): Promise<void> => {
 router.post("/devis/:id/convert", async (req, res): Promise<void> => {
   const parsed = ConvertDevisToAffaireParams.safeParse(req.params);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
 
   const result = await withTenant(tenantId, async (tx) => {
     const [d] = await tx.select().from(devisTable).where(eq(devisTable.id, parsed.data.id));

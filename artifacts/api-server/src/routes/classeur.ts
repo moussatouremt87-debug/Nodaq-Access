@@ -6,7 +6,6 @@ import {
   CreateClasseurDocumentBody,
   DeleteClasseurDocumentParams,
 } from "@workspace/api-zod";
-import { getDefaultTenantId } from "../lib/defaultTenant";
 
 const router: IRouter = Router();
 
@@ -14,7 +13,7 @@ router.get("/classeur", async (req, res): Promise<void> => {
   const parsed = ListClasseurQueryParams.safeParse(req.query);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const { category, search } = parsed.data;
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
 
   let all = await withTenant(tenantId, async (tx) =>
     tx.select().from(classeurTable).orderBy(desc(classeurTable.createdAt))
@@ -31,7 +30,7 @@ router.get("/classeur", async (req, res): Promise<void> => {
 router.post("/classeur", async (req, res): Promise<void> => {
   const parsed = CreateClasseurDocumentBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
 
   const [doc] = await withTenant(tenantId, async (tx) =>
     tx.insert(classeurTable).values({
@@ -51,7 +50,7 @@ router.post("/classeur", async (req, res): Promise<void> => {
 router.delete("/classeur/:id", async (req, res): Promise<void> => {
   const parsed = DeleteClasseurDocumentParams.safeParse(req.params);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
 
   const [existing] = await withTenant(tenantId, async (tx) =>
     tx.select().from(classeurTable).where(eq(classeurTable.id, parsed.data.id))

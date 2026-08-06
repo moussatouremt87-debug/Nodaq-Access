@@ -5,12 +5,11 @@ import {
   ApprovePendingActionParams,
   RejectPendingActionParams,
 } from "@workspace/api-zod";
-import { getDefaultTenantId } from "../lib/defaultTenant";
 
 const router: IRouter = Router();
 
-router.get("/pending-actions", async (_req, res): Promise<void> => {
-  const tenantId = await getDefaultTenantId();
+router.get("/pending-actions", async (req, res): Promise<void> => {
+  const tenantId = req.tenantId!;
   const actions = await withTenant(tenantId, async (tx) =>
     tx.select().from(pendingActionsTable).orderBy(desc(pendingActionsTable.createdAt))
   );
@@ -20,7 +19,7 @@ router.get("/pending-actions", async (_req, res): Promise<void> => {
 router.post("/pending-actions/:id/approve", async (req, res): Promise<void> => {
   const params = ApprovePendingActionParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
 
   const action = await withTenant(tenantId, async (tx) => {
     const [action] = await tx
@@ -45,7 +44,7 @@ router.post("/pending-actions/:id/approve", async (req, res): Promise<void> => {
 router.post("/pending-actions/:id/reject", async (req, res): Promise<void> => {
   const params = RejectPendingActionParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
 
   const [action] = await withTenant(tenantId, async (tx) =>
     tx.update(pendingActionsTable)

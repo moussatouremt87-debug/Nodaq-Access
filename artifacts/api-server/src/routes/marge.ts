@@ -2,7 +2,6 @@ import { Router, type IRouter } from "express";
 import { withTenant, affairesTable } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import { GetMargeStatsQueryParams } from "@workspace/api-zod";
-import { getDefaultTenantId } from "../lib/defaultTenant";
 
 const router: IRouter = Router();
 
@@ -10,7 +9,7 @@ router.get("/marge", async (req, res): Promise<void> => {
   const parsed = GetMargeStatsQueryParams.safeParse(req.query);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
 
   const { affaires, monthly } = await withTenant(tenantId, async (tx) => {
     let affaires = await tx.select().from(affairesTable);

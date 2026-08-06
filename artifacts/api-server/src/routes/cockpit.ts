@@ -1,12 +1,11 @@
 import { Router, type IRouter } from "express";
 import { withTenant, affairesTable, contratsTable, facturesTable, prospectsTable, pendingActionsTable, activityTable } from "@workspace/db";
 import { sql, eq, and } from "drizzle-orm";
-import { getDefaultTenantId } from "../lib/defaultTenant";
 
 const router: IRouter = Router();
 
 router.get("/cockpit/kpis", async (req, res): Promise<void> => {
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
 
   const data = await withTenant(tenantId, async (tx) => {
     const [affairesEnCours] = await tx
@@ -137,8 +136,8 @@ router.get("/cockpit/kpis", async (req, res): Promise<void> => {
   });
 });
 
-router.get("/cockpit/activity", async (_req, res): Promise<void> => {
-  const tenantId = await getDefaultTenantId();
+router.get("/cockpit/activity", async (req, res): Promise<void> => {
+  const tenantId = req.tenantId!;
 
   const items = await withTenant(tenantId, async (tx) => {
     return tx

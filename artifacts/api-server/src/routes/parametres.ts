@@ -2,7 +2,6 @@ import { Router, type IRouter } from "express";
 import { withTenant, settingsTable } from "@workspace/db";
 import { inArray } from "drizzle-orm";
 import { z } from "zod";
-import { getDefaultTenantId } from "../lib/defaultTenant";
 
 const router: IRouter = Router();
 
@@ -21,8 +20,8 @@ const DEFAULTS: Record<string, string> = {
 
 const SetSettingsBody = z.record(z.string(), z.string());
 
-router.get("/parametres", async (_req, res): Promise<void> => {
-  const tenantId = await getDefaultTenantId();
+router.get("/parametres", async (req, res): Promise<void> => {
+  const tenantId = req.tenantId!;
 
   const rows = await withTenant(tenantId, async (tx) => {
     // Ensure defaults exist for this tenant
@@ -39,7 +38,7 @@ router.get("/parametres", async (_req, res): Promise<void> => {
 router.patch("/parametres", async (req, res): Promise<void> => {
   const parsed = SetSettingsBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
 
   const updated = await withTenant(tenantId, async (tx) => {
     for (const [key, value] of Object.entries(parsed.data)) {

@@ -5,7 +5,6 @@ import {
   SendChatMessageBody,
   GetChatHistoryQueryParams,
 } from "@workspace/api-zod";
-import { getDefaultTenantId } from "../lib/defaultTenant";
 
 const router: IRouter = Router();
 
@@ -29,7 +28,7 @@ router.get("/chat/messages", async (req, res): Promise<void> => {
     return;
   }
 
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
   const messages = await withTenant(tenantId, async (tx) =>
     tx.select()
       .from(chatMessagesTable)
@@ -45,7 +44,7 @@ router.post("/chat/messages", async (req, res): Promise<void> => {
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const { content, conversationId } = parsed.data;
   const convId = conversationId ?? crypto.randomUUID();
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
 
   const reply = AI_REPLIES[replyIndex % AI_REPLIES.length] ?? AI_REPLIES[0]!;
   replyIndex++;

@@ -8,7 +8,6 @@ import {
   DeleteProspectParams,
   ListProspectsQueryParams,
 } from "@workspace/api-zod";
-import { getDefaultTenantId } from "../lib/defaultTenant";
 
 const router: IRouter = Router();
 
@@ -16,7 +15,7 @@ router.get("/prospects", async (req, res): Promise<void> => {
   const parsed = ListProspectsQueryParams.safeParse(req.query);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const { stage } = parsed.data;
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
 
   const prospects = await withTenant(tenantId, async (tx) => {
     let query = tx.select().from(prospectsTable).$dynamic();
@@ -31,7 +30,7 @@ router.post("/prospects", async (req, res): Promise<void> => {
   const parsed = CreateProspectBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const data = parsed.data;
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
 
   const prospect = await withTenant(tenantId, async (tx) => {
     const [prospect] = await tx.insert(prospectsTable).values({
@@ -73,7 +72,7 @@ router.patch("/prospects/:id", async (req, res): Promise<void> => {
   if (data.estimatedValueCents !== undefined) updateData.estimatedValueCents = data.estimatedValueCents;
   if (data.notes !== undefined) updateData.notes = data.notes;
 
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
   const [prospect] = await withTenant(tenantId, async (tx) =>
     tx.update(prospectsTable).set(updateData).where(eq(prospectsTable.id, params.data.id)).returning()
   );
@@ -84,7 +83,7 @@ router.patch("/prospects/:id", async (req, res): Promise<void> => {
 router.delete("/prospects/:id", async (req, res): Promise<void> => {
   const params = DeleteProspectParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
   const [deleted] = await withTenant(tenantId, async (tx) =>
     tx.delete(prospectsTable).where(eq(prospectsTable.id, params.data.id)).returning()
   );

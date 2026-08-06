@@ -15,13 +15,16 @@
     "migrate-rls": "node scripts/migrate-rls.cjs",
     "test-connectors": "node src/test-connectors.cjs",
     "test-connectors-http": "node src/test-connectors-http.cjs",
-    "test-planning-http": "node src/test-planning-http.cjs"
+    "test-planning-http": "node src/test-planning-http.cjs",
+    "seed-owner": "node scripts/seed-owner.cjs",
+    "test-auth-phase4": "node src/test-auth-phase4.cjs"
   },
   "dependencies": {
     "drizzle-orm": "catalog:",
     "drizzle-zod": "^0.8.3",
     "pg": "^8.22.0",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "bcryptjs": "^2.4.3"
   },
   "devDependencies": {
     "@types/node": "catalog:",

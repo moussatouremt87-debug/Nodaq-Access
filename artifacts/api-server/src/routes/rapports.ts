@@ -1,7 +1,6 @@
 import { Router, type IRouter } from "express";
 import { withTenant, affairesTable, facturesTable, prospectsTable } from "@workspace/db";
 import { GetRapportMensuelQueryParams } from "@workspace/api-zod";
-import { getDefaultTenantId } from "../lib/defaultTenant";
 
 const router: IRouter = Router();
 
@@ -15,7 +14,7 @@ router.get("/rapports/mensuel", async (req, res): Promise<void> => {
   const monthStart = new Date(year, month - 1, 1);
   const monthEnd   = new Date(year, month, 1);
 
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
 
   const { allAffaires, allFactures, allProspects } = await withTenant(tenantId, async (tx) => {
     const allAffaires  = await tx.select().from(affairesTable);

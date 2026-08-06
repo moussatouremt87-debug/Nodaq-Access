@@ -7,7 +7,6 @@ import {
   UpdateFactureParams,
   ListFacturesQueryParams,
 } from "@workspace/api-zod";
-import { getDefaultTenantId } from "../lib/defaultTenant";
 
 const router: IRouter = Router();
 
@@ -15,7 +14,7 @@ router.get("/factures", async (req, res): Promise<void> => {
   const parsed = ListFacturesQueryParams.safeParse(req.query);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const { settled } = parsed.data;
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
 
   const factures = await withTenant(tenantId, async (tx) => {
     let query = tx.select().from(facturesTable).$dynamic();
@@ -36,7 +35,7 @@ router.post("/factures", async (req, res): Promise<void> => {
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const data = parsed.data;
   const toStr = (v: unknown) => v instanceof Date ? v.toISOString().slice(0, 10) : String(v ?? '');
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
 
   const [facture] = await withTenant(tenantId, async (tx) =>
     tx.insert(facturesTable).values({
@@ -65,7 +64,7 @@ router.patch("/factures/:id", async (req, res): Promise<void> => {
   if (data.settled !== undefined) updateData.settled = data.settled;
   if (data.residualCents !== undefined) updateData.residualCents = data.residualCents;
   if (data.affaireId !== undefined) updateData.affaireId = data.affaireId;
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
 
   const facture = await withTenant(tenantId, async (tx) => {
     const [facture] = await tx.update(facturesTable).set(updateData).where(eq(facturesTable.id, params.data.id)).returning();

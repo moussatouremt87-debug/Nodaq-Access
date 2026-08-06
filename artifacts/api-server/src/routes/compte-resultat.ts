@@ -5,7 +5,6 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 import PDFDocument from "pdfkit";
 import { requireAuth } from "../middleware/requireAuth";
-import { getDefaultTenantId } from "../lib/defaultTenant";
 
 const router: IRouter = Router();
 
@@ -160,7 +159,7 @@ router.get("/compte-resultat", async (req, res): Promise<void> => {
   const parsed = PeriodQuery.safeParse(req.query);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const { from, to } = parsed.data;
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
 
   const { lines, totals } = await withTenant(tenantId, async (tx) => {
     const lines = await buildLineResults(tx, from, to);
@@ -194,7 +193,7 @@ router.patch("/compte-resultat/lignes", requireAuth, async (req, res): Promise<v
     }
   }
 
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
 
   await withTenant(tenantId, async (tx) => {
     for (const { lineCode, amountCents } of lines) {
@@ -220,7 +219,7 @@ router.get("/compte-resultat/export/pdf", async (req, res): Promise<void> => {
   const parsed = PeriodQuery.safeParse(req.query);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const { from, to } = parsed.data;
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
 
   // Fetch data inside transaction, then generate PDF outside
   const { lines, totals } = await withTenant(tenantId, async (tx) => {
@@ -335,7 +334,7 @@ router.get("/compte-resultat/export/csv", async (req, res): Promise<void> => {
   const parsed = PeriodQuery.safeParse(req.query);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const { from, to } = parsed.data;
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
 
   const { lines, totals } = await withTenant(tenantId, async (tx) => {
     const lines = await buildLineResults(tx, from, to);

@@ -9,12 +9,11 @@ import {
   DeleteAffaireParams,
   ListAffairesQueryParams,
 } from "@workspace/api-zod";
-import { getDefaultTenantId } from "../lib/defaultTenant";
 
 const router: IRouter = Router();
 
-router.get("/affaires/stats", async (_req, res): Promise<void> => {
-  const tenantId = await getDefaultTenantId();
+router.get("/affaires/stats", async (req, res): Promise<void> => {
+  const tenantId = req.tenantId!;
   const { byStatus } = await withTenant(tenantId, async (tx) => {
     const rows = await tx.execute(sql`
       SELECT
@@ -40,7 +39,7 @@ router.get("/affaires", async (req, res): Promise<void> => {
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const { statut, inclureArchivees } = parsed.data;
 
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
   const { affaires } = await withTenant(tenantId, async (tx) => {
     let query = tx.select().from(affairesTable).$dynamic();
     if (statut) {
@@ -60,7 +59,7 @@ router.post("/affaires", async (req, res): Promise<void> => {
   const parsed = CreateAffaireBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const data = parsed.data;
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
   const refNum = String(Date.now()).slice(-6);
   const rawStart = data.startDate as unknown as Date | string | undefined;
   const startDate = rawStart instanceof Date ? rawStart.toISOString().slice(0, 10) : (rawStart ?? null);
@@ -91,7 +90,7 @@ router.post("/affaires", async (req, res): Promise<void> => {
 router.get("/affaires/:id", async (req, res): Promise<void> => {
   const params = GetAffaireParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
   const [affaire] = await withTenant(tenantId, async (tx) =>
     tx.select().from(affairesTable).where(eq(affairesTable.id, params.data.id))
   );
@@ -116,7 +115,7 @@ router.patch("/affaires/:id", async (req, res): Promise<void> => {
   if (data.startDate !== undefined) updateData.startDate = data.startDate;
   if (data.completedAt !== undefined) updateData.completedAt = data.completedAt;
 
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
   const [affaire] = await withTenant(tenantId, async (tx) =>
     tx.update(affairesTable).set(updateData).where(eq(affairesTable.id, params.data.id)).returning()
   );
@@ -127,7 +126,7 @@ router.patch("/affaires/:id", async (req, res): Promise<void> => {
 router.delete("/affaires/:id", async (req, res): Promise<void> => {
   const params = DeleteAffaireParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
   const [deleted] = await withTenant(tenantId, async (tx) =>
     tx.delete(affairesTable).where(eq(affairesTable.id, params.data.id)).returning()
   );

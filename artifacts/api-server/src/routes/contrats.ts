@@ -7,7 +7,6 @@ import {
   UpdateContratParams,
   DeleteContratParams,
 } from "@workspace/api-zod";
-import { getDefaultTenantId } from "../lib/defaultTenant";
 
 function nextOccurrence(startDate: string | null, cadence: string): string | null {
   if (!startDate) return null;
@@ -23,8 +22,8 @@ function nextOccurrence(startDate: string | null, cadence: string): string | nul
 
 const router: IRouter = Router();
 
-router.get("/contrats", async (_req, res): Promise<void> => {
-  const tenantId = await getDefaultTenantId();
+router.get("/contrats", async (req, res): Promise<void> => {
+  const tenantId = req.tenantId!;
   const contrats = await withTenant(tenantId, async (tx) =>
     tx.select().from(contratsTable).orderBy(desc(contratsTable.createdAt))
   );
@@ -36,7 +35,7 @@ router.post("/contrats", async (req, res): Promise<void> => {
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const data = parsed.data;
   const toStr = (v: unknown) => v instanceof Date ? v.toISOString().slice(0, 10) : (v as string | null | undefined) ?? null;
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
 
   const [contrat] = await withTenant(tenantId, async (tx) =>
     tx.insert(contratsTable).values({
@@ -71,7 +70,7 @@ router.patch("/contrats/:id", async (req, res): Promise<void> => {
   if (data.endDate !== undefined) updateData.endDate = data.endDate;
   if (data.notes !== undefined) updateData.notes = data.notes;
 
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
   const [contrat] = await withTenant(tenantId, async (tx) =>
     tx.update(contratsTable).set(updateData).where(eq(contratsTable.id, params.data.id)).returning()
   );
@@ -82,7 +81,7 @@ router.patch("/contrats/:id", async (req, res): Promise<void> => {
 router.delete("/contrats/:id", async (req, res): Promise<void> => {
   const params = DeleteContratParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
-  const tenantId = await getDefaultTenantId();
+  const tenantId = req.tenantId!;
   const [deleted] = await withTenant(tenantId, async (tx) =>
     tx.delete(contratsTable).where(eq(contratsTable.id, params.data.id)).returning()
   );
