@@ -813,6 +813,19 @@ paths:
               schema:
                 $ref: "#/components/schemas/ChatReply"
 
+  /chat/suggestions:
+    get:
+      operationId: getChatSuggestions
+      tags: [chat]
+      summary: Get contextual conversation suggestions for the current tenant
+      responses:
+        "200":
+          description: Suggestion pills for the chat empty state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatSuggestions"
+
   # ── Équipe ───────────────────────────────────────────────────────────────
   /equipe:
     get:
@@ -1000,6 +1013,28 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/MonthlyRevenue"
+        ytd:
+          $ref: "#/components/schemas/CockpitYtd"
+
+    CockpitYtd:
+      type: object
+      required: [caYtdCents, caPrevYearSamePeriodCents, facturesEmisesYtd, tauxRecouvrement]
+      properties:
+        caYtdCents:
+          type: number
+          description: Year-to-date revenue in cents
+        caPrevYearSamePeriodCents:
+          type: number
+          description: Revenue at same point in the previous year in cents
+        caGrowthPct:
+          type: ["number", "null"]
+          description: YoY growth percentage (null when no prior year data)
+        facturesEmisesYtd:
+          type: number
+          description: Number of invoices issued year-to-date
+        tauxRecouvrement:
+          type: number
+          description: Collection rate 0–100
 
     MonthlyRevenue:
       type: object
@@ -1489,6 +1524,23 @@ components:
         conversationId:
           type: ["string", "null"]
 
+    AgentAction:
+      type: object
+      required: [type, label]
+      properties:
+        type:
+          type: string
+          description: "Tool name that was executed (e.g. create_prospect, update_affaire_status)"
+        label:
+          type: string
+          description: Human-readable description of what was done
+        entityId:
+          type: string
+          description: UUID of the created/updated entity
+        entityType:
+          type: string
+          enum: [prospect, affaire, echeance, classeur, activity]
+
     ChatReply:
       type: object
       required: [conversationId, message]
@@ -1497,6 +1549,19 @@ components:
           type: string
         message:
           $ref: "#/components/schemas/ChatMessage"
+        actions_performed:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentAction"
+
+    ChatSuggestions:
+      type: object
+      required: [suggestions]
+      properties:
+        suggestions:
+          type: array
+          items:
+            type: string
 
     # ── Devis ─────────────────────────────────────────────────────────────────
     DevisLine:

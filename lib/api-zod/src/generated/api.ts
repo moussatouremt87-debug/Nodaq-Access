@@ -32,7 +32,14 @@ export const GetCockpitKpisResponse = zod.object({
   "month": zod.string().describe('YYYY-MM'),
   "revenueCents": zod.number(),
   "invoiceCount": zod.number()
-})).optional()
+})).optional(),
+  "ytd": zod.object({
+  "caYtdCents": zod.number().describe('Year-to-date revenue in cents'),
+  "caPrevYearSamePeriodCents": zod.number().describe('Revenue at same point in the previous year in cents'),
+  "caGrowthPct": zod.number().nullish().describe('YoY growth percentage (null when no prior year data)'),
+  "facturesEmisesYtd": zod.number().describe('Number of invoices issued year-to-date'),
+  "tauxRecouvrement": zod.number().describe('Collection rate 0–100')
+}).optional()
 })
 
 
@@ -993,7 +1000,21 @@ export const SendChatMessageResponse = zod.object({
   "role": zod.enum(['user', 'assistant']),
   "content": zod.string(),
   "createdAt": zod.coerce.date()
+}),
+  "actions_performed": zod.array(zod.object({
+  "type": zod.string().describe('Tool name that was executed (e.g. create_prospect, update_affaire_status)'),
+  "label": zod.string().describe('Human-readable description of what was done'),
+  "entityId": zod.string().optional().describe('UUID of the created\/updated entity'),
+  "entityType": zod.enum(['prospect', 'affaire', 'echeance', 'classeur', 'activity']).optional()
+})).optional()
 })
+
+
+/**
+ * @summary Get contextual conversation suggestions for the current tenant
+ */
+export const GetChatSuggestionsResponse = zod.object({
+  "suggestions": zod.array(zod.string())
 })
 
 

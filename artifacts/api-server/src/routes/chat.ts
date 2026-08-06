@@ -1,5 +1,3 @@
-// STUB — aucune IA branchée. Ne pas démontrer comme un agent.
-// Les réponses ci-dessous sont préenregistrées. Remplacer par un vrai LLM avant tout usage en production.
 import { Router, type IRouter } from "express";
 import { withTenant, chatMessagesTable } from "@workspace/db";
 import { eq, asc } from "drizzle-orm";
@@ -7,18 +5,11 @@ import {
   SendChatMessageBody,
   GetChatHistoryQueryParams,
 } from "@workspace/api-zod";
+import { runAgent, getContextualSuggestions } from "../lib/mistralAgent";
 
 const router: IRouter = Router();
 
-const AI_REPLIES = [
-  "J'ai bien reçu votre message. D'après les données disponibles, tout semble en ordre. Y a-t-il quelque chose de spécifique sur lequel vous souhaitez que je me concentre ?",
-  "Bien sûr, je peux vous aider avec ça. Pouvez-vous me donner plus de détails pour que je puisse vous fournir une réponse précise ?",
-  "Voici ce que j'observe : vos affaires en cours progressent normalement, et vos factures sont à jour. Avez-vous des questions sur un point particulier ?",
-  "Je vais analyser cela pour vous. En attendant, n'hésitez pas à consulter votre brief matin pour un récapitulatif de vos priorités du jour.",
-  "Compris. Je traite votre demande. Vos indicateurs financiers sont dans les normes habituelles pour cette période.",
-];
-
-let replyIndex = 0;
+// ─── GET history ──────────────────────────────────────────────────────────────
 
 router.get("/chat/messages", async (req, res): Promise<void> => {
   const parsed = GetChatHistoryQueryParams.safeParse(req.query);
@@ -41,27 +32,74 @@ router.get("/chat/messages", async (req, res): Promise<void> => {
   res.json({ conversationId, messages });
 });
 
+// ─── POST message → agent ─────────────────────────────────────────────────────
+
 router.post("/chat/messages", async (req, res): Promise<void> => {
   const parsed = SendChatMessageBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+  if (!process.env.MISTRAL_API_KEY) {
+    res.status(503).json({
+      error: "Agent non configuré",
+      detail: "La clé MISTRAL_API_KEY est absente. Ajoutez-la dans les secrets Replit.",
+    });
+    return;
+  }
+
   const { content, conversationId } = parsed.data;
   const convId = conversationId ?? crypto.randomUUID();
   const tenantId = req.tenantId!;
 
-  const reply = AI_REPLIES[replyIndex % AI_REPLIES.length] ?? AI_REPLIES[0]!;
-  replyIndex++;
-
-  const assistantMessage = await withTenant(tenantId, async (tx) => {
+  // 1. Persist user message
+  await withTenant(tenantId, async (tx) => {
     await tx.insert(chatMessagesTable).values({
       tenantId, conversationId: convId, role: "user", content,
     });
+  });
+
+  // 2. Fetch full conversation history for context
+  const history = await withTenant(tenantId, async (tx) =>
+    tx.select({ role: chatMessagesTable.role, content: chatMessagesTable.content })
+      .from(chatMessagesTable)
+      .where(eq(chatMessagesTable.conversationId, convId))
+      .orderBy(asc(chatMessagesTable.createdAt))
+  );
+
+  // 3. Run agent (with tool-calling loop)
+  let agentResult: Awaited<ReturnType<typeof runAgent>>;
+  try {
+    agentResult = await runAgent(tenantId, history);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Erreur inconnue";
+    req.log?.error({ err }, "mistral agent error");
+    res.status(502).json({ error: "L'agent IA a rencontré une erreur.", detail: message });
+    return;
+  }
+
+  // 4. Persist assistant reply
+  const assistantMessage = await withTenant(tenantId, async (tx) => {
     const [msg] = await tx.insert(chatMessagesTable).values({
-      tenantId, conversationId: convId, role: "assistant", content: reply,
+      tenantId,
+      conversationId: convId,
+      role: "assistant",
+      content: agentResult.content,
     }).returning();
     return msg;
   });
 
-  res.json({ conversationId: convId, message: assistantMessage, stub: true });
+  res.json({
+    conversationId: convId,
+    message: assistantMessage,
+    actions_performed: agentResult.actions,
+  });
+});
+
+// ─── GET contextual suggestions ───────────────────────────────────────────────
+
+router.get("/chat/suggestions", async (req, res): Promise<void> => {
+  const tenantId = req.tenantId!;
+  const suggestions = await getContextualSuggestions(tenantId);
+  res.json({ suggestions });
 });
 
 export default router;

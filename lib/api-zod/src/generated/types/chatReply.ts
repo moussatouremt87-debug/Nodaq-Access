@@ -5,9 +5,11 @@
  * NODAQ API — AI-powered business management for French SMEs
  * OpenAPI spec version: 0.1.0
  */
+import type { AgentAction } from './agentAction';
 import type { ChatMessage } from './chatMessage';
 
 export interface ChatReply {
   conversationId: string;
   message: ChatMessage;
+  actions_performed?: AgentAction[];
 }

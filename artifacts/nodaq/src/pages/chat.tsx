@@ -1,25 +1,52 @@
 import { useEffect, useRef, useState } from 'react';
-import { Send, Bot, User, Sparkles } from 'lucide-react';
+import { Send, Bot, User, Sparkles, CheckCircle2, Zap } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { useChat } from '@/hooks/use-chat';
+import { useChat, type AgentAction } from '@/hooks/use-chat';
 import { fmtDateTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import { useGetChatSuggestions } from '@workspace/api-client-react';
 
-const SUGGESTIONS = [
+// ─── Contextual suggestions ────────────────────────────────────────────────────
+
+const FALLBACK_SUGGESTIONS = [
   "Quel est mon chiffre d'affaires ce mois-ci ?",
   'Quelles factures sont en retard ?',
   'Résume mon pipeline de prospects.',
-  "Y a-t-il des actions en attente d'approbation ?",
+  "Y a-t-il des actions en attente ?",
 ];
 
+// ─── Action card ──────────────────────────────────────────────────────────────
+
+function ActionCard({ actions }: { actions: AgentAction[] }) {
+  if (actions.length === 0) return null;
+  return (
+    <div className="mt-2 rounded-xl border border-primary/20 bg-primary/5 px-3.5 py-2.5 space-y-1">
+      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-primary/70">
+        <Zap className="h-3 w-3" />
+        <span>Actions effectuées</span>
+      </div>
+      {actions.map((action, i) => (
+        <div key={i} className="flex items-start gap-1.5 text-xs text-foreground/80">
+          <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 shrink-0 text-green-500" />
+          <span>{action.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
+
 export default function Chat() {
-  const { messages, isLoadingHistory, sendMessage, isSending } = useChat();
+  const { messages, isLoadingHistory, sendMessage, isSending, actionsMap } = useChat();
   const [input, setInput] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
+  const suggestionsQuery = useGetChatSuggestions();
+  const suggestions = suggestionsQuery.data?.suggestions ?? FALLBACK_SUGGESTIONS;
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
@@ -37,7 +64,7 @@ export default function Chat() {
       <PageHeader
         eyebrow="Agent NODAQ"
         title="Chat agent"
-        description="Posez vos questions sur votre activité, en langage naturel."
+        description="Posez vos questions, donnez des instructions — l'agent met à jour l'app en temps réel."
         className="shrink-0"
       />
 
@@ -58,11 +85,11 @@ export default function Chat() {
                 Votre copilote opérationnel
               </h2>
               <p className="text-sm text-muted-foreground mt-1.5">
-                Demandez-lui un état de la trésorerie, une synthèse des affaires en cours,
-                ou toute autre question sur votre activité.
+                Demandez l'état d'une affaire, créez un prospect depuis un post-it,
+                ou dites simplement ce qui vient de se passer.
               </p>
               <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {SUGGESTIONS.map((s) => (
+                {suggestions.map((s) => (
                   <button
                     key={s}
                     onClick={() => handleSend(s)}
@@ -76,47 +103,58 @@ export default function Chat() {
             </div>
           ) : (
             <div className="max-w-2xl mx-auto space-y-4">
-              {messages.map((m) => (
-                <div
-                  key={m.id}
-                  className={cn(
-                    'flex gap-3 animate-stagger-in',
-                    m.role === 'user' ? 'flex-row-reverse' : 'flex-row',
-                  )}
-                  data-testid={`message-${m.role}-${m.id}`}
-                >
-                  <Avatar className="h-7 w-7 shrink-0 mt-0.5">
-                    <AvatarFallback
-                      className={cn(
-                        'text-[10px]',
-                        m.role === 'user'
-                          ? 'bg-secondary text-secondary-foreground'
-                          : 'bg-primary/15 text-primary',
-                      )}
-                    >
-                      {m.role === 'user' ? <User className="h-3.5 w-3.5" /> : <Bot className="h-3.5 w-3.5" />}
-                    </AvatarFallback>
-                  </Avatar>
+              {messages.map((m) => {
+                const actions = actionsMap.get(m.id) ?? [];
+                return (
                   <div
+                    key={m.id}
                     className={cn(
-                      'max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap',
-                      m.role === 'user'
-                        ? 'bg-primary text-primary-foreground rounded-tr-sm'
-                        : 'bg-card border border-card-border text-foreground rounded-tl-sm',
+                      'flex gap-3 animate-stagger-in',
+                      m.role === 'user' ? 'flex-row-reverse' : 'flex-row',
                     )}
+                    data-testid={`message-${m.role}-${m.id}`}
                   >
-                    {m.content}
-                    <div
-                      className={cn(
-                        'mt-1 text-[10px] font-mono-nums',
-                        m.role === 'user' ? 'text-primary-foreground/60' : 'text-muted-foreground',
+                    <Avatar className="h-7 w-7 shrink-0 mt-0.5">
+                      <AvatarFallback
+                        className={cn(
+                          'text-[10px]',
+                          m.role === 'user'
+                            ? 'bg-secondary text-secondary-foreground'
+                            : 'bg-primary/15 text-primary',
+                        )}
+                      >
+                        {m.role === 'user' ? <User className="h-3.5 w-3.5" /> : <Bot className="h-3.5 w-3.5" />}
+                      </AvatarFallback>
+                    </Avatar>
+
+                    <div className={cn('max-w-[80%] flex flex-col', m.role === 'user' && 'items-end')}>
+                      <div
+                        className={cn(
+                          'rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap',
+                          m.role === 'user'
+                            ? 'bg-primary text-primary-foreground rounded-tr-sm'
+                            : 'bg-card border border-card-border text-foreground rounded-tl-sm',
+                        )}
+                      >
+                        {m.content}
+                        <div
+                          className={cn(
+                            'mt-1 text-[10px] font-mono-nums',
+                            m.role === 'user' ? 'text-primary-foreground/60' : 'text-muted-foreground',
+                          )}
+                        >
+                          {fmtDateTime(m.createdAt)}
+                        </div>
+                      </div>
+
+                      {m.role === 'assistant' && actions.length > 0 && (
+                        <ActionCard actions={actions} />
                       )}
-                    >
-                      {fmtDateTime(m.createdAt)}
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
+
               {isSending && (
                 <div className="flex gap-3">
                   <Avatar className="h-7 w-7 shrink-0 mt-0.5">
@@ -152,7 +190,7 @@ export default function Chat() {
                   handleSend();
                 }
               }}
-              placeholder="Écrivez à votre agent NODAQ..."
+              placeholder="Écrivez à votre agent NODAQ… (ex: 'Le chantier Dupont est terminé')"
               rows={1}
               className="min-h-[44px] max-h-32 resize-none"
               data-testid="input-chat-message"

@@ -31,6 +31,7 @@ import type {
   ChatHistory,
   ChatMessageInput,
   ChatReply,
+  ChatSuggestions,
   ClasseurDocument,
   ClasseurDocumentInput,
   ClasseurList,
@@ -3192,6 +3193,83 @@ export const useSendChatMessage = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getSendChatMessageMutationOptions(options));
     }
+
+export const getGetChatSuggestionsUrl = () => {
+
+
+
+
+  return `/api/chat/suggestions`
+}
+
+/**
+ * @summary Get contextual conversation suggestions for the current tenant
+ */
+export const getChatSuggestions = async ( options?: Parameters<typeof customFetch>[1]): Promise<ChatSuggestions> => {
+
+  return customFetch<ChatSuggestions>(getGetChatSuggestionsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetChatSuggestionsQueryKey = () => {
+    return [
+    `/api/chat/suggestions`
+    ] as const;
+    }
+
+
+export const getGetChatSuggestionsQueryOptions = <TData = Awaited<ReturnType<typeof getChatSuggestions>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getChatSuggestions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetChatSuggestionsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getChatSuggestions>>> = ({ signal }) => getChatSuggestions({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getChatSuggestions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetChatSuggestionsQueryResult = NonNullable<Awaited<ReturnType<typeof getChatSuggestions>>>
+export type GetChatSuggestionsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get contextual conversation suggestions for the current tenant
+ */
+
+export function useGetChatSuggestions<TData = Awaited<ReturnType<typeof getChatSuggestions>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getChatSuggestions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetChatSuggestionsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getListTeamMembersUrl = () => {
 

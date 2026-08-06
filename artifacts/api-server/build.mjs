@@ -105,7 +105,34 @@ async function buildAll() {
     sourcemap: "linked",
     plugins: [
       // pino relies on workers to handle logging, instead of externalizing it we use a plugin to handle it
-      esbuildPluginPino({ transports: ["pino-pretty"] })
+      esbuildPluginPino({ transports: ["pino-pretty"] }),
+      // Stub out ALL @opentelemetry/* imports (including subpaths like /incubating).
+      // The Mistral SDK uses OpenTelemetry as an optional peer dep for observability.
+      // Installing it explicitly creates a duplicate drizzle-orm peer instance that
+      // breaks TypeScript. A no-op plugin returns empty module content instead.
+      {
+        name: "otel-noop",
+        setup(build) {
+          build.onResolve({ filter: /^@opentelemetry\// }, (args) => ({
+            path: args.path,
+            namespace: "otel-noop",
+          }));
+          build.onLoad({ filter: /.*/, namespace: "otel-noop" }, () => ({
+            contents: [
+              "// @opentelemetry no-op stub (Mistral SDK optional peer dep)",
+              "export default new Proxy({}, { get: () => (() => {}) });",
+              "export const trace = { getTracer: () => ({ startSpan: () => ({}), startActiveSpan: (_n, _o, _c, fn) => fn && fn({}) }) };",
+              "export const context = { active: () => ({}), with: (_c, fn) => fn() };",
+              "export const propagation = { inject: () => {}, extract: (_c) => _c };",
+              "export const SpanStatusCode = { UNSET: 0, OK: 1, ERROR: 2 };",
+              "export const SpanKind = { INTERNAL: 0, SERVER: 1, CLIENT: 2 };",
+              "export const diag = { setLogger: () => {}, verbose: () => {}, debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };",
+              "export const ROOT_CONTEXT = {};",
+            ].join("\n"),
+            loader: "js",
+          }));
+        },
+      },
     ],
     // Make sure packages that are cjs only (e.g. express) but are bundled continue to work in our esm output file
     banner: {
