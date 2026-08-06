@@ -468,4 +468,81 @@
     30%        { transform: translate(-11%, 7%); }
     65%        { transform: translate(7%,  -11%); }
   }
+
+  /* ── Directional shimmer for Skeleton ───────────────────────── */
+  @keyframes shimmer {
+    0%   { background-position: -200% 0; }
+    100% { background-position:  200% 0; }
+  }
+
+  .animate-shimmer {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--muted)) 25%,
+      hsl(var(--muted-foreground) / 0.12) 50%,
+      hsl(var(--muted)) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.6s ease-in-out infinite;
+  }
+
+  /* ── Navigation progress bar ─────────────────────────────────── */
+  @keyframes progress-sweep {
+    0%   { transform: scaleX(0); opacity: 1; transform-origin: left; }
+    80%  { transform: scaleX(0.9); opacity: 1; transform-origin: left; }
+    95%  { transform: scaleX(1); opacity: 1; transform-origin: left; }
+    100% { transform: scaleX(1); opacity: 0; transform-origin: left; }
+  }
+
+  .nav-progress {
+    background: hsl(var(--primary));
+    transform-origin: left;
+    animation: progress-sweep 550ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  }
+
+  /* ── Hero gradient mesh — slow-shifting two-tone radial blend ── */
+  @keyframes mesh-shift {
+    0%, 100% {
+      opacity: 1;
+      background-position: 0% 50%;
+    }
+    50% {
+      opacity: 0.7;
+      background-position: 100% 50%;
+    }
+  }
+
+  .hero-mesh {
+    background:
+      radial-gradient(ellipse 90% 70% at 15% 40%, hsl(var(--primary) / 0.09) 0%, transparent 65%),
+      radial-gradient(ellipse 70% 90% at 85% 60%, hsl(var(--accent) / 0.06) 0%, transparent 65%);
+    background-size: 200% 200%;
+    animation: mesh-shift 6s ease-in-out infinite;
+  }
+
+  /* ── Reduced-motion: kill all decorative animations ─────────── */
+  @media (prefers-reduced-motion: reduce) {
+    .animate-shimmer {
+      animation: none;
+      background: hsl(var(--muted));
+    }
+    .animate-stagger-in {
+      animation: none;
+      opacity: 1;
+      transform: none;
+    }
+    .nav-progress {
+      animation: none;
+      opacity: 0;
+    }
+    .orb {
+      animation: none;
+    }
+    .hero-mesh {
+      animation: none;
+    }
+    .animate-pulse-dot {
+      animation: none;
+    }
+  }
 }

@@ -108,6 +108,7 @@ export default function Cockpit() {
         eyebrow="Vue d'ensemble"
         title="Cockpit"
         description="Le pilotage en temps réel de votre activité — trésorerie, affaires, factures et prospects."
+        withMesh
         actions={
           <Button
             size="sm"

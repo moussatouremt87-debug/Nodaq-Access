@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import {
   Plus,
   Search,
@@ -44,11 +45,13 @@ import {
 } from '@/components/ui/empty';
 import { AffaireStatusBadge, AFFAIRE_STATUS_OPTIONS } from '@/components/status-badge';
 import { fmtEUR, fmtDate } from '@/lib/format';
+import { listContainerVariants, itemVariants } from '@/lib/motion-variants';
 import { useAffaires, useAffaireStats, useDeleteAffaireMutation } from '@/hooks/use-affaires';
 import { AffaireDialog } from '@/components/affaire-dialog';
 import type { Affaire } from '@workspace/api-client-react';
 
 export default function Affaires() {
+  const reducedMotion = useReducedMotion();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -207,10 +210,15 @@ export default function Affaires() {
                   <th className="px-3 py-3"></th>
                 </tr>
               </thead>
-              <tbody>
+              <motion.tbody
+                variants={reducedMotion ? undefined : listContainerVariants}
+                initial={reducedMotion ? false : 'hidden'}
+                animate="visible"
+              >
                 {filtered.map((affaire) => (
-                  <tr
+                  <motion.tr
                     key={affaire.id}
+                    variants={reducedMotion ? undefined : itemVariants}
                     className="border-b border-border last:border-0 hover-elevate"
                     data-testid={`row-affaire-${affaire.id}`}
                   >
@@ -257,9 +265,9 @@ export default function Affaires() {
                         onDelete={() => deleteAffaire(affaire.id)}
                       />
                     </td>
-                  </tr>
+                  </motion.tr>
                 ))}
-              </tbody>
+              </motion.tbody>
             </table>
           )}
         </div>

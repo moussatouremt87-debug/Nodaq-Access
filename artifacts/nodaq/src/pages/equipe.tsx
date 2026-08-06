@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { listContainerVariants, itemVariants } from '@/lib/motion-variants';
 import {
   Users, MoreVertical, Pencil, Trash2, CheckCircle2,
   Clock, AlertCircle, UserPlus, Mic, Settings, CalendarOff,
@@ -200,6 +201,7 @@ function GanttBlock({ semaines, devisEnAttente }: {
   devisEnAttente: { count: number; semainesPotentielles: number };
 }) {
   const [, setLocation] = useLocation();
+  const reducedMotion = useReducedMotion();
 
   // Derive one row per unique affaire, in the order they first appear.
   const affaireRows = useMemo(() => {
@@ -266,10 +268,16 @@ function GanttBlock({ semaines, devisEnAttente }: {
               ))}
             </div>
 
-            {/* ── Affaire rows ─────────────────────────────────────────── */}
+            {/* ── Affaire rows — staggered entrance ────────────────── */}
+            <motion.div
+              variants={reducedMotion ? undefined : listContainerVariants}
+              initial={reducedMotion ? false : 'hidden'}
+              animate="visible"
+            >
             {affaireRows.map((aff, rowIdx) => (
-              <div
+              <motion.div
                 key={aff.id}
+                variants={reducedMotion ? undefined : itemVariants}
                 className={cn(
                   'flex items-center border-b border-border last:border-b-0',
                   rowIdx % 2 === 1 && 'bg-muted/10',
@@ -319,8 +327,9 @@ function GanttBlock({ semaines, devisEnAttente }: {
                     </div>
                   );
                 })}
-              </div>
+              </motion.div>
             ))}
+            </motion.div>
 
             {/* ── Absents footer row (only if any absences in window) ── */}
             {hasAbsents && (
@@ -884,6 +893,7 @@ export default function EquipePage() {
         eyebrow="Plateforme"
         title="Équipe & plannings"
         description="Qui travaille où, et ce que vous avez devant vous."
+        withMesh
       />
 
       <div className="px-5 md:px-8 pt-6 space-y-5">

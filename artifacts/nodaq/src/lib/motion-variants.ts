@@ -50,3 +50,32 @@ export const cardHoverVariants: Variants = {
     transition: { type: 'spring', stiffness: 300, damping: 20 },
   },
 };
+
+/**
+ * Tighter stagger for table/list rows — 30 ms gap, immediate start.
+ * Pair with itemVariants on children.
+ */
+export const listContainerVariants: Variants = {
+  hidden: {},
+  visible: {
+    transition: {
+      staggerChildren: 0.03,
+      delayChildren: 0,
+    },
+  },
+};
+
+/** Page enter/exit — fade + subtle Y drift, 18 ms exit for snappiness */
+export const pageVariants = {
+  initial: { opacity: 0, y: 8 },
+  animate: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.2, ease: [0.25, 0.1, 0.25, 1] as const },
+  },
+  exit: {
+    opacity: 0,
+    y: -4,
+    transition: { duration: 0.14, ease: [0.25, 0.1, 0.25, 1] as const },
+  },
+};

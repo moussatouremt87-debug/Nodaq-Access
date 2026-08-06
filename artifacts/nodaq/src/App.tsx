@@ -1,7 +1,9 @@
-import { Switch, Route } from 'wouter';
+import { Switch, Route, useLocation } from 'wouter';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from '@/contexts/theme-context';
 import { AppShell } from '@/components/app-shell';
+import { NavProgressBar } from '@/components/nav-progress-bar';
 import { Toaster } from '@/components/ui/toaster';
 import NotFound from '@/pages/not-found';
 import Cockpit from '@/pages/cockpit';
@@ -23,7 +25,6 @@ import Parametres from '@/pages/parametres';
 import VotreMetier from '@/pages/votre-metier';
 import Login from '@/pages/login';
 import { useAuth } from '@/hooks/use-auth';
-import { useLocation } from 'wouter';
 
 /** HOC: redirects to /login if not authenticated */
 function PlatformRoute(Page: React.ComponentType) {
@@ -59,30 +60,50 @@ const queryClient = new QueryClient({
 });
 
 function AppRouter() {
+  const [location] = useLocation();
+  const reducedMotion = useReducedMotion();
+
+  // Use the top-level segment as the page key so /affaires and /affaires/:id
+  // share the same transition key — no extra flash when drilling into a detail.
+  const pageKey = '/' + (location.split('/')[1] ?? '');
+
   return (
-    <AppShell>
-      <Switch>
-        <Route path="/" component={Cockpit} />
-        <Route path="/affaires/:id" component={AffaireDetail} />
-        <Route path="/affaires" component={Affaires} />
-        <Route path="/contrats" component={Contrats} />
-        <Route path="/factures" component={Factures} />
-        <Route path="/prospects" component={Prospects} />
-        <Route path="/brief" component={Brief} />
-        <Route path="/chat" component={Chat} />
-        <Route path="/devis" component={Devis} />
-        <Route path="/classeur" component={Classeur} />
-        <Route path="/marge" component={Marge} />
-        <Route path="/rapports" component={Rapports} />
-        <Route path="/echeancier" component={Echeancier} />
-        <Route path="/equipe" component={PlatformRoute(Equipe)} />
-        <Route path="/votre-metier" component={PlatformRoute(VotreMetier)} />
-        <Route path="/connecteurs" component={PlatformRoute(Connecteurs)} />
-        <Route path="/parametres" component={PlatformRoute(Parametres)} />
-        <Route path="/login" component={Login} />
-        <Route component={NotFound} />
-      </Switch>
-    </AppShell>
+    <>
+      <NavProgressBar />
+      <AppShell>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={pageKey}
+            initial={reducedMotion ? false : { opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={reducedMotion ? {} : { opacity: 0, y: -4 }}
+            transition={reducedMotion ? { duration: 0 } : { duration: 0.18, ease: [0.25, 0.1, 0.25, 1] }}
+          >
+            <Switch>
+              <Route path="/" component={Cockpit} />
+              <Route path="/affaires/:id" component={AffaireDetail} />
+              <Route path="/affaires" component={Affaires} />
+              <Route path="/contrats" component={Contrats} />
+              <Route path="/factures" component={Factures} />
+              <Route path="/prospects" component={Prospects} />
+              <Route path="/brief" component={Brief} />
+              <Route path="/chat" component={Chat} />
+              <Route path="/devis" component={Devis} />
+              <Route path="/classeur" component={Classeur} />
+              <Route path="/marge" component={Marge} />
+              <Route path="/rapports" component={Rapports} />
+              <Route path="/echeancier" component={Echeancier} />
+              <Route path="/equipe" component={PlatformRoute(Equipe)} />
+              <Route path="/votre-metier" component={PlatformRoute(VotreMetier)} />
+              <Route path="/connecteurs" component={PlatformRoute(Connecteurs)} />
+              <Route path="/parametres" component={PlatformRoute(Parametres)} />
+              <Route path="/login" component={Login} />
+              <Route component={NotFound} />
+            </Switch>
+          </motion.div>
+        </AnimatePresence>
+      </AppShell>
+    </>
   );
 }
 
