@@ -53,24 +53,26 @@ router.patch("/connecteurs/:type", async (req, res): Promise<void> => {
   const [existing] = await db.select().from(connectorsTable).where(eq(connectorsTable.type, type));
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
 
+  const disconnecting = parsed.data.status === "NON_CONNECTE";
   const updateData: Record<string, unknown> = {};
+
   if (parsed.data.status !== undefined) {
     updateData.status = parsed.data.status;
     updateData.lastSyncAt = parsed.data.status === "CONNECTE" ? new Date() : null;
-    // On explicit disconnect, clear stored credentials
-    if (parsed.data.status === "NON_CONNECTE") {
-      updateData.config = {};
-    }
   }
-  if (parsed.data.config !== undefined) {
-    // Merge new fields into existing config — never blindly replace so that
-    // unedited credential fields (returned as "***" to the client) are preserved.
-    const existing = (await db.select({ config: connectorsTable.config })
+
+  if (disconnecting) {
+    // Disconnect is authoritative: always clear credentials, skip merge entirely.
+    updateData.config = {};
+  } else if (parsed.data.config !== undefined) {
+    // Merge new fields into existing config — unedited credential fields
+    // (returned as "***" to the client) must be preserved from the DB.
+    const stored = (await db.select({ config: connectorsTable.config })
       .from(connectorsTable).where(eq(connectorsTable.type, type)))[0]?.config as Record<string, string> ?? {};
     const incoming = parsed.data.config as Record<string, string>;
-    const merged: Record<string, string> = { ...existing };
+    const merged: Record<string, string> = { ...stored };
     for (const [k, v] of Object.entries(incoming)) {
-      // Only apply the value if the user actually typed something new (not the redacted placeholder)
+      // Apply the value only when the user typed something real (not the redacted placeholder)
       if (v && v !== "***") merged[k] = v;
     }
     updateData.config = merged;

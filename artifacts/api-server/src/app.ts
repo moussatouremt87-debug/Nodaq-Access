@@ -7,21 +7,36 @@ import { logger } from "./lib/logger";
 
 const app: Express = express();
 
-// ── CORS: restrict to the Replit dev domain + localhost ────────────────────
-const allowedOrigins: (string | RegExp)[] = [
-  /^http:\/\/localhost(:\d+)?$/,
-  /^https?:\/\/127\.0\.0\.1(:\d+)?$/,
-];
-
-const devDomain = process.env.REPLIT_DEV_DOMAIN;
-if (devDomain) {
-  allowedOrigins.push(new RegExp(`https?://${devDomain.replace(".", "\\.")}.*`));
-}
+// ── CORS: strict allowlist — localhost and the exact Replit dev domain ──────
+const devDomain = process.env.REPLIT_DEV_DOMAIN; // e.g. "abc123.id.repl.co"
 
 app.use(
   cors({
-    origin: allowedOrigins,
-    credentials: true, // allow cookies to be sent
+    origin(origin, callback) {
+      // Same-origin requests and server-to-server calls have no Origin header.
+      if (!origin) { callback(null, true); return; }
+
+      // Exact localhost / 127.0.0.1 match (any port)
+      if (/^https?:\/\/localhost(:\d+)?$/.test(origin) ||
+          /^https?:\/\/127\.0\.0\.1(:\d+)?$/.test(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      // Exact Replit dev domain — both bare and with explicit port
+      if (devDomain) {
+        const bare  = `https://${devDomain}`;
+        const bare2 = `http://${devDomain}`;
+        if (origin === bare || origin === bare2 ||
+            origin.startsWith(`${bare}:`) || origin.startsWith(`${bare2}:`)) {
+          callback(null, true);
+          return;
+        }
+      }
+
+      callback(new Error(`CORS: origin not allowed: ${origin}`));
+    },
+    credentials: true,
   }),
 );
 
