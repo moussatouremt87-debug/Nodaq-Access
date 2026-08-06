@@ -115,7 +115,7 @@ afterAll(async () => {
   await cleanupTenants(...tenantIds);
   await cleanupUsers(...testEmails);
   // Do NOT end drizzlePool — it is shared with the running application.
-  await adminPool.end().catch(() => {});
+  // adminPool is shared across test files; let the process close it naturally
 }, 30_000);
 
 // ────────────────────────────────────────────────────────────────────────────

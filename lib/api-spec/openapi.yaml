@@ -826,6 +826,47 @@ paths:
               schema:
                 $ref: "#/components/schemas/ChatSuggestions"
 
+  /chat/upload:
+    post:
+      operationId: uploadChatImage
+      tags: [chat]
+      summary: Upload an image/document for Pixtral analysis and agent routing
+      description: >
+        Accepts multipart/form-data with fields: image (file, required),
+        text (string, optional caption), conversationId (string, optional).
+        Not called via generated client — use FormData + fetch directly.
+      responses:
+        "201":
+          description: Image analysed, agent ran, classeur entry created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatUploadReply"
+        "400":
+          description: No image file provided
+        "503":
+          description: MISTRAL_API_KEY not configured
+
+  /chat/transcribe:
+    post:
+      operationId: transcribeChatAudio
+      tags: [chat]
+      summary: Transcribe an audio recording via Scaleway STT (Whisper)
+      description: >
+        Accepts multipart/form-data with field: audio (file, required).
+        Not called via generated client — use FormData + fetch directly.
+      responses:
+        "200":
+          description: Transcription result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranscribeReply"
+        "400":
+          description: No audio file provided
+        "503":
+          description: SCALEWAY_API_KEY not configured
+
   # ── Équipe ───────────────────────────────────────────────────────────────
   /equipe:
     get:
@@ -1562,6 +1603,44 @@ components:
           type: array
           items:
             type: string
+
+    ChatUploadReply:
+      type: object
+      required: [conversationId, message, document, binaryDiscarded]
+      properties:
+        conversationId:
+          type: string
+        message:
+          $ref: "#/components/schemas/ChatMessage"
+        actions_performed:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentAction"
+        binaryDiscarded:
+          type: boolean
+          description: >
+            Always true in this version — the image binary is not stored.
+            Binary storage (object storage + classeur thumbnail) is tracked
+            in a follow-up task.
+        document:
+          type: object
+          required: [name, documentType, summary]
+          properties:
+            name:
+              type: string
+              description: Auto-generated classeur document name
+            documentType:
+              type: string
+            summary:
+              type: string
+
+    TranscribeReply:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+          description: Transcribed text from the audio recording
 
     # ── Devis ─────────────────────────────────────────────────────────────────
     DevisLine:

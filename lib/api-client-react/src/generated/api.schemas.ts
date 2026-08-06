@@ -423,6 +423,27 @@ export interface ChatSuggestions {
   suggestions: string[];
 }
 
+export type ChatUploadReplyDocument = {
+  /** Auto-generated classeur document name */
+  name: string;
+  documentType: string;
+  summary: string;
+};
+
+export interface ChatUploadReply {
+  conversationId: string;
+  message: ChatMessage;
+  actions_performed?: AgentAction[];
+  /** Always true in this version — the image binary is not stored. Binary storage (object storage + classeur thumbnail) is tracked in a follow-up task. */
+  binaryDiscarded: boolean;
+  document: ChatUploadReplyDocument;
+}
+
+export interface TranscribeReply {
+  /** Transcribed text from the audio recording */
+  text: string;
+}
+
 export interface DevisLine {
   id: string;
   description: string;

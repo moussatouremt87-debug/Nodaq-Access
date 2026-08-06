@@ -1019,6 +1019,42 @@ export const GetChatSuggestionsResponse = zod.object({
 
 
 /**
+ * Accepts multipart/form-data with fields: image (file, required), text (string, optional caption), conversationId (string, optional). Not called via generated client — use FormData + fetch directly.
+ * @summary Upload an image/document for Pixtral analysis and agent routing
+ */
+export const UploadChatImageResponse = zod.object({
+  "conversationId": zod.string(),
+  "message": zod.object({
+  "id": zod.string(),
+  "role": zod.enum(['user', 'assistant']),
+  "content": zod.string(),
+  "createdAt": zod.coerce.date()
+}),
+  "actions_performed": zod.array(zod.object({
+  "type": zod.string().describe('Tool name that was executed (e.g. create_prospect, update_affaire_status)'),
+  "label": zod.string().describe('Human-readable description of what was done'),
+  "entityId": zod.string().optional().describe('UUID of the created\/updated entity'),
+  "entityType": zod.enum(['prospect', 'affaire', 'echeance', 'classeur', 'activity']).optional()
+})).optional(),
+  "binaryDiscarded": zod.boolean().describe('Always true in this version — the image binary is not stored. Binary storage (object storage + classeur thumbnail) is tracked in a follow-up task.\n'),
+  "document": zod.object({
+  "name": zod.string().describe('Auto-generated classeur document name'),
+  "documentType": zod.string(),
+  "summary": zod.string()
+})
+})
+
+
+/**
+ * Accepts multipart/form-data with field: audio (file, required). Not called via generated client — use FormData + fetch directly.
+ * @summary Transcribe an audio recording via Scaleway STT (Whisper)
+ */
+export const TranscribeChatAudioResponse = zod.object({
+  "text": zod.string().describe('Transcribed text from the audio recording')
+})
+
+
+/**
  * @summary List team members
  */
 export const ListTeamMembersResponseItem = zod.object({
