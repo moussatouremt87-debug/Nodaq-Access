@@ -1,3 +1,5 @@
+// STUB — aucune IA branchée. Ne pas démontrer comme un agent.
+// Les réponses ci-dessous sont préenregistrées. Remplacer par un vrai LLM avant tout usage en production.
 import { Router, type IRouter } from "express";
 import { withTenant, chatMessagesTable } from "@workspace/db";
 import { eq, asc } from "drizzle-orm";
@@ -59,7 +61,7 @@ router.post("/chat/messages", async (req, res): Promise<void> => {
     return msg;
   });
 
-  res.json({ conversationId: convId, message: assistantMessage });
+  res.json({ conversationId: convId, message: assistantMessage, stub: true });
 });
 
 export default router;

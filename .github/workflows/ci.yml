@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  ci:
+    name: Typecheck + RLS Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: nodaq_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/nodaq_ci
+      SESSION_SECRET: ci-test-session-secret-minimum-32chars
+      NODE_ENV: test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ── Database Setup ──────────────────────────────────────────────────
+      # db:setup = create-app-role → migrate-multitenant → migrate-rls → seed-owner
+      # create-app-role prints the DATABASE_URL_APP to stdout; we capture it here.
+
+      - name: Create app_user and capture DATABASE_URL_APP
+        id: setup_appuser
+        run: |
+          SCRIPT_OUTPUT=$(node lib/db/scripts/create-app-role.cjs)
+          echo "$SCRIPT_OUTPUT"
+          DB_APP_URL=$(echo "$SCRIPT_OUTPUT" | grep "^postgres://" | tail -1)
+          if [ -z "$DB_APP_URL" ]; then
+            echo "ERROR: could not extract DATABASE_URL_APP from create-app-role.cjs output"
+            exit 1
+          fi
+          echo "db_app_url=$DB_APP_URL" >> "$GITHUB_OUTPUT"
+          echo "DATABASE_URL_APP=$DB_APP_URL" >> "$GITHUB_ENV"
+
+      - name: Run schema migration + RLS + seed (db:setup minus create-app-role)
+        run: |
+          node lib/db/scripts/migrate-multitenant.cjs
+          node lib/db/scripts/migrate-rls.cjs
+          node lib/db/scripts/seed-owner.cjs
+        env:
+          DATABASE_URL_APP: ${{ steps.setup_appuser.outputs.db_app_url }}
+
+      # ── Typecheck ───────────────────────────────────────────────────────
+      - name: Typecheck all workspaces
+        run: pnpm run typecheck
+
+      # ── Tests ───────────────────────────────────────────────────────────
+      - name: Run RLS isolation tests
+        run: pnpm --filter @workspace/api-server run test
+        env:
+          DATABASE_URL_APP: ${{ steps.setup_appuser.outputs.db_app_url }}

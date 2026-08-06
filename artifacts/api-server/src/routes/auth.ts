@@ -120,6 +120,12 @@ router.get("/auth/me", async (req, res): Promise<void> => {
   const ctx = await findValidSession(sessionId);
   if (!ctx) { res.status(401).json({ authenticated: false }); return; }
 
+  if (!ctx.membership) {
+    // Valid session but membership was revoked between login and this request.
+    res.status(403).json({ authenticated: false, error: "Membership révoqué" });
+    return;
+  }
+
   res.json({
     authenticated: true,
     userId: ctx.user.id,

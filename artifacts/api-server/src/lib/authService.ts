@@ -83,7 +83,8 @@ export async function createSession(
 export interface SessionWithContext {
   session: Session;
   user: Pick<User, "id" | "email" | "nom">;
-  membership: Pick<Membership, "role">;
+  /** null when the membership has been revoked — requireMembership handles the 403. */
+  membership: Pick<Membership, "role"> | null;
 }
 
 export async function findValidSession(
@@ -104,6 +105,9 @@ export async function findValidSession(
     .where(eq(usersTable.id, session.userId));
   if (!user) return null;
 
+  // Membership is re-checked by requireMembership on every request.
+  // We load it here only to pre-populate req.session.role for convenience;
+  // a null membership does NOT cause a 401 — requireMembership returns 403 instead.
   const [membership] = await db
     .select({ role: membershipsTable.role })
     .from(membershipsTable)
@@ -113,9 +117,8 @@ export async function findValidSession(
         eq(membershipsTable.tenantId, session.tenantId),
       ),
     );
-  if (!membership) return null;
 
-  return { session, user, membership };
+  return { session, user, membership: membership ?? null };
 }
 
 export async function extendSession(sessionId: string): Promise<void> {

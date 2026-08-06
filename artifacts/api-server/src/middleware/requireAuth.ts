@@ -30,12 +30,13 @@ export async function requireAuth(
     return;
   }
 
-  // Attach typed context
+  // Attach typed context.
+  // role may be '' if membership was revoked — requireMembership will return 403.
   req.session = {
     id:       ctx.session.id,
     userId:   ctx.user.id,
     tenantId: ctx.session.tenantId,
-    role:     ctx.membership.role,
+    role:     ctx.membership?.role ?? "",
     email:    ctx.user.email,
     nom:      ctx.user.nom,
   };
