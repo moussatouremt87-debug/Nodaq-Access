@@ -57,6 +57,49 @@ router.get("/cockpit/kpis", async (req, res): Promise<void> => {
     ORDER BY month ASC
   `);
 
+  // ── YTD (year-to-date) ────────────────────────────────────────────────────
+  const year = now.getFullYear();
+  const firstOfYear    = `${year}-01-01`;
+  const firstOfLastYear = `${year - 1}-01-01`;
+  // Same calendar day last year (apples-to-apples comparison)
+  const sameDayLastYear = `${year - 1}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+  const [caYtdRow] = await db
+    .select({ total: sql<number>`coalesce(sum(amount_cents), 0)` })
+    .from(facturesTable)
+    .where(and(eq(facturesTable.settled, true), sql`created_at >= ${firstOfYear}`));
+
+  const [caPrevYearRow] = await db
+    .select({ total: sql<number>`coalesce(sum(amount_cents), 0)` })
+    .from(facturesTable)
+    .where(and(
+      eq(facturesTable.settled, true),
+      sql`created_at >= ${firstOfLastYear}`,
+      sql`created_at <  ${sameDayLastYear}`,
+    ));
+
+  const [facturesYtdRow] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(facturesTable)
+    .where(sql`created_at >= ${firstOfYear}`);
+
+  const recRow = await db.execute(sql`
+    SELECT
+      coalesce(sum(CASE WHEN settled = true THEN amount_cents ELSE 0 END), 0)::float AS paid,
+      coalesce(sum(amount_cents), 0)::float AS total
+    FROM factures
+    WHERE created_at >= ${firstOfYear}
+  `);
+
+  const caYtdCents              = caYtdRow?.total ?? 0;
+  const caPrevYearSamePeriodCents = caPrevYearRow?.total ?? 0;
+  const caGrowthPct             = caPrevYearSamePeriodCents > 0
+    ? Math.round(((caYtdCents - caPrevYearSamePeriodCents) / caPrevYearSamePeriodCents) * 100)
+    : null;
+  const recPaid  = Number(recRow.rows[0]?.paid  ?? 0);
+  const recTotal = Number(recRow.rows[0]?.total ?? 0);
+  const tauxRecouvrement = recTotal > 0 ? Math.round((recPaid / recTotal) * 100) : 0;
+
   res.json({
     affairesEnCours: affairesEnCours?.count ?? 0,
     chiffreAffairesMois: caMonth?.total ?? 0,
@@ -67,6 +110,13 @@ router.get("/cockpit/kpis", async (req, res): Promise<void> => {
     pendingActionsCount: pendingCount?.count ?? 0,
     treasuryBalanceCents: null,
     monthlySeries: monthlySeries.rows ?? [],
+    ytd: {
+      caYtdCents,
+      caPrevYearSamePeriodCents,
+      caGrowthPct,
+      facturesEmisesYtd: facturesYtdRow?.count ?? 0,
+      tauxRecouvrement,
+    },
   });
 });
 

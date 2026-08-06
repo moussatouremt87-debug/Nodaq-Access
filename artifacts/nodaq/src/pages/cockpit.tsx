@@ -13,6 +13,7 @@ import {
   Activity,
   ArrowUpRight,
   RefreshCw,
+  CalendarDays,
 } from 'lucide-react';
 import {
   Bar,
@@ -90,6 +91,22 @@ export default function Cockpit() {
   );
 
   const pending = (pendingActions ?? []).filter((a) => a.status === 'EN_ATTENTE');
+
+  // ── YTD helpers ──────────────────────────────────────────────────────────
+  const currentYear = new Date().getFullYear();
+  const pctYearElapsed = (() => {
+    const n = new Date();
+    const start = new Date(n.getFullYear(), 0, 1).getTime();
+    const end   = new Date(n.getFullYear() + 1, 0, 1).getTime();
+    return Math.round(((n.getTime() - start) / (end - start)) * 100);
+  })();
+  const ytd = kpis?.ytd ?? {
+    caYtdCents: 0,
+    caPrevYearSamePeriodCents: 0,
+    caGrowthPct: null,
+    facturesEmisesYtd: 0,
+    tauxRecouvrement: 0,
+  };
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
@@ -208,6 +225,84 @@ export default function Cockpit() {
             </>
           )}
         </motion.div>
+
+        {/* ── YTD Bilan ──────────────────────────────────────────────────── */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 px-0.5">
+            <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="text-[11px] font-medium uppercase tracking-[0.09em] text-muted-foreground">
+              Bilan {currentYear} — du 1er janvier à aujourd'hui
+            </span>
+          </div>
+
+          <motion.div
+            key={`ytd-${refreshKey}`}
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+            className="grid grid-cols-1 sm:grid-cols-3 gap-3"
+          >
+            {kpisLoading ? (
+              Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-[110px] rounded-xl" />
+              ))
+            ) : (
+              <>
+                <AnimatedKpi
+                  label="CA de l'année"
+                  target={ytd.caYtdCents}
+                  format={fmtCentsCompact}
+                  icon={TrendingUp}
+                  tone="accent"
+                  hint={
+                    ytd.caGrowthPct != null
+                      ? `${ytd.caGrowthPct >= 0 ? '↑' : '↓'} ${Math.abs(ytd.caGrowthPct)} % vs N−1`
+                      : undefined
+                  }
+                />
+                <AnimatedKpi
+                  label="Factures émises"
+                  target={ytd.facturesEmisesYtd}
+                  format={fmtCount}
+                  icon={Euro}
+                />
+                <AnimatedKpi
+                  label="Taux de recouvrement"
+                  target={ytd.tauxRecouvrement}
+                  format={(n) => `${Math.round(n)} %`}
+                  icon={ShieldCheck}
+                  tone={
+                    ytd.tauxRecouvrement >= 80
+                      ? 'accent'
+                      : ytd.tauxRecouvrement < 60
+                        ? 'warning'
+                        : 'default'
+                  }
+                />
+              </>
+            )}
+          </motion.div>
+
+          {/* Year-progress bar */}
+          {!kpisLoading && (
+            <div className="rounded-xl border border-card-border bg-card px-5 py-3 space-y-2">
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Progression annuelle</span>
+                <span className="font-mono-nums tabular-nums">
+                  {pctYearElapsed} % de l'année écoulée
+                </span>
+              </div>
+              <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${pctYearElapsed}%` }}
+                  transition={{ duration: 1.2, ease: 'easeOut', delay: 0.2 }}
+                  className="h-full rounded-full bg-primary/50"
+                />
+              </div>
+            </div>
+          )}
+        </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
           {/* Treasury + chart */}

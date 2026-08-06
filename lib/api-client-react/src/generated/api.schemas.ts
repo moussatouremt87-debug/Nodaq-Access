@@ -16,6 +16,19 @@ export interface MonthlyRevenue {
   invoiceCount: number;
 }
 
+export interface CockpitYtd {
+  /** Revenue settled Jan 1 to today, in cents */
+  caYtdCents: number;
+  /** Revenue settled same period last year, in cents */
+  caPrevYearSamePeriodCents: number;
+  /** Growth vs same period N-1 in %; null when no prior-year data */
+  caGrowthPct: number | null;
+  /** All invoices issued Jan 1 to today */
+  facturesEmisesYtd: number;
+  /** % of YTD invoiced amount that has been paid (0–100) */
+  tauxRecouvrement: number;
+}
+
 export interface CockpitKpis {
   affairesEnCours: number;
   /** Revenue this month in cents */
@@ -29,6 +42,7 @@ export interface CockpitKpis {
   /** @nullable */
   treasuryBalanceCents?: number | null;
   monthlySeries?: MonthlyRevenue[];
+  ytd?: CockpitYtd;
 }
 
 export interface ActivityItem {

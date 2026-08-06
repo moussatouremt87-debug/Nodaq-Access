@@ -1,0 +1,52 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+
+.neo-brutalist-root {
+  --neo-bg: #EAE6DF; /* Concrete-like off-white */
+  --neo-card-bg: #FFFFFF;
+  --neo-border: #000000;
+  --neo-accent: #FF4A1C; /* Safety Orange */
+  --neo-accent-2: #FFD600; /* High-vis Yellow */
+  --neo-accent-3: #B288FF; /* Electric Purple */
+  --neo-text: #000000;
+  --neo-muted: #4A4A4A;
+}
+
+.neo-font-heading {
+  font-family: 'Space Grotesk', sans-serif;
+}
+
+.neo-font-body {
+  font-family: 'Space Mono', monospace;
+}
+
+.neo-shadow {
+  box-shadow: 6px 6px 0px var(--neo-border);
+}
+
+.neo-shadow-lg {
+  box-shadow: 10px 10px 0px var(--neo-border);
+}
+
+.neo-shadow-sm {
+  box-shadow: 3px 3px 0px var(--neo-border);
+}
+
+.neo-button-hover {
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.neo-button-hover:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 8px 8px 0px var(--neo-border);
+}
+
+.neo-button-hover:active {
+  transform: translate(6px, 6px);
+  box-shadow: 0px 0px 0px var(--neo-border);
+}
+
+.neo-bg-pattern {
+  background-color: var(--neo-bg);
+  background-image: radial-gradient(var(--neo-muted) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
