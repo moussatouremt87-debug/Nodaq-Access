@@ -1,9 +1,11 @@
-import { pgTable, text, timestamp, real } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, real, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { tenantsTable } from "./tenants";
 
 export const pendingActionsTable = pgTable("pending_actions", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  tenantId: uuid("tenant_id").notNull().references(() => tenantsTable.id),
   type: text("type").notNull(),
   status: text("status").notNull().default("EN_ATTENTE"),
   label: text("label").notNull(),

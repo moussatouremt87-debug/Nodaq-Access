@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, pendingActionsTable, activityTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
+import { getDefaultTenantId } from "../lib/defaultTenant";
 import {
   ApprovePendingActionParams,
   RejectPendingActionParams,
@@ -31,7 +32,9 @@ router.post("/pending-actions/:id/approve", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Action not found" });
     return;
   }
+  const tenantId = await getDefaultTenantId();
   await db.insert(activityTable).values({
+    tenantId,
     type: "action_approved",
     label: `Action approuvée : ${action.label}`,
     meta: null,

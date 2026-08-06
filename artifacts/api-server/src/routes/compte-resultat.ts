@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, pool, facturesTable, crEntriesTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
+import { getDefaultTenantId } from "../lib/defaultTenant";
 import { z } from "zod";
 // pdfkit is externalized in esbuild so its AFM fonts resolve from node_modules
 import PDFDocument from "pdfkit";
@@ -234,6 +235,7 @@ router.patch("/compte-resultat/lignes", requireAuth, async (req, res): Promise<v
     }
   }
 
+  const tenantId = await getDefaultTenantId();
   for (const { lineCode, amountCents } of lines) {
     // Try update first, then insert (manual upsert for broad pg compatibility)
     const existing = await db.select().from(crEntriesTable)
@@ -244,7 +246,7 @@ router.patch("/compte-resultat/lignes", requireAuth, async (req, res): Promise<v
         .set({ amountCents, updatedAt: new Date() })
         .where(and(eq(crEntriesTable.periodKey, pKey), eq(crEntriesTable.lineCode, lineCode)));
     } else {
-      await db.insert(crEntriesTable).values({ periodKey: pKey, lineCode, amountCents });
+      await db.insert(crEntriesTable).values({ tenantId, periodKey: pKey, lineCode, amountCents });
     }
   }
 

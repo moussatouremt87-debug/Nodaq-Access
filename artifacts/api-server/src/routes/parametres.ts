@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, settingsTable } from "@workspace/db";
 import { eq, inArray } from "drizzle-orm";
 import { z } from "zod";
+import { getDefaultTenantId } from "../lib/defaultTenant";
 
 const router: IRouter = Router();
 
@@ -21,8 +22,9 @@ const DEFAULTS: Record<string, string> = {
 const SetSettingsBody = z.record(z.string(), z.string());
 
 async function ensureDefaults() {
+  const tenantId = await getDefaultTenantId();
   for (const [key, value] of Object.entries(DEFAULTS)) {
-    await db.insert(settingsTable).values({ key, value })
+    await db.insert(settingsTable).values({ tenantId, key, value })
       .onConflictDoNothing();
   }
 }
@@ -39,9 +41,10 @@ router.patch("/parametres", async (req, res): Promise<void> => {
   const parsed = SetSettingsBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
+  const tenantId = await getDefaultTenantId();
   for (const [key, value] of Object.entries(parsed.data)) {
-    await db.insert(settingsTable).values({ key, value })
-      .onConflictDoUpdate({ target: settingsTable.key, set: { value, updatedAt: new Date() } });
+    await db.insert(settingsTable).values({ tenantId, key, value })
+      .onConflictDoUpdate({ target: [settingsTable.tenantId, settingsTable.key], set: { value, updatedAt: new Date() } });
   }
 
   const keys = Object.keys(parsed.data);

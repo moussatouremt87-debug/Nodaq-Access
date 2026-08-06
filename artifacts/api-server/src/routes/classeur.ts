@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, classeurTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
+import { getDefaultTenantId } from "../lib/defaultTenant";
 import {
   ListClasseurQueryParams,
   CreateClasseurDocumentBody,
@@ -28,7 +29,9 @@ router.post("/classeur", async (req, res): Promise<void> => {
   const parsed = CreateClasseurDocumentBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
+  const tenantId = await getDefaultTenantId();
   const [doc] = await db.insert(classeurTable).values({
+    tenantId,
     name: parsed.data.name,
     category: parsed.data.category,
     size: parsed.data.size ?? null,

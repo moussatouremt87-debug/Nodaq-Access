@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, facturesTable, activityTable } from "@workspace/db";
 import { eq, sql, desc } from "drizzle-orm";
+import { getDefaultTenantId } from "../lib/defaultTenant";
 import {
   CreateFactureBody,
   UpdateFactureBody,
@@ -41,7 +42,9 @@ router.post("/factures", async (req, res): Promise<void> => {
   }
   const data = parsed.data;
   const toStr = (v: unknown) => v instanceof Date ? v.toISOString().slice(0, 10) : String(v ?? '');
+  const tenantId = await getDefaultTenantId();
   const [facture] = await db.insert(facturesTable).values({
+    tenantId,
     customerName: data.customerName,
     number: data.number,
     issuedDate: toStr(data.issuedDate),
@@ -79,7 +82,9 @@ router.patch("/factures/:id", async (req, res): Promise<void> => {
   }
 
   if (data.settled) {
+    const tenantId = await getDefaultTenantId();
     await db.insert(activityTable).values({
+      tenantId,
       type: "facture_paid",
       label: `Facture réglée : ${facture.number}`,
       meta: facture.customerName,

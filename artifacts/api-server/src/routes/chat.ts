@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, chatMessagesTable } from "@workspace/db";
 import { eq, asc } from "drizzle-orm";
+import { getDefaultTenantId } from "../lib/defaultTenant";
 import {
   SendChatMessageBody,
   GetChatHistoryQueryParams,
@@ -49,9 +50,11 @@ router.post("/chat/messages", async (req, res): Promise<void> => {
   }
   const { content, conversationId } = parsed.data;
   const convId = conversationId ?? crypto.randomUUID();
+  const tenantId = await getDefaultTenantId();
 
   // Store user message
   await db.insert(chatMessagesTable).values({
+    tenantId,
     conversationId: convId,
     role: "user",
     content,
@@ -62,6 +65,7 @@ router.post("/chat/messages", async (req, res): Promise<void> => {
   replyIndex++;
 
   const [assistantMessage] = await db.insert(chatMessagesTable).values({
+    tenantId,
     conversationId: convId,
     role: "assistant",
     content: reply,

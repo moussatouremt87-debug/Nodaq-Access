@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, pool, teamMembersTable, affairesTable, facturesTable } from "@workspace/db";
 import { eq, asc, sql } from "drizzle-orm";
+import { getDefaultTenantId } from "../lib/defaultTenant";
 import { z } from "zod";
 import {
   buildSemaines,
@@ -26,9 +27,10 @@ const DAYS = ["LUN", "MAR", "MER", "JEU", "VEN", "SAM", "DIM"];
 async function ensureDefaultMembers() {
   const existing = await db.select().from(teamMembersTable);
   if (existing.length === 0) {
+    const tenantId = await getDefaultTenantId();
     for (const m of SEED_MEMBERS) {
       await db.insert(teamMembersTable).values({
-        name: m.name, role: m.role, email: m.email,
+        tenantId, name: m.name, role: m.role, email: m.email,
         availability: m.availability,
         schedule: JSON.stringify(DAYS.map(day => ({ day, affaireId: null }))),
       });
@@ -61,8 +63,9 @@ router.post("/equipe", async (req, res): Promise<void> => {
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
   const { name, role = "Collaborateur", email, availability = "DISPONIBLE", schedule = [] } = parsed.data;
+  const tenantId = await getDefaultTenantId();
   const [member] = await db.insert(teamMembersTable).values({
-    name, role, availability,
+    tenantId, name, role, availability,
     schedule: JSON.stringify(schedule),
     ...(email ? { email } : {}),
   }).returning();
@@ -104,15 +107,20 @@ router.delete("/equipe/:id", async (req, res): Promise<void> => {
 // ── Settings helpers ──────────────────────────────────────────────────────
 
 async function getSetting(client: any, key: string): Promise<string | null> {
-  const { rows } = await client.query("SELECT value FROM settings WHERE key = $1", [key]);
+  const tenantId = await getDefaultTenantId();
+  const { rows } = await client.query(
+    "SELECT value FROM settings WHERE tenant_id = $1 AND key = $2",
+    [tenantId, key],
+  );
   return rows[0]?.value ?? null;
 }
 
 async function setSetting(client: any, key: string, value: string): Promise<void> {
+  const tenantId = await getDefaultTenantId();
   await client.query(
-    `INSERT INTO settings (key, value) VALUES ($1, $2)
-     ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
-    [key, value],
+    `INSERT INTO settings (tenant_id, key, value) VALUES ($1, $2, $3)
+     ON CONFLICT (tenant_id, key) DO UPDATE SET value = $3, updated_at = NOW()`,
+    [tenantId, key, value],
   );
 }
 
@@ -154,8 +162,11 @@ router.get("/equipe/plannings", async (_req, res): Promise<void> => {
   const client2 = await pool.connect();
   let absences: AbsenceRecord[] = [];
   try {
+    const tenantIdForAbsences = await getDefaultTenantId();
     const { rows } = await client2.query(
-      "SELECT membre_id AS \"membreId\", date_debut::text AS \"dateDebut\", date_fin::text AS \"dateFin\" FROM absences WHERE date_fin >= CURRENT_DATE",
+      `SELECT membre_id AS "membreId", date_debut::text AS "dateDebut", date_fin::text AS "dateFin"
+       FROM absences WHERE tenant_id = $1 AND date_fin >= CURRENT_DATE`,
+      [tenantIdForAbsences],
     );
     absences = rows as AbsenceRecord[];
   } catch {
@@ -253,8 +264,11 @@ router.post("/equipe/plannings/simuler", async (req, res): Promise<void> => {
   const client2 = await pool.connect();
   let absences: AbsenceRecord[] = [];
   try {
+    const tenantIdForAbsences = await getDefaultTenantId();
     const { rows } = await client2.query(
-      "SELECT membre_id AS \"membreId\", date_debut::text AS \"dateDebut\", date_fin::text AS \"dateFin\" FROM absences WHERE date_fin >= CURRENT_DATE",
+      `SELECT membre_id AS "membreId", date_debut::text AS "dateDebut", date_fin::text AS "dateFin"
+       FROM absences WHERE tenant_id = $1 AND date_fin >= CURRENT_DATE`,
+      [tenantIdForAbsences],
     );
     absences = rows as AbsenceRecord[];
   } catch { /* absences table may not exist */ } finally { client2.release(); }
@@ -321,11 +335,13 @@ const AbsenceBody = z.object({
 router.get("/equipe/absences", async (_req, res): Promise<void> => {
   const client = await pool.connect();
   try {
+    const tenantId = await getDefaultTenantId();
     const { rows } = await client.query(
       `SELECT id, membre_id AS "membreId", type,
               date_debut::text AS "dateDebut", date_fin::text AS "dateFin",
               created_at AS "createdAt"
-       FROM absences ORDER BY date_debut DESC LIMIT 50`,
+       FROM absences WHERE tenant_id = $1 ORDER BY date_debut DESC LIMIT 50`,
+      [tenantId],
     );
     res.json(rows);
   } finally {
@@ -343,13 +359,14 @@ router.post("/equipe/absences", async (req, res): Promise<void> => {
 
   const client = await pool.connect();
   try {
+    const tenantId = await getDefaultTenantId();
     const { rows } = await client.query(
-      `INSERT INTO absences (id, membre_id, type, date_debut, date_fin)
-       VALUES (gen_random_uuid()::text, $1, $2, $3, $4)
+      `INSERT INTO absences (id, tenant_id, membre_id, type, date_debut, date_fin)
+       VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5)
        RETURNING id, membre_id AS "membreId", type,
                  date_debut::text AS "dateDebut", date_fin::text AS "dateFin",
                  created_at AS "createdAt"`,
-      [membreId, type, dateDebut, dateFin],
+      [tenantId, membreId, type, dateDebut, dateFin],
     );
     res.status(201).json(rows[0]);
   } finally {

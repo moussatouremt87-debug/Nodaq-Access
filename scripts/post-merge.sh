@@ -5,6 +5,9 @@ pnpm install --frozen-lockfile
 # Apply platform table migrations (non-interactive, idempotent raw SQL)
 pnpm --filter @workspace/db run migrate-platform
 
+# Apply Phase 2 multi-tenant schema migration (idempotent — safe on already-migrated DBs)
+pnpm --filter @workspace/db run migrate-multitenant
+
 # Apply remaining Drizzle schema non-interactively
 pnpm --filter @workspace/db run push-force
 

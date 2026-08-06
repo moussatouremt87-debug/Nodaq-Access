@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, echeancesTable } from "@workspace/db";
 import { eq, asc } from "drizzle-orm";
+import { getDefaultTenantId } from "../lib/defaultTenant";
 import {
   ListEcheancesQueryParams,
   CreateEcheanceBody,
@@ -50,8 +51,10 @@ router.post("/echeances", async (req, res): Promise<void> => {
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
   const dueDate = toDateStr(parsed.data.dueDate as unknown as Date | string);
+  const tenantId = await getDefaultTenantId();
 
   const insertData: Record<string, unknown> = {
+    tenantId,
     type: parsed.data.type,
     label: parsed.data.label,
     dueDate,

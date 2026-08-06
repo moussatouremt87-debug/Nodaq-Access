@@ -1,9 +1,11 @@
-import { pgTable, text, timestamp, integer, real, json } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, real, json, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { tenantsTable } from "./tenants";
 
 export const devisTable = pgTable("devis", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  tenantId: uuid("tenant_id").notNull().references(() => tenantsTable.id),
   reference: text("reference").notNull(),
   clientName: text("client_name").notNull(),
   status: text("status").notNull().default("BROUILLON"),

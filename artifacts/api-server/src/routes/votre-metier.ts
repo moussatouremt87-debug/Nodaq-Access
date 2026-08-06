@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, settingsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
+import { getDefaultTenantId } from "../lib/defaultTenant";
 
 const router: IRouter = Router();
 
@@ -22,8 +23,9 @@ router.patch("/votre-metier", async (req, res): Promise<void> => {
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
   const { metier } = parsed.data;
-  await db.insert(settingsTable).values({ key: KEY, value: metier })
-    .onConflictDoUpdate({ target: settingsTable.key, set: { value: metier, updatedAt: new Date() } });
+  const tenantId = await getDefaultTenantId();
+  await db.insert(settingsTable).values({ tenantId, key: KEY, value: metier })
+    .onConflictDoUpdate({ target: [settingsTable.tenantId, settingsTable.key], set: { value: metier, updatedAt: new Date() } });
 
   res.json({ metier });
 });

@@ -1,13 +1,23 @@
-import { db, teamMembersTable, connectorsTable } from "./index.js";
+import { db, teamMembersTable, connectorsTable, tenantsTable } from "./index.js";
+import { eq } from "drizzle-orm";
 
 const DAYS = ['LUN', 'MAR', 'MER', 'JEU', 'VEN'];
 
 async function seedPlatform() {
+  // Resolve the Migration tenant — created by migrate-multitenant.cjs
+  const tenants = await db.select().from(tenantsTable);
+  if (tenants.length === 0) {
+    console.error("No tenant found. Run migrate-multitenant.cjs first.");
+    process.exit(1);
+  }
+  const tenantId = tenants[0].id;
+
   // Seed team members
   const existingMembers = await db.select().from(teamMembersTable);
   if (existingMembers.length === 0) {
     await db.insert(teamMembersTable).values([
       {
+        tenantId,
         name: "Sophie Marchand",
         role: "Développeuse Full-Stack",
         email: "sophie@nodaq.fr",
@@ -15,13 +25,15 @@ async function seedPlatform() {
         schedule: JSON.stringify(DAYS.map(day => ({ day, affaireId: null }))),
       },
       {
+        tenantId,
         name: "Thomas Dubois",
         role: "Designer UX/UI",
         email: "thomas@nodaq.fr",
         availability: "PARTIEL",
-        schedule: JSON.stringify(['LUN', 'MAR', 'MER'].map(day => ({ day, affaireId: null })).concat(['JEU', 'VEN'].map(day => ({ day, affaireId: null })))),
+        schedule: JSON.stringify(DAYS.map(day => ({ day, affaireId: null }))),
       },
       {
+        tenantId,
         name: "Amel Benali",
         role: "Chef de projet",
         email: "amel@nodaq.fr",
@@ -44,7 +56,7 @@ async function seedPlatform() {
       { type: "ZAPIER",       label: "Zapier",        description: "Automatisation de workflows",                status: "NON_CONNECTE" },
     ];
     for (const c of CONNECTORS) {
-      await db.insert(connectorsTable).values({ ...c, config: {} }).onConflictDoNothing();
+      await db.insert(connectorsTable).values({ tenantId, ...c, config: {} }).onConflictDoNothing();
     }
     console.log("✓ Seeded connectors");
   }

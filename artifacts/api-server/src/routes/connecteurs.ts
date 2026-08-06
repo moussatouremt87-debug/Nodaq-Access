@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, connectorsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
+import { getDefaultTenantId } from "../lib/defaultTenant";
 
 const router: IRouter = Router();
 
@@ -22,9 +23,10 @@ const DEFAULTS = [
 async function ensureDefaults() {
   const existing = await db.select().from(connectorsTable);
   if (existing.length === 0) {
+    const tenantId = await getDefaultTenantId();
     for (const d of DEFAULTS) {
       await db.insert(connectorsTable).values({
-        type: d.type, label: d.label, description: d.description, status: d.status, config: {},
+        tenantId, type: d.type, label: d.label, description: d.description, status: d.status, config: {},
       }).onConflictDoNothing();
     }
   }

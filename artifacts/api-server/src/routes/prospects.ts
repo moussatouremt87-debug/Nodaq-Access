@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, prospectsTable, activityTable } from "@workspace/db";
 import { eq, sql, desc } from "drizzle-orm";
+import { getDefaultTenantId } from "../lib/defaultTenant";
 import {
   CreateProspectBody,
   UpdateProspectBody,
@@ -36,7 +37,9 @@ router.post("/prospects", async (req, res): Promise<void> => {
     return;
   }
   const data = parsed.data;
+  const tenantId = await getDefaultTenantId();
   const [prospect] = await db.insert(prospectsTable).values({
+    tenantId,
     name: data.name,
     companyName: data.companyName ?? null,
     phone: data.phone ?? null,
@@ -48,6 +51,7 @@ router.post("/prospects", async (req, res): Promise<void> => {
   }).returning();
 
   await db.insert(activityTable).values({
+    tenantId,
     type: "prospect_added",
     label: `Nouveau prospect : ${prospect!.name}`,
     meta: prospect!.companyName ?? null,

@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, affairesTable, activityTable } from "@workspace/db";
 import { eq, sql, desc } from "drizzle-orm";
+import { getDefaultTenantId } from "../lib/defaultTenant";
 import {
   CreateAffaireBody,
   UpdateAffaireBody,
@@ -60,10 +61,12 @@ router.post("/affaires", async (req, res): Promise<void> => {
     return;
   }
   const data = parsed.data;
+  const tenantId = await getDefaultTenantId();
   const refNum = String(Date.now()).slice(-6);
   const rawStart = data.startDate as unknown as Date | string | undefined;
   const startDate = rawStart instanceof Date ? rawStart.toISOString().slice(0, 10) : (rawStart ?? null);
   const [affaire] = await db.insert(affairesTable).values({
+    tenantId,
     label: data.label,
     clientName: data.clientName ?? null,
     status: data.status ?? "PROSPECT",
@@ -75,6 +78,7 @@ router.post("/affaires", async (req, res): Promise<void> => {
 
   // Log activity
   await db.insert(activityTable).values({
+    tenantId,
     type: "affaire_created",
     label: `Nouvelle affaire : ${affaire!.label}`,
     meta: affaire!.clientName ?? null,

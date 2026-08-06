@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, contratsTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
+import { getDefaultTenantId } from "../lib/defaultTenant";
 import {
   CreateContratBody,
   UpdateContratBody,
@@ -40,7 +41,9 @@ router.post("/contrats", async (req, res): Promise<void> => {
   }
   const data = parsed.data;
   const toStr = (v: unknown) => v instanceof Date ? v.toISOString().slice(0, 10) : (v as string | null | undefined) ?? null;
+  const tenantId = await getDefaultTenantId();
   const [contrat] = await db.insert(contratsTable).values({
+    tenantId,
     label: data.label,
     clientName: data.clientName ?? null,
     cadence: data.cadence ?? "mensuel",

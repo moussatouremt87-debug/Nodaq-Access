@@ -1,11 +1,20 @@
-import { db, devisTable, classeurTable, echeancesTable } from "./index.js";
+import { db, devisTable, classeurTable, echeancesTable, tenantsTable } from "./index.js";
 
 async function seedMetier() {
+  // Resolve the Migration tenant — created by migrate-multitenant.cjs
+  const tenants = await db.select().from(tenantsTable);
+  if (tenants.length === 0) {
+    console.error("No tenant found. Run migrate-multitenant.cjs first.");
+    process.exit(1);
+  }
+  const tenantId = tenants[0].id;
+
   // Seed devis
   const existingDevis = await db.select().from(devisTable);
   if (existingDevis.length === 0) {
     await db.insert(devisTable).values([
       {
+        tenantId,
         reference: "DEV-2026-0001",
         clientName: "Atelier Dupont",
         status: "ACCEPTE",
@@ -21,6 +30,7 @@ async function seedMetier() {
         notes: "Devis accepté suite au rendez-vous du 15 juillet.",
       },
       {
+        tenantId,
         reference: "DEV-2026-0002",
         clientName: "Cabinet Martin & Associés",
         status: "ENVOYE",
@@ -35,6 +45,7 @@ async function seedMetier() {
         validUntil: "2026-08-31",
       },
       {
+        tenantId,
         reference: "DEV-2026-0003",
         clientName: "Boulangerie Chez Paul",
         status: "BROUILLON",
@@ -48,6 +59,7 @@ async function seedMetier() {
         notes: "En attente des spécifications définitives.",
       },
       {
+        tenantId,
         reference: "DEV-2026-0004",
         clientName: "Groupe Lemaire",
         status: "REFUSE",
@@ -69,12 +81,12 @@ async function seedMetier() {
   const existingDocs = await db.select().from(classeurTable);
   if (existingDocs.length === 0) {
     await db.insert(classeurTable).values([
-      { name: "Facture F-2026-001 - Atelier Dupont.pdf", category: "FACTURES", size: 145230, mimeType: "application/pdf" },
-      { name: "Contrat prestation - Cabinet Martin.pdf", category: "CONTRATS", size: 287450, mimeType: "application/pdf" },
-      { name: "Devis DEV-2026-0001 signé.pdf", category: "DEVIS", size: 98760, mimeType: "application/pdf" },
-      { name: "Kbis NODAQ 2026.pdf", category: "DIVERS", size: 234100, mimeType: "application/pdf" },
-      { name: "Contrat SaaS annuel - Groupe Lemaire.pdf", category: "CONTRATS", size: 312000, mimeType: "application/pdf" },
-      { name: "Facture fournisseur OVH - Juin 2026.pdf", category: "FACTURES", size: 52000, mimeType: "application/pdf" },
+      { tenantId, name: "Facture F-2026-001 - Atelier Dupont.pdf", category: "FACTURES", size: 145230, mimeType: "application/pdf" },
+      { tenantId, name: "Contrat prestation - Cabinet Martin.pdf", category: "CONTRATS", size: 287450, mimeType: "application/pdf" },
+      { tenantId, name: "Devis DEV-2026-0001 signé.pdf", category: "DEVIS", size: 98760, mimeType: "application/pdf" },
+      { tenantId, name: "Kbis NODAQ 2026.pdf", category: "DIVERS", size: 234100, mimeType: "application/pdf" },
+      { tenantId, name: "Contrat SaaS annuel - Groupe Lemaire.pdf", category: "CONTRATS", size: 312000, mimeType: "application/pdf" },
+      { tenantId, name: "Facture fournisseur OVH - Juin 2026.pdf", category: "FACTURES", size: 52000, mimeType: "application/pdf" },
     ]);
     console.log("✓ Seeded classeur");
   }
@@ -90,17 +102,17 @@ async function seedMetier() {
     };
 
     await db.insert(echeancesTable).values([
-      { type: "TVA", label: "Déclaration TVA CA3 — Juillet 2026", dueDate: d(8), estimatedCents: 234000, status: "A_VENIR" },
-      { type: "URSSAF", label: "Cotisations sociales URSSAF — T3 2026", dueDate: d(22), estimatedCents: 189000, status: "A_VENIR" },
-      { type: "IS", label: "Acompte IS — 3ème trimestre 2026", dueDate: d(45), estimatedCents: 420000, status: "A_VENIR" },
-      { type: "CFE", label: "Cotisation Foncière des Entreprises 2026", dueDate: d(150), estimatedCents: 86000, status: "A_VENIR" },
+      { tenantId, type: "TVA", label: "Déclaration TVA CA3 — Juillet 2026", dueDate: d(8), estimatedCents: 234000, status: "A_VENIR" },
+      { tenantId, type: "URSSAF", label: "Cotisations sociales URSSAF — T3 2026", dueDate: d(22), estimatedCents: 189000, status: "A_VENIR" },
+      { tenantId, type: "IS", label: "Acompte IS — 3ème trimestre 2026", dueDate: d(45), estimatedCents: 420000, status: "A_VENIR" },
+      { tenantId, type: "CFE", label: "Cotisation Foncière des Entreprises 2026", dueDate: d(150), estimatedCents: 86000, status: "A_VENIR" },
       {
-        type: "TVA", label: "Déclaration TVA CA3 — Juin 2026", dueDate: d(-10),
+        tenantId, type: "TVA", label: "Déclaration TVA CA3 — Juin 2026", dueDate: d(-10),
         estimatedCents: 198000, paidCents: 198000, status: "PAYEE",
         paidAt: new Date(today.getTime() - 5 * 24 * 60 * 60 * 1000),
       },
       {
-        type: "URSSAF", label: "Cotisations sociales URSSAF — T2 2026", dueDate: d(-45),
+        tenantId, type: "URSSAF", label: "Cotisations sociales URSSAF — T2 2026", dueDate: d(-45),
         estimatedCents: 175000, paidCents: 175000, status: "PAYEE",
         paidAt: new Date(today.getTime() - 40 * 24 * 60 * 60 * 1000),
       },

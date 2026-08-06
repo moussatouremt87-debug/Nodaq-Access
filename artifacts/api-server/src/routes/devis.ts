@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, devisTable, affairesTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
+import { getDefaultTenantId } from "../lib/defaultTenant";
 import {
   ListDevisQueryParams,
   CreateDevisBody,
@@ -57,9 +58,11 @@ router.post("/devis", async (req, res): Promise<void> => {
   const { clientName, lines = [], tvaRate = 20, remise = 0, notes, validUntil } = parsed.data;
   const count = (await db.select().from(devisTable)).length;
   const { totalHTCents, totalTTCCents } = calcTotals(lines, tvaRate, remise);
+  const tenantId = await getDefaultTenantId();
 
   const linesWithId = lines.map(l => ({ ...l, id: crypto.randomUUID() }));
   const [created] = await db.insert(devisTable).values({
+    tenantId,
     reference: nextRef(count),
     clientName,
     status: parsed.data.status ?? "BROUILLON",
@@ -149,8 +152,10 @@ router.post("/devis/:id/convert", async (req, res): Promise<void> => {
 
   const count = (await db.select().from(affairesTable)).length;
   const ref = `AFF-${new Date().getFullYear()}-${String(count + 1).padStart(4, "0")}`;
+  const tenantId = await getDefaultTenantId();
 
   const [affaire] = await db.insert(affairesTable).values({
+    tenantId,
     reference: ref,
     label: `Affaire ${d.clientName}`,
     clientName: d.clientName,
