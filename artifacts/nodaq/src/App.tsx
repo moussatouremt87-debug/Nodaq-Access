@@ -18,6 +18,7 @@ import Echeancier from '@/pages/echeancier';
 import Equipe from '@/pages/equipe';
 import Connecteurs from '@/pages/connecteurs';
 import Parametres from '@/pages/parametres';
+import VotreMetier from '@/pages/votre-metier';
 import Login from '@/pages/login';
 import { useAuth } from '@/hooks/use-auth';
 import { useLocation } from 'wouter';
@@ -72,6 +73,7 @@ function AppRouter() {
         <Route path="/rapports" component={Rapports} />
         <Route path="/echeancier" component={Echeancier} />
         <Route path="/equipe" component={PlatformRoute(Equipe)} />
+        <Route path="/votre-metier" component={PlatformRoute(VotreMetier)} />
         <Route path="/connecteurs" component={PlatformRoute(Connecteurs)} />
         <Route path="/parametres" component={PlatformRoute(Parametres)} />
         <Route path="/login" component={Login} />

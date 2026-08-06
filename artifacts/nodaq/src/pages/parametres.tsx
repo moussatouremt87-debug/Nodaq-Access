@@ -4,8 +4,6 @@ import { Building2, Bell, Puzzle, Save } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -16,15 +14,8 @@ const API = '/api';
 type Settings = Record<string, string>;
 
 const TABS = [
-  { id: 'metier',        label: 'Votre métier',  icon: Building2 },
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'modules',       label: 'Modules',       icon: Puzzle },
-];
-
-const SECTEURS = [
-  'Informatique / Tech', 'Consulting / Conseil', 'Marketing / Communication',
-  'BTP / Travaux', 'Commerce / Distribution', 'Services aux entreprises',
-  'Santé / Bien-être', 'Formation / Education', 'Autre',
 ];
 
 function useSettings() {
@@ -102,12 +93,9 @@ export default function ParametresPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const { data, isLoading } = useSettings();
-  const [activeTab, setActiveTab] = useState('metier');
+  const [activeTab, setActiveTab] = useState('notifications');
 
   // Form state
-  const [raisonSociale, setRaisonSociale] = useState('');
-  const [siret, setSiret] = useState('');
-  const [secteur, setSecteur] = useState('');
   const [notifFact, setNotifFact] = useState(true);
   const [notifAction, setNotifAction] = useState(true);
   const [notifProspect, setNotifProspect] = useState(false);
@@ -119,9 +107,6 @@ export default function ParametresPage() {
   // Populate form from server
   useEffect(() => {
     if (data) {
-      setRaisonSociale(data['metier.raisonSociale'] ?? '');
-      setSiret(data['metier.siret'] ?? '');
-      setSecteur(data['metier.secteur'] ?? '');
       setNotifFact(data['notif.nouvelleFact'] !== 'false');
       setNotifAction(data['notif.actionAvalider'] !== 'false');
       setNotifProspect(data['notif.prospectQualifie'] === 'true');
@@ -154,9 +139,6 @@ export default function ParametresPage() {
 
   const handleSave = () => {
     const payload: Settings = {
-      'metier.raisonSociale': raisonSociale,
-      'metier.siret': siret,
-      'metier.secteur': secteur,
       'notif.nouvelleFact': String(notifFact),
       'notif.actionAvalider': String(notifAction),
       'notif.prospectQualifie': String(notifProspect),
@@ -173,7 +155,7 @@ export default function ParametresPage() {
       <PageHeader
         eyebrow="Plateforme"
         title="Paramètres"
-        description="Configurez votre espace de travail, les notifications et les modules actifs."
+        description="Configurez les notifications et les modules actifs."
         actions={
           <Button onClick={handleSave} disabled={saveMut.isPending} className="gap-1.5">
             <Save className="h-4 w-4" />
@@ -212,39 +194,6 @@ export default function ParametresPage() {
         ) : (
           <motion.div key={activeTab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.2 }}>
-
-            {activeTab === 'metier' && (
-              <div className="max-w-xl space-y-5">
-                <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
-                  <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                    <Building2 className="h-4 w-4 text-muted-foreground" /> Informations légales
-                  </h3>
-                  <div className="space-y-1.5">
-                    <Label>Raison sociale</Label>
-                    <Input value={raisonSociale}
-                      onChange={e => setRaisonSociale(e.target.value)}
-                      placeholder="NODAQ SAS" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>SIRET</Label>
-                    <Input value={siret}
-                      onChange={e => setSiret(e.target.value)}
-                      placeholder="000 000 000 00000" maxLength={17} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Secteur d'activité</Label>
-                    <select
-                      value={secteur}
-                      onChange={e => setSecteur(e.target.value)}
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      <option value="">Sélectionner un secteur...</option>
-                      {SECTEURS.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  </div>
-                </div>
-              </div>
-            )}
 
             {activeTab === 'notifications' && (
               <div className="max-w-xl">

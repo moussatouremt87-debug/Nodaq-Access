@@ -45,4 +45,7 @@ fi
 TEST_API_BASE=http://localhost:18080 \
   pnpm --filter @workspace/db run test-connectors-http
 
+TEST_API_BASE=http://localhost:18080 \
+  pnpm --filter @workspace/db run test-planning-http
+
 echo "HTTP regression tests complete."

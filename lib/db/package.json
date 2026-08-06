@@ -12,7 +12,8 @@
     "push-force": "drizzle-kit push --force --config ./drizzle.config.ts",
     "migrate-platform": "node src/migrate-platform.cjs",
     "test-connectors": "node src/test-connectors.cjs",
-    "test-connectors-http": "node src/test-connectors-http.cjs"
+    "test-connectors-http": "node src/test-connectors-http.cjs",
+    "test-planning-http": "node src/test-planning-http.cjs"
   },
   "dependencies": {
     "drizzle-orm": "catalog:",

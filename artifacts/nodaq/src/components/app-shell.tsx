@@ -16,6 +16,7 @@ import {
   UserCog,
   Plug2,
   Settings2,
+  Hammer,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -56,6 +57,7 @@ const NAV_SECTIONS = [
     label: 'Plateforme',
     items: [
       { href: '/equipe', label: 'Équipe & plannings', icon: UserCog, testId: 'nav-equipe' },
+      { href: '/votre-metier', label: 'Votre métier', icon: Hammer, testId: 'nav-votre-metier' },
       { href: '/connecteurs', label: 'Connecteurs', icon: Plug2, testId: 'nav-connecteurs' },
       { href: '/parametres', label: 'Paramètres', icon: Settings2, testId: 'nav-parametres' },
     ],

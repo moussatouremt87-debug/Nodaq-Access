@@ -16,8 +16,11 @@ import rapportsRouter from "./rapports";
 import equipeRouter from "./equipe";
 import connecteursRouter from "./connecteurs";
 import parametresRouter from "./parametres";
+import votreMetierRouter from "./votre-metier";
 import authRouter from "./auth";
 import { requireAuth } from "../middleware/requireAuth";
+import { db, facturesTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -44,5 +47,15 @@ router.use(rapportsRouter);
 router.use(requireAuth, equipeRouter);
 router.use(requireAuth, connecteursRouter);
 router.use(requireAuth, parametresRouter);
+router.use(requireAuth, votreMetierRouter);
+
+// Protected destructive operations on otherwise-public business resources
+router.delete("/factures/:id", requireAuth, async (req, res): Promise<void> => {
+  const id = req.params["id"] as string;
+  if (!id) { res.status(400).json({ error: "id required" }); return; }
+  const [deleted] = await db.delete(facturesTable).where(eq(facturesTable.id, id)).returning();
+  if (!deleted) { res.status(404).json({ error: "Facture not found" }); return; }
+  res.status(204).send();
+});
 
 export default router;
