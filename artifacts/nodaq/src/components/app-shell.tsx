@@ -1,93 +1,18 @@
 import { Link, useLocation } from 'wouter';
-import {
-  LayoutDashboard,
-  Briefcase,
-  Repeat,
-  Receipt,
-  Users,
-  Sunrise,
-  MessageSquare,
-  Radio,
-  FileText,
-  FolderOpen,
-  TrendingUp,
-  FileBarChart,
-  CalendarClock,
-  UserCog,
-  Plug2,
-  Settings2,
-  Hammer,
-} from 'lucide-react';
+import { Radio } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-const NAV_SECTIONS = [
-  {
-    label: 'Tableau de bord',
-    items: [
-      { href: '/', label: 'Cockpit', icon: LayoutDashboard, testId: 'nav-cockpit' },
-      { href: '/brief', label: 'Brief matin', icon: Sunrise, testId: 'nav-brief' },
-      { href: '/chat', label: 'Agent IA', icon: MessageSquare, testId: 'nav-chat' },
-    ],
-  },
-  {
-    label: 'Commercial',
-    items: [
-      { href: '/affaires', label: 'Affaires', icon: Briefcase, testId: 'nav-affaires' },
-      { href: '/devis', label: 'Devis', icon: FileText, testId: 'nav-devis' },
-      { href: '/contrats', label: 'Contrats', icon: Repeat, testId: 'nav-contrats' },
-      { href: '/prospects', label: 'Prospects', icon: Users, testId: 'nav-prospects' },
-    ],
-  },
-  {
-    label: 'Finance',
-    items: [
-      { href: '/factures', label: 'Factures', icon: Receipt, testId: 'nav-factures' },
-      { href: '/marge', label: 'Marge', icon: TrendingUp, testId: 'nav-marge' },
-      { href: '/rapports', label: 'Rapports', icon: FileBarChart, testId: 'nav-rapports' },
-      { href: '/echeancier', label: 'Échéancier fiscal', icon: CalendarClock, testId: 'nav-echeancier' },
-    ],
-  },
-  {
-    label: 'Documents',
-    items: [
-      { href: '/classeur', label: 'Classeur', icon: FolderOpen, testId: 'nav-classeur' },
-    ],
-  },
-  {
-    label: 'Plateforme',
-    items: [
-      { href: '/equipe', label: 'Équipe & plannings', icon: UserCog, testId: 'nav-equipe' },
-      { href: '/votre-metier', label: 'Votre métier', icon: Hammer, testId: 'nav-votre-metier' },
-      { href: '/connecteurs', label: 'Connecteurs', icon: Plug2, testId: 'nav-connecteurs' },
-      { href: '/parametres', label: 'Paramètres', icon: Settings2, testId: 'nav-parametres' },
-    ],
-  },
-];
-
-// Flat list for mobile nav (keep it compact)
-const MOBILE_NAV = [
-  { href: '/', label: 'Cockpit', icon: LayoutDashboard },
-  { href: '/affaires', label: 'Affaires', icon: Briefcase },
-  { href: '/devis', label: 'Devis', icon: FileText },
-  { href: '/factures', label: 'Factures', icon: Receipt },
-  { href: '/marge', label: 'Marge', icon: TrendingUp },
-  { href: '/echeancier', label: 'Fiscal', icon: CalendarClock },
-  { href: '/classeur', label: 'Classeur', icon: FolderOpen },
-  { href: '/chat', label: 'Agent IA', icon: MessageSquare },
-];
-
-function isActive(href: string, location: string) {
-  return href === '/' ? location === '/' : location.startsWith(href);
-}
+import { NAV_SECTIONS, MOBILE_NAV, navIsActive } from '@/lib/nav';
+import { TopRibbon } from './top-ribbon';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
 
   return (
     <div className="min-h-[100dvh] w-full bg-background text-foreground flex grain">
+      {/* ── Desktop sidebar ──────────────────────────────────────────── */}
       <aside className="hidden md:flex md:w-60 lg:w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
-        <div className="flex items-center gap-2.5 px-5 h-16 border-b border-sidebar-border">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
+        <div className="flex items-center gap-2.5 px-5 h-11 border-b border-sidebar-border">
+          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
             <Radio className="h-4 w-4" strokeWidth={2.5} />
           </div>
           <div className="leading-none">
@@ -108,7 +33,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </div>
               <div className="space-y-0.5 mt-0.5">
                 {section.items.map(item => {
-                  const active = isActive(item.href, location);
+                  const active = navIsActive(item.href, location);
                   const Icon = item.icon;
                   return (
                     <Link
@@ -159,8 +84,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
+      {/* ── Right column: ribbon + main content ──────────────────────── */}
       <div className="flex-1 min-w-0 flex flex-col">
+        {/* Mobile nav (mobile only, sticky top) */}
         <MobileNav location={location} />
+
+        {/* Desktop top ribbon (desktop only, sticky top-0, h-11) */}
+        <TopRibbon />
+
         <main className="flex-1 min-w-0 relative z-10">{children}</main>
       </div>
     </div>
@@ -171,7 +102,7 @@ function MobileNav({ location }: { location: string }) {
   return (
     <div className="md:hidden sticky top-0 z-30 flex items-center gap-1 overflow-x-auto border-b border-sidebar-border bg-sidebar px-2 py-2">
       {MOBILE_NAV.map(item => {
-        const active = isActive(item.href, location);
+        const active = navIsActive(item.href, location);
         const Icon = item.icon;
         return (
           <Link

@@ -16,7 +16,8 @@ export function PageHeader({
   return (
     <div
       className={cn(
-        'sticky top-0 z-20 border-b border-border bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70 px-5 md:px-8 py-5',
+        // On desktop, stick below the top ribbon (h-11 = 44px). On mobile, stick at top-0 (no ribbon).
+        'sticky top-0 md:top-11 z-20 border-b border-border bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70 px-5 md:px-8 py-5',
         className,
       )}
     >
