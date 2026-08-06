@@ -6,6 +6,7 @@ import { Toaster } from '@/components/ui/toaster';
 import NotFound from '@/pages/not-found';
 import Cockpit from '@/pages/cockpit';
 import Affaires from '@/pages/affaires';
+import AffaireDetail from '@/pages/affaire-detail';
 import Contrats from '@/pages/contrats';
 import Factures from '@/pages/factures';
 import Prospects from '@/pages/prospects';
@@ -62,6 +63,7 @@ function AppRouter() {
     <AppShell>
       <Switch>
         <Route path="/" component={Cockpit} />
+        <Route path="/affaires/:id" component={AffaireDetail} />
         <Route path="/affaires" component={Affaires} />
         <Route path="/contrats" component={Contrats} />
         <Route path="/factures" component={Factures} />

@@ -40,10 +40,11 @@ type TeamMember = {
 type Absence = {
   id: string; membreId: string; type: string; dateDebut: string; dateFin: string;
 };
+type ChantierItem = { id: string; label: string };
 type SemaineData = {
   dateDebut: string; label: string;
   type: 'plein' | 'partiel' | 'libre';
-  fillPct: number; chantiers: string[]; absentsNoms: string[];
+  fillPct: number; chantiers: ChantierItem[]; absentsNoms: string[];
   joursLibres: number; joursDisponibles: number; joursVendus: number;
 };
 type JourneesResult = {
@@ -192,11 +193,35 @@ function HorizonBlock({ planning, loading }: { planning?: PlanningData; loading:
   );
 }
 
-// ── FriseBlock ────────────────────────────────────────────────────────────
-function FriseBlock({ semaines, devisEnAttente }: {
+// ── GanttBlock ────────────────────────────────────────────────────────────
+// Rows = affaires, columns = weeks. Each bar is clickable → /affaires/:id.
+function GanttBlock({ semaines, devisEnAttente }: {
   semaines: SemaineData[];
   devisEnAttente: { count: number; semainesPotentielles: number };
 }) {
+  const [, setLocation] = useLocation();
+
+  // Derive one row per unique affaire, in the order they first appear.
+  const affaireRows = useMemo(() => {
+    const map = new Map<string, { id: string; label: string; activeWeekIndices: Set<number> }>();
+    semaines.forEach((sem, weekIdx) => {
+      for (const ch of sem.chantiers) {
+        if (!map.has(ch.id)) {
+          map.set(ch.id, { id: ch.id, label: ch.label, activeWeekIndices: new Set() });
+        }
+        map.get(ch.id)!.activeWeekIndices.add(weekIdx);
+      }
+    });
+    return [...map.values()];
+  }, [semaines]);
+
+  const hasWork = affaireRows.length > 0;
+  const hasAbsents = semaines.some(s => s.absentsNoms.length > 0);
+
+  // Column widths
+  const LABEL_W = 128; // px — sticky left label column
+  const COL_W   = 76;  // px — each week column
+
   return (
     <div className="rounded-2xl border border-card-border bg-card overflow-hidden">
       <div className="px-5 pt-5 pb-3 border-b border-border">
@@ -204,64 +229,135 @@ function FriseBlock({ semaines, devisEnAttente }: {
         <p className="text-[13px] text-muted-foreground mt-0.5">Qui travaille où, et où sont les trous.</p>
       </div>
 
-      <div className="px-5 py-3 space-y-1.5">
-        {semaines.map((sem) => (
-          <WeekBar key={sem.dateDebut} sem={sem} />
-        ))}
-      </div>
+      {!hasWork ? (
+        <div className="px-5 py-5 text-[13px] text-muted-foreground italic">
+          Aucun chantier planifié sur les prochaines semaines.
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <div style={{ minWidth: `${LABEL_W + semaines.length * COL_W}px` }}>
+
+            {/* ── Week header row ──────────────────────────────────────── */}
+            <div className="flex border-b border-border bg-muted/20">
+              {/* Sticky label spacer */}
+              <div
+                className="shrink-0 sticky left-0 z-10 bg-muted/20 border-r border-border"
+                style={{ width: LABEL_W }}
+              />
+              {semaines.map(sem => (
+                <div
+                  key={sem.dateDebut}
+                  className="shrink-0 flex flex-col items-center justify-center py-2 border-r border-border last:border-r-0"
+                  style={{ width: COL_W }}
+                >
+                  <span className="text-[11px] font-semibold text-muted-foreground leading-tight">
+                    {sem.label}
+                  </span>
+                  {sem.joursLibres > 0 ? (
+                    <span className="mt-0.5 text-[10px] font-medium text-amber-500">
+                      {sem.joursLibres}j lib.
+                    </span>
+                  ) : sem.type === 'libre' ? (
+                    <span className="mt-0.5 text-[10px] text-muted-foreground/60">libre</span>
+                  ) : (
+                    <span className="mt-0.5 text-[10px] text-primary/70">complet</span>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* ── Affaire rows ─────────────────────────────────────────── */}
+            {affaireRows.map((aff, rowIdx) => (
+              <div
+                key={aff.id}
+                className={cn(
+                  'flex items-center border-b border-border last:border-b-0',
+                  rowIdx % 2 === 1 && 'bg-muted/10',
+                )}
+              >
+                {/* Sticky affaire label */}
+                <div
+                  className={cn(
+                    'shrink-0 sticky left-0 z-10 border-r border-border px-3 py-2',
+                    rowIdx % 2 === 1 ? 'bg-card' : 'bg-card',
+                  )}
+                  style={{ width: LABEL_W }}
+                >
+                  <span
+                    className="text-[11.5px] font-semibold text-foreground block truncate"
+                    title={aff.label}
+                  >
+                    {aff.label}
+                  </span>
+                </div>
+
+                {/* Week cells */}
+                {semaines.map((sem, weekIdx) => {
+                  const isActive = aff.activeWeekIndices.has(weekIdx);
+                  const barCls = sem.type === 'partiel'
+                    ? 'bg-amber-500 hover:bg-amber-400'
+                    : 'bg-primary hover:bg-primary/85';
+                  return (
+                    <div
+                      key={sem.dateDebut}
+                      className="shrink-0 px-1 py-1.5 border-r border-border last:border-r-0"
+                      style={{ width: COL_W }}
+                    >
+                      {isActive ? (
+                        <button
+                          title={`${aff.label} — ${sem.label}`}
+                          onClick={() => setLocation(`/affaires/${aff.id}`)}
+                          className={cn(
+                            'w-full h-6 rounded transition-colors cursor-pointer',
+                            barCls,
+                          )}
+                          aria-label={`Voir ${aff.label}`}
+                        />
+                      ) : (
+                        <div className="w-full h-6" />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+
+            {/* ── Absents footer row (only if any absences in window) ── */}
+            {hasAbsents && (
+              <div className="flex border-t border-border bg-muted/10">
+                <div
+                  className="shrink-0 sticky left-0 z-10 bg-muted/10 border-r border-border px-3 py-2"
+                  style={{ width: LABEL_W }}
+                >
+                  <span className="text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70">
+                    Absents
+                  </span>
+                </div>
+                {semaines.map(sem => (
+                  <div
+                    key={sem.dateDebut}
+                    className="shrink-0 px-1.5 py-1.5 border-r border-border last:border-r-0"
+                    style={{ width: COL_W }}
+                  >
+                    {sem.absentsNoms.length > 0 && (
+                      <p
+                        className="text-[10px] leading-snug text-muted-foreground truncate"
+                        title={sem.absentsNoms.join(', ')}
+                      >
+                        {sem.absentsNoms.join(', ')}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {devisEnAttente.count > 0 && (
         <DevisActionCard devis={devisEnAttente} />
       )}
-    </div>
-  );
-}
-
-function WeekBar({ sem }: { sem: SemaineData }) {
-  const isLibre = sem.type === 'libre';
-  const isPartial = sem.type === 'partiel';
-  const barColor = isLibre
-    ? 'transparent'
-    : isPartial
-      ? 'bg-amber-500'
-      : 'bg-primary';
-
-  return (
-    <div className="grid grid-cols-[72px_1fr] gap-3 items-center py-1">
-      <span className="text-[13px] font-semibold text-muted-foreground tabular-nums">
-        {sem.label}
-      </span>
-      <div className="relative h-8 rounded-md overflow-hidden"
-        style={{ background: isLibre
-          ? 'repeating-linear-gradient(45deg, hsl(var(--muted)/0.4) 0, hsl(var(--muted)/0.4) 7px, hsl(var(--muted)/0.2) 7px, hsl(var(--muted)/0.2) 14px)'
-          : 'hsl(var(--muted)/0.3)'
-        }}>
-        {!isLibre && (
-          <div
-            className={cn('absolute inset-y-0 left-0 transition-all', barColor)}
-            style={{ width: `${sem.fillPct}%` }}
-          />
-        )}
-        <div className="absolute inset-0 flex items-center px-3">
-          {isLibre ? (
-            <span className="text-[12px] font-medium text-muted-foreground">rien de prévu</span>
-          ) : (
-            <div className="relative z-10">
-              <p className="text-[12px] font-semibold text-white leading-tight" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.4)' }}>
-                {sem.chantiers.join(' · ')}
-                {sem.joursLibres > 0 && (
-                  <span className="font-normal opacity-90"> · {sem.joursLibres} jour{sem.joursLibres > 1 ? 's' : ''} libre{sem.joursLibres > 1 ? 's' : ''}</span>
-                )}
-              </p>
-              {sem.absentsNoms.length > 0 && (
-                <p className="text-[11px] text-white/80 leading-tight" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.3)' }}>
-                  {sem.absentsNoms.join(', ')} absent{sem.absentsNoms.length > 1 ? 's' : ''}
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
     </div>
   );
 }
@@ -812,7 +908,7 @@ export default function EquipePage() {
         {planningLoading ? (
           <Skeleton className="h-72 w-full rounded-2xl" />
         ) : planning?.semaines?.length ? (
-          <FriseBlock semaines={planning.semaines} devisEnAttente={planning.devisEnAttente} />
+          <GanttBlock semaines={planning.semaines} devisEnAttente={planning.devisEnAttente} />
         ) : null}
 
         {/* ── Simulateur ── */}

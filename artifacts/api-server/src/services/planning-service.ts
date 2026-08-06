@@ -135,12 +135,14 @@ function getAffaireEndDate(
 
 // ── Semaines ──────────────────────────────────────────────────────────────
 
+export type ChantierItem = { id: string; label: string };
+
 export type SemaineData = {
   dateDebut: string;         // Monday YYYY-MM-DD
   label: string;             // "Cette sem." / "11 août"
   type: "plein" | "partiel" | "libre";
   fillPct: number;
-  chantiers: string[];
+  chantiers: ChantierItem[];  // { id, label } — carries affaire id for clickable navigation
   absentsNoms: string[];
   joursLibres: number;
   joursDisponibles: number;
@@ -217,9 +219,10 @@ export function buildSemaines(params: {
     // "sold" regardless of whether any member has that affaire in their schedule.
     // We cap total joursVendus at joursDisponibles (can't sell more than capacity).
     let rawVendus = 0;
-    const chantiersSet = new Set<string>();
+    // Map<affaireId, ChantierItem> — preserves insertion order, deduplicates by id
+    const chantiersMap = new Map<string, ChantierItem>();
 
-    for (const [, range] of affaireRanges) {
+    for (const [affaireId, range] of affaireRanges) {
       let daysInWeek = 0;
       for (let di = 0; di < 5; di++) {
         const dateStr = toISODate(addDays(monday, di));
@@ -229,7 +232,7 @@ export function buildSemaines(params: {
         }
       }
       if (daysInWeek > 0) {
-        chantiersSet.add(range.label);
+        chantiersMap.set(affaireId, { id: affaireId, label: range.label });
         rawVendus += daysInWeek;
       }
     }
@@ -247,7 +250,7 @@ export function buildSemaines(params: {
       label: frShortDate(monday, w === 0),
       type,
       fillPct,
-      chantiers: [...chantiersSet],
+      chantiers: [...chantiersMap.values()],
       absentsNoms: [...absentsSet],
       joursLibres,
       joursDisponibles,
