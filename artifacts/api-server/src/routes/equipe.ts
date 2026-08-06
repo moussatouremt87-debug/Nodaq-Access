@@ -1,7 +1,17 @@
 import { Router, type IRouter } from "express";
-import { db, pool, teamMembersTable, contratsTable, facturesTable } from "@workspace/db";
-import { eq, asc } from "drizzle-orm";
+import { db, pool, teamMembersTable, affairesTable, facturesTable } from "@workspace/db";
+import { eq, asc, sql } from "drizzle-orm";
 import { z } from "zod";
+import {
+  buildSemaines,
+  calcHorizon,
+  calcDevisEnAttente,
+  calcJournees,
+  simulerChantier,
+  type MemberRecord,
+  type AbsenceRecord,
+  type AffaireRecord,
+} from "../services/planning-service";
 
 const router: IRouter = Router();
 
@@ -52,9 +62,7 @@ router.post("/equipe", async (req, res): Promise<void> => {
 
   const { name, role = "Collaborateur", email, availability = "DISPONIBLE", schedule = [] } = parsed.data;
   const [member] = await db.insert(teamMembersTable).values({
-    name,
-    role,
-    availability,
+    name, role, availability,
     schedule: JSON.stringify(schedule),
     ...(email ? { email } : {}),
   }).returning();
@@ -63,7 +71,7 @@ router.post("/equipe", async (req, res): Promise<void> => {
 });
 
 router.patch("/equipe/:id", async (req, res): Promise<void> => {
-  const { id } = req.params;
+  const { id } = req.params as { id: string };
   const parsed = UpdateMemberBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
@@ -86,163 +94,238 @@ router.patch("/equipe/:id", async (req, res): Promise<void> => {
 });
 
 router.delete("/equipe/:id", async (req, res): Promise<void> => {
-  const { id } = req.params;
+  const { id } = req.params as { id: string };
   const [existing] = await db.select().from(teamMembersTable).where(eq(teamMembersTable.id, id));
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
-
   await db.delete(teamMembersTable).where(eq(teamMembersTable.id, id));
   res.status(204).send();
 });
 
-// ── Planning data ─────────────────────────────────────────────────────────
-/** Return YYYY-MM for a month offset from today (0 = current month) */
-function monthLabel(offsetMonths: number): string {
-  const d = new Date();
-  d.setDate(1);
-  d.setMonth(d.getMonth() + offsetMonths);
-  return d.toISOString().slice(0, 7);
+// ── Settings helpers ──────────────────────────────────────────────────────
+
+async function getSetting(client: any, key: string): Promise<string | null> {
+  const { rows } = await client.query("SELECT value FROM settings WHERE key = $1", [key]);
+  return rows[0]?.value ?? null;
 }
 
-/**
- * Monthly revenue in cents for a contract, derived from its cadence.
- * amountCents is stored as integer-equivalent cents in the DB.
- */
-function monthlyRevenueCents(amountCents: number | null, cadence: string): number {
-  const c = amountCents ?? 0;
-  switch (cadence) {
-    case "mensuel":     return c;
-    case "trimestriel": return c / 3;
-    case "semestriel":  return c / 6;
-    case "annuel":      return c / 12;
-    default:            return c;
-  }
-}
-
-/** Build capacity + performance rows from live DB data */
-async function buildPlanningData(tauxHoraire: number) {
-  const CAPACITY_H_PER_MEMBER = 151; // 35 h/week × 4.33 weeks/month, fixed integer
-  const PAST_MONTHS = 6;
-  const FUTURE_MONTHS = 6;
-
-  // ── Active team members → capacity ──────────────────────────────────────
-  // Ensure seed members exist before reading — planning can be fetched before
-  // GET /equipe, which is the only other path that seeds default members.
-  await ensureDefaultMembers();
-  const members = await db.select().from(teamMembersTable);
-  const activeCount = members.filter(m => m.availability !== "ABSENT").length;
-  const capaciteH = activeCount * CAPACITY_H_PER_MEMBER; // 0 when no active members
-
-  // ── Active contracts → monthly charge estimate ───────────────────────────
-  // Work in cents throughout; derive hours via (cents) / (tauxHoraire * 100)
-  // so a contract worth 38 000 c (380 €) at 60 €/h → 380/60 ≈ 6.33 h
-  const contracts = await db.select().from(contratsTable)
-    .where(eq(contratsTable.status, "ACTIF"));
-  const totalMonthlyContractCents = contracts.reduce(
-    (sum, c) => sum + monthlyRevenueCents(c.amountCents, c.cadence),
-    0,
+async function setSetting(client: any, key: string, value: string): Promise<void> {
+  await client.query(
+    `INSERT INTO settings (key, value) VALUES ($1, $2)
+     ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
+    [key, value],
   );
-  // tauxHoraire is in €/h; multiply by 100 to stay in cent units
-  const contractChargeH = tauxHoraire > 0
-    ? totalMonthlyContractCents / (tauxHoraire * 100)
-    : 0;
-
-  // ── Future months: capacity vs contract-derived charge ───────────────────
-  const capacity = Array.from({ length: FUTURE_MONTHS }, (_, i) => {
-    const chargeH = Math.round(contractChargeH);
-    const ecartH = capaciteH - chargeH;
-    let verdict: string;
-    if (capaciteH === 0 && chargeH === 0) verdict = "inconnu";
-    else if (ecartH < 0) verdict = "sous-capacité";
-    else if (chargeH === 0) verdict = "inconnu";
-    else if (ecartH < capaciteH * 0.1) verdict = "limite";
-    else verdict = "ok";
-    return { mois: monthLabel(i), capaciteH, chargeH, ecartH, verdict };
-  });
-
-  // ── Invoices → CA réalisé per past month ────────────────────────────────
-  // Accumulate in cents, then convert to euros for the response
-  const invoices = await db.select().from(facturesTable);
-  const caByMonthCents: Record<string, number> = {};
-  for (const inv of invoices) {
-    if (!inv.issuedDate) continue;
-    const mois = String(inv.issuedDate).slice(0, 7);
-    caByMonthCents[mois] = (caByMonthCents[mois] ?? 0) + (inv.amountCents ?? 0);
-  }
-
-  // ── Past months: heuresEstimees (from contracts) + CA réalisé (from invoices) ──
-  const performance = Array.from({ length: PAST_MONTHS }, (_, i) => {
-    const mois = monthLabel(-(PAST_MONTHS - i));
-    // caRealise in euros (÷ 100) for display
-    const caRealise = Math.round((caByMonthCents[mois] ?? 0) / 100);
-    // heuresEstimees mirrors contractChargeH — same contracts, same rate
-    const heuresEstimees = Math.round(contractChargeH);
-    const eurosParHeure = heuresEstimees > 0
-      ? Math.round(caRealise / heuresEstimees)
-      : null;
-    const verdict = eurosParHeure === null
-      ? "inconnu"
-      : eurosParHeure >= tauxHoraire
-        ? "ok"
-        : "sous-objectif";
-    return { mois, caRealise, heuresEstimees, eurosParHeure, verdict };
-  });
-
-  return { capacity, performance, tauxHoraire };
 }
+
+// ── Planning ──────────────────────────────────────────────────────────────
+
+const WEEK_COUNT = 10;
 
 router.get("/equipe/plannings", async (_req, res): Promise<void> => {
+  await ensureDefaultMembers();
+
   const client = await pool.connect();
-  let tauxHoraire = 60;
+  let tauxJourFacture: number | null = null;
+  let coutJourCharge: number | null = null;
+
   try {
-    const { rows } = await client.query(
-      "SELECT value FROM settings WHERE key = 'equipe.tauxHoraire'",
-    );
-    if (rows[0]) tauxHoraire = Number(rows[0].value);
+    const tauxRaw = await getSetting(client, "equipe.tauxJourFacture");
+    const coutRaw = await getSetting(client, "equipe.coutJourCharge");
+    if (tauxRaw !== null) tauxJourFacture = Number(tauxRaw);
+    if (coutRaw !== null) coutJourCharge = Number(coutRaw);
   } finally {
     client.release();
   }
-  const data = await buildPlanningData(tauxHoraire);
-  res.json(data);
+
+  const parametresManquants = tauxJourFacture === null || coutJourCharge === null;
+  const taux = tauxJourFacture ?? 0.7;
+  const cout = coutJourCharge ?? 250;
+
+  // Fetch team members
+  const rawMembers = await db.select().from(teamMembersTable).orderBy(asc(teamMembersTable.createdAt));
+  const members: MemberRecord[] = rawMembers.map(m => ({
+    id: m.id,
+    name: m.name,
+    availability: m.availability,
+    schedule: (() => { try { return JSON.parse(m.schedule); } catch { return []; } })(),
+  }));
+  const activeCount = members.filter(m => m.availability !== "ABSENT").length;
+
+  // Fetch absences
+  const client2 = await pool.connect();
+  let absences: AbsenceRecord[] = [];
+  try {
+    const { rows } = await client2.query(
+      "SELECT membre_id AS \"membreId\", date_debut::text AS \"dateDebut\", date_fin::text AS \"dateFin\" FROM absences WHERE date_fin >= CURRENT_DATE",
+    );
+    absences = rows as AbsenceRecord[];
+  } catch {
+    // absences table may not exist in some envs — gracefully degrade
+  } finally {
+    client2.release();
+  }
+
+  // Fetch affaires
+  const rawAffaires = await db.select().from(affairesTable);
+  const affaires: AffaireRecord[] = rawAffaires.map(a => ({
+    id: a.id,
+    label: a.label,
+    status: a.status,
+    quotedAmountCents: a.quotedAmountCents ?? null,
+    startDate: a.startDate ?? null,
+    completedAt: a.completedAt ?? null,
+  }));
+
+  // Build semaines
+  const today = new Date();
+  const semaines = buildSemaines({ today, members, absences, affaires, weekCount: WEEK_COUNT, tauxJourFacture: taux, coutJourCharge: cout });
+  const horizonResult = calcHorizon(semaines, activeCount);
+
+  // Devis en attente
+  const avgDispo = semaines.length > 0
+    ? semaines.reduce((s, w) => s + w.joursDisponibles, 0) / semaines.length
+    : 5;
+  const devisEnAttente = calcDevisEnAttente(affaires, cout, avgDispo);
+
+  // Vos journées: previous month CA
+  const now = new Date();
+  const prevMonth = new Date(now.getUTCFullYear(), now.getUTCMonth() - 1, 1);
+  const prevMonthISO = prevMonth.toISOString().slice(0, 7);
+
+  const invoices = await db.select().from(facturesTable);
+  const caRealiseCents = invoices.reduce((sum, inv) => {
+    if (!inv.issuedDate) return sum;
+    if (String(inv.issuedDate).slice(0, 7) !== prevMonthISO) return sum;
+    return sum + (inv.amountCents ?? 0);
+  }, 0);
+
+  const journees = calcJournees({
+    prevMonthISO,
+    caRealiseCents,
+    activeCount,
+    tauxJourFacture: taux,
+    coutJourCharge: cout,
+    parametresManquants,
+  });
+
+  res.json({
+    etat: parametresManquants ? "PARAMETRES_MANQUANTS" : "OK",
+    horizon: horizonResult.horizon,
+    horizonPhrase: horizonResult.phrase,
+    horizonSous: horizonResult.sous,
+    activeCount,
+    semaines,
+    devisEnAttente,
+    journees,
+    tauxJourFacture: taux,
+    coutJourCharge: cout,
+  });
 });
 
-router.patch("/equipe/plannings/taux", async (req, res): Promise<void> => {
-  const { tauxHoraire } = req.body ?? {};
-  const val = Number(tauxHoraire);
-  if (!Number.isFinite(val) || val <= 0) {
-    res.status(400).json({ error: "tauxHoraire must be a positive number" });
-    return;
-  }
+// POST: simulator — accepts { joursNecessaires, personnesNecessaires }, fetches live semaines
+router.post("/equipe/plannings/simuler", async (req, res): Promise<void> => {
+  const schema = z.object({
+    joursNecessaires: z.number().int().min(1).max(1000),
+    personnesNecessaires: z.number().int().min(1).max(500),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.flatten() }); return; }
+
+  // Fetch live planning data (same queries as GET /equipe/plannings)
   const client = await pool.connect();
+  let tauxJourFacture = 0.7;
+  let coutJourCharge = 250;
   try {
-    await client.query(
-      `INSERT INTO settings (key, value) VALUES ('equipe.tauxHoraire', $1)
-       ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()`,
-      [String(val)],
-    );
+    const tauxRaw = await getSetting(client, "equipe.tauxJourFacture");
+    const coutRaw = await getSetting(client, "equipe.coutJourCharge");
+    if (tauxRaw !== null) tauxJourFacture = Number(tauxRaw);
+    if (coutRaw !== null) coutJourCharge = Number(coutRaw);
   } finally {
     client.release();
   }
-  // Return updated planning rows so the client can update in one round-trip
-  const data = await buildPlanningData(val);
-  res.json(data);
+
+  const rawMembers = await db.select().from(teamMembersTable).orderBy(asc(teamMembersTable.createdAt));
+  const members: MemberRecord[] = rawMembers.map(m => ({
+    id: m.id, name: m.name, availability: m.availability,
+    schedule: (() => { try { return JSON.parse(m.schedule); } catch { return []; } })(),
+  }));
+  const activeCount = members.filter(m => m.availability !== "ABSENT").length;
+
+  const client2 = await pool.connect();
+  let absences: AbsenceRecord[] = [];
+  try {
+    const { rows } = await client2.query(
+      "SELECT membre_id AS \"membreId\", date_debut::text AS \"dateDebut\", date_fin::text AS \"dateFin\" FROM absences WHERE date_fin >= CURRENT_DATE",
+    );
+    absences = rows as AbsenceRecord[];
+  } catch { /* absences table may not exist */ } finally { client2.release(); }
+
+  const rawAffaires = await db.select().from(affairesTable);
+  const affaires: AffaireRecord[] = rawAffaires.map(a => ({
+    id: a.id, label: a.label, status: a.status,
+    quotedAmountCents: a.quotedAmountCents ?? null,
+    startDate: a.startDate ?? null,
+    completedAt: a.completedAt ?? null,
+  }));
+
+  const semaines = buildSemaines({ today: new Date(), members, absences, affaires, weekCount: WEEK_COUNT, tauxJourFacture, coutJourCharge });
+  const result = simulerChantier({ joursNecessaires: parsed.data.joursNecessaires, personnesNecessaires: parsed.data.personnesNecessaires, semaines, activeCount });
+  res.json(result);
+});
+
+// PATCH: update settings keys (tauxHoraire is legacy — stored as no-op but accepted without error)
+router.patch("/equipe/plannings/taux", async (req, res): Promise<void> => {
+  const schema = z.object({
+    tauxJourFacture: z.number().min(0.1).max(1).optional(),
+    coutJourCharge: z.number().min(1).optional(),
+    // legacy key — accepted without error; callers should migrate to tauxJourFacture
+    tauxHoraire: z.number().optional(),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.flatten() }); return; }
+
+  const client = await pool.connect();
+  try {
+    if (parsed.data.tauxJourFacture !== undefined)
+      await setSetting(client, "equipe.tauxJourFacture", String(parsed.data.tauxJourFacture));
+    if (parsed.data.coutJourCharge !== undefined)
+      await setSetting(client, "equipe.coutJourCharge", String(parsed.data.coutJourCharge));
+  } finally {
+    client.release();
+  }
+
+  // Return updated settings so callers don't need a separate GET
+  const client3 = await pool.connect();
+  let tauxJourFacture: number | null = null;
+  let coutJourCharge: number | null = null;
+  try {
+    const t = await getSetting(client3, "equipe.tauxJourFacture");
+    const c = await getSetting(client3, "equipe.coutJourCharge");
+    if (t !== null) tauxJourFacture = Number(t);
+    if (c !== null) coutJourCharge = Number(c);
+  } finally {
+    client3.release();
+  }
+
+  res.json({ ok: true, tauxJourFacture, coutJourCharge });
 });
 
 // ── Absences ──────────────────────────────────────────────────────────────
+
 const AbsenceBody = z.object({
   membreId:  z.string().min(1),
   type:      z.enum(["Congés", "Maladie", "RTT", "Autre"]),
   dateDebut: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "dateDebut must be YYYY-MM-DD"),
   dateFin:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "dateFin must be YYYY-MM-DD"),
-}).refine(d => d.dateDebut <= d.dateFin, {
-  message: "dateFin must be >= dateDebut",
-  path: ["dateFin"],
-});
+}).refine(d => d.dateDebut <= d.dateFin, { message: "dateFin must be >= dateDebut", path: ["dateFin"] });
 
 router.get("/equipe/absences", async (_req, res): Promise<void> => {
   const client = await pool.connect();
   try {
     const { rows } = await client.query(
-      "SELECT id, membre_id AS \"membreId\", type, date_debut::text AS \"dateDebut\", date_fin::text AS \"dateFin\", created_at AS \"createdAt\" FROM absences ORDER BY date_debut DESC LIMIT 50",
+      `SELECT id, membre_id AS "membreId", type,
+              date_debut::text AS "dateDebut", date_fin::text AS "dateFin",
+              created_at AS "createdAt"
+       FROM absences ORDER BY date_debut DESC LIMIT 50`,
     );
     res.json(rows);
   } finally {
@@ -255,8 +338,6 @@ router.post("/equipe/absences", async (req, res): Promise<void> => {
   if (!parsed.success) { res.status(400).json({ error: parsed.error.flatten() }); return; }
 
   const { membreId, type, dateDebut, dateFin } = parsed.data;
-
-  // Verify the referenced team member exists
   const [member] = await db.select().from(teamMembersTable).where(eq(teamMembersTable.id, membreId));
   if (!member) { res.status(400).json({ error: "membreId does not reference a known team member" }); return; }
 
@@ -265,7 +346,9 @@ router.post("/equipe/absences", async (req, res): Promise<void> => {
     const { rows } = await client.query(
       `INSERT INTO absences (id, membre_id, type, date_debut, date_fin)
        VALUES (gen_random_uuid()::text, $1, $2, $3, $4)
-       RETURNING id, membre_id AS "membreId", type, date_debut::text AS "dateDebut", date_fin::text AS "dateFin", created_at AS "createdAt"`,
+       RETURNING id, membre_id AS "membreId", type,
+                 date_debut::text AS "dateDebut", date_fin::text AS "dateFin",
+                 created_at AS "createdAt"`,
       [membreId, type, dateDebut, dateFin],
     );
     res.status(201).json(rows[0]);
