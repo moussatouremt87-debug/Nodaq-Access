@@ -12,6 +12,7 @@
     "push-force": "drizzle-kit push --force --config ./drizzle.config.ts",
     "migrate-platform": "node src/migrate-platform.cjs",
     "migrate-multitenant": "node scripts/migrate-multitenant.cjs",
+    "migrate-rls": "node scripts/migrate-rls.cjs",
     "test-connectors": "node src/test-connectors.cjs",
     "test-connectors-http": "node src/test-connectors-http.cjs",
     "test-planning-http": "node src/test-planning-http.cjs"

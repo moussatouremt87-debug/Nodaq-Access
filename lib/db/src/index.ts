@@ -30,3 +30,4 @@ export const pool = new Pool({ connectionString: process.env.DATABASE_URL_APP })
 export const db = drizzle(pool, { schema });
 
 export * from "./schema";
+export { withTenant, type DrizzleTx } from "./withTenant";

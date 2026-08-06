@@ -20,8 +20,9 @@ import parametresRouter from "./parametres";
 import votreMetierRouter from "./votre-metier";
 import authRouter from "./auth";
 import { requireAuth } from "../middleware/requireAuth";
-import { db, facturesTable } from "@workspace/db";
+import { withTenant, facturesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { getDefaultTenantId } from "../lib/defaultTenant";
 
 const router: IRouter = Router();
 
@@ -55,7 +56,10 @@ router.use(requireAuth, votreMetierRouter);
 router.delete("/factures/:id", requireAuth, async (req, res): Promise<void> => {
   const id = req.params["id"] as string;
   if (!id) { res.status(400).json({ error: "id required" }); return; }
-  const [deleted] = await db.delete(facturesTable).where(eq(facturesTable.id, id)).returning();
+  const tenantId = await getDefaultTenantId();
+  const [deleted] = await withTenant(tenantId, async (tx) =>
+    tx.delete(facturesTable).where(eq(facturesTable.id, id)).returning()
+  );
   if (!deleted) { res.status(404).json({ error: "Facture not found" }); return; }
   res.status(204).send();
 });

@@ -1,7 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, echeancesTable } from "@workspace/db";
+import { withTenant, echeancesTable } from "@workspace/db";
 import { eq, asc } from "drizzle-orm";
-import { getDefaultTenantId } from "../lib/defaultTenant";
 import {
   ListEcheancesQueryParams,
   CreateEcheanceBody,
@@ -9,10 +8,10 @@ import {
   UpdateEcheanceBody,
   DeleteEcheanceParams,
 } from "@workspace/api-zod";
+import { getDefaultTenantId } from "../lib/defaultTenant";
 
 const router: IRouter = Router();
 
-/** Coerce a possible Date object (from Zod body coercion) to an ISO date string */
 function toDateStr(v: Date | string | null | undefined): string {
   if (!v) return new Date().toISOString().slice(0, 10);
   if (v instanceof Date) return v.toISOString().slice(0, 10);
@@ -30,18 +29,13 @@ function computeStatus(dueDate: string, currentStatus: string): string {
 router.get("/echeances", async (req, res): Promise<void> => {
   const parsed = ListEcheancesQueryParams.safeParse(req.query);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const tenantId = await getDefaultTenantId();
 
-  let all = await db.select().from(echeancesTable).orderBy(asc(echeancesTable.dueDate));
-
-  // Auto-update statuses for overdue items
-  all = all.map(e => ({
-    ...e,
-    status: computeStatus(e.dueDate, e.status),
-  }));
-
-  if (parsed.data.statut) {
-    all = all.filter(e => e.status === parsed.data.statut);
-  }
+  let all = await withTenant(tenantId, async (tx) =>
+    tx.select().from(echeancesTable).orderBy(asc(echeancesTable.dueDate))
+  );
+  all = all.map(e => ({ ...e, status: computeStatus(e.dueDate, e.status) }));
+  if (parsed.data.statut) all = all.filter(e => e.status === parsed.data.statut);
 
   res.json(all);
 });
@@ -49,7 +43,6 @@ router.get("/echeances", async (req, res): Promise<void> => {
 router.post("/echeances", async (req, res): Promise<void> => {
   const parsed = CreateEcheanceBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-
   const dueDate = toDateStr(parsed.data.dueDate as unknown as Date | string);
   const tenantId = await getDefaultTenantId();
 
@@ -63,7 +56,9 @@ router.post("/echeances", async (req, res): Promise<void> => {
   if (parsed.data.estimatedCents != null) insertData.estimatedCents = parsed.data.estimatedCents;
   if (parsed.data.notes) insertData.notes = parsed.data.notes;
 
-  const [e] = await db.insert(echeancesTable).values(insertData as any).returning();
+  const [e] = await withTenant(tenantId, async (tx) =>
+    tx.insert(echeancesTable).values(insertData as any).returning()
+  );
   res.status(201).json(e);
 });
 
@@ -72,7 +67,9 @@ router.patch("/echeances/:id", async (req, res): Promise<void> => {
   const body = UpdateEcheanceBody.safeParse(req.body);
   if (!params.success || !body.success) { res.status(400).json({ error: "Invalid input" }); return; }
 
-  const [existing] = await db.select().from(echeancesTable).where(eq(echeancesTable.id, params.data.id));
+  const [existing] = await withTenant(await getDefaultTenantId(), async (tx) =>
+    tx.select().from(echeancesTable).where(eq(echeancesTable.id, params.data.id))
+  );
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
 
   const updateData: Record<string, unknown> = {};
@@ -88,22 +85,26 @@ router.patch("/echeances/:id", async (req, res): Promise<void> => {
     }
   }
 
-  const [updated] = await db.update(echeancesTable)
-    .set(updateData as any)
-    .where(eq(echeancesTable.id, params.data.id))
-    .returning();
-
+  const tenantId = await getDefaultTenantId();
+  const [updated] = await withTenant(tenantId, async (tx) =>
+    tx.update(echeancesTable).set(updateData as any).where(eq(echeancesTable.id, params.data.id)).returning()
+  );
   res.json(updated);
 });
 
 router.delete("/echeances/:id", async (req, res): Promise<void> => {
   const parsed = DeleteEcheanceParams.safeParse(req.params);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const tenantId = await getDefaultTenantId();
 
-  const [existing] = await db.select().from(echeancesTable).where(eq(echeancesTable.id, parsed.data.id));
+  const [existing] = await withTenant(tenantId, async (tx) =>
+    tx.select().from(echeancesTable).where(eq(echeancesTable.id, parsed.data.id))
+  );
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
 
-  await db.delete(echeancesTable).where(eq(echeancesTable.id, parsed.data.id));
+  await withTenant(tenantId, async (tx) =>
+    tx.delete(echeancesTable).where(eq(echeancesTable.id, parsed.data.id))
+  );
   res.status(204).send();
 });
 
