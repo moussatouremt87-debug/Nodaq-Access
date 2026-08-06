@@ -61,13 +61,15 @@ router.post("/affaires", async (req, res): Promise<void> => {
   }
   const data = parsed.data;
   const refNum = String(Date.now()).slice(-6);
+  const rawStart = data.startDate as unknown as Date | string | undefined;
+  const startDate = rawStart instanceof Date ? rawStart.toISOString().slice(0, 10) : (rawStart ?? null);
   const [affaire] = await db.insert(affairesTable).values({
     label: data.label,
     clientName: data.clientName ?? null,
     status: data.status ?? "PROSPECT",
     quotedAmountCents: data.quotedAmountCents ?? null,
     notes: data.notes ?? null,
-    startDate: data.startDate ?? null,
+    startDate,
     reference: `AFF-${refNum}`,
   }).returning();
 

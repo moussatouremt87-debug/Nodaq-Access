@@ -1,0 +1,2 @@
+- [AnimatedKpi usage contract](animated-kpi-usage.md) — full card component only; never use as inline formatter (causes "format is not a function" at runtime)
+- [Orval inline body conflict](orval-body-conflict.md) — inline POST request bodies auto-generate `type` aliases that clash with Zod const exports; use named $ref schemas or remove the endpoint

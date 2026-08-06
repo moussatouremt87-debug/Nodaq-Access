@@ -5,3 +5,6 @@ export * from "./prospects";
 export * from "./pending_actions";
 export * from "./chat";
 export * from "./activity";
+export * from "./devis";
+export * from "./classeur";
+export * from "./echeances";

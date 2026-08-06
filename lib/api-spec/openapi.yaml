@@ -17,6 +17,11 @@ tags:
   - name: brief
   - name: pending-actions
   - name: chat
+  - name: devis
+  - name: classeur
+  - name: echeances
+  - name: marge
+  - name: rapports
 
 paths:
   /healthz:
@@ -470,6 +475,304 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PendingAction"
+
+  # ── Devis ─────────────────────────────────────────────────────────────────
+  /devis:
+    get:
+      operationId: listDevis
+      tags: [devis]
+      summary: List devis
+      parameters:
+        - in: query
+          name: statut
+          schema:
+            type: string
+        - in: query
+          name: search
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of devis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DevisList"
+    post:
+      operationId: createDevis
+      tags: [devis]
+      summary: Create a devis
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DevisInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Devis"
+
+  /devis/{id}:
+    get:
+      operationId: getDevis
+      tags: [devis]
+      summary: Get a devis
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Devis detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Devis"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateDevis
+      tags: [devis]
+      summary: Update a devis
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DevisUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Devis"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteDevis
+      tags: [devis]
+      summary: Delete a devis
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
+  /devis/{id}/convert:
+    post:
+      operationId: convertDevisToAffaire
+      tags: [devis]
+      summary: Convert accepted devis to affaire
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Affaire created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Affaire"
+        "404":
+          description: Not found
+
+  # ── Classeur ────────────────────────────────────────────────────────────────
+  /classeur:
+    get:
+      operationId: listClasseur
+      tags: [classeur]
+      summary: List documents in classeur
+      parameters:
+        - in: query
+          name: category
+          schema:
+            type: string
+        - in: query
+          name: search
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of documents
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClasseurList"
+    post:
+      operationId: createClasseurDocument
+      tags: [classeur]
+      summary: Add a document to classeur
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClasseurDocumentInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClasseurDocument"
+
+  /classeur/{id}:
+    delete:
+      operationId: deleteClasseurDocument
+      tags: [classeur]
+      summary: Delete a document from classeur
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
+  # ── Échéances fiscales ───────────────────────────────────────────────────────
+  /echeances:
+    get:
+      operationId: listEcheances
+      tags: [echeances]
+      summary: List fiscal deadlines
+      parameters:
+        - in: query
+          name: statut
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of echeances
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Echeance"
+    post:
+      operationId: createEcheance
+      tags: [echeances]
+      summary: Create a fiscal deadline
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EcheanceInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Echeance"
+
+  /echeances/{id}:
+    patch:
+      operationId: updateEcheance
+      tags: [echeances]
+      summary: Update a fiscal deadline
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EcheanceUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Echeance"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteEcheance
+      tags: [echeances]
+      summary: Delete a fiscal deadline
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
+  # ── Marge ────────────────────────────────────────────────────────────────────
+  /marge:
+    get:
+      operationId: getMargeStats
+      tags: [marge]
+      summary: Global margin analytics
+      parameters:
+        - in: query
+          name: statut
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Margin statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MargeStats"
+
+  # ── Rapports mensuels ────────────────────────────────────────────────────────
+  /rapports/mensuel:
+    get:
+      operationId: getRapportMensuel
+      tags: [rapports]
+      summary: Get monthly business report
+      parameters:
+        - in: query
+          name: mois
+          schema:
+            type: string
+            description: "YYYY-MM format"
+      responses:
+        "200":
+          description: Monthly report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RapportMensuel"
 
   # ── Chat ─────────────────────────────────────────────────────────────────
   /chat/messages:
@@ -1040,3 +1343,322 @@ components:
           type: string
         message:
           $ref: "#/components/schemas/ChatMessage"
+
+    # ── Devis ─────────────────────────────────────────────────────────────────
+    DevisLine:
+      type: object
+      required: [id, description, quantity, unitPriceCents]
+      properties:
+        id:
+          type: string
+        description:
+          type: string
+        quantity:
+          type: number
+        unitPriceCents:
+          type: number
+
+    Devis:
+      type: object
+      required: [id, reference, clientName, status, totalHTCents, totalTTCCents, tvaRate, remise, lines, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        reference:
+          type: string
+        clientName:
+          type: string
+        status:
+          type: string
+          enum: [BROUILLON, ENVOYE, ACCEPTE, REFUSE, EXPIRE]
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/DevisLine"
+        totalHTCents:
+          type: number
+          description: Total HT en centimes (entier)
+        totalTTCCents:
+          type: number
+          description: Total TTC en centimes (entier)
+        tvaRate:
+          type: number
+        remise:
+          type: number
+        notes:
+          type: ["string", "null"]
+        validUntil:
+          type: ["string", "null"]
+          format: date
+        affaireId:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    DevisList:
+      type: object
+      required: [devis, total, totalTTCCents]
+      properties:
+        devis:
+          type: array
+          items:
+            $ref: "#/components/schemas/Devis"
+        total:
+          type: number
+        totalTTCCents:
+          type: number
+          description: Somme des totaux TTC en centimes
+
+    DevisInput:
+      type: object
+      required: [clientName, lines]
+      properties:
+        clientName:
+          type: string
+          minLength: 1
+        status:
+          type: string
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/DevisLine"
+        tvaRate:
+          type: number
+        remise:
+          type: number
+        notes:
+          type: string
+        validUntil:
+          type: string
+          format: date
+
+    DevisUpdate:
+      type: object
+      properties:
+        clientName:
+          type: string
+        status:
+          type: string
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/DevisLine"
+        tvaRate:
+          type: number
+        remise:
+          type: number
+        notes:
+          type: string
+        validUntil:
+          type: string
+          format: date
+
+    # ── Classeur ──────────────────────────────────────────────────────────────
+    ClasseurDocument:
+      type: object
+      required: [id, name, category, createdAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        category:
+          type: string
+          enum: [FACTURES, CONTRATS, DEVIS, DIVERS]
+        size:
+          type: ["number", "null"]
+        mimeType:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        affaireId:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    ClasseurList:
+      type: object
+      required: [documents, total]
+      properties:
+        documents:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClasseurDocument"
+        total:
+          type: number
+
+    ClasseurDocumentInput:
+      type: object
+      required: [name, category]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        category:
+          type: string
+          enum: [FACTURES, CONTRATS, DEVIS, DIVERS]
+        size:
+          type: number
+        mimeType:
+          type: string
+        notes:
+          type: string
+        affaireId:
+          type: string
+
+    # ── Échéances fiscales ─────────────────────────────────────────────────────
+    Echeance:
+      type: object
+      required: [id, type, label, dueDate, status, createdAt]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [TVA, IS, URSSAF, CFE, CVAE, AUTRE]
+        label:
+          type: string
+        dueDate:
+          type: string
+          format: date
+        estimatedCents:
+          type: ["number", "null"]
+        paidCents:
+          type: ["number", "null"]
+        status:
+          type: string
+          enum: [A_VENIR, PAYEE, EN_RETARD]
+        notes:
+          type: ["string", "null"]
+        paidAt:
+          type: ["string", "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    EcheanceInput:
+      type: object
+      required: [type, label, dueDate]
+      properties:
+        type:
+          type: string
+        label:
+          type: string
+          minLength: 1
+        dueDate:
+          type: string
+          format: date
+        estimatedCents:
+          type: number
+        notes:
+          type: string
+
+    EcheanceUpdate:
+      type: object
+      properties:
+        label:
+          type: string
+        dueDate:
+          type: string
+          format: date
+        estimatedCents:
+          type: number
+        paidCents:
+          type: number
+        status:
+          type: string
+        notes:
+          type: string
+
+    # ── Marge ─────────────────────────────────────────────────────────────────
+    MargeAffaire:
+      type: object
+      required: [id, label, status]
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        clientName:
+          type: ["string", "null"]
+        status:
+          type: string
+        invoicedAmountCents:
+          type: ["number", "null"]
+        marginCents:
+          type: ["number", "null"]
+        marginPct:
+          type: ["number", "null"]
+
+    MargeMensuelle:
+      type: object
+      required: [month, revenueCents, marginCents]
+      properties:
+        month:
+          type: string
+        revenueCents:
+          type: number
+        marginCents:
+          type: number
+
+    MargeStats:
+      type: object
+      required: [totalRevenueCents, totalMarginCents, marginPct, affaires, mensuelle]
+      properties:
+        totalRevenueCents:
+          type: number
+        totalMarginCents:
+          type: number
+        marginPct:
+          type: number
+        affaires:
+          type: array
+          items:
+            $ref: "#/components/schemas/MargeAffaire"
+        mensuelle:
+          type: array
+          items:
+            $ref: "#/components/schemas/MargeMensuelle"
+
+    # ── Rapport mensuel ───────────────────────────────────────────────────────
+    RapportMensuel:
+      type: object
+      required: [mois, summary, topAffaires, topClients]
+      properties:
+        mois:
+          type: string
+          description: "YYYY-MM"
+        summary:
+          type: object
+          required: [caMois, nouvellesAffaires, nouveauxClients, facturesEncaissees, tauxMarge]
+          properties:
+            caMois:
+              type: number
+            nouvellesAffaires:
+              type: number
+            nouveauxClients:
+              type: number
+            facturesEncaissees:
+              type: number
+            tauxMarge:
+              type: number
+        topAffaires:
+          type: array
+          items:
+            $ref: "#/components/schemas/MargeAffaire"
+        topClients:
+          type: array
+          items:
+            type: object
+            required: [clientName, totalCents]
+            properties:
+              clientName:
+                type: string
+              totalCents:
+                type: number

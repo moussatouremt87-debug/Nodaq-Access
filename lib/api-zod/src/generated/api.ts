@@ -560,6 +560,404 @@ export const RejectPendingActionResponse = zod.object({
 
 
 /**
+ * @summary List devis
+ */
+export const ListDevisQueryParams = zod.object({
+  "statut": zod.coerce.string().optional(),
+  "search": zod.coerce.string().optional()
+})
+
+export const ListDevisResponse = zod.object({
+  "devis": zod.array(zod.object({
+  "id": zod.string(),
+  "reference": zod.string(),
+  "clientName": zod.string(),
+  "status": zod.enum(['BROUILLON', 'ENVOYE', 'ACCEPTE', 'REFUSE', 'EXPIRE']),
+  "lines": zod.array(zod.object({
+  "id": zod.string(),
+  "description": zod.string(),
+  "quantity": zod.number(),
+  "unitPriceCents": zod.number()
+})),
+  "totalHTCents": zod.number().describe('Total HT en centimes (entier)'),
+  "totalTTCCents": zod.number().describe('Total TTC en centimes (entier)'),
+  "tvaRate": zod.number(),
+  "remise": zod.number(),
+  "notes": zod.string().nullish(),
+  "validUntil": zod.coerce.date().nullish(),
+  "affaireId": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "total": zod.number(),
+  "totalTTCCents": zod.number().describe('Somme des totaux TTC en centimes')
+})
+
+
+/**
+ * @summary Create a devis
+ */
+
+
+
+export const CreateDevisBody = zod.object({
+  "clientName": zod.string().min(1),
+  "status": zod.string().optional(),
+  "lines": zod.array(zod.object({
+  "id": zod.string(),
+  "description": zod.string(),
+  "quantity": zod.number(),
+  "unitPriceCents": zod.number()
+})),
+  "tvaRate": zod.number().optional(),
+  "remise": zod.number().optional(),
+  "notes": zod.string().optional(),
+  "validUntil": zod.coerce.date().optional()
+})
+
+export const CreateDevisResponse = zod.object({
+  "id": zod.string(),
+  "reference": zod.string(),
+  "clientName": zod.string(),
+  "status": zod.enum(['BROUILLON', 'ENVOYE', 'ACCEPTE', 'REFUSE', 'EXPIRE']),
+  "lines": zod.array(zod.object({
+  "id": zod.string(),
+  "description": zod.string(),
+  "quantity": zod.number(),
+  "unitPriceCents": zod.number()
+})),
+  "totalHTCents": zod.number().describe('Total HT en centimes (entier)'),
+  "totalTTCCents": zod.number().describe('Total TTC en centimes (entier)'),
+  "tvaRate": zod.number(),
+  "remise": zod.number(),
+  "notes": zod.string().nullish(),
+  "validUntil": zod.coerce.date().nullish(),
+  "affaireId": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Get a devis
+ */
+export const GetDevisParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const GetDevisResponse = zod.object({
+  "id": zod.string(),
+  "reference": zod.string(),
+  "clientName": zod.string(),
+  "status": zod.enum(['BROUILLON', 'ENVOYE', 'ACCEPTE', 'REFUSE', 'EXPIRE']),
+  "lines": zod.array(zod.object({
+  "id": zod.string(),
+  "description": zod.string(),
+  "quantity": zod.number(),
+  "unitPriceCents": zod.number()
+})),
+  "totalHTCents": zod.number().describe('Total HT en centimes (entier)'),
+  "totalTTCCents": zod.number().describe('Total TTC en centimes (entier)'),
+  "tvaRate": zod.number(),
+  "remise": zod.number(),
+  "notes": zod.string().nullish(),
+  "validUntil": zod.coerce.date().nullish(),
+  "affaireId": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update a devis
+ */
+export const UpdateDevisParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const UpdateDevisBody = zod.object({
+  "clientName": zod.string().optional(),
+  "status": zod.string().optional(),
+  "lines": zod.array(zod.object({
+  "id": zod.string(),
+  "description": zod.string(),
+  "quantity": zod.number(),
+  "unitPriceCents": zod.number()
+})).optional(),
+  "tvaRate": zod.number().optional(),
+  "remise": zod.number().optional(),
+  "notes": zod.string().optional(),
+  "validUntil": zod.coerce.date().optional()
+})
+
+export const UpdateDevisResponse = zod.object({
+  "id": zod.string(),
+  "reference": zod.string(),
+  "clientName": zod.string(),
+  "status": zod.enum(['BROUILLON', 'ENVOYE', 'ACCEPTE', 'REFUSE', 'EXPIRE']),
+  "lines": zod.array(zod.object({
+  "id": zod.string(),
+  "description": zod.string(),
+  "quantity": zod.number(),
+  "unitPriceCents": zod.number()
+})),
+  "totalHTCents": zod.number().describe('Total HT en centimes (entier)'),
+  "totalTTCCents": zod.number().describe('Total TTC en centimes (entier)'),
+  "tvaRate": zod.number(),
+  "remise": zod.number(),
+  "notes": zod.string().nullish(),
+  "validUntil": zod.coerce.date().nullish(),
+  "affaireId": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a devis
+ */
+export const DeleteDevisParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DeleteDevisResponse = zod.void()
+
+
+/**
+ * @summary Convert accepted devis to affaire
+ */
+export const ConvertDevisToAffaireParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ConvertDevisToAffaireResponse = zod.object({
+  "id": zod.string(),
+  "reference": zod.string().nullish(),
+  "label": zod.string(),
+  "clientName": zod.string().nullish(),
+  "status": zod.enum(['PROSPECT', 'DEVIS_ENVOYE', 'ACCEPTEE', 'EN_COURS', 'TERMINEE', 'PERDUE', 'ARCHIVEE']),
+  "quotedAmountCents": zod.number().nullish(),
+  "invoicedAmountCents": zod.number().nullish(),
+  "marginCents": zod.number().nullish(),
+  "notes": zod.string().nullish(),
+  "startDate": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary List documents in classeur
+ */
+export const ListClasseurQueryParams = zod.object({
+  "category": zod.coerce.string().optional(),
+  "search": zod.coerce.string().optional()
+})
+
+export const ListClasseurResponse = zod.object({
+  "documents": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "category": zod.enum(['FACTURES', 'CONTRATS', 'DEVIS', 'DIVERS']),
+  "size": zod.number().nullish(),
+  "mimeType": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "affaireId": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Add a document to classeur
+ */
+
+
+
+export const CreateClasseurDocumentBody = zod.object({
+  "name": zod.string().min(1),
+  "category": zod.enum(['FACTURES', 'CONTRATS', 'DEVIS', 'DIVERS']),
+  "size": zod.number().optional(),
+  "mimeType": zod.string().optional(),
+  "notes": zod.string().optional(),
+  "affaireId": zod.string().optional()
+})
+
+export const CreateClasseurDocumentResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "category": zod.enum(['FACTURES', 'CONTRATS', 'DEVIS', 'DIVERS']),
+  "size": zod.number().nullish(),
+  "mimeType": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "affaireId": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a document from classeur
+ */
+export const DeleteClasseurDocumentParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DeleteClasseurDocumentResponse = zod.void()
+
+
+/**
+ * @summary List fiscal deadlines
+ */
+export const ListEcheancesQueryParams = zod.object({
+  "statut": zod.coerce.string().optional()
+})
+
+export const ListEcheancesResponseItem = zod.object({
+  "id": zod.string(),
+  "type": zod.enum(['TVA', 'IS', 'URSSAF', 'CFE', 'CVAE', 'AUTRE']),
+  "label": zod.string(),
+  "dueDate": zod.coerce.date(),
+  "estimatedCents": zod.number().nullish(),
+  "paidCents": zod.number().nullish(),
+  "status": zod.enum(['A_VENIR', 'PAYEE', 'EN_RETARD']),
+  "notes": zod.string().nullish(),
+  "paidAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date()
+})
+export const ListEcheancesResponse = zod.array(ListEcheancesResponseItem)
+
+
+/**
+ * @summary Create a fiscal deadline
+ */
+
+
+
+export const CreateEcheanceBody = zod.object({
+  "type": zod.string(),
+  "label": zod.string().min(1),
+  "dueDate": zod.coerce.date(),
+  "estimatedCents": zod.number().optional(),
+  "notes": zod.string().optional()
+})
+
+export const CreateEcheanceResponse = zod.object({
+  "id": zod.string(),
+  "type": zod.enum(['TVA', 'IS', 'URSSAF', 'CFE', 'CVAE', 'AUTRE']),
+  "label": zod.string(),
+  "dueDate": zod.coerce.date(),
+  "estimatedCents": zod.number().nullish(),
+  "paidCents": zod.number().nullish(),
+  "status": zod.enum(['A_VENIR', 'PAYEE', 'EN_RETARD']),
+  "notes": zod.string().nullish(),
+  "paidAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update a fiscal deadline
+ */
+export const UpdateEcheanceParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const UpdateEcheanceBody = zod.object({
+  "label": zod.string().optional(),
+  "dueDate": zod.coerce.date().optional(),
+  "estimatedCents": zod.number().optional(),
+  "paidCents": zod.number().optional(),
+  "status": zod.string().optional(),
+  "notes": zod.string().optional()
+})
+
+export const UpdateEcheanceResponse = zod.object({
+  "id": zod.string(),
+  "type": zod.enum(['TVA', 'IS', 'URSSAF', 'CFE', 'CVAE', 'AUTRE']),
+  "label": zod.string(),
+  "dueDate": zod.coerce.date(),
+  "estimatedCents": zod.number().nullish(),
+  "paidCents": zod.number().nullish(),
+  "status": zod.enum(['A_VENIR', 'PAYEE', 'EN_RETARD']),
+  "notes": zod.string().nullish(),
+  "paidAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a fiscal deadline
+ */
+export const DeleteEcheanceParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DeleteEcheanceResponse = zod.void()
+
+
+/**
+ * @summary Global margin analytics
+ */
+export const GetMargeStatsQueryParams = zod.object({
+  "statut": zod.coerce.string().optional()
+})
+
+export const GetMargeStatsResponse = zod.object({
+  "totalRevenueCents": zod.number(),
+  "totalMarginCents": zod.number(),
+  "marginPct": zod.number(),
+  "affaires": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "clientName": zod.string().nullish(),
+  "status": zod.string(),
+  "invoicedAmountCents": zod.number().nullish(),
+  "marginCents": zod.number().nullish(),
+  "marginPct": zod.number().nullish()
+})),
+  "mensuelle": zod.array(zod.object({
+  "month": zod.string(),
+  "revenueCents": zod.number(),
+  "marginCents": zod.number()
+}))
+})
+
+
+/**
+ * @summary Get monthly business report
+ */
+export const GetRapportMensuelQueryParams = zod.object({
+  "mois": zod.coerce.string().optional()
+})
+
+export const GetRapportMensuelResponse = zod.object({
+  "mois": zod.string().describe('YYYY-MM'),
+  "summary": zod.object({
+  "caMois": zod.number(),
+  "nouvellesAffaires": zod.number(),
+  "nouveauxClients": zod.number(),
+  "facturesEncaissees": zod.number(),
+  "tauxMarge": zod.number()
+}),
+  "topAffaires": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "clientName": zod.string().nullish(),
+  "status": zod.string(),
+  "invoicedAmountCents": zod.number().nullish(),
+  "marginCents": zod.number().nullish(),
+  "marginPct": zod.number().nullish()
+})),
+  "topClients": zod.array(zod.object({
+  "clientName": zod.string(),
+  "totalCents": zod.number()
+}))
+})
+
+
+/**
  * @summary Get chat history
  */
 export const GetChatHistoryQueryParams = zod.object({

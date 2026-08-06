@@ -40,11 +40,12 @@ router.post("/factures", async (req, res): Promise<void> => {
     return;
   }
   const data = parsed.data;
+  const toStr = (v: unknown) => v instanceof Date ? v.toISOString().slice(0, 10) : String(v ?? '');
   const [facture] = await db.insert(facturesTable).values({
     customerName: data.customerName,
     number: data.number,
-    issuedDate: data.issuedDate,
-    dueDate: data.dueDate,
+    issuedDate: toStr(data.issuedDate),
+    dueDate: toStr(data.dueDate),
     amountCents: data.amountCents,
     residualCents: data.amountCents,
     settled: false,

@@ -380,6 +380,229 @@ export interface ChatReply {
   message: ChatMessage;
 }
 
+export interface DevisLine {
+  id: string;
+  description: string;
+  quantity: number;
+  unitPriceCents: number;
+}
+
+export type DevisStatus = typeof DevisStatus[keyof typeof DevisStatus];
+
+
+export const DevisStatus = {
+  BROUILLON: 'BROUILLON',
+  ENVOYE: 'ENVOYE',
+  ACCEPTE: 'ACCEPTE',
+  REFUSE: 'REFUSE',
+  EXPIRE: 'EXPIRE',
+} as const;
+
+export interface Devis {
+  id: string;
+  reference: string;
+  clientName: string;
+  status: DevisStatus;
+  lines: DevisLine[];
+  /** Total HT en centimes (entier) */
+  totalHTCents: number;
+  /** Total TTC en centimes (entier) */
+  totalTTCCents: number;
+  tvaRate: number;
+  remise: number;
+  /** @nullable */
+  notes?: string | null;
+  /** @nullable */
+  validUntil?: string | null;
+  /** @nullable */
+  affaireId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DevisList {
+  devis: Devis[];
+  total: number;
+  /** Somme des totaux TTC en centimes */
+  totalTTCCents: number;
+}
+
+export interface DevisInput {
+  /** @minLength 1 */
+  clientName: string;
+  status?: string;
+  lines: DevisLine[];
+  tvaRate?: number;
+  remise?: number;
+  notes?: string;
+  validUntil?: string;
+}
+
+export interface DevisUpdate {
+  clientName?: string;
+  status?: string;
+  lines?: DevisLine[];
+  tvaRate?: number;
+  remise?: number;
+  notes?: string;
+  validUntil?: string;
+}
+
+export type ClasseurDocumentCategory = typeof ClasseurDocumentCategory[keyof typeof ClasseurDocumentCategory];
+
+
+export const ClasseurDocumentCategory = {
+  FACTURES: 'FACTURES',
+  CONTRATS: 'CONTRATS',
+  DEVIS: 'DEVIS',
+  DIVERS: 'DIVERS',
+} as const;
+
+export interface ClasseurDocument {
+  id: string;
+  name: string;
+  category: ClasseurDocumentCategory;
+  /** @nullable */
+  size?: number | null;
+  /** @nullable */
+  mimeType?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  /** @nullable */
+  affaireId?: string | null;
+  createdAt: string;
+}
+
+export interface ClasseurList {
+  documents: ClasseurDocument[];
+  total: number;
+}
+
+export type ClasseurDocumentInputCategory = typeof ClasseurDocumentInputCategory[keyof typeof ClasseurDocumentInputCategory];
+
+
+export const ClasseurDocumentInputCategory = {
+  FACTURES: 'FACTURES',
+  CONTRATS: 'CONTRATS',
+  DEVIS: 'DEVIS',
+  DIVERS: 'DIVERS',
+} as const;
+
+export interface ClasseurDocumentInput {
+  /** @minLength 1 */
+  name: string;
+  category: ClasseurDocumentInputCategory;
+  size?: number;
+  mimeType?: string;
+  notes?: string;
+  affaireId?: string;
+}
+
+export type EcheanceType = typeof EcheanceType[keyof typeof EcheanceType];
+
+
+export const EcheanceType = {
+  TVA: 'TVA',
+  IS: 'IS',
+  URSSAF: 'URSSAF',
+  CFE: 'CFE',
+  CVAE: 'CVAE',
+  AUTRE: 'AUTRE',
+} as const;
+
+export type EcheanceStatus = typeof EcheanceStatus[keyof typeof EcheanceStatus];
+
+
+export const EcheanceStatus = {
+  A_VENIR: 'A_VENIR',
+  PAYEE: 'PAYEE',
+  EN_RETARD: 'EN_RETARD',
+} as const;
+
+export interface Echeance {
+  id: string;
+  type: EcheanceType;
+  label: string;
+  dueDate: string;
+  /** @nullable */
+  estimatedCents?: number | null;
+  /** @nullable */
+  paidCents?: number | null;
+  status: EcheanceStatus;
+  /** @nullable */
+  notes?: string | null;
+  /** @nullable */
+  paidAt?: string | null;
+  createdAt: string;
+}
+
+export interface EcheanceInput {
+  type: string;
+  /** @minLength 1 */
+  label: string;
+  dueDate: string;
+  estimatedCents?: number;
+  notes?: string;
+}
+
+export interface EcheanceUpdate {
+  label?: string;
+  dueDate?: string;
+  estimatedCents?: number;
+  paidCents?: number;
+  status?: string;
+  notes?: string;
+}
+
+export interface MargeAffaire {
+  id: string;
+  label: string;
+  /** @nullable */
+  clientName?: string | null;
+  status: string;
+  /** @nullable */
+  invoicedAmountCents?: number | null;
+  /** @nullable */
+  marginCents?: number | null;
+  /** @nullable */
+  marginPct?: number | null;
+}
+
+export interface MargeMensuelle {
+  month: string;
+  revenueCents: number;
+  marginCents: number;
+}
+
+export interface MargeStats {
+  totalRevenueCents: number;
+  totalMarginCents: number;
+  marginPct: number;
+  affaires: MargeAffaire[];
+  mensuelle: MargeMensuelle[];
+}
+
+export type RapportMensuelSummary = {
+  caMois: number;
+  nouvellesAffaires: number;
+  nouveauxClients: number;
+  facturesEncaissees: number;
+  tauxMarge: number;
+};
+
+export type RapportMensuelTopClientsItem = {
+  clientName: string;
+  totalCents: number;
+};
+
+export interface RapportMensuel {
+  /** YYYY-MM */
+  mois: string;
+  summary: RapportMensuelSummary;
+  topAffaires: MargeAffaire[];
+  topClients: RapportMensuelTopClientsItem[];
+}
+
 export type ListAffairesParams = {
 statut?: string;
 inclureArchivees?: boolean;
@@ -391,6 +614,31 @@ settled?: boolean;
 
 export type ListProspectsParams = {
 stage?: string;
+};
+
+export type ListDevisParams = {
+statut?: string;
+search?: string;
+};
+
+export type ListClasseurParams = {
+category?: string;
+search?: string;
+};
+
+export type ListEcheancesParams = {
+statut?: string;
+};
+
+export type GetMargeStatsParams = {
+statut?: string;
+};
+
+export type GetRapportMensuelParams = {
+/**
+ * YYYY-MM format
+ */
+mois?: string;
 };
 
 export type GetChatHistoryParams = {

@@ -10,6 +10,11 @@ import Factures from '@/pages/factures';
 import Prospects from '@/pages/prospects';
 import Brief from '@/pages/brief';
 import Chat from '@/pages/chat';
+import Devis from '@/pages/devis';
+import Classeur from '@/pages/classeur';
+import Marge from '@/pages/marge';
+import Rapports from '@/pages/rapports';
+import Echeancier from '@/pages/echeancier';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -32,6 +37,11 @@ function AppRouter() {
         <Route path="/prospects" component={Prospects} />
         <Route path="/brief" component={Brief} />
         <Route path="/chat" component={Chat} />
+        <Route path="/devis" component={Devis} />
+        <Route path="/classeur" component={Classeur} />
+        <Route path="/marge" component={Marge} />
+        <Route path="/rapports" component={Rapports} />
+        <Route path="/echeancier" component={Echeancier} />
         <Route component={NotFound} />
       </Switch>
     </AppShell>

@@ -8,6 +8,11 @@ import prospectsRouter from "./prospects";
 import briefRouter from "./brief";
 import pendingActionsRouter from "./pending_actions";
 import chatRouter from "./chat";
+import devisRouter from "./devis";
+import classeurRouter from "./classeur";
+import echeancesRouter from "./echeances";
+import margeRouter from "./marge";
+import rapportsRouter from "./rapports";
 
 const router: IRouter = Router();
 
@@ -20,5 +25,10 @@ router.use(prospectsRouter);
 router.use(briefRouter);
 router.use(pendingActionsRouter);
 router.use(chatRouter);
+router.use(devisRouter);
+router.use(classeurRouter);
+router.use(echeancesRouter);
+router.use(margeRouter);
+router.use(rapportsRouter);
 
 export default router;

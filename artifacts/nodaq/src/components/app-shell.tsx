@@ -8,18 +8,64 @@ import {
   Sunrise,
   MessageSquare,
   Radio,
+  FileText,
+  FolderOpen,
+  TrendingUp,
+  FileBarChart,
+  CalendarClock,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-const NAV_ITEMS = [
-  { href: '/', label: 'Cockpit', icon: LayoutDashboard, testId: 'nav-cockpit' },
-  { href: '/affaires', label: 'Affaires', icon: Briefcase, testId: 'nav-affaires' },
-  { href: '/contrats', label: 'Contrats', icon: Repeat, testId: 'nav-contrats' },
-  { href: '/factures', label: 'Factures', icon: Receipt, testId: 'nav-factures' },
-  { href: '/prospects', label: 'Prospects', icon: Users, testId: 'nav-prospects' },
-  { href: '/brief', label: 'Brief matin', icon: Sunrise, testId: 'nav-brief' },
-  { href: '/chat', label: 'Agent IA', icon: MessageSquare, testId: 'nav-chat' },
+const NAV_SECTIONS = [
+  {
+    label: 'Tableau de bord',
+    items: [
+      { href: '/', label: 'Cockpit', icon: LayoutDashboard, testId: 'nav-cockpit' },
+      { href: '/brief', label: 'Brief matin', icon: Sunrise, testId: 'nav-brief' },
+      { href: '/chat', label: 'Agent IA', icon: MessageSquare, testId: 'nav-chat' },
+    ],
+  },
+  {
+    label: 'Commercial',
+    items: [
+      { href: '/affaires', label: 'Affaires', icon: Briefcase, testId: 'nav-affaires' },
+      { href: '/devis', label: 'Devis', icon: FileText, testId: 'nav-devis' },
+      { href: '/contrats', label: 'Contrats', icon: Repeat, testId: 'nav-contrats' },
+      { href: '/prospects', label: 'Prospects', icon: Users, testId: 'nav-prospects' },
+    ],
+  },
+  {
+    label: 'Finance',
+    items: [
+      { href: '/factures', label: 'Factures', icon: Receipt, testId: 'nav-factures' },
+      { href: '/marge', label: 'Marge', icon: TrendingUp, testId: 'nav-marge' },
+      { href: '/rapports', label: 'Rapports', icon: FileBarChart, testId: 'nav-rapports' },
+      { href: '/echeancier', label: 'Échéancier fiscal', icon: CalendarClock, testId: 'nav-echeancier' },
+    ],
+  },
+  {
+    label: 'Documents',
+    items: [
+      { href: '/classeur', label: 'Classeur', icon: FolderOpen, testId: 'nav-classeur' },
+    ],
+  },
 ];
+
+// Flat list for mobile nav (keep it compact)
+const MOBILE_NAV = [
+  { href: '/', label: 'Cockpit', icon: LayoutDashboard },
+  { href: '/affaires', label: 'Affaires', icon: Briefcase },
+  { href: '/devis', label: 'Devis', icon: FileText },
+  { href: '/factures', label: 'Factures', icon: Receipt },
+  { href: '/marge', label: 'Marge', icon: TrendingUp },
+  { href: '/echeancier', label: 'Fiscal', icon: CalendarClock },
+  { href: '/classeur', label: 'Classeur', icon: FolderOpen },
+  { href: '/chat', label: 'Agent IA', icon: MessageSquare },
+];
+
+function isActive(href: string, location: string) {
+  return href === '/' ? location === '/' : location.startsWith(href);
+}
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
@@ -41,39 +87,45 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-0.5">
-          {NAV_ITEMS.map((item) => {
-            const active =
-              item.href === '/'
-                ? location === '/'
-                : location.startsWith(item.href);
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                data-testid={item.testId}
-                className={cn(
-                  'group relative flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors hover-elevate',
-                  active
-                    ? 'bg-sidebar-accent text-sidebar-primary'
-                    : 'text-sidebar-foreground/70',
-                )}
-              >
-                {active && (
-                  <span className="absolute left-0 h-5 w-[3px] rounded-r-full bg-sidebar-primary" />
-                )}
-                <Icon
-                  className={cn(
-                    'h-4 w-4 shrink-0',
-                    active ? 'text-sidebar-primary' : 'text-sidebar-foreground/50',
-                  )}
-                  strokeWidth={2}
-                />
-                <span>{item.label}</span>
-              </Link>
-            );
-          })}
+        <nav className="flex-1 overflow-y-auto py-3 px-3 space-y-4">
+          {NAV_SECTIONS.map(section => (
+            <div key={section.label}>
+              <div className="px-3 py-1 text-[10px] uppercase tracking-[0.12em] text-sidebar-foreground/35 font-medium">
+                {section.label}
+              </div>
+              <div className="space-y-0.5 mt-0.5">
+                {section.items.map(item => {
+                  const active = isActive(item.href, location);
+                  const Icon = item.icon;
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      data-testid={item.testId}
+                      className={cn(
+                        'group relative flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors hover-elevate',
+                        active
+                          ? 'bg-sidebar-accent text-sidebar-primary'
+                          : 'text-sidebar-foreground/70',
+                      )}
+                    >
+                      {active && (
+                        <span className="absolute left-0 h-5 w-[3px] rounded-r-full bg-sidebar-primary" />
+                      )}
+                      <Icon
+                        className={cn(
+                          'h-4 w-4 shrink-0',
+                          active ? 'text-sidebar-primary' : 'text-sidebar-foreground/50',
+                        )}
+                        strokeWidth={2}
+                      />
+                      <span>{item.label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
 
         <div className="p-4 border-t border-sidebar-border">
@@ -105,15 +157,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 function MobileNav({ location }: { location: string }) {
   return (
     <div className="md:hidden sticky top-0 z-30 flex items-center gap-1 overflow-x-auto border-b border-sidebar-border bg-sidebar px-2 py-2">
-      {NAV_ITEMS.map((item) => {
-        const active =
-          item.href === '/' ? location === '/' : location.startsWith(item.href);
+      {MOBILE_NAV.map(item => {
+        const active = isActive(item.href, location);
         const Icon = item.icon;
         return (
           <Link
             key={item.href}
             href={item.href}
-            data-testid={`mobile-${item.testId}`}
             className={cn(
               'flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium hover-elevate',
               active

@@ -39,13 +39,14 @@ router.post("/contrats", async (req, res): Promise<void> => {
     return;
   }
   const data = parsed.data;
+  const toStr = (v: unknown) => v instanceof Date ? v.toISOString().slice(0, 10) : (v as string | null | undefined) ?? null;
   const [contrat] = await db.insert(contratsTable).values({
     label: data.label,
     clientName: data.clientName ?? null,
     cadence: data.cadence ?? "mensuel",
     amountCents: data.amountCents ?? null,
-    startDate: data.startDate ?? null,
-    endDate: data.endDate ?? null,
+    startDate: toStr(data.startDate),
+    endDate: toStr(data.endDate),
     notes: data.notes ?? null,
     status: "ACTIF",
   }).returning();
