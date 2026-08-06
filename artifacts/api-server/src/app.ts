@@ -4,6 +4,7 @@ import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { pool } from "@workspace/db";
 
 const app: Express = express();
 
@@ -71,5 +72,28 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
+
+// ── DB role verification — runs once at startup ───────────────────────────────
+// The application pool must run as app_user (non-owner) so that PostgreSQL RLS
+// policies are enforced. If current_user comes back as the table owner (e.g.
+// "postgres"), RLS policies are bypassed and data isolation is broken.
+pool.query("SELECT current_user").then((result) => {
+  const currentUser: string = result.rows[0]?.current_user ?? "unknown";
+  if (currentUser !== "app_user") {
+    logger.error(
+      { currentUser },
+      "[startup] SECURITY: DB pool is running as '%s' instead of 'app_user'. " +
+        "Set DATABASE_URL_APP to a connection string that authenticates as app_user. " +
+        "Without this, PostgreSQL RLS policies will be bypassed.",
+      currentUser,
+    );
+    // Do not exit — the app remains reachable so the error is visible in logs.
+    // Phase 3 RLS enforcement will make this critical; address it before then.
+  } else {
+    logger.info("[startup] DB user verified: %s ✓", currentUser);
+  }
+}).catch((err: Error) => {
+  logger.error({ err }, "[startup] Could not verify DB user: %s", err.message);
+});
 
 export default app;
