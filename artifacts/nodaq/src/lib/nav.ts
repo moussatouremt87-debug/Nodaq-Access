@@ -75,14 +75,19 @@ export const NAV_SECTIONS: NavSection[] = [
 ];
 
 export const MOBILE_NAV = [
-  { href: '/',          label: 'Cockpit',   icon: LayoutDashboard },
-  { href: '/affaires',  label: 'Affaires',  icon: Briefcase },
-  { href: '/devis',     label: 'Devis',     icon: FileText },
-  { href: '/factures',  label: 'Factures',  icon: Receipt },
-  { href: '/marge',     label: 'Marge',     icon: TrendingUp },
-  { href: '/echeancier', label: 'Fiscal',   icon: CalendarClock },
-  { href: '/classeur',  label: 'Classeur',  icon: FolderOpen },
-  { href: '/chat',      label: 'Agent IA',  icon: MessageSquare },
+  { href: '/',             label: 'Cockpit',    icon: LayoutDashboard },
+  { href: '/affaires',     label: 'Affaires',   icon: Briefcase },
+  { href: '/devis',        label: 'Devis',      icon: FileText },
+  { href: '/factures',     label: 'Factures',   icon: Receipt },
+  { href: '/marge',        label: 'Marge',      icon: TrendingUp },
+  { href: '/echeancier',   label: 'Fiscal',     icon: CalendarClock },
+  { href: '/classeur',     label: 'Classeur',   icon: FolderOpen },
+  { href: '/chat',         label: 'Agent IA',   icon: MessageSquare },
+  // Plateforme screens (auth-gated at route level)
+  { href: '/equipe',       label: 'Équipe',     icon: UserCog },
+  { href: '/votre-metier', label: 'Métier',     icon: Hammer },
+  { href: '/connecteurs',  label: 'Connecteurs', icon: Plug2 },
+  { href: '/parametres',   label: 'Paramètres', icon: Settings2 },
 ];
 
 /** Returns true when the given nav href matches the current location. */
