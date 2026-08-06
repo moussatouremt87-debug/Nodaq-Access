@@ -11,3 +11,4 @@ export * from "./echeances";
 export * from "./team_members";
 export * from "./connectors";
 export * from "./settings";
+export * from "./cr_entries";

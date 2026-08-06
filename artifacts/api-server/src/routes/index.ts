@@ -13,6 +13,7 @@ import classeurRouter from "./classeur";
 import echeancesRouter from "./echeances";
 import margeRouter from "./marge";
 import rapportsRouter from "./rapports";
+import compteResultatRouter from "./compte-resultat";
 import equipeRouter from "./equipe";
 import connecteursRouter from "./connecteurs";
 import parametresRouter from "./parametres";
@@ -42,6 +43,7 @@ router.use(classeurRouter);
 router.use(echeancesRouter);
 router.use(margeRouter);
 router.use(rapportsRouter);
+router.use(compteResultatRouter);
 
 // Platform routes — require authentication
 router.use(requireAuth, equipeRouter);

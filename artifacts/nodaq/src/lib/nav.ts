@@ -15,6 +15,7 @@ import {
   Plug2,
   Settings2,
   Hammer,
+  FileSpreadsheet,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -54,7 +55,8 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: '/factures',   label: 'Factures',         icon: Receipt,       testId: 'nav-factures' },
       { href: '/marge',      label: 'Marge',            icon: TrendingUp,    testId: 'nav-marge' },
       { href: '/rapports',   label: 'Rapports',         icon: FileBarChart,  testId: 'nav-rapports' },
-      { href: '/echeancier', label: 'Échéancier fiscal', icon: CalendarClock, testId: 'nav-echeancier' },
+      { href: '/echeancier',      label: 'Échéancier fiscal',   icon: CalendarClock,   testId: 'nav-echeancier' },
+      { href: '/compte-resultat', label: 'Compte de résultat', icon: FileSpreadsheet, testId: 'nav-compte-resultat' },
     ],
   },
   {

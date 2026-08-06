@@ -18,6 +18,7 @@ import Devis from '@/pages/devis';
 import Classeur from '@/pages/classeur';
 import Marge from '@/pages/marge';
 import Rapports from '@/pages/rapports';
+import CompteResultat from '@/pages/compte-resultat';
 import Echeancier from '@/pages/echeancier';
 import Equipe from '@/pages/equipe';
 import Connecteurs from '@/pages/connecteurs';
@@ -92,6 +93,7 @@ function AppRouter() {
               <Route path="/classeur" component={Classeur} />
               <Route path="/marge" component={Marge} />
               <Route path="/rapports" component={Rapports} />
+              <Route path="/compte-resultat" component={CompteResultat} />
               <Route path="/echeancier" component={Echeancier} />
               <Route path="/equipe" component={PlatformRoute(Equipe)} />
               <Route path="/votre-metier" component={PlatformRoute(VotreMetier)} />
