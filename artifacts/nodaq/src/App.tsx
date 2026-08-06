@@ -15,6 +15,35 @@ import Classeur from '@/pages/classeur';
 import Marge from '@/pages/marge';
 import Rapports from '@/pages/rapports';
 import Echeancier from '@/pages/echeancier';
+import Equipe from '@/pages/equipe';
+import Connecteurs from '@/pages/connecteurs';
+import Parametres from '@/pages/parametres';
+import Login from '@/pages/login';
+import { useAuth } from '@/hooks/use-auth';
+import { useLocation } from 'wouter';
+
+/** HOC: redirects to /login if not authenticated */
+function PlatformRoute(Page: React.ComponentType) {
+  return function Protected() {
+    const { data, isLoading } = useAuth();
+    const [, setLocation] = useLocation();
+
+    if (isLoading) {
+      return (
+        <div className="flex h-full items-center justify-center p-12 text-muted-foreground text-sm">
+          Vérification de l'accès...
+        </div>
+      );
+    }
+    if (!data?.authenticated) {
+      // Redirect to login, preserving the intended destination
+      const from = encodeURIComponent(window.location.pathname);
+      setLocation(`/login?from=${from}`);
+      return null;
+    }
+    return <Page />;
+  };
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -42,6 +71,10 @@ function AppRouter() {
         <Route path="/marge" component={Marge} />
         <Route path="/rapports" component={Rapports} />
         <Route path="/echeancier" component={Echeancier} />
+        <Route path="/equipe" component={PlatformRoute(Equipe)} />
+        <Route path="/connecteurs" component={PlatformRoute(Connecteurs)} />
+        <Route path="/parametres" component={PlatformRoute(Parametres)} />
+        <Route path="/login" component={Login} />
         <Route component={NotFound} />
       </Switch>
     </AppShell>

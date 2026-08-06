@@ -997,3 +997,158 @@ export const SendChatMessageResponse = zod.object({
 })
 
 
+/**
+ * @summary List team members
+ */
+export const ListTeamMembersResponseItem = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "role": zod.string(),
+  "email": zod.string().nullish(),
+  "availability": zod.enum(['DISPONIBLE', 'PARTIEL', 'ABSENT']),
+  "schedule": zod.array(zod.object({
+  "day": zod.string(),
+  "affaireId": zod.string().nullish()
+})),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListTeamMembersResponse = zod.array(ListTeamMembersResponseItem)
+
+
+/**
+ * @summary Create a team member
+ */
+
+
+
+export const CreateTeamMemberBody = zod.object({
+  "name": zod.string().min(1),
+  "role": zod.string().optional(),
+  "email": zod.string().optional(),
+  "availability": zod.enum(['DISPONIBLE', 'PARTIEL', 'ABSENT']).optional(),
+  "schedule": zod.array(zod.object({
+  "day": zod.string().optional(),
+  "affaireId": zod.string().nullish()
+})).optional()
+})
+
+export const CreateTeamMemberResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "role": zod.string(),
+  "email": zod.string().nullish(),
+  "availability": zod.enum(['DISPONIBLE', 'PARTIEL', 'ABSENT']),
+  "schedule": zod.array(zod.object({
+  "day": zod.string(),
+  "affaireId": zod.string().nullish()
+})),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update a team member
+ */
+export const UpdateTeamMemberParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+
+
+
+export const UpdateTeamMemberBody = zod.object({
+  "name": zod.string().min(1).optional(),
+  "role": zod.string().optional(),
+  "email": zod.string().optional(),
+  "availability": zod.enum(['DISPONIBLE', 'PARTIEL', 'ABSENT']).optional(),
+  "schedule": zod.array(zod.object({
+  "day": zod.string().optional(),
+  "affaireId": zod.string().nullish()
+})).optional()
+})
+
+export const UpdateTeamMemberResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "role": zod.string(),
+  "email": zod.string().nullish(),
+  "availability": zod.enum(['DISPONIBLE', 'PARTIEL', 'ABSENT']),
+  "schedule": zod.array(zod.object({
+  "day": zod.string(),
+  "affaireId": zod.string().nullish()
+})),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a team member
+ */
+export const DeleteTeamMemberParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DeleteTeamMemberResponse = zod.void()
+
+
+/**
+ * @summary List available connectors
+ */
+export const ListConnectorsResponse = zod.object({
+  "connectors": zod.array(zod.object({
+  "id": zod.string(),
+  "type": zod.string(),
+  "label": zod.string(),
+  "description": zod.string().nullish(),
+  "status": zod.enum(['NON_CONNECTE', 'CONNECTE', 'ERREUR']),
+  "config": zod.record(zod.string(), zod.string()),
+  "lastSyncAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date()
+})),
+  "connected": zod.number(),
+  "withError": zod.number(),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Update connector status and config
+ */
+export const UpdateConnectorParams = zod.object({
+  "type": zod.coerce.string()
+})
+
+export const UpdateConnectorBody = zod.object({
+  "status": zod.enum(['NON_CONNECTE', 'CONNECTE', 'ERREUR']).optional(),
+  "config": zod.record(zod.string(), zod.string()).optional()
+})
+
+export const UpdateConnectorResponse = zod.object({
+  "id": zod.string(),
+  "type": zod.string(),
+  "label": zod.string(),
+  "description": zod.string().nullish(),
+  "status": zod.enum(['NON_CONNECTE', 'CONNECTE', 'ERREUR']),
+  "config": zod.record(zod.string(), zod.string()),
+  "lastSyncAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Get all settings as key-value map
+ */
+export const GetParametresResponse = zod.record(zod.string(), zod.string())
+
+
+/**
+ * @summary Update one or more settings
+ */
+export const UpdateParametresBody = zod.record(zod.string(), zod.string())
+
+export const UpdateParametresResponse = zod.record(zod.string(), zod.string())
+
+

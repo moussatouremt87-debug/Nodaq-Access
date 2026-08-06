@@ -8,3 +8,6 @@ export * from "./activity";
 export * from "./devis";
 export * from "./classeur";
 export * from "./echeances";
+export * from "./team_members";
+export * from "./connectors";
+export * from "./settings";

@@ -13,6 +13,9 @@ import {
   TrendingUp,
   FileBarChart,
   CalendarClock,
+  UserCog,
+  Plug2,
+  Settings2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -47,6 +50,14 @@ const NAV_SECTIONS = [
     label: 'Documents',
     items: [
       { href: '/classeur', label: 'Classeur', icon: FolderOpen, testId: 'nav-classeur' },
+    ],
+  },
+  {
+    label: 'Plateforme',
+    items: [
+      { href: '/equipe', label: 'Équipe & plannings', icon: UserCog, testId: 'nav-equipe' },
+      { href: '/connecteurs', label: 'Connecteurs', icon: Plug2, testId: 'nav-connecteurs' },
+      { href: '/parametres', label: 'Paramètres', icon: Settings2, testId: 'nav-parametres' },
     ],
   },
 ];

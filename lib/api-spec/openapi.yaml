@@ -22,6 +22,9 @@ tags:
   - name: echeances
   - name: marge
   - name: rapports
+  - name: equipe
+  - name: connecteurs
+  - name: parametres
 
 paths:
   /healthz:
@@ -809,6 +812,157 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ChatReply"
+
+  # ── Équipe ───────────────────────────────────────────────────────────────
+  /equipe:
+    get:
+      operationId: listTeamMembers
+      tags: [equipe]
+      summary: List team members
+      responses:
+        "200":
+          description: List of team members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TeamMember"
+    post:
+      operationId: createTeamMember
+      tags: [equipe]
+      summary: Create a team member
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TeamMemberInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamMember"
+
+  /equipe/{id}:
+    patch:
+      operationId: updateTeamMember
+      tags: [equipe]
+      summary: Update a team member
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TeamMemberUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamMember"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteTeamMember
+      tags: [equipe]
+      summary: Delete a team member
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
+  # ── Connecteurs ───────────────────────────────────────────────────────────
+  /connecteurs:
+    get:
+      operationId: listConnectors
+      tags: [connecteurs]
+      summary: List available connectors
+      responses:
+        "200":
+          description: Connector list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectorList"
+
+  /connecteurs/{type}:
+    patch:
+      operationId: updateConnector
+      tags: [connecteurs]
+      summary: Update connector status and config
+      parameters:
+        - in: path
+          name: type
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConnectorUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectorItem"
+        "404":
+          description: Not found
+
+  # ── Paramètres ───────────────────────────────────────────────────────────
+  /parametres:
+    get:
+      operationId: getParametres
+      tags: [parametres]
+      summary: Get all settings as key-value map
+      responses:
+        "200":
+          description: Settings map
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+    patch:
+      operationId: updateParametres
+      tags: [parametres]
+      summary: Update one or more settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ParametresInput"
+      responses:
+        "200":
+          description: Updated settings
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
 
 components:
   schemas:
@@ -1662,3 +1816,139 @@ components:
                 type: string
               totalCents:
                 type: number
+
+    TeamMember:
+      type: object
+      required: [id, name, role, availability, schedule, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+        email:
+          type: ["string", "null"]
+        availability:
+          type: string
+          enum: [DISPONIBLE, PARTIEL, ABSENT]
+        schedule:
+          type: array
+          items:
+            type: object
+            required: [day]
+            properties:
+              day:
+                type: string
+              affaireId:
+                type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    TeamMemberInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        role:
+          type: string
+        email:
+          type: string
+        availability:
+          type: string
+          enum: [DISPONIBLE, PARTIEL, ABSENT]
+        schedule:
+          type: array
+          items:
+            type: object
+            properties:
+              day:
+                type: string
+              affaireId:
+                type: ["string", "null"]
+
+    TeamMemberUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        role:
+          type: string
+        email:
+          type: string
+        availability:
+          type: string
+          enum: [DISPONIBLE, PARTIEL, ABSENT]
+        schedule:
+          type: array
+          items:
+            type: object
+            properties:
+              day:
+                type: string
+              affaireId:
+                type: ["string", "null"]
+
+    ConnectorItem:
+      type: object
+      required: [id, type, label, status, config, createdAt]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        label:
+          type: string
+        description:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [NON_CONNECTE, CONNECTE, ERREUR]
+        config:
+          type: object
+          additionalProperties:
+            type: string
+        lastSyncAt:
+          type: ["string", "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    ConnectorList:
+      type: object
+      required: [connectors, connected, withError, total]
+      properties:
+        connectors:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConnectorItem"
+        connected:
+          type: number
+        withError:
+          type: number
+        total:
+          type: number
+
+    ConnectorUpdate:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [NON_CONNECTE, CONNECTE, ERREUR]
+        config:
+          type: object
+          additionalProperties:
+            type: string
+
+    ParametresInput:
+      type: object
+      additionalProperties:
+        type: string

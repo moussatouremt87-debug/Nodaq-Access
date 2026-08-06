@@ -603,6 +603,130 @@ export interface RapportMensuel {
   topClients: RapportMensuelTopClientsItem[];
 }
 
+export type TeamMemberAvailability = typeof TeamMemberAvailability[keyof typeof TeamMemberAvailability];
+
+
+export const TeamMemberAvailability = {
+  DISPONIBLE: 'DISPONIBLE',
+  PARTIEL: 'PARTIEL',
+  ABSENT: 'ABSENT',
+} as const;
+
+export type TeamMemberScheduleItem = {
+  day: string;
+  /** @nullable */
+  affaireId?: string | null;
+};
+
+export interface TeamMember {
+  id: string;
+  name: string;
+  role: string;
+  /** @nullable */
+  email?: string | null;
+  availability: TeamMemberAvailability;
+  schedule: TeamMemberScheduleItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type TeamMemberInputAvailability = typeof TeamMemberInputAvailability[keyof typeof TeamMemberInputAvailability];
+
+
+export const TeamMemberInputAvailability = {
+  DISPONIBLE: 'DISPONIBLE',
+  PARTIEL: 'PARTIEL',
+  ABSENT: 'ABSENT',
+} as const;
+
+export type TeamMemberInputScheduleItem = {
+  day?: string;
+  /** @nullable */
+  affaireId?: string | null;
+};
+
+export interface TeamMemberInput {
+  /** @minLength 1 */
+  name: string;
+  role?: string;
+  email?: string;
+  availability?: TeamMemberInputAvailability;
+  schedule?: TeamMemberInputScheduleItem[];
+}
+
+export type TeamMemberUpdateAvailability = typeof TeamMemberUpdateAvailability[keyof typeof TeamMemberUpdateAvailability];
+
+
+export const TeamMemberUpdateAvailability = {
+  DISPONIBLE: 'DISPONIBLE',
+  PARTIEL: 'PARTIEL',
+  ABSENT: 'ABSENT',
+} as const;
+
+export type TeamMemberUpdateScheduleItem = {
+  day?: string;
+  /** @nullable */
+  affaireId?: string | null;
+};
+
+export interface TeamMemberUpdate {
+  /** @minLength 1 */
+  name?: string;
+  role?: string;
+  email?: string;
+  availability?: TeamMemberUpdateAvailability;
+  schedule?: TeamMemberUpdateScheduleItem[];
+}
+
+export type ConnectorItemStatus = typeof ConnectorItemStatus[keyof typeof ConnectorItemStatus];
+
+
+export const ConnectorItemStatus = {
+  NON_CONNECTE: 'NON_CONNECTE',
+  CONNECTE: 'CONNECTE',
+  ERREUR: 'ERREUR',
+} as const;
+
+export type ConnectorItemConfig = {[key: string]: string};
+
+export interface ConnectorItem {
+  id: string;
+  type: string;
+  label: string;
+  /** @nullable */
+  description?: string | null;
+  status: ConnectorItemStatus;
+  config: ConnectorItemConfig;
+  /** @nullable */
+  lastSyncAt?: string | null;
+  createdAt: string;
+}
+
+export interface ConnectorList {
+  connectors: ConnectorItem[];
+  connected: number;
+  withError: number;
+  total: number;
+}
+
+export type ConnectorUpdateStatus = typeof ConnectorUpdateStatus[keyof typeof ConnectorUpdateStatus];
+
+
+export const ConnectorUpdateStatus = {
+  NON_CONNECTE: 'NON_CONNECTE',
+  CONNECTE: 'CONNECTE',
+  ERREUR: 'ERREUR',
+} as const;
+
+export type ConnectorUpdateConfig = {[key: string]: string};
+
+export interface ConnectorUpdate {
+  status?: ConnectorUpdateStatus;
+  config?: ConnectorUpdateConfig;
+}
+
+export interface ParametresInput {[key: string]: string}
+
 export type ListAffairesParams = {
 statut?: string;
 inclureArchivees?: boolean;
@@ -644,4 +768,8 @@ mois?: string;
 export type GetChatHistoryParams = {
 conversationId?: string;
 };
+
+export type GetParametres200 = {[key: string]: string};
+
+export type UpdateParametres200 = {[key: string]: string};
 
