@@ -54,7 +54,7 @@ let tenantIds: string[] = [];
 let testEmails: string[] = [];
 
 const BUSINESS_TABLES = [
-  "activity", "affaires", "chat_messages", "classeur_documents",
+  "activity", "affaires", "analytics_tool_logs", "chat_messages", "classeur_documents",
   "connectors", "contrats", "cr_entries", "devis", "echeances", "factures",
   "pending_actions", "prospects", "settings", "team_members", "absences",
 ] as const;
@@ -522,6 +522,7 @@ describe("h — GARDE STRUCTURELLE", () => {
   const BUSINESS_TABLE_VARS = [
     "activityTable",
     "affairesTable",
+    "analyticsToolLogsTable",
     "chatMessagesTable",
     "classeurTable",
     "connectorsTable",

@@ -26,6 +26,13 @@ import {
   classeurTable,
 } from "@workspace/db";
 import { eq, desc, asc, sql, and, lte } from "drizzle-orm";
+import {
+  CALCULATORS,
+  computeComparaison,
+  INDICATEUR_IDS,
+  type IndicateurId,
+} from "../routes/analytics.js";
+import { parsePeriode } from "./analytics-periods.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -255,6 +262,46 @@ const TOOLS: LlmTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "get_indicateur",
+      description: [
+        "Calcule un indicateur économique de l'entreprise sur une période donnée.",
+        "LE MODÈLE NE CALCULE JAMAIS LUI-MÊME UN CHIFFRE — il appelle toujours cet outil.",
+        "Toute réponse chiffrée doit citer la période et le nombre de sources (nbSources).",
+        "Si donneesInsuffisantes = true, dire qu'on ne sait pas ; aucune estimation.",
+      ].join(" "),
+      parameters: {
+        type: "object",
+        properties: {
+          id: {
+            type: "string",
+            enum: [
+              "horizon_travail", "argent_qui_dort", "marge_pour_100_euros",
+              "delai_paiement_client", "ca_facture", "ca_encaisse",
+              "resultat_estime", "carnet_commandes", "taux_transformation",
+              "montant_moyen_affaire", "delai_reponse_devis",
+              "ecart_devis_realise", "jours_factures_sur_payes",
+              "concentration_client",
+            ],
+            description: "Identifiant de l'indicateur à calculer.",
+          },
+          periode: {
+            type: "string",
+            enum: ["mois", "trimestre", "exercice", "12_mois"],
+            description: "Fenêtre de calcul. Défaut : '12_mois'.",
+          },
+          comparaison: {
+            type: "string",
+            enum: ["aucune", "periode_precedente", "meme_periode_n1", "moyenne_12_mois"],
+            description: "Mode de comparaison. Défaut : 'meme_periode_n1'.",
+          },
+        },
+        required: ["id"],
+      },
+    },
+  },
 ];
 
 // ─── Context builder ──────────────────────────────────────────────────────────
@@ -365,12 +412,52 @@ ${context.teamMembers.map(m => `  • ${m.name} (${m.role}) — ${m.availability
 Activité récente :
 ${context.recentActivity.map(a => `  • ${a.label}`).join("\n") || "  (aucune)"}
 
+═══ INDICATEURS ANALYTIQUES — RÈGLES ABSOLUES ═══
+L'outil get_indicateur te donne accès aux indicateurs économiques de l'entreprise.
+Quatre règles sans aucune exception :
+a) Toute réponse chiffrée cite LA PÉRIODE ET LE NOMBRE DE SOURCES (champ nbSources).
+   Exemple : « calculé sur 7 affaires terminées entre janvier et juillet ».
+b) Si donneesInsuffisantes = true : dis que tu ne sais pas et explique ce qui manque.
+   AUCUNE estimation, aucun ordre de grandeur, aucun « environ ».
+c) Si la question ne correspond à aucun indicateur de la liste : dis-le clairement.
+   Ne bricole jamais une réponse à partir d'autre chose.
+d) Ne JAMAIS comparer à d'autres entreprises, à un secteur ou à une moyenne nationale,
+   même si l'utilisateur le demande explicitement.
+   Réponse type : « Je ne compare qu'à votre propre historique. »
+
 ═══ INSTRUCTIONS ═══
 - Utilise tes outils pour lire les données avant de répondre si besoin.
 - Quand l'utilisateur mentionne une action (chantier terminé, nouveau contact, etc.), utilise les outils appropriés pour mettre à jour l'app.
 - Confirme toujours ce que tu as fait avec les IDs des entités créées ou modifiées.
 - Sois concis mais complet. Priorité aux informations actionnables.
 - Si une information manque pour effectuer une action, demande-la.`;
+}
+
+// ─── Analytics tool logging ───────────────────────────────────────────────────
+// Spec §16 : JAMAIS la question, JAMAIS la réponse, JAMAIS une valeur.
+
+async function logAnalyticsTool(
+  tenantId: string,
+  indicateurId: string,
+  periodeDebut: string,
+  periodeFin: string,
+  comparaisonMode: string,
+  durationMs: number,
+  status: "ok" | "insuffisantes" | "erreur",
+): Promise<void> {
+  try {
+    await withTenant(tenantId, (tx) =>
+      tx.execute(sql`
+        INSERT INTO analytics_tool_logs
+          (tenant_id, indicateur_id, periode_debut, periode_fin, comparaison_mode, duration_ms, status)
+        VALUES
+          (${tenantId}::uuid, ${indicateurId}, ${periodeDebut}::date, ${periodeFin}::date,
+           ${comparaisonMode}, ${durationMs}, ${status})
+      `),
+    );
+  } catch {
+    // Logging failure must never affect the main flow
+  }
 }
 
 // ─── Tool executor ────────────────────────────────────────────────────────────
@@ -571,6 +658,80 @@ async function executeTool(
         result: `Activité enregistrée : "${activity.label}".`,
         action: { type: "log_activity", label: activity.label, entityId: activity.id, entityType: "activity" },
       };
+    }
+
+    case "get_indicateur": {
+      const id = args.id as string;
+      const periodeMode = (args.periode as string | undefined) ?? "12_mois";
+      const compMode = (args.comparaison as string | undefined) ?? "meme_periode_n1";
+
+      if (!(INDICATEUR_IDS as readonly string[]).includes(id)) {
+        return {
+          result: `Indicateur inconnu : "${id}". Identifiants valides : ${INDICATEUR_IDS.join(", ")}`,
+        };
+      }
+
+      const periode = parsePeriode(periodeMode);
+      const t0 = Date.now();
+      let logStatus: "ok" | "insuffisantes" | "erreur" = "ok";
+
+      try {
+        const partial = await withTenant(tenantId, async (tx) => {
+          const base = await CALCULATORS[id as IndicateurId](tx, periode);
+
+          const comp =
+            compMode !== "aucune"
+              ? await computeComparaison(
+                  tx,
+                  id as IndicateurId,
+                  periode,
+                  compMode as "periode_precedente" | "meme_periode_n1" | "moyenne_12_mois",
+                ).catch(() => undefined)
+              : undefined;
+
+          return { ...base, comparaison: comp };
+        });
+
+        if (partial.donneesInsuffisantes) logStatus = "insuffisantes";
+
+        // Log (fire-and-forget) — spec §16: no value, no question, no response
+        logAnalyticsTool(
+          tenantId, id,
+          periode.debut.toISOString().slice(0, 10),
+          periode.fin.toISOString().slice(0, 10),
+          compMode,
+          Date.now() - t0,
+          logStatus,
+        ).catch(() => {});
+
+        return {
+          result: JSON.stringify({
+            id,
+            valeur: partial.valeur,
+            unite: partial.unite,
+            periode: {
+              debut: periode.debut.toISOString().slice(0, 10),
+              fin: periode.fin.toISOString().slice(0, 10),
+              label: periode.label,
+            },
+            nbSources: partial.nbSources,
+            donneesInsuffisantes: partial.donneesInsuffisantes ?? false,
+            estime: partial.estime ?? false,
+            comparaison: partial.comparaison ?? null,
+          }),
+        };
+      } catch (err) {
+        logAnalyticsTool(
+          tenantId, id,
+          periode.debut.toISOString().slice(0, 10),
+          periode.fin.toISOString().slice(0, 10),
+          compMode,
+          Date.now() - t0,
+          "erreur",
+        ).catch(() => {});
+        const msg = err instanceof Error ? err.message : String(err);
+        return { result: `Erreur lors du calcul de ${id} : ${msg}` };
+      }
     }
 
     default:

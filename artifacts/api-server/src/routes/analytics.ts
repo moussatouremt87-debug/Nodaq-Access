@@ -135,7 +135,7 @@ function insufficient(
 // Each function operates inside a withTenant callback — DO NOT call withTenant
 // inside these functions; they receive a transaction (tx) already scoped to a tenant.
 
-type Tx = Parameters<Parameters<typeof withTenant>[1]>[0];
+export type Tx = Parameters<Parameters<typeof withTenant>[1]>[0];
 
 /**
  * 1. horizon_travail
@@ -724,9 +724,9 @@ async function calcConcentrationClient(
 
 // ── Dispatcher ────────────────────────────────────────────────────────────────
 
-type PartialResult = Omit<IndicateurResult, "id" | "periode">;
+export type PartialResult = Omit<IndicateurResult, "id" | "periode">;
 
-const CALCULATORS: Record<
+export const CALCULATORS: Record<
   IndicateurId,
   (tx: Tx, periode: { debut: Date; fin: Date }) => Promise<PartialResult>
 > = {
@@ -770,7 +770,7 @@ type ComparaisonResult = {
  *   - Averages the non-null, sufficient values.
  *   - Requires at least 3 valid months; otherwise: messageImpossible.
  */
-async function computeComparaison(
+export async function computeComparaison(
   tx: Tx,
   id: IndicateurId,
   currentPeriode: { debut: Date; fin: Date; label: string },
