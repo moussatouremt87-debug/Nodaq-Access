@@ -18,6 +18,7 @@ import Chat from '@/pages/chat';
 import Devis from '@/pages/devis';
 import Classeur from '@/pages/classeur';
 import Marge from '@/pages/marge';
+import Analytique from '@/pages/analytique';
 import Rapports from '@/pages/rapports';
 import CompteResultat from '@/pages/compte-resultat';
 import Echeancier from '@/pages/echeancier';
@@ -135,6 +136,7 @@ function AppRouter() {
               <Route path="/chat" component={PlatformRoute(Chat)} />
               <Route path="/devis" component={PlatformRoute(Devis)} />
               <Route path="/classeur" component={PlatformRoute(Classeur)} />
+              <Route path="/analytique" component={PlatformRoute(Analytique)} />
               <Route path="/marge" component={PlatformRoute(Marge)} />
               <Route path="/rapports" component={PlatformRoute(Rapports)} />
               <Route path="/compte-resultat" component={PlatformRoute(CompteResultat)} />

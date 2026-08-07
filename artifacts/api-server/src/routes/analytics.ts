@@ -1009,4 +1009,55 @@ router.get("/analytics/indicateurs/:id", async (req, res): Promise<void> => {
   }
 });
 
+/**
+ * GET /analytics/indicateurs/:id/serie
+ * Returns an ordered array of monthly data points — used by the evolution chart.
+ * The model never receives this data; only the formatted result goes to the chat.
+ *
+ * Query params:
+ *   n   Number of months to return (3–24, default 12).
+ */
+router.get("/analytics/indicateurs/:id/serie", async (req, res): Promise<void> => {
+  const idParsed = IndicateurIdSchema.safeParse(req.params["id"]);
+  if (!idParsed.success) {
+    res.status(404).json({ error: `Indicateur inconnu : "${req.params["id"]}"`, identifiantsValides: INDICATEUR_IDS });
+    return;
+  }
+
+  const nRaw = parseInt((req.query["n"] as string | undefined) ?? "12", 10);
+  const n = Number.isFinite(nRaw) ? Math.min(24, Math.max(3, nRaw)) : 12;
+  const tenantId = req.tenantId!;
+  const id = idParsed.data;
+  const months = getLast12Months(new Date(), n);
+
+  try {
+    const points = await withTenant(tenantId, async (tx) => {
+      return Promise.all(
+        months.map(async (m) => {
+          const partial = await CALCULATORS[id](tx, m).catch(() => ({
+            valeur: null as number | null,
+            unite: "",
+            nbSources: 0,
+            donneesInsuffisantes: true,
+          }));
+          return {
+            periode: {
+              debut: m.debut.toISOString().slice(0, 10),
+              fin: m.fin.toISOString().slice(0, 10),
+              label: m.label,
+            },
+            valeur: partial.valeur,
+            nbSources: partial.nbSources,
+            donneesInsuffisantes: partial.donneesInsuffisantes,
+          };
+        }),
+      );
+    });
+    res.json(points);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: msg });
+  }
+});
+
 export default router;

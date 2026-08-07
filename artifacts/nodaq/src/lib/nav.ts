@@ -18,6 +18,7 @@ import {
   FileSpreadsheet,
   Building2,
   DatabaseZap,
+  BarChart2,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -58,6 +59,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: '/factures',   label: 'Factures',         icon: Receipt,       testId: 'nav-factures' },
       { href: '/avoirs',     label: 'Avoirs',           icon: FileText,      testId: 'nav-avoirs' },
+      { href: '/analytique', label: 'Activité',          icon: BarChart2,     testId: 'nav-analytique' },
       { href: '/marge',      label: 'Marge',            icon: TrendingUp,    testId: 'nav-marge' },
       { href: '/rapports',   label: 'Rapports',         icon: FileBarChart,  testId: 'nav-rapports' },
       { href: '/echeancier',      label: 'Échéancier fiscal',   icon: CalendarClock,   testId: 'nav-echeancier' },
