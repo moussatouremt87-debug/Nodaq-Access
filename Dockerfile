@@ -1,0 +1,129 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# NODAQ — Multi-stage production Dockerfile
+#
+# Uses node:20-slim (Debian Bookworm, glibc) — NOT Alpine — because several
+# native optional packages (@rollup/rollup-linux-x64-musl, @tailwindcss/oxide
+# musl variant) are explicitly excluded from the pnpm workspace overrides.
+# The -gnu variants are NOT excluded and install correctly on Debian.
+#
+# Build:
+#   docker build -t nodaq:latest .
+#
+# Migrate (one-off, owner creds, before first start):
+#   docker run --rm \
+#     -e DATABASE_URL="postgres://owner:PASSWORD@host:5432/nodaq" \
+#     nodaq:latest node /app/migrate.mjs
+#
+# Run (no Replit variables needed):
+#   docker run -p 8080:8080 \
+#     -e DATABASE_URL_APP="postgres://app_user:PASSWORD@host:5432/nodaq" \
+#     -e SESSION_SECRET="$(openssl rand -hex 32)" \
+#     -e PUBLIC_URL="https://app.nodaq.fr" \
+#     -e PORT=8080 \
+#     -e NODE_ENV=production \
+#     -e LITELLM_API_KEY="…" \
+#     nodaq:latest
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Stage 1: Builder ──────────────────────────────────────────────────────────
+FROM node:20-slim AS builder
+
+WORKDIR /workspace
+
+# Install pnpm at the exact version used in development
+RUN npm install -g pnpm@10.26.1 --quiet
+
+# Copy workspace manifests first — Docker layer cache is only invalidated when
+# the lockfile or manifests change, not on source changes.
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json ./
+
+# Copy all source packages required for the build
+COPY lib/ ./lib/
+COPY artifacts/api-server/ ./artifacts/api-server/
+COPY artifacts/nodaq/ ./artifacts/nodaq/
+
+# Install all dependencies (dev + prod) — build tools need dev deps
+RUN pnpm install --frozen-lockfile
+
+# ── Build the frontend (Vite) ─────────────────────────────────────────────────
+# BASE_PATH=/ — SPA is served from root in Docker (no sub-path prefix).
+# NODE_ENV=production ensures Replit-only Vite plugins (gated on REPL_ID !== undefined)
+# are automatically skipped, no code change needed.
+# PORT is consumed by vite.config.ts at import time; unused during a build-only run.
+ENV NODE_ENV=production \
+    BASE_PATH=/ \
+    PORT=8080
+
+RUN pnpm --filter @workspace/nodaq run build
+
+# ── Build the API server (esbuild single-file bundle) ────────────────────────
+RUN pnpm --filter @workspace/api-server run build
+
+# ── Create a standalone deployment with real, non-symlinked node_modules ─────
+# pnpm deploy resolves all workspace:* dependencies and copies files out of the
+# pnpm virtual store as regular files (not symlinks), making node_modules
+# portable into the production stage without carrying the entire .pnpm store.
+# The --legacy flag is required for pnpm v10 in workspaces that do not set
+# inject-workspace-packages=true.
+RUN pnpm --filter @workspace/api-server deploy --prod --legacy /standalone
+
+# ── Stage 2: Production image ─────────────────────────────────────────────────
+FROM node:20-slim AS production
+
+WORKDIR /app
+
+# Create a non-root user (Debian syntax: groupadd / useradd)
+RUN groupadd -r -g 1001 nodaq && \
+    useradd  -r -u 1001 -g nodaq -M nodaq
+
+# ── Runtime artefacts ─────────────────────────────────────────────────────────
+
+# Resolved production node_modules — real files, no symlinks to pnpm store.
+# Contains: express, nodemailer, pdfkit, pino, pg, and all transitive prod deps.
+COPY --from=builder --chown=nodaq:nodaq /standalone/node_modules ./node_modules
+
+# API server esbuild bundle (self-contained; workspace libs already inlined)
+COPY --from=builder --chown=nodaq:nodaq \
+  /workspace/artifacts/api-server/dist ./dist
+
+# Frontend static files — served by Express in production via express.static
+COPY --from=builder --chown=nodaq:nodaq \
+  /workspace/artifacts/nodaq/dist/public ./public
+
+# Migration runner + SQL files
+# Run as a one-off before the app starts: node /app/migrate.mjs
+# Requires DATABASE_URL (owner creds), not DATABASE_URL_APP.
+COPY --from=builder --chown=nodaq:nodaq \
+  /workspace/lib/db/scripts/migrate.mjs ./migrate.mjs
+COPY --from=builder --chown=nodaq:nodaq \
+  /workspace/lib/db/migrations ./migrations
+
+# package.json — used by the /api/health endpoint to read the version field
+COPY --from=builder --chown=nodaq:nodaq \
+  /workspace/artifacts/api-server/package.json ./package.json
+
+USER nodaq
+
+# ── Configuration ─────────────────────────────────────────────────────────────
+ENV NODE_ENV=production \
+    PORT=8080 \
+    # Tell migrate.mjs where the SQL files are inside the image.
+    # Without this the script resolves paths relative to its own parent dir,
+    # which in the container would be /app (not /app/migrations).
+    MIGRATIONS_DIR=/app/migrations
+
+EXPOSE 8080
+
+# ── Health check ──────────────────────────────────────────────────────────────
+# Uses the Node.js built-in http module — no curl/wget needed, keeps image minimal.
+# Exits 0 when /api/health returns HTTP 200 with {"status":"ok"}, 1 otherwise.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "\
+    require('http').get(\
+      'http://localhost:' + (process.env.PORT || 8080) + '/api/health',\
+      function(r) { process.exit(r.statusCode === 200 ? 0 : 1); }\
+    ).on('error', function() { process.exit(1); })"
+
+# ── Entrypoint ────────────────────────────────────────────────────────────────
+CMD ["node", "--enable-source-maps", "./dist/index.mjs"]

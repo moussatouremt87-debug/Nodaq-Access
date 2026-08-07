@@ -7,7 +7,8 @@
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
-    "db:setup": "node lib/db/scripts/create-app-role.cjs && node lib/db/scripts/migrate-multitenant.cjs && node lib/db/scripts/migrate-onboarding.cjs && node lib/db/scripts/migrate-facturation.cjs && node lib/db/scripts/migrate-rls.cjs && node lib/db/scripts/seed-owner.cjs"
+    "db:migrate": "node lib/db/scripts/migrate.mjs",
+    "db:setup": "node lib/db/scripts/create-app-role.cjs && node lib/db/scripts/migrate.mjs && node lib/db/scripts/seed-owner.cjs"
   },
   "private": true,
   "dependencies": {

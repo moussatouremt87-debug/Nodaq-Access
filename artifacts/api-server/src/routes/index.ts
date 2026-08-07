@@ -24,6 +24,7 @@ import votreMetierRouter from "./votre-metier";
 import entreprisesRouter from "./entreprises";
 import publicRouter from "./public";
 import { onboardingReadRouter, onboardingWriteRouter } from "./onboarding";
+import analyticsRouter from "./analytics";
 
 import { requireAuth } from "../middleware/requireAuth";
 import { resolveTenant } from "../middleware/resolveTenant";
@@ -60,6 +61,7 @@ router.use(biz, avoirsRouter);
 router.use(biz, prospectsRouter);
 router.use(biz, votreMetierRouter);
 router.use(biz, onboardingReadRouter);
+router.use(biz, analyticsRouter);
 
 // ── OWNER-only routes ─────────────────────────────────────────────────────
 router.use(ownerOnly, equipeRouter);

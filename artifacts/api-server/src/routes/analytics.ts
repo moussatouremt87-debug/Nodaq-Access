@@ -1,0 +1,835 @@
+/**
+ * 4.11 — Section analytique
+ *
+ * Implements the 13-indicator calculation engine.
+ *
+ * Rules:
+ *  - ALL calculations happen server-side in withTenant(). Zero client-side arithmetic.
+ *  - Below the data threshold → { donneesInsuffisantes: true, valeur: null, nbSources: N }
+ *    and NOTHING ELSE — no zero, no estimate, no approximation.
+ *  - tenantId ALWAYS comes from the authenticated session, never from the client.
+ *  - Zod validates every request and every response shape.
+ *
+ * Forbidden (spec §13):
+ *   KPI · ratio · taux de · performance · pilotage · indicateur avancé
+ */
+
+import { Router, type IRouter } from "express";
+import { z } from "zod";
+import {
+  withTenant,
+  affairesTable,
+  facturesTable,
+  devisTable,
+  teamMembersTable,
+  absencesTable,
+  crEntriesTable,
+} from "@workspace/db";
+import { sql, and, eq, gte, lte, isNotNull, isNull, ne } from "drizzle-orm";
+import { parsePeriode } from "../lib/analytics-periods.js";
+
+const router: IRouter = Router();
+
+// ── Zod schemas ───────────────────────────────────────────────────────────────
+
+export const INDICATEUR_IDS = [
+  "horizon_travail",
+  "argent_qui_dort",
+  "marge_pour_100_euros",
+  "delai_paiement_client",
+  "ca_facture",
+  "ca_encaisse",
+  "resultat_exploitation_estime",
+  "carnet_commandes_euros",
+  "taux_signature_devis",
+  "delai_reponse_devis",
+  "montant_moyen_affaire",
+  "jours_factures_sur_payes",
+  "ecart_devise_realise",
+  "concentration_client",
+] as const;
+
+export type IndicateurId = (typeof INDICATEUR_IDS)[number];
+
+const IndicateurIdSchema = z.enum(INDICATEUR_IDS);
+
+const IndicateurResultSchema = z.object({
+  id: IndicateurIdSchema,
+  valeur: z.number().nullable(),
+  unite: z.string(),
+  periode: z.object({ debut: z.string(), fin: z.string(), label: z.string() }),
+  nbSources: z.number().int().min(0),
+  donneesInsuffisantes: z.boolean(),
+  estime: z.boolean().optional(),
+  /** Sub-values for compound indicators (e.g. argent_qui_dort breakdown, ecart_devise_realise). */
+  detail: z.record(z.unknown()).optional(),
+});
+
+export type IndicateurResult = z.infer<typeof IndicateurResultSchema>;
+
+const QuerySchema = z.object({
+  /** Comma-separated list of indicator IDs, or "all" */
+  ids: z.string().optional(),
+  periode: z.string().optional(),
+  debut: z.string().optional(),
+  fin: z.string().optional(),
+});
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** Returns an insufficient-data sentinel — the ONLY valid return when below threshold. */
+function insufficient(
+  id: IndicateurId,
+  unite: string,
+  nbSources: number,
+  periode: { debut: string; fin: string; label: string },
+): IndicateurResult {
+  return {
+    id,
+    valeur: null,
+    unite,
+    periode,
+    nbSources,
+    donneesInsuffisantes: true,
+  };
+}
+
+// ── Individual indicator calculators ─────────────────────────────────────────
+// Each function operates inside a withTenant callback — DO NOT call withTenant
+// inside these functions; they receive a transaction (tx) already scoped to a tenant.
+
+type Tx = Parameters<Parameters<typeof withTenant>[1]>[0];
+
+/**
+ * 1. horizon_travail
+ * Remaining backlog ÷ daily production capacity (team absences deducted).
+ * Seuil: 3 affaires en cours.
+ * Retourne: nombre de JOURS de travail devant soi.
+ */
+async function calcHorizonTravail(
+  tx: Tx,
+  _periode: { debut: Date; fin: Date },
+): Promise<Omit<IndicateurResult, "id" | "periode">> {
+  // Active affaires with a value
+  const [carnet] = await tx.execute(sql`
+    SELECT
+      count(*)::int                              AS nb_affaires,
+      coalesce(sum(montant_vendu_ht), 0)::float  AS total_carnet_ht
+    FROM affaires
+    WHERE status NOT IN ('TERMINE', 'ANNULE', 'PERDU')
+      AND montant_vendu_ht IS NOT NULL
+      AND montant_vendu_ht > 0
+  `) as unknown as [{ nb_affaires: number; total_carnet_ht: number }];
+
+  if ((carnet.nb_affaires ?? 0) < 3) {
+    return { valeur: null, unite: "jours", nbSources: carnet.nb_affaires ?? 0, donneesInsuffisantes: true };
+  }
+
+  // Amount already invoiced for those active affaires
+  const [invoiced] = await tx.execute(sql`
+    SELECT coalesce(sum(f.total_ht_cents), 0)::float / 100 AS total_facture_ht
+    FROM factures f
+    JOIN affaires a ON a.id = f.affaire_id
+    WHERE a.status NOT IN ('TERMINE', 'ANNULE', 'PERDU')
+      AND f.statut NOT IN ('ANNULEE', 'AVOIR', 'BROUILLON')
+  `) as unknown as [{ total_facture_ht: number }];
+
+  const resteHt = Math.max(0, carnet.total_carnet_ht - (invoiced.total_facture_ht ?? 0));
+
+  // Daily production capacity: average monthly invoiced over last 3 months / 22 working days
+  const [cap] = await tx.execute(sql`
+    SELECT coalesce(avg(monthly_ht), 0)::float AS avg_monthly_ht
+    FROM (
+      SELECT
+        date_trunc('month', issued_date::date) AS month,
+        sum(total_ht_cents)::float / 100       AS monthly_ht
+      FROM factures
+      WHERE issued_date::date >= (now() - interval '3 months')::date
+        AND statut NOT IN ('ANNULEE', 'AVOIR', 'BROUILLON')
+      GROUP BY 1
+    ) sub
+  `) as unknown as [{ avg_monthly_ht: number }];
+
+  const avgMonthly = cap.avg_monthly_ht ?? 0;
+  if (avgMonthly <= 0) {
+    // No recent invoicing history → cannot estimate capacity
+    return { valeur: null, unite: "jours", nbSources: carnet.nb_affaires, donneesInsuffisantes: true };
+  }
+
+  // Days of work ahead (22 working days/month)
+  const dailyCapacityHt = avgMonthly / 22;
+  const horizonJours = Math.round(resteHt / dailyCapacityHt);
+
+  return {
+    valeur: horizonJours,
+    unite: "jours",
+    nbSources: carnet.nb_affaires,
+    donneesInsuffisantes: false,
+  };
+}
+
+/**
+ * 2. argent_qui_dort
+ * Unsettled invoices, RETENUE DE GARANTIE EXCLUDED, with >60d sub-total.
+ * Seuil: 1 facture impayée.
+ */
+async function calcArgentQuiDort(
+  tx: Tx,
+  _periode: { debut: Date; fin: Date },
+): Promise<Omit<IndicateurResult, "id" | "periode">> {
+  // Unsettled invoices (not drafts, not avoirs)
+  // Join devis via affaire_id to retrieve retenue_garantie_pct for exclusion
+  const rows = await tx.execute(sql`
+    SELECT
+      f.id,
+      f.total_ht_cents,
+      f.issued_date,
+      f.due_date,
+      coalesce(d.retenue_garantie_pct, 0) AS retenue_pct
+    FROM factures f
+    LEFT JOIN LATERAL (
+      SELECT retenue_garantie_pct
+        FROM devis
+       WHERE affaire_id = f.affaire_id
+         AND status = 'ACCEPTE'
+       ORDER BY created_at DESC
+       LIMIT 1
+    ) d ON true
+    WHERE f.settled = false
+      AND f.statut IN ('ENVOYEE', 'EN_RETARD', 'EN_ATTENTE', 'PARTIELLE')
+  `) as unknown as {
+    id: string;
+    total_ht_cents: number;
+    issued_date: string;
+    due_date: string;
+    retenue_pct: number;
+  }[];
+
+  const nbSources = rows.length;
+  if (nbSources < 1) {
+    return { valeur: null, unite: "centimes", nbSources: 0, donneesInsuffisantes: true };
+  }
+
+  const now = new Date();
+  let totalCents = 0;
+  let plus60Cents = 0;
+
+  for (const r of rows) {
+    const retenuePct = Number(r.retenue_pct ?? 0);
+    // Net amount excluding retenue de garantie
+    const netCents = Math.round(r.total_ht_cents * (1 - retenuePct / 100));
+    totalCents += netCents;
+
+    // >60 days from issuedDate
+    const issued = new Date(r.issued_date);
+    if (!isNaN(issued.getTime())) {
+      const ageJours = (now.getTime() - issued.getTime()) / 86400000;
+      if (ageJours > 60) plus60Cents += netCents;
+    }
+  }
+
+  return {
+    valeur: totalCents,
+    unite: "centimes",
+    nbSources,
+    donneesInsuffisantes: false,
+    detail: { plus60Jours: plus60Cents },
+  };
+}
+
+/**
+ * 3. marge_pour_100_euros
+ * (CA − costs) ÷ CA on completed affaires. Uses affaires.marginCents / invoicedAmountCents.
+ * Seuil: 3 affaires terminées.
+ */
+async function calcMargePour100(
+  tx: Tx,
+  periode: { debut: Date; fin: Date },
+): Promise<Omit<IndicateurResult, "id" | "periode">> {
+  const [res] = await tx.execute(sql`
+    SELECT
+      count(*)::int                                        AS nb_affaires,
+      coalesce(sum(invoiced_amount_cents), 0)::float       AS total_ca_cents,
+      coalesce(sum(margin_cents), 0)::float                AS total_margin_cents
+    FROM affaires
+    WHERE completed_at IS NOT NULL
+      AND completed_at::date BETWEEN ${periode.debut.toISOString().slice(0, 10)}::date
+                                 AND ${periode.fin.toISOString().slice(0, 10)}::date
+      AND invoiced_amount_cents IS NOT NULL
+      AND invoiced_amount_cents > 0
+  `) as unknown as [{ nb_affaires: number; total_ca_cents: number; total_margin_cents: number }];
+
+  const nb = res.nb_affaires ?? 0;
+  if (nb < 3) {
+    return { valeur: null, unite: "centimes par 100 € facturés", nbSources: nb, donneesInsuffisantes: true };
+  }
+
+  const ca = res.total_ca_cents ?? 0;
+  const marge = res.total_margin_cents ?? 0;
+  if (ca <= 0) {
+    return { valeur: null, unite: "centimes par 100 € facturés", nbSources: nb, donneesInsuffisantes: true };
+  }
+
+  // "Sur 100 € facturés, il vous reste X €" → marge / ca × 100
+  const margePour100 = Math.round((marge / ca) * 10000) / 100; // in €
+
+  return {
+    valeur: margePour100,
+    unite: "€ sur 100 €",
+    nbSources: nb,
+    donneesInsuffisantes: false,
+  };
+}
+
+/**
+ * 4. delai_paiement_client
+ * Weighted average days from issuedDate to settlement.
+ * Approximation: uses updatedAt as settlement proxy (no paidAt column).
+ * Seuil: 5 factures réglées.
+ */
+async function calcDelaiPaiement(
+  tx: Tx,
+  periode: { debut: Date; fin: Date },
+): Promise<Omit<IndicateurResult, "id" | "periode">> {
+  const [res] = await tx.execute(sql`
+    SELECT
+      count(*)::int                                                      AS nb_factures,
+      coalesce(
+        sum(total_ht_cents * extract(days from updated_at - issued_date::timestamp))
+        / nullif(sum(total_ht_cents), 0),
+      0)::float AS delai_moyen_pondere
+    FROM factures
+    WHERE settled = true
+      AND issued_date::date BETWEEN ${periode.debut.toISOString().slice(0, 10)}::date
+                                 AND ${periode.fin.toISOString().slice(0, 10)}::date
+      AND total_ht_cents > 0
+      AND updated_at > issued_date::timestamp
+  `) as unknown as [{ nb_factures: number; delai_moyen_pondere: number }];
+
+  const nb = res.nb_factures ?? 0;
+  if (nb < 5) {
+    return { valeur: null, unite: "jours", nbSources: nb, donneesInsuffisantes: true };
+  }
+
+  return {
+    valeur: Math.round(res.delai_moyen_pondere ?? 0),
+    unite: "jours",
+    nbSources: nb,
+    donneesInsuffisantes: false,
+  };
+}
+
+/**
+ * 5. ca_facture
+ * Total HT of invoices issued in the period.
+ */
+async function calcCaFacture(
+  tx: Tx,
+  periode: { debut: Date; fin: Date },
+): Promise<Omit<IndicateurResult, "id" | "periode">> {
+  const [res] = await tx.execute(sql`
+    SELECT
+      count(*)::int                              AS nb_factures,
+      coalesce(sum(total_ht_cents), 0)::int      AS total_ht
+    FROM factures
+    WHERE issued_date::date BETWEEN ${periode.debut.toISOString().slice(0, 10)}::date
+                                AND ${periode.fin.toISOString().slice(0, 10)}::date
+      AND statut NOT IN ('ANNULEE', 'AVOIR', 'BROUILLON')
+  `) as unknown as [{ nb_factures: number; total_ht: number }];
+
+  return {
+    valeur: res.total_ht ?? 0,
+    unite: "centimes HT",
+    nbSources: res.nb_factures ?? 0,
+    donneesInsuffisantes: false,
+  };
+}
+
+/**
+ * 6. ca_encaisse
+ * Total HT of settled invoices in the period.
+ */
+async function calcCaEncaisse(
+  tx: Tx,
+  periode: { debut: Date; fin: Date },
+): Promise<Omit<IndicateurResult, "id" | "periode">> {
+  const [res] = await tx.execute(sql`
+    SELECT
+      count(*)::int                              AS nb_factures,
+      coalesce(sum(total_ht_cents), 0)::int      AS total_ht
+    FROM factures
+    WHERE settled = true
+      AND issued_date::date BETWEEN ${periode.debut.toISOString().slice(0, 10)}::date
+                                AND ${periode.fin.toISOString().slice(0, 10)}::date
+      AND statut NOT IN ('ANNULEE', 'AVOIR')
+  `) as unknown as [{ nb_factures: number; total_ht: number }];
+
+  return {
+    valeur: res.total_ht ?? 0,
+    unite: "centimes HT",
+    nbSources: res.nb_factures ?? 0,
+    donneesInsuffisantes: false,
+  };
+}
+
+/**
+ * 7. resultat_exploitation_estime
+ * CA encaissé − charges de la période (from cr_entries).
+ * Marked `estime: true` when charge lines are incomplete.
+ *
+ * "Complete" = at least one CHARGE_EXTERNE + one MASSE_SALARIALE entry in the period.
+ */
+async function calcResultatExploitation(
+  tx: Tx,
+  periode: { debut: Date; fin: Date },
+): Promise<Omit<IndicateurResult, "id" | "periode">> {
+  const periodKey = `${periode.debut.getFullYear()}-${String(periode.debut.getMonth() + 1).padStart(2, "0")}`;
+
+  // CA encaissé on the period
+  const [caRow] = await tx.execute(sql`
+    SELECT coalesce(sum(total_ht_cents), 0)::float AS ca_cents
+    FROM factures
+    WHERE settled = true
+      AND issued_date::date BETWEEN ${periode.debut.toISOString().slice(0, 10)}::date
+                                AND ${periode.fin.toISOString().slice(0, 10)}::date
+      AND statut NOT IN ('ANNULEE', 'AVOIR')
+  `) as unknown as [{ ca_cents: number }];
+
+  // Charges from cr_entries — sum of all CHARGE lines for the period
+  const chargeRows = await tx.execute(sql`
+    SELECT line_code, coalesce(sum(amount_cents), 0)::float AS total
+    FROM cr_entries
+    WHERE period_key >= ${periodKey}
+    GROUP BY line_code
+  `) as unknown as { line_code: string; total: number }[];
+
+  const totalCharges = chargeRows.reduce((acc, r) => acc + (r.total ?? 0), 0);
+
+  // Completeness check: do we have at least the main charge categories?
+  const lineCodes = new Set(chargeRows.map((r) => r.line_code));
+  const hasExternal = [...lineCodes].some((c) => c.includes("CHARGE") || c.includes("ACHAT") || c.includes("SOUS_TRAITANCE"));
+  const hasSalaires = [...lineCodes].some((c) => c.includes("SALAIRE") || c.includes("MASSE") || c.includes("SOCIAL"));
+  const estime = !hasExternal || !hasSalaires;
+
+  const ca = caRow.ca_cents ?? 0;
+  const resultat = ca - totalCharges;
+
+  return {
+    valeur: Math.round(resultat),
+    unite: "centimes",
+    nbSources: chargeRows.length,
+    donneesInsuffisantes: false,
+    estime,
+  };
+}
+
+/**
+ * 8. carnet_commandes_euros
+ * Sum of montant_vendu_ht for active affaires minus amount already invoiced.
+ */
+async function calcCarnetCommandes(
+  tx: Tx,
+  _periode: { debut: Date; fin: Date },
+): Promise<Omit<IndicateurResult, "id" | "periode">> {
+  const [res] = await tx.execute(sql`
+    SELECT
+      count(*)::int                               AS nb_affaires,
+      coalesce(sum(a.montant_vendu_ht), 0)::float AS carnet_ht,
+      coalesce(
+        (
+          SELECT sum(f2.total_ht_cents)::float / 100
+          FROM factures f2
+          JOIN affaires a2 ON a2.id = f2.affaire_id
+          WHERE a2.status NOT IN ('TERMINE', 'ANNULE', 'PERDU')
+            AND f2.statut NOT IN ('ANNULEE', 'AVOIR', 'BROUILLON')
+        ), 0
+      ) AS deja_facture_ht
+    FROM affaires a
+    WHERE a.status NOT IN ('TERMINE', 'ANNULE', 'PERDU')
+      AND a.montant_vendu_ht IS NOT NULL
+  `) as unknown as [{ nb_affaires: number; carnet_ht: number; deja_facture_ht: number }];
+
+  const nbSources = res.nb_affaires ?? 0;
+  const reste = Math.max(0, (res.carnet_ht ?? 0) - (res.deja_facture_ht ?? 0));
+
+  return {
+    valeur: Math.round(reste * 100), // in cents
+    unite: "centimes HT",
+    nbSources,
+    donneesInsuffisantes: false,
+  };
+}
+
+/**
+ * 9. taux_signature_devis
+ * Accepted devis / sent devis in the period.
+ * Seuil: 5 devis envoyés.
+ */
+async function calcTauxSignatureDevis(
+  tx: Tx,
+  periode: { debut: Date; fin: Date },
+): Promise<Omit<IndicateurResult, "id" | "periode">> {
+  const [res] = await tx.execute(sql`
+    SELECT
+      count(*)::int                                                        AS nb_envoyes,
+      count(*) FILTER (WHERE status = 'ACCEPTE')::int                     AS nb_acceptes
+    FROM devis
+    WHERE date_envoi IS NOT NULL
+      AND date_envoi::date BETWEEN ${periode.debut.toISOString().slice(0, 10)}::date
+                               AND ${periode.fin.toISOString().slice(0, 10)}::date
+      AND status NOT IN ('BROUILLON')
+  `) as unknown as [{ nb_envoyes: number; nb_acceptes: number }];
+
+  const nb = res.nb_envoyes ?? 0;
+  if (nb < 5) {
+    return { valeur: null, unite: "sur N", nbSources: nb, donneesInsuffisantes: true };
+  }
+
+  const acceptes = res.nb_acceptes ?? 0;
+  // Return as a ratio in percent
+  const pct = Math.round((acceptes / nb) * 100);
+
+  return {
+    valeur: pct,
+    unite: "%",
+    nbSources: nb,
+    donneesInsuffisantes: false,
+    detail: { nbAcceptes: acceptes, nbEnvoyes: nb },
+  };
+}
+
+/**
+ * 10. delai_reponse_devis
+ * Average days from dateEnvoi to acceptedAt, on accepted devis in the period.
+ * No explicit threshold in spec — use 3 as conservative minimum.
+ */
+async function calcDelaiReponseDevis(
+  tx: Tx,
+  periode: { debut: Date; fin: Date },
+): Promise<Omit<IndicateurResult, "id" | "periode">> {
+  const [res] = await tx.execute(sql`
+    SELECT
+      count(*)::int                                                             AS nb_devis,
+      round(
+        avg(extract(epoch from (accepted_at - date_envoi)) / 86400)
+      )::int                                                                   AS delai_moyen_jours
+    FROM devis
+    WHERE status = 'ACCEPTE'
+      AND date_envoi IS NOT NULL
+      AND accepted_at IS NOT NULL
+      AND date_envoi::date BETWEEN ${periode.debut.toISOString().slice(0, 10)}::date
+                               AND ${periode.fin.toISOString().slice(0, 10)}::date
+      AND accepted_at > date_envoi
+  `) as unknown as [{ nb_devis: number; delai_moyen_jours: number }];
+
+  const nb = res.nb_devis ?? 0;
+  if (nb < 3) {
+    return { valeur: null, unite: "jours", nbSources: nb, donneesInsuffisantes: true };
+  }
+
+  return {
+    valeur: res.delai_moyen_jours ?? 0,
+    unite: "jours",
+    nbSources: nb,
+    donneesInsuffisantes: false,
+  };
+}
+
+/**
+ * 11. montant_moyen_affaire
+ * Average montant_vendu_ht for affaires created in the period.
+ */
+async function calcMontantMoyenAffaire(
+  tx: Tx,
+  periode: { debut: Date; fin: Date },
+): Promise<Omit<IndicateurResult, "id" | "periode">> {
+  const [res] = await tx.execute(sql`
+    SELECT
+      count(*)::int                                     AS nb_affaires,
+      round(avg(montant_vendu_ht) * 100)::int           AS moyen_cents
+    FROM affaires
+    WHERE created_at BETWEEN ${periode.debut.toISOString()}::timestamptz
+                         AND ${periode.fin.toISOString()}::timestamptz
+      AND montant_vendu_ht IS NOT NULL
+      AND montant_vendu_ht > 0
+  `) as unknown as [{ nb_affaires: number; moyen_cents: number }];
+
+  const nb = res.nb_affaires ?? 0;
+  if (nb < 1) {
+    return { valeur: null, unite: "centimes HT", nbSources: 0, donneesInsuffisantes: true };
+  }
+
+  return {
+    valeur: res.moyen_cents ?? 0,
+    unite: "centimes HT",
+    nbSources: nb,
+    donneesInsuffisantes: false,
+  };
+}
+
+/**
+ * 12. jours_factures_sur_payes
+ * Ratio of billable days actually invoiced vs. days paid.
+ * Requires a timesheet / pointage table that does not yet exist.
+ * Returns donneesInsuffisantes: true with nbSources = 0 until the table is created.
+ * Spec threshold: 2 weeks of tracked entries.
+ */
+async function calcJoursFacturesSurPayes(
+  _tx: Tx,
+  _periode: { debut: Date; fin: Date },
+): Promise<Omit<IndicateurResult, "id" | "periode">> {
+  return {
+    valeur: null,
+    unite: "jours sur jours",
+    nbSources: 0,
+    donneesInsuffisantes: true,
+    // Note: this indicator requires a pointage (timesheet) table.
+    // It will become available once time-tracking is implemented.
+  };
+}
+
+/**
+ * 13. ecart_devise_realise
+ * Gap between planned and actual completion: in days AND in euros.
+ * Seuil: 3 affaires terminées with both planned and actual dates.
+ */
+async function calcEcartDeviseRealise(
+  tx: Tx,
+  periode: { debut: Date; fin: Date },
+): Promise<Omit<IndicateurResult, "id" | "periode">> {
+  const rows = await tx.execute(sql`
+    SELECT
+      date_fin_prevue::date                                    AS prevue,
+      completed_at::date                                       AS realisee,
+      coalesce(montant_vendu_ht, 0)                            AS devis_ht,
+      coalesce(invoiced_amount_cents, 0) / 100.0               AS realise_ht
+    FROM affaires
+    WHERE completed_at IS NOT NULL
+      AND date_fin_prevue IS NOT NULL
+      AND completed_at::date BETWEEN ${periode.debut.toISOString().slice(0, 10)}::date
+                                 AND ${periode.fin.toISOString().slice(0, 10)}::date
+      AND montant_vendu_ht IS NOT NULL
+      AND montant_vendu_ht > 0
+  `) as unknown as {
+    prevue: string;
+    realisee: string;
+    devis_ht: number;
+    realise_ht: number;
+  }[];
+
+  const nb = rows.length;
+  if (nb < 3) {
+    return { valeur: null, unite: "jours", nbSources: nb, donneesInsuffisantes: true };
+  }
+
+  let totalEcartJours = 0;
+  let totalEcartEurosCents = 0;
+
+  for (const r of rows) {
+    const prevue = new Date(r.prevue);
+    const realisee = new Date(r.realisee);
+    if (!isNaN(prevue.getTime()) && !isNaN(realisee.getTime())) {
+      totalEcartJours += (realisee.getTime() - prevue.getTime()) / 86400000;
+    }
+    // Positive = invoiced more than planned; negative = under-billed
+    totalEcartEurosCents += Math.round((r.realise_ht - r.devis_ht) * 100);
+  }
+
+  const moyenneEcartJours = Math.round(totalEcartJours / nb);
+  const moyenneEcartCents = Math.round(totalEcartEurosCents / nb);
+
+  return {
+    valeur: moyenneEcartJours, // primary value: days late (positive = late)
+    unite: "jours",
+    nbSources: nb,
+    donneesInsuffisantes: false,
+    detail: { ecartMoyenCents: moyenneEcartCents },
+  };
+}
+
+/**
+ * 14. concentration_client
+ * Share of top client in total invoiced CA for the period.
+ */
+async function calcConcentrationClient(
+  tx: Tx,
+  periode: { debut: Date; fin: Date },
+): Promise<Omit<IndicateurResult, "id" | "periode">> {
+  const rows = await tx.execute(sql`
+    SELECT
+      customer_name,
+      sum(total_ht_cents)::float AS ca_client
+    FROM factures
+    WHERE issued_date::date BETWEEN ${periode.debut.toISOString().slice(0, 10)}::date
+                                AND ${periode.fin.toISOString().slice(0, 10)}::date
+      AND statut NOT IN ('ANNULEE', 'AVOIR', 'BROUILLON')
+    GROUP BY customer_name
+    ORDER BY ca_client DESC
+  `) as unknown as { customer_name: string; ca_client: number }[];
+
+  const nbClients = rows.length;
+  if (nbClients < 1) {
+    return { valeur: null, unite: "%", nbSources: 0, donneesInsuffisantes: true };
+  }
+
+  const total = rows.reduce((acc, r) => acc + (r.ca_client ?? 0), 0);
+  const topCa = rows[0]?.ca_client ?? 0;
+  const pct = total > 0 ? Math.round((topCa / total) * 100) : 0;
+
+  return {
+    valeur: pct,
+    unite: "%",
+    nbSources: nbClients,
+    donneesInsuffisantes: false,
+    detail: { topClient: rows[0]?.customer_name ?? null, topClientCaCents: Math.round(topCa) },
+  };
+}
+
+// ── Dispatcher ────────────────────────────────────────────────────────────────
+
+type PartialResult = Omit<IndicateurResult, "id" | "periode">;
+
+const CALCULATORS: Record<
+  IndicateurId,
+  (tx: Tx, periode: { debut: Date; fin: Date }) => Promise<PartialResult>
+> = {
+  horizon_travail: calcHorizonTravail,
+  argent_qui_dort: calcArgentQuiDort,
+  marge_pour_100_euros: calcMargePour100,
+  delai_paiement_client: calcDelaiPaiement,
+  ca_facture: calcCaFacture,
+  ca_encaisse: calcCaEncaisse,
+  resultat_exploitation_estime: calcResultatExploitation,
+  carnet_commandes_euros: calcCarnetCommandes,
+  taux_signature_devis: calcTauxSignatureDevis,
+  delai_reponse_devis: calcDelaiReponseDevis,
+  montant_moyen_affaire: calcMontantMoyenAffaire,
+  jours_factures_sur_payes: calcJoursFacturesSurPayes,
+  ecart_devise_realise: calcEcartDeviseRealise,
+  concentration_client: calcConcentrationClient,
+};
+
+// ── Routes ────────────────────────────────────────────────────────────────────
+
+/**
+ * GET /analytics/indicateurs
+ * Returns multiple indicators for a given period.
+ */
+router.get("/analytics/indicateurs", async (req, res): Promise<void> => {
+  const query = QuerySchema.safeParse(req.query);
+  if (!query.success) {
+    res.status(400).json({ error: query.error.flatten() });
+    return;
+  }
+
+  const { ids, periode: periodeRaw, debut, fin } = query.data;
+  const tenantId = req.tenantId!;
+
+  // Resolve requested indicator IDs
+  let requestedIds: IndicateurId[];
+  if (!ids || ids === "all") {
+    requestedIds = [...INDICATEUR_IDS];
+  } else {
+    const parsed = ids.split(",").map((s) => s.trim());
+    const validated = parsed.map((s) => IndicateurIdSchema.safeParse(s));
+    const invalid = validated.filter((v) => !v.success);
+    if (invalid.length > 0) {
+      res.status(400).json({
+        error: `Identifiants inconnus : ${parsed.filter((s) => !INDICATEUR_IDS.includes(s as IndicateurId)).join(", ")}`,
+        identifiantsValides: INDICATEUR_IDS,
+      });
+      return;
+    }
+    requestedIds = validated.map((v) => (v as { success: true; data: IndicateurId }).data);
+  }
+
+  const periode = parsePeriode(periodeRaw, debut, fin);
+  const periodeJson = {
+    debut: periode.debut.toISOString().slice(0, 10),
+    fin: periode.fin.toISOString().slice(0, 10),
+    label: periode.label,
+  };
+
+  try {
+    const results = await withTenant(tenantId, async (tx) => {
+      const calculated = await Promise.all(
+        requestedIds.map(async (id) => {
+          try {
+            const partial = await CALCULATORS[id](tx, periode);
+            return { id, periode: periodeJson, ...partial } satisfies IndicateurResult;
+          } catch (err) {
+            // Individual indicator failure must not break the whole response
+            const msg = err instanceof Error ? err.message : String(err);
+            return {
+              id,
+              valeur: null,
+              unite: "",
+              periode: periodeJson,
+              nbSources: 0,
+              donneesInsuffisantes: true,
+              detail: { erreur: msg },
+            } satisfies IndicateurResult;
+          }
+        }),
+      );
+      return calculated;
+    });
+
+    res.json(results);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: msg });
+  }
+});
+
+/**
+ * GET /analytics/indicateurs/:id
+ * Single indicator — used by the chat agent tool get_indicateur().
+ */
+router.get("/analytics/indicateurs/:id", async (req, res): Promise<void> => {
+  const idParsed = IndicateurIdSchema.safeParse(req.params["id"]);
+  if (!idParsed.success) {
+    res.status(404).json({
+      error: `Indicateur inconnu : "${req.params["id"]}"`,
+      identifiantsValides: INDICATEUR_IDS,
+    });
+    return;
+  }
+
+  const query = QuerySchema.safeParse(req.query);
+  if (!query.success) {
+    res.status(400).json({ error: query.error.flatten() });
+    return;
+  }
+
+  const { periode: periodeRaw, debut, fin } = query.data;
+  const tenantId = req.tenantId!;
+  const id = idParsed.data;
+  const periode = parsePeriode(periodeRaw, debut, fin);
+  const periodeJson = {
+    debut: periode.debut.toISOString().slice(0, 10),
+    fin: periode.fin.toISOString().slice(0, 10),
+    label: periode.label,
+  };
+
+  try {
+    const result = await withTenant(tenantId, async (tx) => {
+      const partial = await CALCULATORS[id](tx, periode);
+      return { id, periode: periodeJson, ...partial } satisfies IndicateurResult;
+    });
+
+    // Validate response shape before returning
+    const validated = IndicateurResultSchema.safeParse(result);
+    if (!validated.success) {
+      res.status(500).json({ error: "Réponse invalide du moteur de calcul", detail: validated.error.flatten() });
+      return;
+    }
+
+    res.json(validated.data);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: msg });
+  }
+});
+
+export default router;

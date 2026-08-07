@@ -1,3 +1,4 @@
+import path from "node:path";
 import express, { type Express } from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -8,33 +9,49 @@ import { pool } from "@workspace/db";
 
 const app: Express = express();
 
-// ── CORS: strict allowlist — localhost and the exact Replit dev domain ──────
-const devDomain = process.env.REPLIT_DEV_DOMAIN; // e.g. "abc123.id.repl.co"
+// ── CORS ─────────────────────────────────────────────────────────────────────
+// Allowed origins, in priority order:
+//   1. localhost / 127.0.0.1 (any port) — dev convenience
+//   2. PUBLIC_URL — the canonical production origin (e.g. https://app.nodaq.fr)
+//   3. REPLIT_DEV_DOMAIN — dev fallback when no PUBLIC_URL; not set on Scaleway
+//
+// NOTE: REPLIT_DEV_DOMAIN is intentionally a fallback — it must never be the
+// sole allowed origin in production. Set PUBLIC_URL on any non-Replit host.
+const publicUrl   = process.env.PUBLIC_URL;         // e.g. "https://app.nodaq.fr"
+const devDomain   = process.env.REPLIT_DEV_DOMAIN;  // e.g. "abc123.id.repl.co"
+
+function isAllowedOrigin(origin: string): boolean {
+  // Exact localhost / 127.0.0.1 match (any port)
+  if (/^https?:\/\/localhost(:\d+)?$/.test(origin) ||
+      /^https?:\/\/127\.0\.0\.1(:\d+)?$/.test(origin)) {
+    return true;
+  }
+
+  // PUBLIC_URL — canonical production origin (scheme + host only, no trailing slash)
+  if (publicUrl) {
+    const base = publicUrl.replace(/\/$/, "");
+    if (origin === base || origin.startsWith(`${base}:`)) return true;
+  }
+
+  // REPLIT_DEV_DOMAIN — dev-only fallback (absent on Scaleway and other hosts)
+  if (devDomain) {
+    const bare  = `https://${devDomain}`;
+    const bare2 = `http://${devDomain}`;
+    if (origin === bare || origin === bare2 ||
+        origin.startsWith(`${bare}:`) || origin.startsWith(`${bare2}:`)) {
+      return true;
+    }
+  }
+
+  return false;
+}
 
 app.use(
   cors({
     origin(origin, callback) {
       // Same-origin requests and server-to-server calls have no Origin header.
       if (!origin) { callback(null, true); return; }
-
-      // Exact localhost / 127.0.0.1 match (any port)
-      if (/^https?:\/\/localhost(:\d+)?$/.test(origin) ||
-          /^https?:\/\/127\.0\.0\.1(:\d+)?$/.test(origin)) {
-        callback(null, true);
-        return;
-      }
-
-      // Exact Replit dev domain — both bare and with explicit port
-      if (devDomain) {
-        const bare  = `https://${devDomain}`;
-        const bare2 = `http://${devDomain}`;
-        if (origin === bare || origin === bare2 ||
-            origin.startsWith(`${bare}:`) || origin.startsWith(`${bare2}:`)) {
-          callback(null, true);
-          return;
-        }
-      }
-
+      if (isAllowedOrigin(origin)) { callback(null, true); return; }
       callback(new Error(`CORS: origin not allowed: ${origin}`));
     },
     credentials: true,
@@ -72,6 +89,22 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
+
+// ── Static frontend (production only) ─────────────────────────────────────────
+// In the Docker image the Vite build is copied to /app/public/.
+// At runtime __dirname resolves to the bundle directory (/app/dist/), so
+// the public dir is one level up.  In development this directory does not exist
+// and the condition below keeps the dev server unaffected.
+if (process.env.NODE_ENV === "production") {
+  const publicDir = path.resolve(__dirname, "..", "public");
+  app.use(express.static(publicDir));
+
+  // SPA fallback — serve index.html for any unmatched path so client-side
+  // routing (wouter) works correctly when the user navigates directly to a deep URL.
+  app.use((_req, res) => {
+    res.sendFile(path.join(publicDir, "index.html"));
+  });
+}
 
 // ── DB role verification — runs once at startup ───────────────────────────────
 // The application pool MUST run as app_user (non-owner) so that PostgreSQL RLS

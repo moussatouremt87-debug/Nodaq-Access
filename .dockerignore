@@ -1,0 +1,49 @@
+# ── Development artifacts ──────────────────────────────────────────────────
+node_modules
+**/node_modules
+**/dist
+**/.tsbuildinfo
+**/*.tsbuildinfo
+
+# ── Test and coverage ──────────────────────────────────────────────────────
+**/__tests__
+**/coverage
+**/*.test.ts
+**/*.spec.ts
+**/vitest.config.ts
+
+# ── Runtime-generated storage ──────────────────────────────────────────────
+artifacts/api-server/storage/
+
+# ── Replit-specific ────────────────────────────────────────────────────────
+.replit
+replit.nix
+.upm/
+.local/
+.cache/
+.config/
+
+# ── Attached assets and docs ───────────────────────────────────────────────
+attached_assets/
+
+# ── VCS and editor ────────────────────────────────────────────────────────
+.git
+.gitignore
+**/.gitignore
+.github/
+.vscode/
+.idea/
+
+# ── Secrets and environment ────────────────────────────────────────────────
+.env
+.env.*
+**/*.pem
+**/*.key
+
+# ── Logs ──────────────────────────────────────────────────────────────────
+*.log
+**/logs/
+
+# ── OS ────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
