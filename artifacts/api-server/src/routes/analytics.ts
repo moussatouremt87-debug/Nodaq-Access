@@ -26,7 +26,16 @@ import {
   crEntriesTable,
 } from "@workspace/db";
 import { sql, and, eq, gte, lte, isNotNull, isNull, ne } from "drizzle-orm";
-import { parsePeriode } from "../lib/analytics-periods.js";
+import {
+  parsePeriode,
+  periodePrecedente,
+  memePeriodeN1,
+  getLast12Months,
+  assertDurationEqual,
+  messageImpossible,
+  type ComparaisonMode,
+  COMPARAISON_MODES,
+} from "../lib/analytics-periods.js";
 
 const router: IRouter = Router();
 
@@ -53,19 +62,41 @@ export type IndicateurId = (typeof INDICATEUR_IDS)[number];
 
 const IndicateurIdSchema = z.enum(INDICATEUR_IDS);
 
+const PeriodeJsonSchema = z.object({ debut: z.string(), fin: z.string(), label: z.string() });
+
+const ComparaisonResultSchema = z.object({
+  mode: z.enum(["periode_precedente", "meme_periode_n1", "moyenne_12_mois"]),
+  /** Present for periode_precedente / meme_periode_n1, absent for moyenne_12_mois. */
+  periode: PeriodeJsonSchema.optional(),
+  valeur: z.number().nullable(),
+  nbSources: z.number().int().min(0),
+  donneesInsuffisantes: z.boolean(),
+  /**
+   * Spec §7: when comparison is impossible, a plain French sentence is returned —
+   * never an empty string, never a dash, never null.
+   */
+  messageImpossible: z.string().optional(),
+});
+
 const IndicateurResultSchema = z.object({
   id: IndicateurIdSchema,
   valeur: z.number().nullable(),
   unite: z.string(),
-  periode: z.object({ debut: z.string(), fin: z.string(), label: z.string() }),
+  periode: PeriodeJsonSchema,
   nbSources: z.number().int().min(0),
   donneesInsuffisantes: z.boolean(),
   estime: z.boolean().optional(),
   /** Sub-values for compound indicators (e.g. argent_qui_dort breakdown, ecart_devise_realise). */
   detail: z.record(z.unknown()).optional(),
+  /** Populated when comparaison != 'aucune'. */
+  comparaison: ComparaisonResultSchema.optional(),
 });
 
 export type IndicateurResult = z.infer<typeof IndicateurResultSchema>;
+
+const ComparaisonModeSchema = z.enum(
+  COMPARAISON_MODES as [ComparaisonMode, ...ComparaisonMode[]],
+);
 
 const QuerySchema = z.object({
   /** Comma-separated list of indicator IDs, or "all" */
@@ -73,6 +104,12 @@ const QuerySchema = z.object({
   periode: z.string().optional(),
   debut: z.string().optional(),
   fin: z.string().optional(),
+  /**
+   * Default = meme_periode_n1 (not periode_precedente).
+   * Spec §5: comparing August to July always shows an apparent collapse (summer holidays).
+   * Use Y-1 as the anchor; fall back to moyenne_12_mois when Y-1 has no data.
+   */
+  comparaison: ComparaisonModeSchema.optional().default("meme_periode_n1"),
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -709,11 +746,136 @@ const CALCULATORS: Record<
   concentration_client: calcConcentrationClient,
 };
 
+// ── Comparison engine ─────────────────────────────────────────────────────────
+
+type ComparaisonResult = {
+  mode: Exclude<ComparaisonMode, "aucune">;
+  periode?: { debut: string; fin: string; label: string };
+  valeur: number | null;
+  nbSources: number;
+  donneesInsuffisantes: boolean;
+  messageImpossible?: string;
+};
+
+/**
+ * Compute the comparison value for a single indicator.
+ *
+ * For `meme_periode_n1` / `periode_precedente`:
+ *   - Enforces equal duration (assertDurationEqual) — throws if mismatched.
+ *   - Computes the indicator on the comparison period.
+ *   - If result has nbSources === 0, returns a plain-French sentence instead of a dash.
+ *
+ * For `moyenne_12_mois`:
+ *   - Computes the indicator for each of the last 12 calendar months.
+ *   - Averages the non-null, sufficient values.
+ *   - Requires at least 3 valid months; otherwise: messageImpossible.
+ */
+async function computeComparaison(
+  tx: Tx,
+  id: IndicateurId,
+  currentPeriode: { debut: Date; fin: Date; label: string },
+  mode: ComparaisonMode,
+): Promise<ComparaisonResult | undefined> {
+  if (mode === "aucune") return undefined;
+
+  const today = new Date();
+
+  if (mode === "meme_periode_n1") {
+    const compP = memePeriodeN1(currentPeriode);
+    // Enforce comparability (same calendar month/quarter → same duration)
+    assertDurationEqual(currentPeriode, compP);
+    const partial = await CALCULATORS[id](tx, compP);
+    const noData = partial.nbSources === 0;
+    return {
+      mode,
+      periode: {
+        debut: compP.debut.toISOString().slice(0, 10),
+        fin: compP.fin.toISOString().slice(0, 10),
+        label: compP.label,
+      },
+      valeur: partial.valeur,
+      nbSources: partial.nbSources,
+      donneesInsuffisantes: partial.donneesInsuffisantes,
+      messageImpossible: noData
+        ? messageImpossible("meme_periode_n1", currentPeriode, today)
+        : undefined,
+    };
+  }
+
+  if (mode === "periode_precedente") {
+    const compP = periodePrecedente(currentPeriode);
+    assertDurationEqual(currentPeriode, compP);
+    const partial = await CALCULATORS[id](tx, compP);
+    const noData = partial.nbSources === 0;
+    return {
+      mode,
+      periode: {
+        debut: compP.debut.toISOString().slice(0, 10),
+        fin: compP.fin.toISOString().slice(0, 10),
+        label: compP.label,
+      },
+      valeur: partial.valeur,
+      nbSources: partial.nbSources,
+      donneesInsuffisantes: partial.donneesInsuffisantes,
+      messageImpossible: noData
+        ? messageImpossible("periode_precedente", currentPeriode, today)
+        : undefined,
+    };
+  }
+
+  if (mode === "moyenne_12_mois") {
+    const months = getLast12Months(today);
+    const monthResults = await Promise.all(
+      months.map((m) => CALCULATORS[id](tx, m)),
+    );
+    const valid = monthResults.filter(
+      (r) => !r.donneesInsuffisantes && r.valeur !== null,
+    );
+    const MIN_MONTHS = 3;
+    if (valid.length < MIN_MONTHS) {
+      return {
+        mode,
+        valeur: null,
+        nbSources: valid.length,
+        donneesInsuffisantes: true,
+        messageImpossible: messageImpossible("moyenne_12_mois", currentPeriode, today),
+      };
+    }
+    const avg = valid.reduce((acc, r) => acc + r.valeur!, 0) / valid.length;
+    return {
+      mode,
+      valeur: Math.round(avg),
+      nbSources: valid.length,
+      donneesInsuffisantes: false,
+    };
+  }
+
+  return undefined;
+}
+
 // ── Routes ────────────────────────────────────────────────────────────────────
+
+/** Resolve requested indicator IDs from the `ids` query param. */
+function resolveIds(ids?: string): IndicateurId[] | { error: string } {
+  if (!ids || ids === "all") return [...INDICATEUR_IDS];
+  const parsed = ids.split(",").map((s) => s.trim());
+  const invalid = parsed.filter((s) => !INDICATEUR_IDS.includes(s as IndicateurId));
+  if (invalid.length > 0) {
+    return { error: `Identifiants inconnus : ${invalid.join(", ")}` };
+  }
+  return parsed as IndicateurId[];
+}
 
 /**
  * GET /analytics/indicateurs
- * Returns multiple indicators for a given period.
+ * Returns multiple indicators for a given period, with optional comparison.
+ *
+ * Query params:
+ *   ids        Comma-separated indicator IDs, or "all" (default).
+ *   periode    mois | trimestre | exercice | 12_mois (default: 12_mois)
+ *   debut/fin  ISO dates for a custom period (requires both).
+ *   comparaison  aucune | periode_precedente | meme_periode_n1 | moyenne_12_mois
+ *                Default: meme_periode_n1 (spec §5 — not periode_precedente).
  */
 router.get("/analytics/indicateurs", async (req, res): Promise<void> => {
   const query = QuerySchema.safeParse(req.query);
@@ -722,25 +884,13 @@ router.get("/analytics/indicateurs", async (req, res): Promise<void> => {
     return;
   }
 
-  const { ids, periode: periodeRaw, debut, fin } = query.data;
+  const { ids, periode: periodeRaw, debut, fin, comparaison: compMode } = query.data;
   const tenantId = req.tenantId!;
 
-  // Resolve requested indicator IDs
-  let requestedIds: IndicateurId[];
-  if (!ids || ids === "all") {
-    requestedIds = [...INDICATEUR_IDS];
-  } else {
-    const parsed = ids.split(",").map((s) => s.trim());
-    const validated = parsed.map((s) => IndicateurIdSchema.safeParse(s));
-    const invalid = validated.filter((v) => !v.success);
-    if (invalid.length > 0) {
-      res.status(400).json({
-        error: `Identifiants inconnus : ${parsed.filter((s) => !INDICATEUR_IDS.includes(s as IndicateurId)).join(", ")}`,
-        identifiantsValides: INDICATEUR_IDS,
-      });
-      return;
-    }
-    requestedIds = validated.map((v) => (v as { success: true; data: IndicateurId }).data);
+  const resolvedIds = resolveIds(ids);
+  if ("error" in resolvedIds) {
+    res.status(400).json({ error: resolvedIds.error, identifiantsValides: INDICATEUR_IDS });
+    return;
   }
 
   const periode = parsePeriode(periodeRaw, debut, fin);
@@ -752,13 +902,23 @@ router.get("/analytics/indicateurs", async (req, res): Promise<void> => {
 
   try {
     const results = await withTenant(tenantId, async (tx) => {
-      const calculated = await Promise.all(
-        requestedIds.map(async (id) => {
+      return Promise.all(
+        resolvedIds.map(async (id) => {
           try {
             const partial = await CALCULATORS[id](tx, periode);
-            return { id, periode: periodeJson, ...partial } satisfies IndicateurResult;
+            const comp =
+              compMode !== "aucune"
+                ? await computeComparaison(tx, id, periode, compMode).catch((err) => ({
+                    mode: compMode as Exclude<ComparaisonMode, "aucune">,
+                    valeur: null as number | null,
+                    nbSources: 0,
+                    donneesInsuffisantes: true,
+                    messageImpossible:
+                      err instanceof Error ? err.message : "Comparaison non disponible.",
+                  }))
+                : undefined;
+            return { id, periode: periodeJson, ...partial, comparaison: comp } satisfies IndicateurResult;
           } catch (err) {
-            // Individual indicator failure must not break the whole response
             const msg = err instanceof Error ? err.message : String(err);
             return {
               id,
@@ -772,7 +932,6 @@ router.get("/analytics/indicateurs", async (req, res): Promise<void> => {
           }
         }),
       );
-      return calculated;
     });
 
     res.json(results);
@@ -784,7 +943,11 @@ router.get("/analytics/indicateurs", async (req, res): Promise<void> => {
 
 /**
  * GET /analytics/indicateurs/:id
- * Single indicator — used by the chat agent tool get_indicateur().
+ * Single indicator — also used by the chat agent tool get_indicateur().
+ *
+ * The chat agent tool signature (spec §14):
+ *   get_indicateur({ id, periode, comparaison })
+ *   → { valeur, unite, periode, comparaison?, nbSources, donneesInsuffisantes }
  */
 router.get("/analytics/indicateurs/:id", async (req, res): Promise<void> => {
   const idParsed = IndicateurIdSchema.safeParse(req.params["id"]);
@@ -802,7 +965,7 @@ router.get("/analytics/indicateurs/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  const { periode: periodeRaw, debut, fin } = query.data;
+  const { periode: periodeRaw, debut, fin, comparaison: compMode } = query.data;
   const tenantId = req.tenantId!;
   const id = idParsed.data;
   const periode = parsePeriode(periodeRaw, debut, fin);
@@ -815,13 +978,27 @@ router.get("/analytics/indicateurs/:id", async (req, res): Promise<void> => {
   try {
     const result = await withTenant(tenantId, async (tx) => {
       const partial = await CALCULATORS[id](tx, periode);
-      return { id, periode: periodeJson, ...partial } satisfies IndicateurResult;
+      const comp =
+        compMode !== "aucune"
+          ? await computeComparaison(tx, id, periode, compMode).catch((err) => ({
+              mode: compMode as Exclude<ComparaisonMode, "aucune">,
+              valeur: null as number | null,
+              nbSources: 0,
+              donneesInsuffisantes: true,
+              messageImpossible:
+                err instanceof Error ? err.message : "Comparaison non disponible.",
+            }))
+          : undefined;
+      return { id, periode: periodeJson, ...partial, comparaison: comp } satisfies IndicateurResult;
     });
 
-    // Validate response shape before returning
+    // Validate response shape before returning (spec §14: "Entrée ET sortie validées par Zod")
     const validated = IndicateurResultSchema.safeParse(result);
     if (!validated.success) {
-      res.status(500).json({ error: "Réponse invalide du moteur de calcul", detail: validated.error.flatten() });
+      res.status(500).json({
+        error: "Réponse invalide du moteur de calcul",
+        detail: validated.error.flatten(),
+      });
       return;
     }
 
