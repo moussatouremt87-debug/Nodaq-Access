@@ -1,9 +1,11 @@
-import { pgTable, text, timestamp, real, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, real, boolean, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { tenantsTable } from "./tenants";
 
 export const facturesTable = pgTable("factures", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  tenantId: uuid("tenant_id").notNull().references(() => tenantsTable.id),
   customerName: text("customer_name").notNull(),
   number: text("number").notNull(),
   issuedDate: text("issued_date").notNull(),

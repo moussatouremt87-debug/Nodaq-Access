@@ -1,9 +1,11 @@
-import { pgTable, text, timestamp, real } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, real, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { tenantsTable } from "./tenants";
 
 export const classeurTable = pgTable("classeur_documents", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  tenantId: uuid("tenant_id").notNull().references(() => tenantsTable.id),
   name: text("name").notNull(),
   category: text("category").notNull().default("DIVERS"),
   size: real("size"), // bytes

@@ -5,8 +5,23 @@ pnpm install --frozen-lockfile
 # Apply platform table migrations (non-interactive, idempotent raw SQL)
 pnpm --filter @workspace/db run migrate-platform
 
+# Apply Phase 2 multi-tenant schema migration (idempotent — safe on already-migrated DBs)
+pnpm --filter @workspace/db run migrate-multitenant
+
+# Apply Phase 3 RLS policies (idempotent — DROP POLICY IF EXISTS + CREATE POLICY)
+pnpm --filter @workspace/db run migrate-rls
+
 # Apply remaining Drizzle schema non-interactively
 pnpm --filter @workspace/db run push-force
+
+# Guard: no route file may import `db` directly from @workspace/db (use withTenant instead)
+echo "Checking for direct db imports in routes..."
+if grep -rn --include="*.ts" "import.*\bdb\b.*from.*@workspace/db" \
+     artifacts/api-server/src/routes/ 2>/dev/null | grep -v "//"; then
+  echo "ERROR: Direct 'db' import found in route files. Use withTenant() instead." >&2
+  exit 1
+fi
+echo "Route guard: OK"
 
 # Unit regression: connector secret merge logic
 pnpm --filter @workspace/db run test-connectors

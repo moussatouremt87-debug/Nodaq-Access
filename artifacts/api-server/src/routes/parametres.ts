@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, settingsTable } from "@workspace/db";
-import { eq, inArray } from "drizzle-orm";
+import { withTenant, settingsTable } from "@workspace/db";
+import { inArray } from "drizzle-orm";
 import { z } from "zod";
 
 const router: IRouter = Router();
@@ -20,34 +20,36 @@ const DEFAULTS: Record<string, string> = {
 
 const SetSettingsBody = z.record(z.string(), z.string());
 
-async function ensureDefaults() {
-  for (const [key, value] of Object.entries(DEFAULTS)) {
-    await db.insert(settingsTable).values({ key, value })
-      .onConflictDoNothing();
-  }
-}
+router.get("/parametres", async (req, res): Promise<void> => {
+  const tenantId = req.tenantId!;
 
-router.get("/parametres", async (_req, res): Promise<void> => {
-  await ensureDefaults();
-  const rows = await db.select().from(settingsTable);
+  const rows = await withTenant(tenantId, async (tx) => {
+    // Ensure defaults exist for this tenant
+    for (const [key, value] of Object.entries(DEFAULTS)) {
+      await tx.insert(settingsTable).values({ tenantId, key, value }).onConflictDoNothing();
+    }
+    return tx.select().from(settingsTable);
+  });
+
   const settings = Object.fromEntries(rows.map(r => [r.key, r.value]));
-  // merge with defaults for any missing keys
   res.json({ ...DEFAULTS, ...settings });
 });
 
 router.patch("/parametres", async (req, res): Promise<void> => {
   const parsed = SetSettingsBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const tenantId = req.tenantId!;
 
-  for (const [key, value] of Object.entries(parsed.data)) {
-    await db.insert(settingsTable).values({ key, value })
-      .onConflictDoUpdate({ target: settingsTable.key, set: { value, updatedAt: new Date() } });
-  }
+  const updated = await withTenant(tenantId, async (tx) => {
+    for (const [key, value] of Object.entries(parsed.data)) {
+      await tx.insert(settingsTable).values({ tenantId, key, value })
+        .onConflictDoUpdate({ target: [settingsTable.tenantId, settingsTable.key], set: { value, updatedAt: new Date() } });
+    }
+    const keys = Object.keys(parsed.data);
+    return tx.select().from(settingsTable).where(inArray(settingsTable.key, keys));
+  });
 
-  const keys = Object.keys(parsed.data);
-  const updated = await db.select().from(settingsTable).where(inArray(settingsTable.key, keys));
-  const result = Object.fromEntries(updated.map(r => [r.key, r.value]));
-  res.json(result);
+  res.json(Object.fromEntries(updated.map(r => [r.key, r.value])));
 });
 
 export default router;

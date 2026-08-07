@@ -6,15 +6,16 @@
  *   1. Partial reconfiguration preserves unedited credential fields.
  *   2. Disconnect (status → NON_CONNECTE) clears all stored credentials.
  *
- * Env vars required: ADMIN_PASSWORD, DATABASE_URL
+ * Env vars required: TEST_EMAIL, TEST_PASSWORD, DATABASE_URL
  */
 
-const BASE = process.env.TEST_API_BASE ?? "http://localhost:8080";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
-const TEST_TYPE = "_HTTP_TEST_STRIPE";
+const BASE         = process.env.TEST_API_BASE ?? "http://localhost:8080";
+const TEST_EMAIL    = process.env.TEST_EMAIL;
+const TEST_PASSWORD = process.env.TEST_PASSWORD;
+const TEST_TYPE    = "_HTTP_TEST_STRIPE";
 
-if (!ADMIN_PASSWORD) {
-  console.error("ADMIN_PASSWORD is required");
+if (!TEST_EMAIL || !TEST_PASSWORD) {
+  console.error("TEST_EMAIL and TEST_PASSWORD are required");
   process.exit(1);
 }
 
@@ -85,16 +86,12 @@ async function cleanup() {
     await waitReady();
 
     // Log in
-    const loginRes = await api("POST", "/api/auth/login", { password: ADMIN_PASSWORD });
-    if (loginRes.status !== 200) throw new Error("Login failed: " + JSON.stringify(loginRes.body));
-    // node-fetch doesn't expose set-cookie easily; set auth header workaround below
-    // Instead, use full curl-like approach with fetch and Replit's same-origin model
-    // We need the cookie from the login response — use a jar approach
     const loginRaw = await fetch(`${BASE}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password: ADMIN_PASSWORD }),
+      body: JSON.stringify({ email: TEST_EMAIL, password: TEST_PASSWORD }),
     });
+    if (!loginRaw.ok) throw new Error("Login failed: HTTP " + loginRaw.status);
     const setCookie = loginRaw.headers.get("set-cookie") ?? "";
     // Extract cookie name=value (before first ;)
     authCookie = setCookie.split(";")[0];

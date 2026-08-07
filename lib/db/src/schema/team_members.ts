@@ -1,9 +1,11 @@
-import { pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { tenantsTable } from "./tenants";
 
 export const teamMembersTable = pgTable("team_members", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  tenantId: uuid("tenant_id").notNull().references(() => tenantsTable.id),
   name: text("name").notNull(),
   role: text("role").notNull().default("Collaborateur"),
   email: text("email"),

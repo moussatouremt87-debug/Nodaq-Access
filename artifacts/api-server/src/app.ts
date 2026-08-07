@@ -4,6 +4,7 @@ import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { pool } from "@workspace/db";
 
 const app: Express = express();
 
@@ -71,5 +72,32 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
+
+// ── DB role verification — runs once at startup ───────────────────────────────
+// The application pool MUST run as app_user (non-owner) so that PostgreSQL RLS
+// policies are enforced. If current_user is the table owner, RLS is bypassed
+// and tenant data isolation cannot be guaranteed. We therefore exit hard.
+pool.query("SELECT current_user").then((result) => {
+  const currentUser: string = result.rows[0]?.current_user ?? "unknown";
+  if (currentUser !== "app_user") {
+    logger.error(
+      { currentUser },
+      "[startup] FATAL: DB pool is running as '%s' instead of 'app_user'. " +
+        "DATABASE_URL_APP must point to a connection authenticated as app_user. " +
+        "Run `node lib/db/scripts/create-app-role.cjs` and update the secret. " +
+        "Shutting down to prevent RLS bypass.",
+      currentUser,
+    );
+    process.exit(1);
+  }
+  logger.info("[startup] DB user verified: %s ✓", currentUser);
+}).catch((err: Error) => {
+  logger.error(
+    { err },
+    "[startup] FATAL: Could not verify DB user (%s). Shutting down.",
+    err.message,
+  );
+  process.exit(1);
+});
 
 export default app;

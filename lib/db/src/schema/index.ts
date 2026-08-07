@@ -1,3 +1,10 @@
+// Infrastructure — tenants, auth
+export * from "./tenants";
+export * from "./users";
+export * from "./memberships";
+export * from "./sessions";
+
+// Business tables
 export * from "./affaires";
 export * from "./contrats";
 export * from "./factures";
@@ -12,3 +19,4 @@ export * from "./team_members";
 export * from "./connectors";
 export * from "./settings";
 export * from "./cr_entries";
+export * from "./absences";
