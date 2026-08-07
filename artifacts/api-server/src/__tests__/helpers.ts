@@ -111,7 +111,7 @@ export async function createTestTeamMember(
 // Order matters — FK constraints cascade from business tables → infra tables.
 
 const BUSINESS_TABLES = [
-  "absences", "activity", "affaires", "chat_messages", "classeur_documents",
+  "absences", "activity", "affaires", "analytics_tool_logs", "chat_messages", "classeur_documents",
   "connectors", "contrats", "cr_entries", "devis", "echeances",
   "avoirs", "facture_sequences", "factures",
   "pending_actions", "prospects", "settings", "team_members",
@@ -144,8 +144,9 @@ export function tableInsertSql(table: string, tenantId: string, memberAId?: stri
   const now = new Date().toISOString();
 
   const map: Record<string, [string, unknown[]]> = {
-    activity:           [`INSERT INTO activity (id, label, type, tenant_id) VALUES ($1, 'rls-test', 'NOTE', $2)`, [id, tenantId]],
-    affaires:           [`INSERT INTO affaires (id, label, tenant_id) VALUES ($1, 'rls-test', $2)`, [id, tenantId]],
+    activity:             [`INSERT INTO activity (id, label, type, tenant_id) VALUES ($1, 'rls-test', 'NOTE', $2)`, [id, tenantId]],
+    affaires:             [`INSERT INTO affaires (id, label, tenant_id) VALUES ($1, 'rls-test', $2)`, [id, tenantId]],
+    analytics_tool_logs:  [`INSERT INTO analytics_tool_logs (tenant_id, indicateur_id, status) VALUES ($1, 'ca_facture', 'ok')`, [tenantId]],
     chat_messages:      [`INSERT INTO chat_messages (id, content, conversation_id, role, tenant_id) VALUES ($1, 'rls-test', 'conv-rls', 'user', $2)`, [id, tenantId]],
     classeur_documents: [`INSERT INTO classeur_documents (id, name, tenant_id) VALUES ($1, 'rls-test', $2)`, [id, tenantId]],
     connectors:         [`INSERT INTO connectors (id, label, type, tenant_id) VALUES ($1, 'rls-test', 'STRIPE_TEST', $2)`, [id, tenantId]],

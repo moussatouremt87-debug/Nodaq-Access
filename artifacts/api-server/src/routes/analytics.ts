@@ -136,6 +136,14 @@ function insufficient(
 // inside these functions; they receive a transaction (tx) already scoped to a tenant.
 
 export type Tx = Parameters<Parameters<typeof withTenant>[1]>[0];
+/**
+ * Drizzle tx.execute(sql`...`) returns a pg.QueryResult object (not a row array).
+ * Unwrap .rows so calculators can safely use array destructuring.
+ */
+function execRows<T>(result: unknown): T[] {
+  return (result as { rows: T[] }).rows;
+}
+
 
 /**
  * 1. horizon_travail
@@ -148,7 +156,7 @@ async function calcHorizonTravail(
   _periode: { debut: Date; fin: Date },
 ): Promise<Omit<IndicateurResult, "id" | "periode">> {
   // Active affaires with a value
-  const [carnet] = await tx.execute(sql`
+  const [carnet] = execRows<{ nb_affaires: number; total_carnet_ht: number }>(await tx.execute(sql`
     SELECT
       count(*)::int                              AS nb_affaires,
       coalesce(sum(montant_vendu_ht), 0)::float  AS total_carnet_ht
@@ -156,25 +164,25 @@ async function calcHorizonTravail(
     WHERE status NOT IN ('TERMINE', 'ANNULE', 'PERDU')
       AND montant_vendu_ht IS NOT NULL
       AND montant_vendu_ht > 0
-  `) as unknown as [{ nb_affaires: number; total_carnet_ht: number }];
+  `));
 
   if ((carnet.nb_affaires ?? 0) < 3) {
     return { valeur: null, unite: "jours", nbSources: carnet.nb_affaires ?? 0, donneesInsuffisantes: true };
   }
 
   // Amount already invoiced for those active affaires
-  const [invoiced] = await tx.execute(sql`
+  const [invoiced] = execRows<{ total_facture_ht: number }>(await tx.execute(sql`
     SELECT coalesce(sum(f.total_ht_cents), 0)::float / 100 AS total_facture_ht
     FROM factures f
     JOIN affaires a ON a.id = f.affaire_id
     WHERE a.status NOT IN ('TERMINE', 'ANNULE', 'PERDU')
       AND f.statut NOT IN ('ANNULEE', 'AVOIR', 'BROUILLON')
-  `) as unknown as [{ total_facture_ht: number }];
+  `));
 
   const resteHt = Math.max(0, carnet.total_carnet_ht - (invoiced.total_facture_ht ?? 0));
 
   // Daily production capacity: average monthly invoiced over last 3 months / 22 working days
-  const [cap] = await tx.execute(sql`
+  const [cap] = execRows<{ avg_monthly_ht: number }>(await tx.execute(sql`
     SELECT coalesce(avg(monthly_ht), 0)::float AS avg_monthly_ht
     FROM (
       SELECT
@@ -185,7 +193,7 @@ async function calcHorizonTravail(
         AND statut NOT IN ('ANNULEE', 'AVOIR', 'BROUILLON')
       GROUP BY 1
     ) sub
-  `) as unknown as [{ avg_monthly_ht: number }];
+  `));
 
   const avgMonthly = cap.avg_monthly_ht ?? 0;
   if (avgMonthly <= 0) {
@@ -216,7 +224,13 @@ async function calcArgentQuiDort(
 ): Promise<Omit<IndicateurResult, "id" | "periode">> {
   // Unsettled invoices (not drafts, not avoirs)
   // Join devis via affaire_id to retrieve retenue_garantie_pct for exclusion
-  const rows = await tx.execute(sql`
+  const rows = execRows<{
+    id: string;
+    total_ht_cents: number;
+    issued_date: string;
+    due_date: string;
+    retenue_pct: number;
+  }>(await tx.execute(sql`
     SELECT
       f.id,
       f.total_ht_cents,
@@ -234,13 +248,7 @@ async function calcArgentQuiDort(
     ) d ON true
     WHERE f.settled = false
       AND f.statut IN ('ENVOYEE', 'EN_RETARD', 'EN_ATTENTE', 'PARTIELLE')
-  `) as unknown as {
-    id: string;
-    total_ht_cents: number;
-    issued_date: string;
-    due_date: string;
-    retenue_pct: number;
-  }[];
+  `));
 
   const nbSources = rows.length;
   if (nbSources < 1) {
@@ -283,7 +291,7 @@ async function calcMargePour100(
   tx: Tx,
   periode: { debut: Date; fin: Date },
 ): Promise<Omit<IndicateurResult, "id" | "periode">> {
-  const [res] = await tx.execute(sql`
+  const [res] = execRows<{ nb_affaires: number; total_ca_cents: number; total_margin_cents: number }>(await tx.execute(sql`
     SELECT
       count(*)::int                                        AS nb_affaires,
       coalesce(sum(invoiced_amount_cents), 0)::float       AS total_ca_cents,
@@ -294,7 +302,7 @@ async function calcMargePour100(
                                  AND ${periode.fin.toISOString().slice(0, 10)}::date
       AND invoiced_amount_cents IS NOT NULL
       AND invoiced_amount_cents > 0
-  `) as unknown as [{ nb_affaires: number; total_ca_cents: number; total_margin_cents: number }];
+  `));
 
   const nb = res.nb_affaires ?? 0;
   if (nb < 3) {
@@ -328,7 +336,7 @@ async function calcDelaiPaiement(
   tx: Tx,
   periode: { debut: Date; fin: Date },
 ): Promise<Omit<IndicateurResult, "id" | "periode">> {
-  const [res] = await tx.execute(sql`
+  const [res] = execRows<{ nb_factures: number; delai_moyen_pondere: number }>(await tx.execute(sql`
     SELECT
       count(*)::int                                                      AS nb_factures,
       coalesce(
@@ -341,7 +349,7 @@ async function calcDelaiPaiement(
                                  AND ${periode.fin.toISOString().slice(0, 10)}::date
       AND total_ht_cents > 0
       AND updated_at > issued_date::timestamp
-  `) as unknown as [{ nb_factures: number; delai_moyen_pondere: number }];
+  `));
 
   const nb = res.nb_factures ?? 0;
   if (nb < 5) {
@@ -364,15 +372,25 @@ async function calcCaFacture(
   tx: Tx,
   periode: { debut: Date; fin: Date },
 ): Promise<Omit<IndicateurResult, "id" | "periode">> {
-  const [res] = await tx.execute(sql`
+  const [res] = execRows<{ nb_factures: number; total_ht: number }>(await tx.execute(sql`
     SELECT
-      count(*)::int                              AS nb_factures,
-      coalesce(sum(total_ht_cents), 0)::int      AS total_ht
-    FROM factures
-    WHERE issued_date::date BETWEEN ${periode.debut.toISOString().slice(0, 10)}::date
-                                AND ${periode.fin.toISOString().slice(0, 10)}::date
-      AND statut NOT IN ('ANNULEE', 'AVOIR', 'BROUILLON')
-  `) as unknown as [{ nb_factures: number; total_ht: number }];
+      count(*)::int AS nb_factures,
+      coalesce(sum(
+        round(f.total_ht_cents::numeric * (1 - coalesce(d.retenue_garantie_pct, 0) / 100.0))
+      ), 0)::int AS total_ht
+    FROM factures f
+    LEFT JOIN LATERAL (
+      SELECT retenue_garantie_pct
+        FROM devis
+       WHERE affaire_id = f.affaire_id
+         AND status = 'ACCEPTE'
+       ORDER BY created_at DESC
+       LIMIT 1
+    ) d ON true
+    WHERE f.issued_date::date BETWEEN ${periode.debut.toISOString().slice(0, 10)}::date
+                                  AND ${periode.fin.toISOString().slice(0, 10)}::date
+      AND f.statut NOT IN ('ANNULEE', 'AVOIR', 'BROUILLON')
+  `));
 
   return {
     valeur: res.total_ht ?? 0,
@@ -390,7 +408,7 @@ async function calcCaEncaisse(
   tx: Tx,
   periode: { debut: Date; fin: Date },
 ): Promise<Omit<IndicateurResult, "id" | "periode">> {
-  const [res] = await tx.execute(sql`
+  const [res] = execRows<{ nb_factures: number; total_ht: number }>(await tx.execute(sql`
     SELECT
       count(*)::int                              AS nb_factures,
       coalesce(sum(total_ht_cents), 0)::int      AS total_ht
@@ -399,7 +417,7 @@ async function calcCaEncaisse(
       AND issued_date::date BETWEEN ${periode.debut.toISOString().slice(0, 10)}::date
                                 AND ${periode.fin.toISOString().slice(0, 10)}::date
       AND statut NOT IN ('ANNULEE', 'AVOIR')
-  `) as unknown as [{ nb_factures: number; total_ht: number }];
+  `));
 
   return {
     valeur: res.total_ht ?? 0,
@@ -423,22 +441,22 @@ async function calcResultatExploitation(
   const periodKey = `${periode.debut.getFullYear()}-${String(periode.debut.getMonth() + 1).padStart(2, "0")}`;
 
   // CA encaissé on the period
-  const [caRow] = await tx.execute(sql`
+  const [caRow] = execRows<{ ca_cents: number }>(await tx.execute(sql`
     SELECT coalesce(sum(total_ht_cents), 0)::float AS ca_cents
     FROM factures
     WHERE settled = true
       AND issued_date::date BETWEEN ${periode.debut.toISOString().slice(0, 10)}::date
                                 AND ${periode.fin.toISOString().slice(0, 10)}::date
       AND statut NOT IN ('ANNULEE', 'AVOIR')
-  `) as unknown as [{ ca_cents: number }];
+  `));
 
   // Charges from cr_entries — sum of all CHARGE lines for the period
-  const chargeRows = await tx.execute(sql`
+  const chargeRows = execRows<{ line_code: string; total: number }>(await tx.execute(sql`
     SELECT line_code, coalesce(sum(amount_cents), 0)::float AS total
     FROM cr_entries
     WHERE period_key >= ${periodKey}
     GROUP BY line_code
-  `) as unknown as { line_code: string; total: number }[];
+  `));
 
   const totalCharges = chargeRows.reduce((acc, r) => acc + (r.total ?? 0), 0);
 
@@ -468,7 +486,7 @@ async function calcCarnetCommandes(
   tx: Tx,
   _periode: { debut: Date; fin: Date },
 ): Promise<Omit<IndicateurResult, "id" | "periode">> {
-  const [res] = await tx.execute(sql`
+  const [res] = execRows<{ nb_affaires: number; carnet_ht: number; deja_facture_ht: number }>(await tx.execute(sql`
     SELECT
       count(*)::int                               AS nb_affaires,
       coalesce(sum(a.montant_vendu_ht), 0)::float AS carnet_ht,
@@ -484,7 +502,7 @@ async function calcCarnetCommandes(
     FROM affaires a
     WHERE a.status NOT IN ('TERMINE', 'ANNULE', 'PERDU')
       AND a.montant_vendu_ht IS NOT NULL
-  `) as unknown as [{ nb_affaires: number; carnet_ht: number; deja_facture_ht: number }];
+  `));
 
   const nbSources = res.nb_affaires ?? 0;
   const reste = Math.max(0, (res.carnet_ht ?? 0) - (res.deja_facture_ht ?? 0));
@@ -506,7 +524,7 @@ async function calcTauxSignatureDevis(
   tx: Tx,
   periode: { debut: Date; fin: Date },
 ): Promise<Omit<IndicateurResult, "id" | "periode">> {
-  const [res] = await tx.execute(sql`
+  const [res] = execRows<{ nb_envoyes: number; nb_acceptes: number }>(await tx.execute(sql`
     SELECT
       count(*)::int                                                        AS nb_envoyes,
       count(*) FILTER (WHERE status = 'ACCEPTE')::int                     AS nb_acceptes
@@ -515,7 +533,7 @@ async function calcTauxSignatureDevis(
       AND date_envoi::date BETWEEN ${periode.debut.toISOString().slice(0, 10)}::date
                                AND ${periode.fin.toISOString().slice(0, 10)}::date
       AND status NOT IN ('BROUILLON')
-  `) as unknown as [{ nb_envoyes: number; nb_acceptes: number }];
+  `));
 
   const nb = res.nb_envoyes ?? 0;
   if (nb < 5) {
@@ -544,7 +562,7 @@ async function calcDelaiReponseDevis(
   tx: Tx,
   periode: { debut: Date; fin: Date },
 ): Promise<Omit<IndicateurResult, "id" | "periode">> {
-  const [res] = await tx.execute(sql`
+  const [res] = execRows<{ nb_devis: number; delai_moyen_jours: number }>(await tx.execute(sql`
     SELECT
       count(*)::int                                                             AS nb_devis,
       round(
@@ -557,7 +575,7 @@ async function calcDelaiReponseDevis(
       AND date_envoi::date BETWEEN ${periode.debut.toISOString().slice(0, 10)}::date
                                AND ${periode.fin.toISOString().slice(0, 10)}::date
       AND accepted_at > date_envoi
-  `) as unknown as [{ nb_devis: number; delai_moyen_jours: number }];
+  `));
 
   const nb = res.nb_devis ?? 0;
   if (nb < 3) {
@@ -580,7 +598,7 @@ async function calcMontantMoyenAffaire(
   tx: Tx,
   periode: { debut: Date; fin: Date },
 ): Promise<Omit<IndicateurResult, "id" | "periode">> {
-  const [res] = await tx.execute(sql`
+  const [res] = execRows<{ nb_affaires: number; moyen_cents: number }>(await tx.execute(sql`
     SELECT
       count(*)::int                                     AS nb_affaires,
       round(avg(montant_vendu_ht) * 100)::int           AS moyen_cents
@@ -589,7 +607,7 @@ async function calcMontantMoyenAffaire(
                          AND ${periode.fin.toISOString()}::timestamptz
       AND montant_vendu_ht IS NOT NULL
       AND montant_vendu_ht > 0
-  `) as unknown as [{ nb_affaires: number; moyen_cents: number }];
+  `));
 
   const nb = res.nb_affaires ?? 0;
   if (nb < 1) {
@@ -634,7 +652,12 @@ async function calcEcartDeviseRealise(
   tx: Tx,
   periode: { debut: Date; fin: Date },
 ): Promise<Omit<IndicateurResult, "id" | "periode">> {
-  const rows = await tx.execute(sql`
+  const rows = execRows<{
+    prevue: string;
+    realisee: string;
+    devis_ht: number;
+    realise_ht: number;
+  }>(await tx.execute(sql`
     SELECT
       date_fin_prevue::date                                    AS prevue,
       completed_at::date                                       AS realisee,
@@ -647,12 +670,7 @@ async function calcEcartDeviseRealise(
                                  AND ${periode.fin.toISOString().slice(0, 10)}::date
       AND montant_vendu_ht IS NOT NULL
       AND montant_vendu_ht > 0
-  `) as unknown as {
-    prevue: string;
-    realisee: string;
-    devis_ht: number;
-    realise_ht: number;
-  }[];
+  `));
 
   const nb = rows.length;
   if (nb < 3) {
@@ -692,7 +710,7 @@ async function calcConcentrationClient(
   tx: Tx,
   periode: { debut: Date; fin: Date },
 ): Promise<Omit<IndicateurResult, "id" | "periode">> {
-  const rows = await tx.execute(sql`
+  const rows = execRows<{ customer_name: string; ca_client: number }>(await tx.execute(sql`
     SELECT
       customer_name,
       sum(total_ht_cents)::float AS ca_client
@@ -702,7 +720,7 @@ async function calcConcentrationClient(
       AND statut NOT IN ('ANNULEE', 'AVOIR', 'BROUILLON')
     GROUP BY customer_name
     ORDER BY ca_client DESC
-  `) as unknown as { customer_name: string; ca_client: number }[];
+  `));
 
   const nbClients = rows.length;
   if (nbClients < 1) {
