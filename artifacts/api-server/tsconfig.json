@@ -16,7 +16,13 @@
       "path": "../../lib/api-zod"
     },
     {
+      "path": "../../lib/classifier"
+    },
+    {
       "path": "../../lib/facturx"
+    },
+    {
+      "path": "../../lib/llm"
     }
   ]
 }

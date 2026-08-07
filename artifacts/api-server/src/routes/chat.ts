@@ -6,6 +6,7 @@ import {
   GetChatHistoryQueryParams,
 } from "@workspace/api-zod";
 import { runAgent, getContextualSuggestions } from "../lib/mistralAgent";
+import { LlmConfigError } from "@nodaq/llm";
 
 const router: IRouter = Router();
 
@@ -38,19 +39,11 @@ router.post("/chat/messages", async (req, res): Promise<void> => {
   const parsed = SendChatMessageBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-  if (!process.env.MISTRAL_API_KEY) {
-    res.status(503).json({
-      error: "Agent non configuré",
-      detail: "La clé MISTRAL_API_KEY est absente. Ajoutez-la dans les secrets Replit.",
-    });
-    return;
-  }
-
   const { content, conversationId } = parsed.data;
   const convId = conversationId ?? crypto.randomUUID();
   const tenantId = req.tenantId!;
 
-  // 1. Persist user message
+  // 1. Persist user message via withTenant (RLS maintained)
   await withTenant(tenantId, async (tx) => {
     await tx.insert(chatMessagesTable).values({
       tenantId, conversationId: convId, role: "user", content,
@@ -65,18 +58,28 @@ router.post("/chat/messages", async (req, res): Promise<void> => {
       .orderBy(asc(chatMessagesTable.createdAt))
   );
 
-  // 3. Run agent (with tool-calling loop)
+  // 3. Run agent (classifier gate + tool-calling loop via LiteLLM)
   let agentResult: Awaited<ReturnType<typeof runAgent>>;
   try {
     agentResult = await runAgent(tenantId, history);
   } catch (err: unknown) {
+    // Missing configuration → 503 with the exact variable name, never its value
+    if (err instanceof LlmConfigError) {
+      const missingVar = err.missingVar;
+      req.log?.warn({ missingVar }, "LLM config missing");
+      res.status(503).json({
+        error: "Agent non configuré",
+        detail: `La variable d'environnement "${missingVar}" est absente.`,
+      });
+      return;
+    }
     const message = err instanceof Error ? err.message : "Erreur inconnue";
-    req.log?.error({ err }, "mistral agent error");
+    req.log?.error({ err }, "agent error");
     res.status(502).json({ error: "L'agent IA a rencontré une erreur.", detail: message });
     return;
   }
 
-  // 4. Persist assistant reply
+  // 4. Persist assistant reply via withTenant (RLS maintained)
   const assistantMessage = await withTenant(tenantId, async (tx) => {
     const [msg] = await tx.insert(chatMessagesTable).values({
       tenantId,

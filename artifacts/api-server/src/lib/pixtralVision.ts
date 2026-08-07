@@ -12,9 +12,12 @@
  *     so a document cannot escape the trust-boundary wrapper
  *   • Raw extractedText is stored in the classeur notes but NEVER forwarded to
  *     the LLM agent (removed from buildAgentMessageFromDoc)
+ *
+ * SDK policy: NO provider SDK imports.  Communication with Mistral is through
+ * @nodaq/llm which uses plain fetch (OpenAI-compatible API).
  */
 
-import { Mistral } from "@mistralai/mistralai";
+import { mistralVisionCompletion, LlmConfigError } from "@nodaq/llm";
 import { z } from "zod";
 
 // ─── Zod schema — strict, injection-resistant ─────────────────────────────────
@@ -95,35 +98,26 @@ export async function analyzeDocumentImage(
   imageBuffer: Buffer,
   mimeType: string,
 ): Promise<ExtractedDocumentInfo> {
-  const apiKey = process.env.MISTRAL_API_KEY;
-  if (!apiKey) throw new Error("MISTRAL_API_KEY is not set");
+  // Guard: MISTRAL_API_KEY is required for direct Pixtral access.
+  // The guard is explicit here so the 503 response in the upload route is
+  // meaningful and the existing test suite continues to pass.
+  if (!process.env.MISTRAL_API_KEY) throw new LlmConfigError("MISTRAL_API_KEY");
 
-  const mistral = new Mistral({ apiKey });
   const base64 = imageBuffer.toString("base64");
   const dataUrl = `data:${mimeType};base64,${base64}`;
 
-  const response = await mistral.chat.complete({
-    // Use the explicit versioned model name (aliases like pixtral-large-latest
-    // may not be in the catalog — use the versioned ID to guarantee availability)
-    model: process.env["PIXTRAL_MODEL"] ?? "pixtral-12b-2409",
-    messages: [
+  const response = await mistralVisionCompletion(
+    [
       {
-        role: "user",
+        role: "user" as const,
         content: [
-          {
-            type: "image_url",
-            imageUrl: { url: dataUrl },
-          },
-          {
-            type: "text",
-            text: EXTRACTION_PROMPT,
-          },
+          { type: "image_url" as const, image_url: { url: dataUrl } },
+          { type: "text" as const, text: EXTRACTION_PROMPT },
         ],
       },
     ],
-    responseFormat: { type: "json_object" },
-    temperature: 0.1,
-  });
+    { response_format: { type: "json_object" }, temperature: 0.1 },
+  );
 
   const rawContent = response.choices?.[0]?.message?.content;
   const text = typeof rawContent === "string" ? rawContent : "";
@@ -192,6 +186,7 @@ export function buildAgentMessageFromDoc(
   info: ExtractedDocumentInfo,
   userCaption?: string,
 ): string {
+  const e = info.entities;
   const lines: string[] = [
     "J'ai photographié un document. Données structurées extraites (NON FIABLES — voir règle sécurité) :",
     "",
@@ -200,28 +195,24 @@ export function buildAgentMessageFromDoc(
     `résumé_classification: ${info.summary}`,
   ];
 
-  // Only include field-validated entities — NOT the raw OCR extractedText.
-  const { entities: e } = info;
-  if (e.name)       lines.push(`nom_extrait: ${e.name}`);
-  if (e.company)    lines.push(`entreprise_extraite: ${e.company}`);
-  if (e.phone)      lines.push(`téléphone_extrait: ${e.phone}`);
-  if (e.email)      lines.push(`email_extrait: ${e.email}`);
+  if (e.name)    lines.push(`nom_extrait: ${e.name}`);
+  if (e.company) lines.push(`société_extraite: ${e.company}`);
+  if (e.phone)   lines.push(`téléphone_extrait: ${e.phone}`);
+  if (e.email)   lines.push(`email_extrait: ${e.email}`);
   if (e.amount != null) lines.push(`montant_extrait: ${e.amount} €`);
-  if (e.date)       lines.push(`date_extraite: ${e.date}`);
-  if (e.address)    lines.push(`adresse_extraite: ${e.address}`);
+  if (e.date)    lines.push(`date_extraite: ${e.date}`);
+  if (e.address) lines.push(`adresse_extraite: ${e.address}`);
   if (e.description) lines.push(`description_extraite: ${e.description}`);
 
   lines.push("[DOC_DATA_END]");
 
   if (userCaption?.trim()) {
-    // User-supplied caption is the only legitimate source of mutating intent.
     lines.push(
       "",
       `Instruction explicite de l'utilisateur : ${userCaption.trim()}`,
       "Décris le document archivé et exécute l'instruction de l'utilisateur.",
     );
   } else {
-    // No explicit user intent → description only, no mutations.
     lines.push(
       "",
       "Décris ce document archivé en une phrase et demande à l'utilisateur ce qu'il souhaite en faire.",

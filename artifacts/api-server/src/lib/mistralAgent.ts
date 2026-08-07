@@ -1,10 +1,21 @@
 /**
- * Agent NODAQ — Mistral AI core
- * Model: mistral-large-latest (supports function/tool calling)
+ * Agent NODAQ — LiteLLM core (via @nodaq/llm, OpenAI-compatible API)
  * Agentic loop: up to MAX_ROUNDS of tool-call → execute → re-send
+ *
+ * SDK policy: NO provider SDK imports.  All model calls go through
+ * @nodaq/llm which communicates with LiteLLM using plain fetch.
+ * The anti-SDK test gate (anti-sdk.test.ts) enforces this invariant.
  */
 
-import { Mistral } from "@mistralai/mistralai";
+import {
+  getConfig,
+  chatCompletion,
+  LlmConfigError,
+  type LlmMessage,
+  type LlmTool,
+  type LlmToolCall,
+} from "@nodaq/llm";
+import { classify } from "@nodaq/classifier";
 import {
   withTenant,
   affairesTable,
@@ -14,7 +25,7 @@ import {
   activityTable,
   classeurTable,
 } from "@workspace/db";
-import { eq, desc, asc, sql, and, gte, lte } from "drizzle-orm";
+import { eq, desc, asc, sql, and, lte } from "drizzle-orm";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -30,19 +41,11 @@ export interface AgentResult {
   actions: AgentAction[];
 }
 
-// ─── Client ───────────────────────────────────────────────────────────────────
-
-function getClient(): Mistral {
-  const apiKey = process.env.MISTRAL_API_KEY;
-  if (!apiKey) throw new Error("MISTRAL_API_KEY is not set");
-  return new Mistral({ apiKey });
-}
-
 // ─── Tool definitions ─────────────────────────────────────────────────────────
 
-const TOOLS = [
+const TOOLS: LlmTool[] = [
   {
-    type: "function" as const,
+    type: "function",
     function: {
       name: "list_affaires",
       description:
@@ -62,7 +65,7 @@ const TOOLS = [
     },
   },
   {
-    type: "function" as const,
+    type: "function",
     function: {
       name: "get_affaire_detail",
       description: "Récupère le détail complet d'une affaire par son ID ou en cherchant par nom/label.",
@@ -77,7 +80,7 @@ const TOOLS = [
     },
   },
   {
-    type: "function" as const,
+    type: "function",
     function: {
       name: "update_affaire_status",
       description:
@@ -97,7 +100,7 @@ const TOOLS = [
     },
   },
   {
-    type: "function" as const,
+    type: "function",
     function: {
       name: "create_affaire",
       description: "Crée une nouvelle affaire/chantier.",
@@ -122,7 +125,7 @@ const TOOLS = [
     },
   },
   {
-    type: "function" as const,
+    type: "function",
     function: {
       name: "list_prospects",
       description: "Liste les prospects actifs.",
@@ -140,7 +143,7 @@ const TOOLS = [
     },
   },
   {
-    type: "function" as const,
+    type: "function",
     function: {
       name: "create_prospect",
       description: "Crée un nouveau prospect dans le pipeline commercial.",
@@ -167,7 +170,7 @@ const TOOLS = [
     },
   },
   {
-    type: "function" as const,
+    type: "function",
     function: {
       name: "update_prospect",
       description: "Met à jour un prospect existant (étape, notes, contact, etc.).",
@@ -189,7 +192,7 @@ const TOOLS = [
     },
   },
   {
-    type: "function" as const,
+    type: "function",
     function: {
       name: "create_echeance",
       description: "Crée une échéance fiscale ou commerciale (TVA, IS, paiement client…).",
@@ -213,7 +216,7 @@ const TOOLS = [
     },
   },
   {
-    type: "function" as const,
+    type: "function",
     function: {
       name: "create_classeur_entry",
       description: "Archive un document dans le classeur numérique du tenant.",
@@ -234,7 +237,7 @@ const TOOLS = [
     },
   },
   {
-    type: "function" as const,
+    type: "function",
     function: {
       name: "log_activity",
       description: "Enregistre une note ou un événement dans le journal d'activité.",
@@ -311,8 +314,8 @@ async function buildSystemPrompt(tenantId: string): Promise<string> {
       .orderBy(desc(activityTable.createdAt))
       .limit(5);
 
-    // Quick financials
     const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
+    void firstOfMonth; // used for context only
     const [affaireCount] = await tx
       .select({ count: sql<number>`count(*)::int`, total: sql<number>`coalesce(sum(quoted_amount_cents), 0)` })
       .from(affairesTable)
@@ -598,72 +601,78 @@ export async function runAgent(
   history: Array<{ role: string; content: string }>,
   options: RunAgentOptions = {},
 ): Promise<AgentResult> {
-  const client = getClient();
+  // 1. Resolve LLM config — throws LlmConfigError if any var is missing.
+  //    The error propagates to chat.ts which maps it to 503.
+  const config = getConfig();
+
+  // 2. Classifier gate — check the most recent user message.
+  //    confidentiel → sovereign-only response; never reaches external model.
+  const lastUserMessage = [...history].reverse().find(m => m.role === "user");
+  if (lastUserMessage) {
+    const classification = await classify({ text: lastUserMessage.content });
+    if (classification.category === "confidentiel") {
+      return {
+        content:
+          "Je détecte des informations sensibles (coordonnées bancaires, données personnelles…) dans votre message. " +
+          "Par mesure de sécurité, ce contenu n'est pas transmis à un modèle externe. " +
+          "Pouvez-vous reformuler votre demande sans inclure ces informations ?",
+        actions: [],
+      };
+    }
+  }
+
   const systemPrompt = await buildSystemPrompt(tenantId);
   const actions: AgentAction[] = [];
 
-  // Apply server-side tool policy: filter TOOLS to the allow-list when provided.
-  // The model only receives definitions for permitted tools → cannot call others.
+  // Apply server-side tool policy
   const allowedTools =
     options.toolAllowList === undefined
-      ? TOOLS // no restriction (normal chat path)
+      ? TOOLS
       : TOOLS.filter((t) => options.toolAllowList!.includes(t.function.name));
 
-  // Authorization Set — enforced BEFORE every executeTool() call.
-  // Even if the model returns a tool-call for a name not in its provided
-  // definitions (possible in adversarial scenarios), this gate ensures
-  // executeTool() is never invoked for a disallowed tool.
   const authorizedNames: Set<string> | null =
     options.toolAllowList === undefined
-      ? null // no restriction
+      ? null
       : new Set(options.toolAllowList);
 
-  // Build the message array — system + conversation history (last 20 messages max)
+  // Build message array — system + conversation history (last 20 messages max)
   const recentHistory = history.slice(-20);
-  const messages: Array<Record<string, unknown>> = [
+  const messages: LlmMessage[] = [
     { role: "system", content: systemPrompt },
-    ...recentHistory.map(m => ({ role: m.role, content: m.content })),
+    ...recentHistory.map(m => ({ role: m.role as LlmMessage["role"], content: m.content })),
   ];
 
   for (let round = 0; round < MAX_ROUNDS; round++) {
-    const response = await client.chat.complete({
-      model: "mistral-large-latest",
-      messages: messages as any,
-      tools: allowedTools as any,
-      toolChoice: allowedTools.length > 0 ? "auto" : "none",
-    });
+    const response = await chatCompletion(
+      config,
+      messages,
+      allowedTools.length > 0 ? allowedTools : undefined,
+      { tool_choice: allowedTools.length > 0 ? "auto" : "none" },
+    );
 
     const choice = response.choices?.[0];
     if (!choice) break;
 
-    const msg = choice.message!;
-    const toolCalls = (msg as any).toolCalls as Array<{
-      id: string;
-      function: { name: string; arguments: string };
-    }> | null | undefined;
+    const msg = choice.message;
+    const toolCalls: LlmToolCall[] | undefined = msg.tool_calls;
 
     // No tool calls → final text response
     if (!toolCalls || toolCalls.length === 0) {
-      const content = Array.isArray(msg.content)
-        ? (msg.content as Array<{ text?: string }>).map(c => c.text ?? "").join("")
-        : (msg.content as string) ?? "";
+      const content = msg.content ?? "";
       return { content, actions };
     }
 
-    // Append the assistant message (with tool_calls) to the conversation
-    messages.push({ role: "assistant", content: msg.content ?? "", toolCalls });
+    // Append assistant message (with tool_calls) to the conversation
+    messages.push({ role: "assistant", content: msg.content ?? null, tool_calls: toolCalls });
 
-    // Execute each tool call — authorization check applied before every call
+    // Execute each tool call
     for (const call of toolCalls) {
-      // Hard authorization gate: reject any tool the model tries to call that
-      // is not in the server-side allow-list, even if its definition was not
-      // sent (defense against adversarial model responses).
       if (authorizedNames !== null && !authorizedNames.has(call.function.name)) {
         messages.push({
           role: "tool",
-          toolCallId: call.id,
-          content: `[AUTHORIZATION ERROR] Tool "${call.function.name}" is not authorized in this context. Only read operations are permitted for document-upload calls.`,
-        } as any);
+          content: `[AUTHORIZATION ERROR] Tool "${call.function.name}" is not authorized in this context.`,
+          tool_call_id: call.id,
+        });
         continue;
       }
 
@@ -677,8 +686,7 @@ export async function runAgent(
       const { result, action } = await executeTool(tenantId, call.function.name, argsObj);
       if (action) actions.push(action);
 
-      // Append tool result
-      messages.push({ role: "tool", toolCallId: call.id, content: result } as any);
+      messages.push({ role: "tool", tool_call_id: call.id, content: result });
     }
   }
 
@@ -689,7 +697,7 @@ export async function runAgent(
   };
 }
 
-// ─── Key-based contextual suggestions ─────────────────────────────────────────
+// ─── Contextual suggestions ───────────────────────────────────────────────────
 
 export async function getContextualSuggestions(tenantId: string): Promise<string[]> {
   try {
