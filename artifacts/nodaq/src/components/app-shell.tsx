@@ -4,9 +4,11 @@ import { cn } from '@/lib/utils';
 import { NAV_SECTIONS, MOBILE_NAV, navIsActive } from '@/lib/nav';
 import { TopRibbon } from './top-ribbon';
 import { ThemeToggle } from './theme-toggle';
+import { useIsOwner } from '@/hooks/use-auth';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
+  const isOwner = useIsOwner();
 
   return (
     <div className="min-h-[100dvh] w-full text-foreground flex grain">
@@ -34,13 +36,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="flex-1 overflow-y-auto py-3 px-3 space-y-4">
-          {NAV_SECTIONS.map(section => (
+          {NAV_SECTIONS.map(section => {
+            const visibleItems = section.items.filter(item => !item.ownerOnly || isOwner);
+            if (visibleItems.length === 0) return null;
+            return (
             <div key={section.label}>
               <div className="px-3 py-1 text-[10px] uppercase tracking-[0.12em] text-sidebar-foreground/35 font-medium">
                 {section.label}
               </div>
               <div className="space-y-0.5 mt-0.5">
-                {section.items.map(item => {
+                {visibleItems.map(item => {
                   const active = navIsActive(item.href, location);
                   const Icon = item.icon;
                   return (
@@ -71,7 +76,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 })}
               </div>
             </div>
-          ))}
+            );
+          })}
         </nav>
 
         <div className="p-4 border-t border-sidebar-border">

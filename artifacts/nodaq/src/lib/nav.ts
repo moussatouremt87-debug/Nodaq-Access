@@ -16,6 +16,8 @@ import {
   Settings2,
   Hammer,
   FileSpreadsheet,
+  Building2,
+  DatabaseZap,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -24,6 +26,8 @@ export type NavItem = {
   label: string;
   icon: LucideIcon;
   testId: string;
+  /** Si true, l'entrée est masquée pour les rôles non-OWNER. */
+  ownerOnly?: boolean;
 };
 
 export type NavSection = {
@@ -72,6 +76,8 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: '/votre-metier', label: 'Votre métier',       icon: Hammer,   testId: 'nav-votre-metier' },
       { href: '/connecteurs',  label: 'Connecteurs',        icon: Plug2,    testId: 'nav-connecteurs' },
       { href: '/parametres',   label: 'Paramètres',         icon: Settings2, testId: 'nav-parametres' },
+      { href: '/onboarding',   label: 'Profil entreprise',   icon: Building2,   testId: 'nav-onboarding',  ownerOnly: true },
+      { href: '/reprise',      label: 'Reprise des données', icon: DatabaseZap, testId: 'nav-reprise',     ownerOnly: true },
     ],
   },
 ];

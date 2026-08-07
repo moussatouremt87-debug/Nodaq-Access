@@ -20,6 +20,8 @@ import equipeRouter from "./equipe";
 import connecteursRouter from "./connecteurs";
 import parametresRouter from "./parametres";
 import votreMetierRouter from "./votre-metier";
+import entreprisesRouter from "./entreprises";
+import { onboardingReadRouter, onboardingWriteRouter } from "./onboarding";
 
 import { requireAuth } from "../middleware/requireAuth";
 import { resolveTenant } from "../middleware/resolveTenant";
@@ -58,11 +60,14 @@ router.use(biz, compteResultatRouter);
 router.use(biz, facturesRouter);
 router.use(biz, prospectsRouter);
 router.use(biz, votreMetierRouter);
+router.use(biz, onboardingReadRouter);     // GET /onboarding/profil, GET /reprise/blocs (tous membres peuvent lire)
 
 // ── OWNER-only routes ─────────────────────────────────────────────────────
 router.use(ownerOnly, equipeRouter);       // team member management
 router.use(ownerOnly, connecteursRouter);  // external service connections
 router.use(ownerOnly, parametresRouter);   // global workspace settings
+router.use(ownerOnly, entreprisesRouter);  // recherche SIRET (onboarding OWNER)
+router.use(ownerOnly, onboardingWriteRouter); // écrits profil + reprise (OWNER only)
 
 // ── DELETE /factures/:id — OWNER-only destructive operation ───────────────
 router.delete(

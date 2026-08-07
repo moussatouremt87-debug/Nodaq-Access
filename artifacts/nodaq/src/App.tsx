@@ -24,6 +24,8 @@ import Equipe from '@/pages/equipe';
 import Connecteurs from '@/pages/connecteurs';
 import Parametres from '@/pages/parametres';
 import VotreMetier from '@/pages/votre-metier';
+import Onboarding from '@/pages/onboarding';
+import Reprise from '@/pages/reprise';
 import Login from '@/pages/login';
 import Register from '@/pages/register';
 import { useAuth } from '@/hooks/use-auth';
@@ -46,6 +48,38 @@ function PlatformRoute(Page: React.ComponentType) {
       const from = encodeURIComponent(window.location.pathname);
       setLocation(`/login?from=${from}`);
       return null;
+    }
+    return <Page />;
+  };
+}
+
+/** HOC: requires authenticated + OWNER role; MEMBER → 403 page */
+function OwnerRoute(Page: React.ComponentType) {
+  return function OwnerProtected() {
+    const { data, isLoading } = useAuth();
+    const [, setLocation] = useLocation();
+
+    if (isLoading) {
+      return (
+        <div className="flex h-full items-center justify-center p-12 text-muted-foreground text-sm">
+          Vérification de l'accès...
+        </div>
+      );
+    }
+    if (!data?.authenticated) {
+      const from = encodeURIComponent(window.location.pathname);
+      setLocation(`/login?from=${from}`);
+      return null;
+    }
+    if (data.role !== 'OWNER') {
+      return (
+        <div className="flex flex-col items-center justify-center h-full p-12 gap-3 text-center">
+          <div className="text-2xl font-semibold text-foreground">Accès restreint</div>
+          <div className="text-sm text-muted-foreground max-w-xs">
+            Cette section est réservée aux administrateurs du compte. Contactez votre OWNER pour y accéder.
+          </div>
+        </div>
+      );
     }
     return <Page />;
   };
@@ -105,6 +139,8 @@ function AppRouter() {
               <Route path="/votre-metier" component={PlatformRoute(VotreMetier)} />
               <Route path="/connecteurs" component={PlatformRoute(Connecteurs)} />
               <Route path="/parametres" component={PlatformRoute(Parametres)} />
+              <Route path="/onboarding" component={OwnerRoute(Onboarding)} />
+              <Route path="/reprise" component={OwnerRoute(Reprise)} />
               <Route component={NotFound} />
             </Switch>
           </motion.div>

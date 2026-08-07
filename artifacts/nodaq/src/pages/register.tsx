@@ -44,7 +44,8 @@ export default function RegisterPage() {
         return;
       }
       await qc.invalidateQueries({ queryKey: ['auth-me'] });
-      setLocation('/');
+      // Première inscription : envoyer vers l'onboarding pour renseigner le profil entreprise
+      setLocation('/onboarding');
     } catch {
       toast({ title: 'Erreur', description: 'Impossible de joindre le serveur', variant: 'destructive' });
     } finally {
