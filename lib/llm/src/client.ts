@@ -84,19 +84,28 @@ export interface ChatCompletionOptions {
 
 /**
  * Resolve LLM config from environment variables.
- * Throws `LlmConfigError` naming the exact missing variable — never its value.
+ *
+ * Resolution order (supports gradual migration from direct-Mistral to LiteLLM):
+ *   baseUrl → LITELLM_BASE_URL  → "https://api.mistral.ai/v1"
+ *   apiKey  → LITELLM_API_KEY  → MISTRAL_API_KEY  (required if neither is set)
+ *   model   → LLM_MODEL        → "mistral-large-latest"
+ *
+ * Throwing LlmConfigError("MISTRAL_API_KEY") when no key is available keeps
+ * the 503 error surface backward-compatible with deployments that only
+ * have MISTRAL_API_KEY set (no LiteLLM proxy yet).
  */
 export function getConfig(): LlmConfig {
-  const baseUrl = process.env["LITELLM_BASE_URL"];
-  if (!baseUrl) throw new LlmConfigError("LITELLM_BASE_URL");
+  const baseUrl = (
+    process.env["LITELLM_BASE_URL"] ?? "https://api.mistral.ai/v1"
+  ).replace(/\/$/, "");
 
-  const apiKey = process.env["LITELLM_API_KEY"];
-  if (!apiKey) throw new LlmConfigError("LITELLM_API_KEY");
+  const apiKey =
+    process.env["LITELLM_API_KEY"] ?? process.env["MISTRAL_API_KEY"];
+  if (!apiKey) throw new LlmConfigError("MISTRAL_API_KEY");
 
-  const model = process.env["LLM_MODEL"];
-  if (!model) throw new LlmConfigError("LLM_MODEL");
+  const model = process.env["LLM_MODEL"] ?? "mistral-large-latest";
 
-  return { baseUrl: baseUrl.replace(/\/$/, ""), apiKey, model };
+  return { baseUrl, apiKey, model };
 }
 
 // ─── Core call ────────────────────────────────────────────────────────────────

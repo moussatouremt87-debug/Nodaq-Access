@@ -12,10 +12,6 @@ export default defineConfig({
     pool: "forks",
     singleFork: true,
 
-    // Global setup: injects fake LITELLM env vars + patches fetch so
-    // chatCompletion() succeeds without a real LiteLLM server.
-    setupFiles: ["src/__tests__/vitest.setup.ts"],
-
     include: ["src/__tests__/**/*.test.ts"],
     reporters: ["verbose"],
   },

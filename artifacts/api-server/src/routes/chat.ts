@@ -68,7 +68,7 @@ router.post("/chat/messages", async (req, res): Promise<void> => {
       const missingVar = err.missingVar;
       req.log?.warn({ missingVar }, "LLM config missing");
       res.status(503).json({
-        error: "Agent non configuré",
+        error: `${missingVar} is not configured — agent unavailable`,
         detail: `La variable d'environnement "${missingVar}" est absente.`,
       });
       return;

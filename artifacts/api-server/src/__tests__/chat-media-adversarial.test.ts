@@ -455,16 +455,34 @@ describe("Upload history isolation — document content never persisted to chat 
     }
     expect(historyBefore.filter((m) => m.role === "user")).toHaveLength(0);
 
-    // Step 2: mock Mistral to assert the model context is clean
-    const { Mistral } = await import("@mistralai/mistralai");
-    const chatSpy = vi.spyOn(Mistral.prototype as any, "chat", "get").mockReturnValue({
-      complete: vi.fn().mockImplementation(async (params: any) => {
-        // Check only user-role messages for injection content.
-        // The system prompt legitimately contains "[DOC_DATA_START/END]" as
-        // part of its security-marker instructions — that is NOT a leak.
-        const userMessages: string[] = (params.messages ?? [])
-          .filter((m: any) => m.role === "user")
-          .map((m: any) =>
+    // Step 2: intercept fetch calls to the LLM endpoint to assert the model
+    // context is clean (no injection content in user-role messages).
+    // The SDK has been replaced by a plain-fetch client, so we override
+    // globalThis.fetch rather than the old Mistral prototype.
+    const originalFetch = globalThis.fetch;
+
+    const interceptFetch = async (
+      input: string | URL | Request,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.href
+            : (input as Request).url;
+
+      // Intercept chat/completions calls only
+      if (url.includes("/chat/completions")) {
+        const body = init?.body
+          ? (JSON.parse(init.body as string) as { messages?: Array<{ role: string; content: unknown }> })
+          : {};
+
+        // Check only user-role messages — system prompt legitimately contains
+        // "[DOC_DATA_START/END]" as security-marker instructions; not a leak.
+        const userMessages: string[] = (body.messages ?? [])
+          .filter((m) => m.role === "user")
+          .map((m) =>
             typeof m.content === "string" ? m.content : JSON.stringify(m.content ?? ""),
           );
         const injectionLeak = userMessages.find((c) => c.includes("INJECT_ADV"));
@@ -473,17 +491,27 @@ describe("Upload history isolation — document content never persisted to chat 
             `SECURITY FAILURE: injection leaked into user context: ${injectionLeak.slice(0, 200)}`,
           );
         }
-        return {
+
+        // Return a benign text-only completion (no tool calls → agent exits cleanly)
+        const benignBody = JSON.stringify({
+          id: "chatcmpl-adv-test",
+          object: "chat.completion",
+          model: "mistral-large-latest",
           choices: [{
-            message: {
-              role: "assistant",
-              content: "Bonjour ! Comment puis-je vous aider ?",
-              toolCalls: null,
-            },
+            index: 0,
+            message: { role: "assistant", content: "Bonjour ! Comment puis-je vous aider ?", tool_calls: null },
+            finish_reason: "stop",
           }],
-        };
-      }),
-    });
+          usage: { prompt_tokens: 12, completion_tokens: 10, total_tokens: 22 },
+        });
+        return new Response(benignBody, { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+
+      // All other fetch calls (e.g. vision endpoint) pass through
+      return originalFetch(input as Parameters<typeof originalFetch>[0], init);
+    };
+
+    globalThis.fetch = interceptFetch as typeof fetch;
 
     try {
       // Step 3: send an innocuous follow-up in the same conversation
@@ -492,7 +520,7 @@ describe("Upload history isolation — document content never persisted to chat 
         .set("Cookie", sessionCookie)
         .send({ content: "Bonjour", conversationId: convId });
 
-      // Mock returns text (no tool calls) → 200
+      // Fetch spy returns text (no tool calls) → 200
       expect(chatRes.status).toBe(200);
 
       // No injection-derived prospect created
@@ -501,7 +529,8 @@ describe("Upload history isolation — document content never persisted to chat 
       );
       expect(injected).toHaveLength(0);
     } finally {
-      chatSpy.mockRestore();
+      globalThis.fetch = originalFetch;
     }
   });
 });
+
