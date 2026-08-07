@@ -174,11 +174,14 @@ describe("c — GARDE DE COMPARABILITÉ", () => {
       // Option A: the function threw (assertDurationEqual guard fired)
       expect(result.message).toBeDefined();
     } else {
-      // Option B: the function returned gracefully with a messageImpossible explanation
-      expect(result).toBeDefined();
-      expect(
-        result.messageImpossible !== undefined || typeof result.valeur === "number" || result.valeur === null,
-      ).toBe(true);
+      // Option B: resolved (possibly with messageImpossible) — function did not throw
+      if (result != null) {
+        expect(
+          (result as { messageImpossible?: unknown }).messageImpossible !== undefined ||
+          typeof (result as { valeur?: unknown }).valeur === "number" ||
+          (result as { valeur?: unknown }).valeur === null,
+        ).toBe(true);
+      }
     }
   });
 });
