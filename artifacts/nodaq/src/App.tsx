@@ -11,6 +11,7 @@ import Affaires from '@/pages/affaires';
 import AffaireDetail from '@/pages/affaire-detail';
 import Contrats from '@/pages/contrats';
 import Factures from '@/pages/factures';
+import Avoirs from '@/pages/avoirs';
 import Prospects from '@/pages/prospects';
 import Brief from '@/pages/brief';
 import Chat from '@/pages/chat';
@@ -28,6 +29,7 @@ import Onboarding from '@/pages/onboarding';
 import Reprise from '@/pages/reprise';
 import Login from '@/pages/login';
 import Register from '@/pages/register';
+import DevisAccepter from '@/pages/devis-accepter';
 import { useAuth } from '@/hooks/use-auth';
 
 /** HOC: redirects to /login if not authenticated */
@@ -119,6 +121,7 @@ function AppRouter() {
               {/* Public routes — no auth required */}
               <Route path="/login" component={Login} />
               <Route path="/register" component={Register} />
+              <Route path="/devis/accepter/:token" component={DevisAccepter} />
 
               {/* All business routes require authentication */}
               <Route path="/" component={PlatformRoute(Cockpit)} />
@@ -126,6 +129,7 @@ function AppRouter() {
               <Route path="/affaires" component={PlatformRoute(Affaires)} />
               <Route path="/contrats" component={PlatformRoute(Contrats)} />
               <Route path="/factures" component={PlatformRoute(Factures)} />
+              <Route path="/avoirs" component={PlatformRoute(Avoirs)} />
               <Route path="/prospects" component={PlatformRoute(Prospects)} />
               <Route path="/brief" component={PlatformRoute(Brief)} />
               <Route path="/chat" component={PlatformRoute(Chat)} />

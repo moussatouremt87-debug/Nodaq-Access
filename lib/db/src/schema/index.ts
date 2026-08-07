@@ -8,6 +8,8 @@ export * from "./sessions";
 export * from "./affaires";
 export * from "./contrats";
 export * from "./factures";
+export * from "./facture_sequences";
+export * from "./avoirs";
 export * from "./prospects";
 export * from "./pending_actions";
 export * from "./chat";

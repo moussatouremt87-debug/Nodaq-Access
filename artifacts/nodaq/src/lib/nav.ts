@@ -57,6 +57,7 @@ export const NAV_SECTIONS: NavSection[] = [
     label: 'Finance',
     items: [
       { href: '/factures',   label: 'Factures',         icon: Receipt,       testId: 'nav-factures' },
+      { href: '/avoirs',     label: 'Avoirs',           icon: FileText,      testId: 'nav-avoirs' },
       { href: '/marge',      label: 'Marge',            icon: TrendingUp,    testId: 'nav-marge' },
       { href: '/rapports',   label: 'Rapports',         icon: FileBarChart,  testId: 'nav-rapports' },
       { href: '/echeancier',      label: 'Échéancier fiscal',   icon: CalendarClock,   testId: 'nav-echeancier' },

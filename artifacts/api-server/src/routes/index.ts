@@ -5,6 +5,7 @@ import cockpitRouter from "./cockpit";
 import affairesRouter from "./affaires";
 import contratsRouter from "./contrats";
 import facturesRouter from "./factures";
+import avoirsRouter from "./avoirs";
 import prospectsRouter from "./prospects";
 import briefRouter from "./brief";
 import pendingActionsRouter from "./pending_actions";
@@ -21,25 +22,22 @@ import connecteursRouter from "./connecteurs";
 import parametresRouter from "./parametres";
 import votreMetierRouter from "./votre-metier";
 import entreprisesRouter from "./entreprises";
+import publicRouter from "./public";
 import { onboardingReadRouter, onboardingWriteRouter } from "./onboarding";
 
 import { requireAuth } from "../middleware/requireAuth";
 import { resolveTenant } from "../middleware/resolveTenant";
 import { requireMembership } from "../middleware/requireMembership";
 import { requireRole } from "../middleware/requireRole";
-import { withTenant, facturesTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
 
 const router: IRouter = Router();
 
 // ── Public (no auth) ──────────────────────────────────────────────────────
 router.use(healthRouter);
 router.use(authRouter);
+router.use(publicRouter);   // /public/devis/:token/accept-page, /public/devis/:token/accept
 
 // ── Auth middleware chain applied to all business routes ──────────────────
-// requireAuth       — validates session cookie in DB, attaches req.session
-// resolveTenant     — copies session.tenantId → req.tenantId
-// requireMembership — re-validates membership from DB, refreshes req.session.role
 const biz: RequestHandler[] = [requireAuth, resolveTenant, requireMembership];
 const ownerOnly: RequestHandler[] = [...biz, requireRole(["OWNER"])];
 
@@ -58,31 +56,16 @@ router.use(biz, margeRouter);
 router.use(biz, rapportsRouter);
 router.use(biz, compteResultatRouter);
 router.use(biz, facturesRouter);
+router.use(biz, avoirsRouter);
 router.use(biz, prospectsRouter);
 router.use(biz, votreMetierRouter);
-router.use(biz, onboardingReadRouter);     // GET /onboarding/profil, GET /reprise/blocs (tous membres peuvent lire)
+router.use(biz, onboardingReadRouter);
 
 // ── OWNER-only routes ─────────────────────────────────────────────────────
-router.use(ownerOnly, equipeRouter);       // team member management
-router.use(ownerOnly, connecteursRouter);  // external service connections
-router.use(ownerOnly, parametresRouter);   // global workspace settings
-router.use(ownerOnly, entreprisesRouter);  // recherche SIRET (onboarding OWNER)
-router.use(ownerOnly, onboardingWriteRouter); // écrits profil + reprise (OWNER only)
-
-// ── DELETE /factures/:id — OWNER-only destructive operation ───────────────
-router.delete(
-  "/factures/:id",
-  ...ownerOnly,
-  async (req, res): Promise<void> => {
-    const id = req.params["id"] as string;
-    if (!id) { res.status(400).json({ error: "id required" }); return; }
-    const tenantId = req.tenantId!;
-    const [deleted] = await withTenant(tenantId, async (tx) =>
-      tx.delete(facturesTable).where(eq(facturesTable.id, id)).returning()
-    );
-    if (!deleted) { res.status(404).json({ error: "Facture not found" }); return; }
-    res.status(204).send();
-  },
-);
+router.use(ownerOnly, equipeRouter);
+router.use(ownerOnly, connecteursRouter);
+router.use(ownerOnly, parametresRouter);
+router.use(ownerOnly, entreprisesRouter);
+router.use(ownerOnly, onboardingWriteRouter);
 
 export default router;

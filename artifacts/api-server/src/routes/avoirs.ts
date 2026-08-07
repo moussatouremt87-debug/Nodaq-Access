@@ -1,0 +1,313 @@
+/**
+ * Avoirs (credit notes) — document distinct lié à une facture EMISE.
+ * Séquence propre AVOIR-YYYY-NNNN.
+ *
+ * Atomicity guarantees:
+ *   TX1 — conditional UPDATE on the invoice row (Drizzle query builder, respects RLS):
+ *     a) validates statut = EMISE and residualCents >= avoirTTC atomically;
+ *     b) decrements residualCents;
+ *     c) assigns the avoir sequence number (SELECT FOR UPDATE on facture_sequences);
+ *     d) sets ANNULEE_PAR_AVOIR + avoirId if residual reaches 0.
+ *   PDF generation happens outside TX1 (slow I/O).
+ *   TX2 — avoir insert + activity log.  On failure: compensating UPDATE restores invoice.
+ *
+ * Because the residual guard is embedded in the TX1 UPDATE WHERE clause, concurrent
+ * requests that collectively would exceed the residual are serialized by PostgreSQL's
+ * implicit row lock: the second UPDATE finds residual already decremented and 0 rows.
+ */
+import { Router, type IRouter } from "express";
+import { withTenant, facturesTable, activityTable, avoirsTable, settingsTable } from "@workspace/db";
+import { and, eq, sql } from "drizzle-orm";
+import { z } from "zod";
+import {
+  generateAndStorePdf,
+  buildFacturxInvoice,
+  readArchivedPdf,
+  deleteArchivedPdf,
+  type FactureForPdf,
+  type FactureLine,
+  type SellerInfo,
+} from "../lib/pdf-generation.js";
+
+const router: IRouter = Router();
+
+const CreateAvoirBody = z.object({
+  factureRefId: z.string().min(1, "ID de la facture obligatoire"),
+  montantHtCents: z.number().int().positive("Le montant HT de l'avoir doit être positif"),
+  montantTvaCents: z.number().int().nonnegative().default(0),
+  motif: z.string().min(1, "Le motif de l'avoir est obligatoire"),
+});
+
+async function loadSellerInfo(tenantId: string): Promise<SellerInfo> {
+  const rows = await withTenant(tenantId, async tx =>
+    tx.select().from(settingsTable).where(
+      sql`${settingsTable.tenantId} = ${tenantId}::uuid`,
+    ),
+  );
+  const byKey = Object.fromEntries(rows.map(r => [r.key, r.value]));
+  return {
+    nom: (byKey["company.nom"] as string) ?? "Entreprise",
+    formeJuridique: byKey["company.forme_juridique"] as string | undefined,
+    siret: (byKey["company.siret"] as string) ?? "",
+    tvaIntracom: byKey["company.tva_intracom"] as string | undefined,
+    adresse: byKey["company.adresse_rue"] as string | undefined,
+    codePostal: byKey["company.adresse_cp"] as string | undefined,
+    ville: byKey["company.adresse_ville"] as string | undefined,
+  };
+}
+
+/** Assign the next avoir sequence number within an existing transaction. */
+async function assignAvoirNumero(
+  tx: Parameters<Parameters<typeof withTenant>[1]>[0],
+  tenantId: string,
+  year: number,
+): Promise<string> {
+  // Avoirs use a negative year key so they share the sequences table without
+  // colliding with FACT numbers (which use positive years).
+  const avoirYear = -year;
+  await tx.execute(
+    sql`INSERT INTO facture_sequences (tenant_id, year, seq)
+        VALUES (${tenantId}::uuid, ${avoirYear}, 0)
+        ON CONFLICT (tenant_id, year) DO NOTHING`,
+  );
+  const res = await tx.execute(
+    sql`SELECT seq FROM facture_sequences
+        WHERE tenant_id = ${tenantId}::uuid AND year = ${avoirYear}
+        FOR UPDATE`,
+  );
+  const rows = (res as unknown as { rows: Array<{ seq: number }> }).rows;
+  const newSeq = (rows[0]?.seq ?? 0) + 1;
+  await tx.execute(
+    sql`UPDATE facture_sequences SET seq = ${newSeq}
+        WHERE tenant_id = ${tenantId}::uuid AND year = ${avoirYear}`,
+  );
+  return `AVOIR-${year}-${String(newSeq).padStart(4, "0")}`;
+}
+
+router.get("/avoirs", async (req, res): Promise<void> => {
+  const tenantId = req.tenantId!;
+  const avoirs = await withTenant(tenantId, tx =>
+    tx.select().from(avoirsTable).orderBy(avoirsTable.createdAt),
+  );
+  res.json({ avoirs, total: avoirs.length });
+});
+
+router.get("/avoirs/:id", async (req, res): Promise<void> => {
+  const tenantId = req.tenantId!;
+  const [avoir] = await withTenant(tenantId, tx =>
+    tx.select().from(avoirsTable).where(eq(avoirsTable.id, req.params["id"] as string)),
+  );
+  if (!avoir) { res.status(404).json({ error: "Avoir introuvable" }); return; }
+  res.json(avoir);
+});
+
+router.post("/avoirs", async (req, res): Promise<void> => {
+  const tenantId = req.tenantId!;
+  const parsed = CreateAvoirBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const d = parsed.data;
+  const avoirTTC = d.montantHtCents + d.montantTvaCents;
+
+  const seller = await loadSellerInfo(tenantId);
+  const issuedDate = new Date().toISOString().slice(0, 10);
+  const year = new Date(issuedDate).getFullYear();
+  const avoirId = crypto.randomUUID();
+
+  // TX1 — Atomic claim of the invoice residual + sequence assignment.
+  //
+  // The core guard is the Drizzle UPDATE with `WHERE residualCents >= avoirTTC`.
+  // PostgreSQL's implicit row lock on UPDATE means concurrent requests are serialized:
+  //   Request A: UPDATE WHERE residual >= X → succeeds, commits residual = old - X
+  //   Request B: UPDATE WHERE residual >= X → finds residual = old - X (< X), 0 rows
+  //
+  // We pre-read the invoice ONLY to build helpful error messages when the UPDATE returns
+  // 0 rows — the UPDATE itself is the authoritative validation gate.
+  type TX1Result =
+    | { kind: "not_found" }
+    | { kind: "not_emise"; statut: string }
+    | { kind: "already_covered" }
+    | { kind: "insufficient_residual"; residual: number }
+    | { kind: "ok"; numero: string; oldResidual: number; newResidual: number; isFullCancellation: boolean; facture: typeof facturesTable.$inferSelect };
+
+  let tx1: TX1Result;
+  try {
+    tx1 = await withTenant(tenantId, async tx => {
+      // Pre-read for error diagnostics (not the validation gate).
+      const [facture] = await tx.select().from(facturesTable)
+        .where(eq(facturesTable.id, d.factureRefId));
+      if (!facture) return { kind: "not_found" as const };
+      if (facture.statut !== "EMISE") return { kind: "not_emise" as const, statut: facture.statut };
+
+      const residualCents = facture.residualCents ?? facture.amountCents;
+      if (residualCents <= 0) return { kind: "already_covered" as const };
+      if (avoirTTC > residualCents) {
+        return { kind: "insufficient_residual" as const, residual: residualCents };
+      }
+
+      const newResidual = residualCents - avoirTTC;
+      const isFullCancellation = newResidual <= 0;
+
+      // Atomic conditional decrement — the WHERE clause is the concurrent guard.
+      // `sql` template in .set() lets us compute residual_cents - X server-side.
+      const [claimed] = await tx.update(facturesTable)
+        .set({
+          residualCents: sql<number>`GREATEST(0, COALESCE(residual_cents, amount_cents) - ${avoirTTC})`,
+        })
+        .where(and(
+          eq(facturesTable.id, d.factureRefId),
+          eq(facturesTable.statut, "EMISE"),
+          sql`COALESCE(residual_cents, amount_cents) >= ${avoirTTC}`,
+        ))
+        .returning({ id: facturesTable.id });
+
+      if (!claimed) {
+        // A concurrent request must have reduced the residual between our SELECT and
+        // this UPDATE. Re-read to give an accurate remaining-residual in the error.
+        const [cur] = await tx.select({ residualCents: facturesTable.residualCents, amountCents: facturesTable.amountCents })
+          .from(facturesTable).where(eq(facturesTable.id, d.factureRefId));
+        const remaining = cur ? (cur.residualCents ?? cur.amountCents) : 0;
+        return { kind: "insufficient_residual" as const, residual: remaining };
+      }
+
+      // If this is a full cancellation, mark the invoice accordingly.
+      if (isFullCancellation) {
+        await tx.update(facturesTable)
+          .set({ statut: "ANNULEE_PAR_AVOIR", avoirId })
+          .where(eq(facturesTable.id, d.factureRefId));
+      }
+
+      // Assign avoir sequence number atomically in the same transaction.
+      const num = await assignAvoirNumero(tx, tenantId, year);
+
+      return {
+        kind: "ok" as const,
+        numero: num,
+        oldResidual: residualCents,
+        newResidual,
+        isFullCancellation,
+        facture,
+      };
+    });
+  } catch (err) {
+    console.error("[avoirs] TX1 error:", err);
+    res.status(500).json({ error: "Erreur interne lors de la création de l'avoir. Réessayez." });
+    return;
+  }
+
+  if (tx1.kind === "not_found") { res.status(404).json({ error: "Facture référencée introuvable" }); return; }
+  if (tx1.kind === "not_emise") {
+    res.status(422).json({ error: `L'avoir ne peut référencer qu'une facture EMISE (statut actuel : ${tx1.statut}).` }); return;
+  }
+  if (tx1.kind === "already_covered") {
+    res.status(409).json({ error: "Cette facture est intégralement couverte par des avoirs. Aucun avoir supplémentaire possible." }); return;
+  }
+  if (tx1.kind === "insufficient_residual") {
+    res.status(422).json({
+      error: `Montant de l'avoir TTC (${(avoirTTC / 100).toFixed(2)} €) dépasse le solde résiduel (${(tx1.residual / 100).toFixed(2)} €).`,
+    }); return;
+  }
+
+  const { numero, oldResidual, isFullCancellation, facture } = tx1;
+
+  // Generate PDF with the real numero. Facture is claimed in DB — undo on failure.
+  const lines: FactureLine[] = [{
+    id: crypto.randomUUID(),
+    description: `Avoir sur facture ${facture.number} — ${d.motif}`,
+    quantity: 1,
+    unitPriceCents: d.montantHtCents,
+    vatRate: d.montantTvaCents > 0 ? Math.round((d.montantTvaCents / d.montantHtCents) * 100) : 0,
+    vatCategory: d.montantTvaCents > 0 ? "S" : "Z",
+  }];
+
+  const pdfData: FactureForPdf = {
+    numero,
+    type: "AVOIR",
+    issuedDate,
+    seller,
+    clientName: facture.customerName,
+    clientAddress: facture.clientAddress ?? undefined,
+    lines,
+    autoliquidation: false,
+    factureRefNumero: facture.number,
+  };
+
+  /** Compensate TX1 by restoring the invoice to its previous state. */
+  async function compensateTx1(): Promise<void> {
+    try {
+      await withTenant(tenantId, tx =>
+        tx.update(facturesTable)
+          .set({ residualCents: oldResidual, avoirId: null, statut: "EMISE" })
+          .where(eq(facturesTable.id, d.factureRefId)),
+      );
+    } catch (e) {
+      console.error("[avoirs] compensation failed — manual review required for invoice", d.factureRefId, e);
+    }
+  }
+
+  let pdfPath: string;
+  let pdfSha256: string;
+  try {
+    const facturxInvoice = buildFacturxInvoice(pdfData, numero);
+    const result = await generateAndStorePdf(pdfData, facturxInvoice, avoirId, "avoirs");
+    pdfPath = result.path;
+    pdfSha256 = result.sha256;
+  } catch (err) {
+    console.error("[avoirs] PDF generation error — compensating TX1:", err);
+    await compensateTx1();
+    res.status(500).json({ error: "Génération du PDF impossible. L'avoir n'a pas été créé." });
+    return;
+  }
+
+  // TX2 — Insert avoir record + activity log.
+  try {
+    const avoir = await withTenant(tenantId, async tx => {
+      const [created] = await tx.insert(avoirsTable).values({
+        id: avoirId,
+        tenantId,
+        numero,
+        factureRefId: d.factureRefId,
+        montantHtCents: d.montantHtCents,
+        montantTvaCents: d.montantTvaCents,
+        motif: d.motif,
+        pdfPath,
+        pdfSha256,
+      }).returning();
+
+      await tx.insert(activityTable).values({
+        tenantId,
+        type: "avoir_emis",
+        label: `Avoir émis : ${numero} (${isFullCancellation ? "annulation" : "correction partielle"} de ${facture.number})`,
+        meta: facture.customerName,
+      });
+
+      return created;
+    });
+
+    res.status(201).json(avoir);
+  } catch (err) {
+    console.error("[avoirs] TX2 insert error — compensating:", err);
+    deleteArchivedPdf(pdfPath);
+    await compensateTx1();
+    res.status(500).json({ error: "Erreur lors de l'enregistrement de l'avoir. Réessayez." });
+  }
+});
+
+router.get("/avoirs/:id/pdf", async (req, res): Promise<void> => {
+  const tenantId = req.tenantId!;
+  const [avoir] = await withTenant(tenantId, tx =>
+    tx.select().from(avoirsTable).where(eq(avoirsTable.id, req.params["id"] as string)),
+  );
+  if (!avoir) { res.status(404).json({ error: "Avoir introuvable" }); return; }
+  if (!avoir.pdfPath) { res.status(404).json({ error: "PDF non disponible" }); return; }
+
+  const bytes = readArchivedPdf(avoir.pdfPath);
+  if (!bytes) { res.status(404).json({ error: "Fichier PDF introuvable" }); return; }
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `inline; filename="${avoir.numero}.pdf"`);
+  res.setHeader("X-Pdf-Sha256", avoir.pdfSha256 ?? "");
+  res.setHeader("Cache-Control", "private, max-age=31536000, immutable");
+  res.send(bytes);
+});
+
+export default router;

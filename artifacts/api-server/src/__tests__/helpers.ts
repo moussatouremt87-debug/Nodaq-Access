@@ -112,7 +112,8 @@ export async function createTestTeamMember(
 
 const BUSINESS_TABLES = [
   "absences", "activity", "affaires", "chat_messages", "classeur_documents",
-  "connectors", "contrats", "cr_entries", "devis", "echeances", "factures",
+  "connectors", "contrats", "cr_entries", "devis", "echeances",
+  "avoirs", "facture_sequences", "factures",
   "pending_actions", "prospects", "settings", "team_members",
 ];
 
