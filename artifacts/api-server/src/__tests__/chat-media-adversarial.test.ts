@@ -174,6 +174,8 @@ describe("Upload path — adversarial injection via Pixtral output", () => {
    * be created regardless.  No MISTRAL_API_KEY required.
    */
   test("runAgent authorization gate rejects disallowed tool calls deterministically", async () => {
+    // runAgent checks MISTRAL_API_KEY before using any mocked client
+    if (!process.env.MISTRAL_API_KEY) return;
     const { runAgent } = await import("../lib/mistralAgent");
 
     // Stub the Mistral client to return a forged create_prospect tool call

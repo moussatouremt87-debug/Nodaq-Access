@@ -68,16 +68,17 @@ router.post(
   "/chat/upload",
   uploadImage.single("image"),
   async (req, res): Promise<void> => {
+    // Validate request first (400) before checking LLM config (503)
+    if (!req.file) {
+      res.status(400).json({ error: "Aucun fichier image reçu (champ 'image' attendu)." });
+      return;
+    }
+
     if (!process.env.MISTRAL_API_KEY) {
       res.status(503).json({
         error: "Agent non configuré",
         detail: "MISTRAL_API_KEY manquante.",
       });
-      return;
-    }
-
-    if (!req.file) {
-      res.status(400).json({ error: "Aucun fichier image reçu (champ 'image' attendu)." });
       return;
     }
 
