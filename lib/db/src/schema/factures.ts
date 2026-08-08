@@ -1,19 +1,71 @@
-import { pgTable, text, timestamp, real, boolean, uuid } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, real, boolean, uuid, integer, json } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { tenantsTable } from "./tenants";
 
+export type FactureAddress = {
+  street?: string;
+  postalCode?: string;
+  city?: string;
+  country?: string;
+};
+
+export type FactureLine = {
+  id: string;
+  description: string;
+  quantity: number;
+  unitPriceCents: number;
+  /** TVA rate in % — 20 | 10 | 5.5 | 2.1 | 0 */
+  vatRate: number;
+  /** UNTDID 5305 VAT category */
+  vatCategory: "S" | "Z" | "E" | "AE";
+  unit?: string;
+};
+
+/** Statut de la facture — une facture EMISE est immuable. */
+export type FactureStatut = "BROUILLON" | "EMISE" | "PAYEE" | "ANNULEE_PAR_AVOIR";
+
 export const facturesTable = pgTable("factures", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   tenantId: uuid("tenant_id").notNull().references(() => tenantsTable.id),
+
+  // ── Legacy columns (kept for backward compat) ─────────────────────────
   customerName: text("customer_name").notNull(),
+  /** Sequential invoice number, set at emission: FACT-YYYY-NNNN. Null = brouillon. */
   number: text("number").notNull(),
   issuedDate: text("issued_date").notNull(),
   dueDate: text("due_date").notNull(),
+  /** Total TTC in (real) cents — kept for backward compat. */
   amountCents: real("amount_cents").notNull(),
   residualCents: real("residual_cents"),
+  /** Kept for backward compat; PAYEE statut is authoritative. */
   settled: boolean("settled").notNull().default(false),
   affaireId: text("affaire_id"),
+
+  // ── New columns ────────────────────────────────────────────────────────
+  /** Authoritative status. Immutability: EMISE → never PATCH/DELETE. */
+  statut: text("statut").notNull().default("BROUILLON"),
+  /** Detailed lines with TVA per line */
+  lines: json("lines").$type<FactureLine[]>().notNull().default([]),
+  /** Total HT in integer cents (computed from lines) */
+  totalHTCents: integer("total_ht_cents").notNull().default(0),
+  /** Total TVA in integer cents */
+  totalTVACents: integer("total_tva_cents").notNull().default(0),
+  /** Client billing address */
+  clientAddress: json("client_address").$type<FactureAddress>(),
+  /** Work-site address */
+  chantierAddress: json("chantier_address").$type<FactureAddress>(),
+  /** Reverse-charge VAT (autoliquidation — art. 283-2 nonies CGI) */
+  autoliquidation: boolean("autoliquidation").notNull().default(false),
+  /** Signed attestation TVA réduite provided by client (required for reduced-rate lines) */
+  attestationTvaFournie: boolean("attestation_tva_fournie").notNull().default(false),
+  /** Path to the archived PDF file (relative to STORAGE_DIR) */
+  pdfPath: text("pdf_path"),
+  /** SHA-256 hex of the archived PDF */
+  pdfSha256: text("pdf_sha256"),
+  /** ID of the avoir that cancelled this facture */
+  avoirId: text("avoir_id"),
+
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

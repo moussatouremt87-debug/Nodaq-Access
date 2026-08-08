@@ -3,14 +3,13 @@
   "compileOnSave": false,
   "files": [],
   "references": [
-    {
-      "path": "./lib/db"
-    },
-    {
-      "path": "./lib/api-client-react"
-    },
-    {
-      "path": "./lib/api-zod"
-    }
+    { "path": "./lib/db" },
+    { "path": "./lib/api-client-react" },
+    { "path": "./lib/api-zod" },
+    { "path": "./lib/shared" },
+    { "path": "./lib/classifier" },
+    { "path": "./lib/llm" },
+    { "path": "./lib/facturx" }
   ]
 }
+

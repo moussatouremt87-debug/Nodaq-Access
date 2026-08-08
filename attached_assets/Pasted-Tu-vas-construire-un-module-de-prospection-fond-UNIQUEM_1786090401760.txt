@@ -1,0 +1,133 @@
+Tu vas construire un module de prospection fondé UNIQUEMENT sur des données publiques
+ouvertes. Lis d'abord l'encadré légal : il détermine l'architecture, ce n'est pas un
+avertissement décoratif.
+
+CADRE LÉGAL — NON NÉGOCIABLE
+- Depuis le 11 août 2026, le démarchage TÉLÉPHONIQUE d'un consommateur exige un
+  CONSENTEMENT PRÉALABLE. Bloctel a disparu. Sanctions jusqu'à 75 000 € par appel pour
+  une personne physique, 375 000 € pour une société.
+- Le courriel et le SMS vers un particulier exigent déjà le consentement préalable
+  (art. L. 34-5 CPCE).
+- La CNIL a sanctionné SOLOCAL MARKETING SERVICES de 900 000 € le 15 mai 2025 pour avoir
+  démarché à partir de fichiers achetés à des courtiers en données.
+- C'est L'UTILISATEUR de notre logiciel qui prend l'amende, pas nous. Le produit ne doit
+  jamais lui rendre une action illégale possible.
+
+DONC, INTERDICTIONS ABSOLUES
+- Aucune donnée achetée à un courtier en données.
+- Aucune donnée de navigation, de recherche ou de traceur.
+- Aucun profilage, aucun score de « probabilité d'achat » sur une personne physique.
+- Aucune action courriel, SMS ou téléphone proposée vers un particulier.
+
+Mêmes règles de dépôt que précédemment (withTenant, tenantId de session, Zod, les trois
+listes, pas de secret affiché). 5 phases, arrêt et validation à chaque fin de phase.
+
+═══════════════════════════════════════════
+PHASE 1 — Sources publiques, en liste blanche
+═══════════════════════════════════════════
+
+1) Crée un registre de sources en LISTE BLANCHE, dans un fichier de données dédié.
+   Une source non listée ne peut pas être consommée. Un test échoue si du code
+   interroge une source absente du registre.
+
+2) Première source : les PERMIS DE CONSTRUIRE (base Sitadel, open data).
+   Pars de la page data.gouv.fr du jeu « Base des permis de construire et autres
+   autorisations d'urbanisme » et évalue les réutilisations disponibles (il existe des
+   API géocodées). MONTRE-MOI ce que tu as trouvé et ce que tu proposes d'utiliser AVANT
+   d'écrire du code d'ingestion.
+   Si aucune source n'est fiable ou stable, ARRÊTE-TOI ET DIS-LE — ne bricole pas un
+   moissonnage de page web.
+
+3) Ingestion : import périodique, géocodage, stockage dans une table de pistes avec
+   tenant_id, et TOUJOURS la source et la date d'obtention sur chaque ligne.
+   Les pistes ne sont pas des données personnelles enrichies : on stocke le fait public
+   (permis, adresse, nature des travaux, date), pas un profil.
+
+4) Sources suivantes, une par une, dans cet ordre : marchés publics (BOAMP, filtrage par
+   code CPV, rayon, montant) · mutations immobilières · créations d'entreprises (Sirene).
+
+═══════════════════════════════════════════
+PHASE 2 — L'écran « chantiers qui se préparent »
+═══════════════════════════════════════════
+
+5) Vue par rayon autour de l'adresse de l'entreprise, réglable. Regroupement par nature
+   de travaux. Formulation attendue, en euros, en dates et en phrases :
+
+   « 14 permis accordés dans un rayon de 20 km ces 60 jours.
+     4 maisons neuves · 6 extensions · 4 changements de destination.
+     Sur une maison neuve, la plomberie intervient en général 4 à 7 mois après le permis.
+     Les 4 maisons neuves de mai vous concernent en octobre. »
+
+6) Les délais « métier → mois après permis » sont des DONNÉES rattachées au pack métier,
+   dans un fichier de configuration. INTERDIT : un `if` sur un nom de verticale ailleurs
+   que dans le chargeur de packs.
+
+7) Chaque piste affiche SA SOURCE ET SA DATE. C'est une exigence de transparence et ça
+   permet à l'artisan de juger.
+
+═══════════════════════════════════════════
+PHASE 3 — Le verrouillage des canaux (le cœur du ticket)
+═══════════════════════════════════════════
+
+8) Chaque piste porte un type de destinataire : PARTICULIER ou PROFESSIONNEL.
+   Sur un permis, le maître d'ouvrage peut être un particulier, mais l'architecte, le
+   maître d'œuvre ou le promoteur sont des PROFESSIONNELS.
+
+9) Matrice des canaux, appliquée AU NIVEAU DE L'API, pas seulement dans l'interface :
+
+   PARTICULIER    : courrier postal OUI · dépôt/porte-à-porte OUI ·
+                    courriel NON · SMS NON · téléphone NON
+   PROFESSIONNEL  : courrier OUI · courriel OUI (intérêt légitime, adresse pro, objet lié
+                    à la fonction) · téléphone encadré
+
+10) Dans l'interface, les canaux interdits sont DÉSACTIVÉS avec la raison affichée.
+    Pas un avertissement en petits caractères : un bouton qu'on ne peut pas cliquer.
+    Exemple : « Envoi d'e-mail indisponible : ce contact est un particulier et n'a pas
+    donné son accord. Vous pouvez lui écrire par courrier. »
+
+═══════════════════════════════════════════
+PHASE 4 — Ce qui rend le module utile
+═══════════════════════════════════════════
+
+11) GÉNÉRATION DU COURRIER POSTAL : à partir d'une piste, un courrier prêt à imprimer,
+    avec l'identité de l'entreprise, une trame modifiable, et l'adresse. C'est le canal
+    qui reste, et il fonctionne bien en local.
+
+12) DEMANDE D'AVIS À LA CLÔTURE — la brique la plus rentable du ticket, à livrer même si
+    le reste glisse. Quand une affaire est clôturée ET sa facture réglée, proposer
+    l'envoi d'une demande d'avis au client. Un lien, un clic pour lui.
+    C'est légal : relation client existante. C'est ce qui fait remonter l'entreprise dans
+    les résultats locaux, bien plus que le référencement d'un site.
+
+13) « D'OÙ VIENNENT VOS CLIENTS » : une question posée UNE FOIS à la création d'une
+    affaire, liste fermée (bouche-à-oreille, passage, recommandation d'un confrère,
+    recherche internet, réseaux sociaux, ancien client, autre), un seul appui, sautable.
+    Restitution en euros par origine, à partir de 10 affaires renseignées.
+
+═══════════════════════════════════════════
+PHASE 5 — Garde-fous et tests
+═══════════════════════════════════════════
+
+14) a) LISTE BLANCHE — test qui échoue si une source hors registre est interrogée.
+    b) CANAUX — test qui échoue si une piste PARTICULIER expose une action courriel,
+       SMS ou téléphone, y compris via une requête forgée directement sur l'API.
+    c) PAS DE PROFILAGE — aucune route ne renvoie de score attribué à une personne
+       physique.
+    d) SOURCE ET DATE — présentes sur 100 % des pistes.
+    e) RIEN SUR LES AUTRES TENANTS — deux entreprises peuvent voir le même permis, c'est
+       public et c'est normal. Mais AUCUN écran, AUCUNE API ne doit indiquer que d'autres
+       entreprises ont vu ou contacté cette piste : ce serait révéler l'activité d'autres
+       clients. Test dédié.
+    f) ISOLATION — les pistes et leur statut de traitement sont cloisonnés par tenant.
+
+15) Mets à jour le registre des traitements : nouvelle finalité, sources publiques
+    utilisées, base légale intérêt légitime pour le volet professionnel, durée de
+    conservation 3 ans.
+
+CE QUE TU NE DOIS PAS FAIRE
+- N'achète, n'intègre et ne suggère AUCUN fournisseur de données de navigation ou
+  d'intention de recherche.
+- Ne propose jamais un appel ou un e-mail vers un particulier.
+- N'attribue aucun score de probabilité à une personne physique.
+- Ne moissonne aucune page web pour contourner l'absence d'API : arrête-toi et dis-le.
+- Ne montre jamais l'activité d'un autre tenant sur une piste partagée.

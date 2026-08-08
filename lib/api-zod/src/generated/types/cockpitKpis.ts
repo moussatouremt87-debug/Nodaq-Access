@@ -5,6 +5,7 @@
  * NODAQ API — AI-powered business management for French SMEs
  * OpenAPI spec version: 0.1.0
  */
+import type { CockpitYtd } from './cockpitYtd';
 import type { MonthlyRevenue } from './monthlyRevenue';
 
 export interface CockpitKpis {
@@ -20,4 +21,5 @@ export interface CockpitKpis {
   /** @nullable */
   treasuryBalanceCents?: number | null;
   monthlySeries?: MonthlyRevenue[];
+  ytd?: CockpitYtd;
 }

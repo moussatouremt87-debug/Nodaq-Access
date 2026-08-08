@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Search, FileText, MoreVertical, Pencil, Trash2,
-  ArrowRightLeft, CheckCircle2, Send, XCircle, Clock,
+  ArrowRightLeft, CheckCircle2, Send, XCircle, Clock, Copy, ExternalLink,
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PageHeader } from '@/components/page-header';
@@ -39,6 +39,7 @@ type Devis = {
   id: string; reference: string; clientName: string; status: string;
   lines: DevisLine[]; totalHTCents: number; totalTTCCents: number; tvaRate: number; remise: number;
   notes?: string | null; validUntil?: string | null; affaireId?: string | null;
+  acceptToken?: string | null; dateEnvoi?: string | null;
   createdAt: string; updatedAt: string;
 };
 
@@ -84,6 +85,9 @@ export default function DevisPage() {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Devis | null>(null);
+  const [linkDialogDevis, setLinkDialogDevis] = useState<Devis | null>(null);
+  /** Devis currently open in the "Envoyer" email-input dialog */
+  const [sendDialogDevis, setSendDialogDevis] = useState<Devis | null>(null);
 
   const { data, isLoading, isError } = useDevis({
     statut: statusFilter !== 'ALL' ? statusFilter : undefined,
@@ -104,6 +108,26 @@ export default function DevisPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['devis'] });
       toast({ title: 'Devis supprimé' });
+    },
+    onError: (err: Error) => {
+      toast({ title: 'Erreur', description: err.message, variant: 'destructive' });
+    },
+  });
+
+  const sendMut = useMutation({
+    mutationFn: async ({ id, emailTo, message }: { id: string; emailTo: string; message?: string }) => {
+      const res = await fetch(`${API}/devis/${id}/envoyer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emailTo, message }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'Envoi impossible');
+      return res.json() as Promise<Devis & { acceptUrl: string }>;
+    },
+    onSuccess: (updated) => {
+      qc.invalidateQueries({ queryKey: ['devis'] });
+      setSendDialogDevis(null);
+      setLinkDialogDevis(updated);
     },
     onError: (err: Error) => {
       toast({ title: 'Erreur', description: err.message, variant: 'destructive' });
@@ -244,7 +268,9 @@ export default function DevisPage() {
                           onEdit={() => openEdit(d)}
                           onDelete={() => deleteMut.mutate(d.id)}
                           onConvert={() => convertMut.mutate(d.id)}
+                          onSend={() => setSendDialogDevis(d)}
                           convertPending={convertMut.isPending}
+                          sendPending={sendMut.isPending && sendMut.variables?.id === d.id}
                         />
                       </td>
                     </motion.tr>
@@ -258,12 +284,30 @@ export default function DevisPage() {
 
       <DevisDialog open={dialogOpen} onOpenChange={setDialogOpen} devis={editing}
         onSaved={() => qc.invalidateQueries({ queryKey: ['devis'] })} />
+
+      {/* Step 1: collect email before calling envoyer */}
+      <SendDevisDialog
+        devis={sendDialogDevis}
+        open={!!sendDialogDevis}
+        onOpenChange={open => { if (!open) setSendDialogDevis(null); }}
+        onSend={(id, emailTo, message) => sendMut.mutate({ id, emailTo, message })}
+        sending={sendMut.isPending}
+        sendError={sendMut.error instanceof Error ? sendMut.error.message : null}
+      />
+
+      {/* Step 2: display accept link after successful send */}
+      <AcceptLinkDialog
+        devis={linkDialogDevis}
+        open={!!linkDialogDevis}
+        onOpenChange={open => { if (!open) setLinkDialogDevis(null); }}
+      />
     </div>
   );
 }
 
-function DevisRowMenu({ devis, onEdit, onDelete, onConvert, convertPending }: {
-  devis: Devis; onEdit: () => void; onDelete: () => void; onConvert: () => void; convertPending: boolean;
+function DevisRowMenu({ devis, onEdit, onDelete, onConvert, onSend, convertPending, sendPending }: {
+  devis: Devis; onEdit: () => void; onDelete: () => void; onConvert: () => void;
+  onSend: () => void; convertPending: boolean; sendPending: boolean;
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   return (
@@ -276,6 +320,12 @@ function DevisRowMenu({ devis, onEdit, onDelete, onConvert, convertPending }: {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem onClick={onEdit}><Pencil className="h-3.5 w-3.5 mr-2" />Modifier</DropdownMenuItem>
+          {(devis.status === 'BROUILLON' || devis.status === 'ENVOYE') && (
+            <DropdownMenuItem onClick={onSend} disabled={sendPending}>
+              <Send className="h-3.5 w-3.5 mr-2" />
+              {devis.acceptToken ? 'Afficher le lien d\'acceptation' : 'Envoyer au client'}
+            </DropdownMenuItem>
+          )}
           {devis.status === 'ACCEPTE' && !devis.affaireId && (
             <DropdownMenuItem onClick={onConvert} disabled={convertPending}>
               <ArrowRightLeft className="h-3.5 w-3.5 mr-2" />Convertir en affaire
@@ -303,6 +353,138 @@ function DevisRowMenu({ devis, onEdit, onDelete, onConvert, convertPending }: {
         </AlertDialogContent>
       </AlertDialog>
     </>
+  );
+}
+
+/** Dialog that collects the client email before calling POST /devis/:id/envoyer. */
+function SendDevisDialog({ devis, open, onOpenChange, onSend, sending, sendError }: {
+  devis: Devis | null; open: boolean; onOpenChange: (v: boolean) => void;
+  onSend: (id: string, emailTo: string, message?: string) => void;
+  sending: boolean; sendError: string | null;
+}) {
+  const [emailTo, setEmailTo] = useState('');
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    if (open) { setEmailTo(''); setMessage(''); }
+  }, [open]);
+
+  if (!devis) return null;
+
+  const handleSend = () => {
+    if (!emailTo.trim()) return;
+    onSend(devis.id, emailTo.trim(), message.trim() || undefined);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Send className="h-4 w-4 text-primary" />
+            Envoyer le devis {devis.reference}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="emailTo">Adresse e-mail du client *</Label>
+            <Input
+              id="emailTo"
+              type="email"
+              value={emailTo}
+              onChange={e => setEmailTo(e.target.value)}
+              placeholder="client@exemple.com"
+              autoFocus
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="msg">Message personnalisé (optionnel)</Label>
+            <Textarea
+              id="msg"
+              value={message}
+              onChange={e => setMessage(e.target.value)}
+              rows={3}
+              placeholder="Bonjour, veuillez trouver ci-joint votre devis..."
+            />
+          </div>
+          {sendError && <p className="text-sm text-destructive">{sendError}</p>}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>
+          <Button onClick={handleSend} disabled={sending || !emailTo.trim()} className="gap-1.5">
+            {sending ? 'Envoi en cours...' : <><Send className="h-4 w-4" /> Envoyer</>}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Dialog showing the accept link for a sent devis. */
+function AcceptLinkDialog({ devis, open, onOpenChange }: {
+  devis: Devis | null; open: boolean; onOpenChange: (v: boolean) => void;
+}) {
+  const { toast } = useToast();
+  if (!devis) return null;
+
+  const acceptUrl = devis.acceptToken
+    ? `${window.location.origin}/api/public/devis/${devis.acceptToken}/accept-page`
+    : null;
+
+  const copyLink = () => {
+    if (!acceptUrl) return;
+    navigator.clipboard.writeText(acceptUrl).then(() =>
+      toast({ title: 'Lien copié', description: 'Collez-le dans votre email au client.' })
+    );
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Send className="h-4 w-4 text-primary" />
+            Devis {devis.reference} — lien d'acceptation
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <p className="text-sm text-muted-foreground">
+            Envoyez ce lien à <span className="font-medium text-foreground">{devis.clientName}</span> pour
+            qu'il puisse accepter le devis en ligne.
+          </p>
+          {acceptUrl ? (
+            <div className="flex gap-2 items-center">
+              <div className="flex-1 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs font-mono text-muted-foreground truncate">
+                {acceptUrl}
+              </div>
+              <Button size="sm" variant="outline" onClick={copyLink} className="shrink-0 gap-1.5">
+                <Copy className="h-3.5 w-3.5" /> Copier
+              </Button>
+              <Button size="sm" variant="outline" asChild className="shrink-0 gap-1.5">
+                <a href={acceptUrl} target="_blank" rel="noreferrer">
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              </Button>
+            </div>
+          ) : (
+            <p className="text-sm text-destructive">Aucun token d'acceptation disponible.</p>
+          )}
+          {devis.dateEnvoi && (
+            <p className="text-xs text-muted-foreground">
+              Envoyé le {new Date(devis.dateEnvoi).toLocaleDateString('fr-FR', { dateStyle: 'long' })}
+            </p>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Fermer</Button>
+          {acceptUrl && (
+            <Button onClick={copyLink} className="gap-1.5">
+              <Copy className="h-4 w-4" /> Copier le lien
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

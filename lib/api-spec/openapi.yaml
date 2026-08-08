@@ -813,6 +813,60 @@ paths:
               schema:
                 $ref: "#/components/schemas/ChatReply"
 
+  /chat/suggestions:
+    get:
+      operationId: getChatSuggestions
+      tags: [chat]
+      summary: Get contextual conversation suggestions for the current tenant
+      responses:
+        "200":
+          description: Suggestion pills for the chat empty state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatSuggestions"
+
+  /chat/upload:
+    post:
+      operationId: uploadChatImage
+      tags: [chat]
+      summary: Upload an image/document for Pixtral analysis and agent routing
+      description: >
+        Accepts multipart/form-data with fields: image (file, required),
+        text (string, optional caption), conversationId (string, optional).
+        Not called via generated client — use FormData + fetch directly.
+      responses:
+        "201":
+          description: Image analysed, agent ran, classeur entry created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatUploadReply"
+        "400":
+          description: No image file provided
+        "503":
+          description: MISTRAL_API_KEY not configured
+
+  /chat/transcribe:
+    post:
+      operationId: transcribeChatAudio
+      tags: [chat]
+      summary: Transcribe an audio recording via Scaleway STT (Whisper)
+      description: >
+        Accepts multipart/form-data with field: audio (file, required).
+        Not called via generated client — use FormData + fetch directly.
+      responses:
+        "200":
+          description: Transcription result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranscribeReply"
+        "400":
+          description: No audio file provided
+        "503":
+          description: SCALEWAY_API_KEY not configured
+
   # ── Équipe ───────────────────────────────────────────────────────────────
   /equipe:
     get:
@@ -1000,6 +1054,28 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/MonthlyRevenue"
+        ytd:
+          $ref: "#/components/schemas/CockpitYtd"
+
+    CockpitYtd:
+      type: object
+      required: [caYtdCents, caPrevYearSamePeriodCents, facturesEmisesYtd, tauxRecouvrement]
+      properties:
+        caYtdCents:
+          type: number
+          description: Year-to-date revenue in cents
+        caPrevYearSamePeriodCents:
+          type: number
+          description: Revenue at same point in the previous year in cents
+        caGrowthPct:
+          type: ["number", "null"]
+          description: YoY growth percentage (null when no prior year data)
+        facturesEmisesYtd:
+          type: number
+          description: Number of invoices issued year-to-date
+        tauxRecouvrement:
+          type: number
+          description: Collection rate 0–100
 
     MonthlyRevenue:
       type: object
@@ -1489,6 +1565,23 @@ components:
         conversationId:
           type: ["string", "null"]
 
+    AgentAction:
+      type: object
+      required: [type, label]
+      properties:
+        type:
+          type: string
+          description: "Tool name that was executed (e.g. create_prospect, update_affaire_status)"
+        label:
+          type: string
+          description: Human-readable description of what was done
+        entityId:
+          type: string
+          description: UUID of the created/updated entity
+        entityType:
+          type: string
+          enum: [prospect, affaire, echeance, classeur, activity]
+
     ChatReply:
       type: object
       required: [conversationId, message]
@@ -1497,6 +1590,57 @@ components:
           type: string
         message:
           $ref: "#/components/schemas/ChatMessage"
+        actions_performed:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentAction"
+
+    ChatSuggestions:
+      type: object
+      required: [suggestions]
+      properties:
+        suggestions:
+          type: array
+          items:
+            type: string
+
+    ChatUploadReply:
+      type: object
+      required: [conversationId, message, document, binaryDiscarded]
+      properties:
+        conversationId:
+          type: string
+        message:
+          $ref: "#/components/schemas/ChatMessage"
+        actions_performed:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentAction"
+        binaryDiscarded:
+          type: boolean
+          description: >
+            Always true in this version — the image binary is not stored.
+            Binary storage (object storage + classeur thumbnail) is tracked
+            in a follow-up task.
+        document:
+          type: object
+          required: [name, documentType, summary]
+          properties:
+            name:
+              type: string
+              description: Auto-generated classeur document name
+            documentType:
+              type: string
+            summary:
+              type: string
+
+    TranscribeReply:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+          description: Transcribed text from the audio recording
 
     # ── Devis ─────────────────────────────────────────────────────────────────
     DevisLine:

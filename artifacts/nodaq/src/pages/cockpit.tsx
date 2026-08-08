@@ -1,4 +1,5 @@
 import { useMemo, useState, useCallback } from 'react';
+import { Link } from 'wouter';
 import {
   Briefcase,
   Euro,
@@ -14,6 +15,8 @@ import {
   ArrowUpRight,
   RefreshCw,
   CalendarDays,
+  Building2,
+  DatabaseZap,
 } from 'lucide-react';
 import {
   Bar,
@@ -56,6 +59,25 @@ import {
   useApproveAction,
   useRejectAction,
 } from '@/hooks/use-cockpit';
+import { useQuery } from '@tanstack/react-query';
+import { apiFetch } from '@/lib/auth';
+import { useIsOwner } from '@/hooks/use-auth';
+
+const API = '/api';
+
+/** Vrai si le profil entreprise n'est pas encore renseigné (SIRET absent). */
+function useProfilIncomplet() {
+  return useQuery({
+    queryKey: ['onboarding-profil'],
+    queryFn: async () => {
+      const res = await apiFetch(`${API}/onboarding/profil`);
+      if (!res.ok) return { incomplete: false };
+      const { profile } = await res.json() as { profile: Record<string, string> };
+      return { incomplete: !profile['company.siret'] };
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+}
 
 /** Formats a plain integer count for the animated counter */
 const fmtCount = (n: number) => String(n);
@@ -79,6 +101,8 @@ export default function Cockpit() {
   const { data: pendingActions, isLoading: pendingLoading } = usePendingActions();
   const { approve, isPending: approving } = useApproveAction();
   const { reject, isPending: rejecting } = useRejectAction();
+  const { data: profilData } = useProfilIncomplet();
+  const isOwner = useIsOwner();
 
   const chartData = useMemo(
     () =>
@@ -155,6 +179,40 @@ export default function Cockpit() {
             className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
           >
             Impossible de charger les indicateurs. Réessayez dans un instant.
+          </motion.div>
+        )}
+
+        {/* CTA : profil entreprise non renseigné (OWNER uniquement) */}
+        {profilData?.incomplete && isOwner && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            data-testid="cta-onboarding"
+            className="rounded-xl border border-primary/30 bg-primary/5 px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-4"
+          >
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                <Building2 className="h-4.5 w-4.5 text-primary" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-sm font-medium text-foreground">Votre profil entreprise est incomplet</div>
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  Renseignez votre SIRET pour que vos devis et factures soient conformes.
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-2 shrink-0">
+              <Link href="/onboarding">
+                <span className="inline-flex items-center gap-1.5 rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium cursor-pointer">
+                  <Building2 className="h-3.5 w-3.5" /> Compléter le profil
+                </span>
+              </Link>
+              <Link href="/reprise">
+                <span className="inline-flex items-center gap-1.5 rounded-lg bg-background border border-border text-foreground px-3 py-1.5 text-xs font-medium cursor-pointer">
+                  <DatabaseZap className="h-3.5 w-3.5" /> Reprendre les données
+                </span>
+              </Link>
+            </div>
           </motion.div>
         )}
 

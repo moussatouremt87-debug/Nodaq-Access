@@ -17,15 +17,18 @@ export interface MonthlyRevenue {
 }
 
 export interface CockpitYtd {
-  /** Revenue settled Jan 1 to today, in cents */
+  /** Year-to-date revenue in cents */
   caYtdCents: number;
-  /** Revenue settled same period last year, in cents */
+  /** Revenue at same point in the previous year in cents */
   caPrevYearSamePeriodCents: number;
-  /** Growth vs same period N-1 in %; null when no prior-year data */
-  caGrowthPct: number | null;
-  /** All invoices issued Jan 1 to today */
+  /**
+     * YoY growth percentage (null when no prior year data)
+     * @nullable
+     */
+  caGrowthPct?: number | null;
+  /** Number of invoices issued year-to-date */
   facturesEmisesYtd: number;
-  /** % of YTD invoiced amount that has been paid (0–100) */
+  /** Collection rate 0–100 */
   tauxRecouvrement: number;
 }
 
@@ -389,9 +392,56 @@ export interface ChatMessageInput {
   conversationId?: string | null;
 }
 
+export type AgentActionEntityType = typeof AgentActionEntityType[keyof typeof AgentActionEntityType];
+
+
+export const AgentActionEntityType = {
+  prospect: 'prospect',
+  affaire: 'affaire',
+  echeance: 'echeance',
+  classeur: 'classeur',
+  activity: 'activity',
+} as const;
+
+export interface AgentAction {
+  /** Tool name that was executed (e.g. create_prospect, update_affaire_status) */
+  type: string;
+  /** Human-readable description of what was done */
+  label: string;
+  /** UUID of the created/updated entity */
+  entityId?: string;
+  entityType?: AgentActionEntityType;
+}
+
 export interface ChatReply {
   conversationId: string;
   message: ChatMessage;
+  actions_performed?: AgentAction[];
+}
+
+export interface ChatSuggestions {
+  suggestions: string[];
+}
+
+export type ChatUploadReplyDocument = {
+  /** Auto-generated classeur document name */
+  name: string;
+  documentType: string;
+  summary: string;
+};
+
+export interface ChatUploadReply {
+  conversationId: string;
+  message: ChatMessage;
+  actions_performed?: AgentAction[];
+  /** Always true in this version — the image binary is not stored. Binary storage (object storage + classeur thumbnail) is tracked in a follow-up task. */
+  binaryDiscarded: boolean;
+  document: ChatUploadReplyDocument;
+}
+
+export interface TranscribeReply {
+  /** Transcribed text from the audio recording */
+  text: string;
 }
 
 export interface DevisLine {

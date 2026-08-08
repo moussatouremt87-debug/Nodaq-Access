@@ -31,6 +31,8 @@ import type {
   ChatHistory,
   ChatMessageInput,
   ChatReply,
+  ChatSuggestions,
+  ChatUploadReply,
   ClasseurDocument,
   ClasseurDocumentInput,
   ClasseurList,
@@ -73,6 +75,7 @@ import type {
   TeamMember,
   TeamMemberInput,
   TeamMemberUpdate,
+  TranscribeReply,
   UpdateParametres200
 } from './api.schemas';
 
@@ -3191,6 +3194,227 @@ export const useSendChatMessage = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getSendChatMessageMutationOptions(options));
+    }
+
+export const getGetChatSuggestionsUrl = () => {
+
+
+
+
+  return `/api/chat/suggestions`
+}
+
+/**
+ * @summary Get contextual conversation suggestions for the current tenant
+ */
+export const getChatSuggestions = async ( options?: Parameters<typeof customFetch>[1]): Promise<ChatSuggestions> => {
+
+  return customFetch<ChatSuggestions>(getGetChatSuggestionsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetChatSuggestionsQueryKey = () => {
+    return [
+    `/api/chat/suggestions`
+    ] as const;
+    }
+
+
+export const getGetChatSuggestionsQueryOptions = <TData = Awaited<ReturnType<typeof getChatSuggestions>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getChatSuggestions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetChatSuggestionsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getChatSuggestions>>> = ({ signal }) => getChatSuggestions({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getChatSuggestions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetChatSuggestionsQueryResult = NonNullable<Awaited<ReturnType<typeof getChatSuggestions>>>
+export type GetChatSuggestionsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get contextual conversation suggestions for the current tenant
+ */
+
+export function useGetChatSuggestions<TData = Awaited<ReturnType<typeof getChatSuggestions>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getChatSuggestions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetChatSuggestionsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUploadChatImageUrl = () => {
+
+
+
+
+  return `/api/chat/upload`
+}
+
+/**
+ * Accepts multipart/form-data with fields: image (file, required), text (string, optional caption), conversationId (string, optional). Not called via generated client — use FormData + fetch directly.
+ * @summary Upload an image/document for Pixtral analysis and agent routing
+ */
+export const uploadChatImage = async ( options?: Parameters<typeof customFetch>[1]): Promise<ChatUploadReply> => {
+
+  return customFetch<ChatUploadReply>(getUploadChatImageUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getUploadChatImageMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadChatImage>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof uploadChatImage>>, TError,void, TContext> => {
+
+const mutationKey = ['uploadChatImage'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof uploadChatImage>>, void> = () => {
+
+
+          return  uploadChatImage(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UploadChatImageMutationResult = NonNullable<Awaited<ReturnType<typeof uploadChatImage>>>
+
+    export type UploadChatImageMutationError = ErrorType<void>
+
+    /**
+ * @summary Upload an image/document for Pixtral analysis and agent routing
+ */
+export const useUploadChatImage = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadChatImage>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof uploadChatImage>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getUploadChatImageMutationOptions(options));
+    }
+
+export const getTranscribeChatAudioUrl = () => {
+
+
+
+
+  return `/api/chat/transcribe`
+}
+
+/**
+ * Accepts multipart/form-data with field: audio (file, required). Not called via generated client — use FormData + fetch directly.
+ * @summary Transcribe an audio recording via Scaleway STT (Whisper)
+ */
+export const transcribeChatAudio = async ( options?: Parameters<typeof customFetch>[1]): Promise<TranscribeReply> => {
+
+  return customFetch<TranscribeReply>(getTranscribeChatAudioUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getTranscribeChatAudioMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof transcribeChatAudio>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof transcribeChatAudio>>, TError,void, TContext> => {
+
+const mutationKey = ['transcribeChatAudio'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof transcribeChatAudio>>, void> = () => {
+
+
+          return  transcribeChatAudio(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TranscribeChatAudioMutationResult = NonNullable<Awaited<ReturnType<typeof transcribeChatAudio>>>
+
+    export type TranscribeChatAudioMutationError = ErrorType<void>
+
+    /**
+ * @summary Transcribe an audio recording via Scaleway STT (Whisper)
+ */
+export const useTranscribeChatAudio = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof transcribeChatAudio>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof transcribeChatAudio>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getTranscribeChatAudioMutationOptions(options));
     }
 
 export const getListTeamMembersUrl = () => {

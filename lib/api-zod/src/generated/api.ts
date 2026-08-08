@@ -32,7 +32,14 @@ export const GetCockpitKpisResponse = zod.object({
   "month": zod.string().describe('YYYY-MM'),
   "revenueCents": zod.number(),
   "invoiceCount": zod.number()
-})).optional()
+})).optional(),
+  "ytd": zod.object({
+  "caYtdCents": zod.number().describe('Year-to-date revenue in cents'),
+  "caPrevYearSamePeriodCents": zod.number().describe('Revenue at same point in the previous year in cents'),
+  "caGrowthPct": zod.number().nullish().describe('YoY growth percentage (null when no prior year data)'),
+  "facturesEmisesYtd": zod.number().describe('Number of invoices issued year-to-date'),
+  "tauxRecouvrement": zod.number().describe('Collection rate 0–100')
+}).optional()
 })
 
 
@@ -993,7 +1000,57 @@ export const SendChatMessageResponse = zod.object({
   "role": zod.enum(['user', 'assistant']),
   "content": zod.string(),
   "createdAt": zod.coerce.date()
+}),
+  "actions_performed": zod.array(zod.object({
+  "type": zod.string().describe('Tool name that was executed (e.g. create_prospect, update_affaire_status)'),
+  "label": zod.string().describe('Human-readable description of what was done'),
+  "entityId": zod.string().optional().describe('UUID of the created\/updated entity'),
+  "entityType": zod.enum(['prospect', 'affaire', 'echeance', 'classeur', 'activity']).optional()
+})).optional()
 })
+
+
+/**
+ * @summary Get contextual conversation suggestions for the current tenant
+ */
+export const GetChatSuggestionsResponse = zod.object({
+  "suggestions": zod.array(zod.string())
+})
+
+
+/**
+ * Accepts multipart/form-data with fields: image (file, required), text (string, optional caption), conversationId (string, optional). Not called via generated client — use FormData + fetch directly.
+ * @summary Upload an image/document for Pixtral analysis and agent routing
+ */
+export const UploadChatImageResponse = zod.object({
+  "conversationId": zod.string(),
+  "message": zod.object({
+  "id": zod.string(),
+  "role": zod.enum(['user', 'assistant']),
+  "content": zod.string(),
+  "createdAt": zod.coerce.date()
+}),
+  "actions_performed": zod.array(zod.object({
+  "type": zod.string().describe('Tool name that was executed (e.g. create_prospect, update_affaire_status)'),
+  "label": zod.string().describe('Human-readable description of what was done'),
+  "entityId": zod.string().optional().describe('UUID of the created\/updated entity'),
+  "entityType": zod.enum(['prospect', 'affaire', 'echeance', 'classeur', 'activity']).optional()
+})).optional(),
+  "binaryDiscarded": zod.boolean().describe('Always true in this version — the image binary is not stored. Binary storage (object storage + classeur thumbnail) is tracked in a follow-up task.\n'),
+  "document": zod.object({
+  "name": zod.string().describe('Auto-generated classeur document name'),
+  "documentType": zod.string(),
+  "summary": zod.string()
+})
+})
+
+
+/**
+ * Accepts multipart/form-data with field: audio (file, required). Not called via generated client — use FormData + fetch directly.
+ * @summary Transcribe an audio recording via Scaleway STT (Whisper)
+ */
+export const TranscribeChatAudioResponse = zod.object({
+  "text": zod.string().describe('Transcribed text from the audio recording')
 })
 
 

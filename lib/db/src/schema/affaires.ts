@@ -16,6 +16,14 @@ export const affairesTable = pgTable("affaires", {
   notes: text("notes"),
   startDate: text("start_date"),
   completedAt: text("completed_at"),
+  /** Montant vendu HT en centimes (issu du devis signé ou de la reprise) */
+  montantVenduHt: real("montant_vendu_ht"),
+  /** Avancement en % (0-100), null = non renseigné */
+  avancementPct: real("avancement_pct"),
+  /** Date de fin prévisionnelle (ISO YYYY-MM-DD) */
+  dateFinPrevue: text("date_fin_prevue"),
+  /** Origine du chantier : DEVIS | DIRECT | RECOMMANDATION | APPEL_OFFRE */
+  origine: text("origine"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
