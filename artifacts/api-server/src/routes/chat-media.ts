@@ -274,16 +274,16 @@ router.post(
   "/chat/transcribe",
   uploadAudio.single("audio"),
   async (req, res): Promise<void> => {
+    if (!req.file) {
+      res.status(400).json({ error: "Aucun fichier audio reçu (champ 'audio' attendu)." });
+      return;
+    }
+
     if (!process.env.SCALEWAY_API_KEY) {
       res.status(503).json({
         error: "Transcription non configurée",
         detail: "SCALEWAY_API_KEY manquante.",
       });
-      return;
-    }
-
-    if (!req.file) {
-      res.status(400).json({ error: "Aucun fichier audio reçu (champ 'audio' attendu)." });
       return;
     }
 
