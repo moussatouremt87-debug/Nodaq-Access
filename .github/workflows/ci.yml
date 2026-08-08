@@ -48,29 +48,63 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # ── Database Setup ──────────────────────────────────────────────────
-      # db:setup = create-app-role → migrate-multitenant → migrate-rls → seed-owner
-      # create-app-role prints the DATABASE_URL_APP to stdout; we capture it here.
+      # Reproduit exactement `pnpm db:setup` :
+      #   create-app-role.cjs → migrate.mjs → seed-owner.cjs
+      # (les anciens scripts migrate-multitenant.cjs / migrate-rls.cjs ne
+      #  créent PAS le schéma : ils supposent les tables déjà présentes.)
 
       - name: Create app_user and capture DATABASE_URL_APP
         id: setup_appuser
         run: |
           SCRIPT_OUTPUT=$(node lib/db/scripts/create-app-role.cjs)
-          echo "$SCRIPT_OUTPUT"
           DB_APP_URL=$(echo "$SCRIPT_OUTPUT" | grep "^postgres://" | tail -1)
           if [ -z "$DB_APP_URL" ]; then
             echo "ERROR: could not extract DATABASE_URL_APP from create-app-role.cjs output"
             exit 1
           fi
+          # Masque la chaîne de connexion (mot de passe compris) dans TOUT le
+          # journal, y compris si un script la ré-affiche plus tard.
+          echo "::add-mask::$DB_APP_URL"
           echo "db_app_url=$DB_APP_URL" >> "$GITHUB_OUTPUT"
           echo "DATABASE_URL_APP=$DB_APP_URL" >> "$GITHUB_ENV"
 
-      - name: Run schema migration + RLS + seed (db:setup minus create-app-role)
-        run: |
-          node lib/db/scripts/migrate-multitenant.cjs
-          node lib/db/scripts/migrate-rls.cjs
-          node lib/db/scripts/seed-owner.cjs
+      - name: Apply schema + RLS migrations
+        run: node lib/db/scripts/migrate.mjs
+
+      - name: Seed owner
+        run: node lib/db/scripts/seed-owner.cjs < /dev/null
         env:
           DATABASE_URL_APP: ${{ steps.setup_appuser.outputs.db_app_url }}
+
+      # ── Garde structurelle RLS ──────────────────────────────────────────
+      # Toute table qui porte une colonne tenant_id DOIT avoir RLS activée
+      # ET forcée. Échoue la CI sinon, en nommant les tables fautives.
+      # memberships et sessions sont exclues : ce sont des tables
+      # d'infrastructure lues avant l'ouverture d'un contexte tenant.
+      - name: Guard — every tenant_id table has RLS enabled AND forced
+        run: |
+          MISSING=$(psql "$DATABASE_URL" -tA -c "
+            SELECT c.relname
+                   || ' (enabled=' || c.relrowsecurity
+                   || ', forced='  || c.relforcerowsecurity || ')'
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'public'
+              AND c.relkind = 'r'
+              AND c.relname NOT IN ('memberships', 'sessions')
+              AND EXISTS (
+                SELECT 1 FROM information_schema.columns col
+                WHERE col.table_schema = 'public'
+                  AND col.table_name   = c.relname
+                  AND col.column_name  = 'tenant_id')
+              AND NOT (c.relrowsecurity AND c.relforcerowsecurity)
+            ORDER BY 1;")
+          if [ -n "$MISSING" ]; then
+            echo "::error::Tables métier sans RLS ENABLE+FORCE :"
+            echo "$MISSING"
+            exit 1
+          fi
+          echo "OK — toutes les tables à tenant_id ont RLS ENABLE + FORCE."
 
       # ── Typecheck ───────────────────────────────────────────────────────
       - name: Typecheck all workspaces
