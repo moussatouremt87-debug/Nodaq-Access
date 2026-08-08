@@ -111,7 +111,7 @@ export async function createTestTeamMember(
 // Order matters — FK constraints cascade from business tables → infra tables.
 
 const BUSINESS_TABLES = [
-  "absences", "activity", "affaires", "analytics_tool_logs", "chat_messages", "classeur_documents",
+  "absences", "activity", "affaires", "analytics_tool_logs", "archived_pdfs", "chat_messages", "classeur_documents",
   "connectors", "contrats", "cr_entries", "devis", "echeances",
   "avoirs", "facture_sequences", "factures",
   "pending_actions", "prospects", "settings", "team_members",
@@ -163,6 +163,8 @@ export function tableInsertSql(table: string, tenantId: string, memberAId?: stri
     absences:           memberAId
       ? [`INSERT INTO absences (id, membre_id, date_debut, date_fin, tenant_id) VALUES ($1, $2, $3, $3, $4) ON CONFLICT DO NOTHING`, [id, memberAId, now, tenantId]]
       : [`SELECT 1`, []], // skip if no member provided
+    // archived_pdfs: id is TEXT PK, bytes is BYTEA — both must be supplied explicitly.
+    archived_pdfs:    [`INSERT INTO archived_pdfs (id, tenant_id, document_type, document_id, bytes, sha256, byte_size) VALUES ($1, $2::uuid, 'FACTURE', $3, $4, $5, $6) ON CONFLICT DO NOTHING`, [id, tenantId, crypto.randomUUID(), Buffer.from("rls-test-pdf"), "rls-test-sha256-placeholder", 12]],
   };
 
   return map[table] ?? [`SELECT 1`, []];

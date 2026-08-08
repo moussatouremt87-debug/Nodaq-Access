@@ -40,15 +40,8 @@ export type FactureLine = {
   unit?: string;
 };
 
-// ── Storage directory ────────────────────────────────────────────────────────
-
-export const STORAGE_DIR = process.env.STORAGE_DIR ?? path.join(process.cwd(), "storage");
-
-export function ensureStorageDir(subdir: string): string {
-  const dir = path.join(STORAGE_DIR, subdir);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  return dir;
-}
+// ── Storage directory (read-only repli — new PDFs go to the DB) ──────────────
+// Computed locally inside readArchivedPdf; no module-level constant exported.
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -306,47 +299,36 @@ async function generateHumanPdf(data: FactureForPdf): Promise<Buffer> {
 // ── Public API ───────────────────────────────────────────────────────────────
 
 export interface GeneratedPdf {
-  bytes: Uint8Array;
+  bytes: Buffer;
   sha256: string;
-  path: string;
 }
 
-export async function generateAndStorePdf(
+/**
+ * Generate a Factur-X PDF and return its bytes and SHA-256.
+ * Nothing is written to disk — the caller is responsible for persisting the
+ * bytes to the `archived_pdfs` table inside its own DB transaction.
+ */
+export async function archiveFacturxPdf(
   data: FactureForPdf,
   facturxInvoice: FacturXInvoice,
-  fileId: string,
-  subdir: "factures" | "avoirs" | "devis",
 ): Promise<GeneratedPdf> {
   const humanPdfBuffer = await generateHumanPdf(data);
   const xml = buildCiiXml(facturxInvoice, "EN16931");
   const finalBytes = await buildFacturXPdf(facturxInvoice, xml, "EN16931", humanPdfBuffer);
   const sha256 = crypto.createHash("sha256").update(finalBytes).digest("hex");
-
-  const dir = ensureStorageDir(subdir);
-  const filePath = path.join(dir, `${fileId}.pdf`);
-  fs.writeFileSync(filePath, finalBytes);
-  const relativePath = path.join(subdir, `${fileId}.pdf`);
-
-  return { bytes: finalBytes, sha256, path: relativePath };
-}
-
-export function readArchivedPdf(relativePath: string): Buffer | null {
-  const fullPath = path.join(STORAGE_DIR, relativePath);
-  if (!fs.existsSync(fullPath)) return null;
-  return fs.readFileSync(fullPath);
+  return { bytes: Buffer.from(finalBytes), sha256 };
 }
 
 /**
- * Delete an archived PDF — used for best-effort cleanup when a DB commit fails
- * after the PDF has already been written to disk.
+ * Read a PDF from the local disk — fallback for documents emitted before the
+ * DB-archival migration, where `pdf_path` is still set.
+ * Computes STORAGE_DIR locally so the module no longer exports it.
  */
-export function deleteArchivedPdf(relativePath: string): void {
-  try {
-    const fullPath = path.join(STORAGE_DIR, relativePath);
-    if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
-  } catch (err) {
-    console.warn("[pdf] cleanup failed for", relativePath, err);
-  }
+export function readArchivedPdf(relativePath: string): Buffer | null {
+  const storageDir = process.env.STORAGE_DIR ?? path.join(process.cwd(), "storage");
+  const fullPath = path.join(storageDir, relativePath);
+  if (!fs.existsSync(fullPath)) return null;
+  return fs.readFileSync(fullPath);
 }
 
 /** Build a FacturXInvoice from internal facture data. */

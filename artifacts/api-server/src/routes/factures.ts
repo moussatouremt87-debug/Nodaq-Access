@@ -8,15 +8,14 @@
  */
 import { Router, type IRouter } from "express";
 import { requireRole } from "../middleware/requireRole.js";
-import { withTenant, facturesTable, avoirsTable, activityTable, settingsTable } from "@workspace/db";
+import { withTenant, facturesTable, avoirsTable, activityTable, settingsTable, archivedPdfsTable } from "@workspace/db";
 import { and, eq, desc, sql } from "drizzle-orm";
 import { z } from "zod";
 import { auditInvoice } from "@nodaq/facturx";
 import {
-  generateAndStorePdf,
+  archiveFacturxPdf,
   buildFacturxInvoice,
   readArchivedPdf,
-  deleteArchivedPdf,
   auditMentionsFR,
   type FactureForPdf,
   type SellerInfo,
@@ -430,27 +429,28 @@ router.post("/factures/:id/emettre", async (req, res): Promise<void> => {
     return;
   }
 
-  // 6. Generate and archive the PDF with the real numero.
-  //    The facture is still BROUILLON in the DB at this point — nothing committed yet.
+  // 6. Generate PDF bytes with the real numero.
+  //    Nothing is written to disk — bytes live in memory until the DB commit below.
+  //    If generation fails, the numero is wasted but the facture stays BROUILLON.
   pdfData.numero = numero;
   const facturxInvoice = buildFacturxInvoice(pdfData, numero);
-  let pdfResult: Awaited<ReturnType<typeof generateAndStorePdf>>;
+  let pdfBytes: Buffer;
+  let pdfSha256: string;
   try {
-    pdfResult = await generateAndStorePdf(pdfData, facturxInvoice, id!, "factures");
+    const pdf = await archiveFacturxPdf(pdfData, facturxInvoice);
+    pdfBytes = pdf.bytes;
+    pdfSha256 = pdf.sha256;
   } catch (err) {
-    // PDF generation failed — the numero is wasted but the facture stays BROUILLON.
-    // The artisan can retry; the next attempt will receive the next sequence slot.
-    console.error("[factures/emettre] PDF archival error (invoice not emitted, still BROUILLON):", err);
+    console.error("[factures/emettre] PDF generation error (invoice not emitted, still BROUILLON):", err);
     res.status(500).json({
       error: "Impossible de générer le PDF. La facture n'a pas été émise — réessayez.",
     });
     return;
   }
 
-  // 7. ATOMIC COMMIT: transition facture → EMISE + numero + pdfPath + residualCents.
-  //    All fields are persisted together in a single UPDATE WHERE statut=BROUILLON.
-  //    If a concurrent request already emitted this facture, the WHERE predicate
-  //    matches 0 rows → we clean up the PDF file and return 409.
+  // 7. ATOMIC COMMIT: facture → EMISE + archived_pdfs INSERT in the same transaction.
+  //    If either write fails, both are rolled back — no partial state is possible.
+  //    A concurrent request that already emitted this facture → UPDATE matches 0 rows → 409.
   let emitted: typeof facturesTable.$inferSelect;
   try {
     const result = await withTenant(tenantId, async tx => {
@@ -460,20 +460,29 @@ router.post("/factures/:id/emettre", async (req, res): Promise<void> => {
           number: numero,
           issuedDate,
           dueDate,
-          pdfPath: pdfResult.path,
-          pdfSha256: pdfResult.sha256,
+          pdfPath: null,           // no longer stored on disk
+          pdfSha256,
           residualCents: preCheck.amountCents,
         })
         .where(and(eq(facturesTable.id, id!), eq(facturesTable.statut, "BROUILLON")))
         .returning();
 
       if (!committed) {
-        // Either the facture was never BROUILLON for this tenant, or a concurrent
-        // request already emitted it.
         const [cur] = await tx.select({ statut: facturesTable.statut })
           .from(facturesTable).where(eq(facturesTable.id, id!));
         return { kind: cur ? "conflict" as const : "not_found" as const, statut: cur?.statut };
       }
+
+      // Archive PDF bytes in the same transaction — atomically with the status change.
+      await tx.insert(archivedPdfsTable).values({
+        id: crypto.randomUUID(),
+        tenantId,
+        documentType: "FACTURE",
+        documentId: id!,
+        bytes: pdfBytes,
+        sha256: pdfSha256,
+        byteSize: pdfBytes.length,
+      });
 
       await tx.insert(activityTable).values({
         tenantId,
@@ -486,19 +495,16 @@ router.post("/factures/:id/emettre", async (req, res): Promise<void> => {
     });
 
     if (result.kind === "not_found") {
-      deleteArchivedPdf(pdfResult.path); // best effort
       res.status(404).json({ error: "Facture introuvable" });
       return;
     }
     if (result.kind === "conflict") {
-      deleteArchivedPdf(pdfResult.path); // best effort — orphan cleanup
       res.status(409).json({ error: `Facture déjà ${result.statut} — impossible de réémettre.` });
       return;
     }
     emitted = result.facture as typeof facturesTable.$inferSelect;
   } catch (err) {
-    // DB transaction failed. The PDF is on disk but not committed. Clean it up.
-    deleteArchivedPdf(pdfResult.path);
+    // TX failed — facture stays BROUILLON, no PDF on disk, nothing to clean up.
     console.error("[factures/emettre] DB commit error:", err);
     res.status(500).json({ error: "Erreur lors de la sauvegarde. Réessayez." });
     return;
@@ -512,7 +518,7 @@ router.post("/factures/:id/emettre", async (req, res): Promise<void> => {
         to: opts.emailTo,
         subject: `Facture ${numero} — ${seller.nom}`,
         body: `Bonjour,\n\nVeuillez trouver ci-joint la facture ${numero} de ${seller.nom}.\n\nCordialement,\n${seller.nom}`,
-        attachments: [{ filename: `${numero}.pdf`, content: Buffer.from(pdfResult.bytes) }],
+        attachments: [{ filename: `${numero}.pdf`, content: pdfBytes }],
         fromName: seller.nom,
       });
     } catch (err) {
@@ -532,6 +538,27 @@ router.get("/factures/:id/pdf", async (req, res): Promise<void> => {
     tx.select().from(facturesTable).where(eq(facturesTable.id, id!)),
   );
   if (!facture) { res.status(404).json({ error: "Facture introuvable" }); return; }
+
+  // Primary source: archived_pdfs table (new path — zero disk dependency).
+  const [archived] = await withTenant(tenantId, tx =>
+    tx.select().from(archivedPdfsTable).where(
+      and(
+        eq(archivedPdfsTable.documentType, "FACTURE"),
+        eq(archivedPdfsTable.documentId, id!),
+      ),
+    ),
+  );
+
+  if (archived) {
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="${facture.number}.pdf"`);
+    res.setHeader("X-Pdf-Sha256", archived.sha256);
+    res.setHeader("Cache-Control", "private, max-age=31536000, immutable");
+    res.send(archived.bytes);
+    return;
+  }
+
+  // Fallback: disk file for factures emitted before the DB-archival migration.
   if (!facture.pdfPath) {
     res.status(404).json({ error: "PDF non encore généré. Émettez la facture d'abord." });
     return;

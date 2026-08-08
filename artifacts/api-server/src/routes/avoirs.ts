@@ -16,14 +16,13 @@
  * implicit row lock: the second UPDATE finds residual already decremented and 0 rows.
  */
 import { Router, type IRouter } from "express";
-import { withTenant, facturesTable, activityTable, avoirsTable, settingsTable } from "@workspace/db";
+import { withTenant, facturesTable, activityTable, avoirsTable, settingsTable, archivedPdfsTable } from "@workspace/db";
 import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
-  generateAndStorePdf,
+  archiveFacturxPdf,
   buildFacturxInvoice,
   readArchivedPdf,
-  deleteArchivedPdf,
   type FactureForPdf,
   type FactureLine,
   type SellerInfo,
@@ -244,13 +243,13 @@ router.post("/avoirs", async (req, res): Promise<void> => {
     }
   }
 
-  let pdfPath: string;
+  let pdfBytes: Buffer;
   let pdfSha256: string;
   try {
     const facturxInvoice = buildFacturxInvoice(pdfData, numero);
-    const result = await generateAndStorePdf(pdfData, facturxInvoice, avoirId, "avoirs");
-    pdfPath = result.path;
-    pdfSha256 = result.sha256;
+    const pdf = await archiveFacturxPdf(pdfData, facturxInvoice);
+    pdfBytes = pdf.bytes;
+    pdfSha256 = pdf.sha256;
   } catch (err) {
     console.error("[avoirs] PDF generation error — compensating TX1:", err);
     await compensateTx1();
@@ -258,9 +257,21 @@ router.post("/avoirs", async (req, res): Promise<void> => {
     return;
   }
 
-  // TX2 — Insert avoir record + activity log.
+  // TX2 — Insert avoir record + archived PDF + activity log (all atomic).
+  // If this transaction fails, no PDF was written to disk, nothing to clean up.
   try {
     const avoir = await withTenant(tenantId, async tx => {
+      // Archive PDF bytes atomically with the avoir record.
+      await tx.insert(archivedPdfsTable).values({
+        id: crypto.randomUUID(),
+        tenantId,
+        documentType: "AVOIR",
+        documentId: avoirId,
+        bytes: pdfBytes,
+        sha256: pdfSha256,
+        byteSize: pdfBytes.length,
+      });
+
       const [created] = await tx.insert(avoirsTable).values({
         id: avoirId,
         tenantId,
@@ -269,7 +280,7 @@ router.post("/avoirs", async (req, res): Promise<void> => {
         montantHtCents: d.montantHtCents,
         montantTvaCents: d.montantTvaCents,
         motif: d.motif,
-        pdfPath,
+        pdfPath: null,   // stored in archived_pdfs
         pdfSha256,
       }).returning();
 
@@ -286,7 +297,7 @@ router.post("/avoirs", async (req, res): Promise<void> => {
     res.status(201).json(avoir);
   } catch (err) {
     console.error("[avoirs] TX2 insert error — compensating:", err);
-    deleteArchivedPdf(pdfPath);
+    // No file on disk to delete — bytes were only in memory.
     await compensateTx1();
     res.status(500).json({ error: "Erreur lors de l'enregistrement de l'avoir. Réessayez." });
   }
@@ -294,10 +305,33 @@ router.post("/avoirs", async (req, res): Promise<void> => {
 
 router.get("/avoirs/:id/pdf", async (req, res): Promise<void> => {
   const tenantId = req.tenantId!;
+  const avoirId = req.params["id"] as string;
+
   const [avoir] = await withTenant(tenantId, tx =>
-    tx.select().from(avoirsTable).where(eq(avoirsTable.id, req.params["id"] as string)),
+    tx.select().from(avoirsTable).where(eq(avoirsTable.id, avoirId)),
   );
   if (!avoir) { res.status(404).json({ error: "Avoir introuvable" }); return; }
+
+  // Primary source: archived_pdfs table (new path — zero disk dependency).
+  const [archived] = await withTenant(tenantId, tx =>
+    tx.select().from(archivedPdfsTable).where(
+      and(
+        eq(archivedPdfsTable.documentType, "AVOIR"),
+        eq(archivedPdfsTable.documentId, avoirId),
+      ),
+    ),
+  );
+
+  if (archived) {
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="${avoir.numero}.pdf"`);
+    res.setHeader("X-Pdf-Sha256", archived.sha256);
+    res.setHeader("Cache-Control", "private, max-age=31536000, immutable");
+    res.send(archived.bytes);
+    return;
+  }
+
+  // Fallback: disk file for avoirs emitted before the DB-archival migration.
   if (!avoir.pdfPath) { res.status(404).json({ error: "PDF non disponible" }); return; }
 
   const bytes = readArchivedPdf(avoir.pdfPath);

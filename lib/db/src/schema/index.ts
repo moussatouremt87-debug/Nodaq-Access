@@ -22,4 +22,5 @@ export * from "./connectors";
 export * from "./settings";
 export * from "./cr_entries";
 export * from "./absences";
+export * from "./archived_pdfs";
 export * from "./analytics_tool_logs";
