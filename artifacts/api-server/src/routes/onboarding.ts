@@ -31,6 +31,7 @@ import {
   devisTable,
 } from "@workspace/db";
 import { eq, and, count } from "drizzle-orm";
+import { toDateString } from "@nodaq/shared";
 
 // ── Validation SIRET (Luhn, inlinée pour éviter la dépendance circulaire) ────
 
@@ -126,7 +127,7 @@ async function countAffaires(tenantId: string): Promise<number> {
 }
 
 function isoToday(): string {
-  return new Date().toISOString().slice(0, 10);
+  return toDateString(new Date());
 }
 
 // ── Schémas de données par bloc ────────────────────────────────────────────────

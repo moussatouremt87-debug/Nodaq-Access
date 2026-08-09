@@ -23,6 +23,9 @@
     },
     {
       "path": "../../lib/llm"
+    },
+    {
+      "path": "../../lib/shared"
     }
   ]
 }

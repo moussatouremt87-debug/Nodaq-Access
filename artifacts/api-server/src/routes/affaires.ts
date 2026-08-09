@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { withTenant, affairesTable, activityTable } from "@workspace/db";
 import { eq, sql, desc } from "drizzle-orm";
+import { toDateString } from "@nodaq/shared";
 import {
   CreateAffaireBody,
   UpdateAffaireBody,
@@ -62,7 +63,7 @@ router.post("/affaires", async (req, res): Promise<void> => {
   const tenantId = req.tenantId!;
   const refNum = String(Date.now()).slice(-6);
   const rawStart = data.startDate as unknown as Date | string | undefined;
-  const startDate = rawStart instanceof Date ? rawStart.toISOString().slice(0, 10) : (rawStart ?? null);
+  const startDate = rawStart instanceof Date ? toDateString(rawStart) : (rawStart ?? null);
 
   const affaire = await withTenant(tenantId, async (tx) => {
     const [affaire] = await tx.insert(affairesTable).values({

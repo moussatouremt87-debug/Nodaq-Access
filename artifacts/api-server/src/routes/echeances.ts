@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { withTenant, echeancesTable } from "@workspace/db";
 import { eq, asc } from "drizzle-orm";
+import { toDateString } from "@nodaq/shared";
 import {
   ListEcheancesQueryParams,
   CreateEcheanceBody,
@@ -12,8 +13,8 @@ import {
 const router: IRouter = Router();
 
 function toDateStr(v: Date | string | null | undefined): string {
-  if (!v) return new Date().toISOString().slice(0, 10);
-  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  if (!v) return toDateString(new Date());
+  if (v instanceof Date) return toDateString(v);
   return String(v);
 }
 

@@ -178,6 +178,9 @@ importers:
       '@nodaq/packs':
         specifier: workspace:*
         version: link:../../lib/packs
+      '@nodaq/shared':
+        specifier: workspace:*
+        version: link:../../lib/shared
       '@types/bcryptjs':
         specifier: ^3.0.0
         version: 3.0.0
@@ -681,6 +684,9 @@ importers:
 
   lib/db:
     dependencies:
+      '@nodaq/shared':
+        specifier: workspace:*
+        version: link:../shared
       bcryptjs:
         specifier: ^2.4.3
         version: 2.4.3

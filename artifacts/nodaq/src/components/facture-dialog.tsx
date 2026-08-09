@@ -21,6 +21,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useCreateFactureMutation } from '@/hooks/use-factures';
+import { toDateString } from '@/lib/format';
 
 const schema = z.object({
   customerName: z.string().min(1, 'Le client est requis'),
@@ -46,7 +47,7 @@ export function FactureDialog({
     defaultValues: {
       customerName: '',
       number: '',
-      issuedDate: new Date().toISOString().slice(0, 10),
+      issuedDate: toDateString(new Date()),
       dueDate: '',
       amountCents: undefined,
     },
@@ -57,7 +58,7 @@ export function FactureDialog({
       form.reset({
         customerName: '',
         number: '',
-        issuedDate: new Date().toISOString().slice(0, 10),
+        issuedDate: toDateString(new Date()),
         dueDate: '',
         amountCents: undefined,
       });

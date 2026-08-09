@@ -2,16 +2,32 @@ import { Router, type IRouter } from "express";
 import { withTenant, DrizzleTx, teamMembersTable, affairesTable, facturesTable, settingsTable } from "@workspace/db";
 import { eq, asc, sql } from "drizzle-orm";
 import { z } from "zod";
+import { toDateString } from "@nodaq/shared";
 import {
   buildSemaines,
   calcHorizon,
   calcDevisEnAttente,
   calcJournees,
   simulerChantier,
+  parseDate,
   type MemberRecord,
   type AbsenceRecord,
   type AffaireRecord,
 } from "../services/planning-service";
+
+/**
+ * planning-service.ts does all of its internal calendar arithmetic in UTC
+ * (getMondayOf, addDays, toISODate — deliberately, to avoid DST off-by-ones).
+ * That's only correct if the "today" fed into it already represents the
+ * right LOCAL (Europe/Paris) calendar day. `new Date()` is a real instant —
+ * converting it straight to a UTC day (as toISODate does) can land on the
+ * wrong day near local midnight. Normalize once here: read today's date from
+ * LOCAL components, then re-anchor to UTC midnight for the module's
+ * UTC-pure pipeline.
+ */
+function todayForPlanning(): Date {
+  return parseDate(toDateString(new Date()));
+}
 
 const router: IRouter = Router();
 
@@ -188,7 +204,7 @@ router.get("/equipe/plannings", async (req, res): Promise<void> => {
     startDate: a.startDate ?? null, completedAt: a.completedAt ?? null,
   }));
 
-  const today = new Date();
+  const today = todayForPlanning();
   const semaines = buildSemaines({ today, members, absences, affaires, weekCount: WEEK_COUNT, tauxJourFacture: taux, coutJourCharge: cout });
   const horizonResult = calcHorizon(semaines, activeCount);
 
@@ -197,8 +213,8 @@ router.get("/equipe/plannings", async (req, res): Promise<void> => {
   const devisEnAttente = calcDevisEnAttente(affaires, cout, avgDispo);
 
   const now = new Date();
-  const prevMonth = new Date(now.getUTCFullYear(), now.getUTCMonth() - 1, 1);
-  const prevMonthISO = prevMonth.toISOString().slice(0, 7);
+  const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const prevMonthISO = toDateString(prevMonth).slice(0, 7);
   const caRealiseCents = invoices.reduce((sum, inv) => {
     if (!inv.issuedDate) return sum;
     if (String(inv.issuedDate).slice(0, 7) !== prevMonthISO) return sum;
@@ -248,7 +264,7 @@ router.post("/equipe/plannings/simuler", async (req, res): Promise<void> => {
   }));
 
   const semaines = buildSemaines({
-    today: new Date(), members, absences, affaires,
+    today: todayForPlanning(), members, absences, affaires,
     weekCount: WEEK_COUNT, tauxJourFacture: taux, coutJourCharge: cout,
   });
 

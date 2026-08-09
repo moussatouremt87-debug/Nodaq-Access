@@ -21,6 +21,7 @@
  */
 
 import { chatCompletion, getConfig, LlmConfigError } from "@nodaq/llm";
+import { toDateString } from "@nodaq/shared";
 import { z } from "zod";
 
 // ─── Zod schema — strict, injection-resistant ─────────────────────────────────
@@ -236,7 +237,7 @@ export function generateDocumentName(
   info: ExtractedDocumentInfo,
   filename: string,
 ): string {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = toDateString(new Date());
   const ext = filename.includes(".")
     ? "." + filename.split(".").pop()?.toLowerCase()
     : ".jpg";

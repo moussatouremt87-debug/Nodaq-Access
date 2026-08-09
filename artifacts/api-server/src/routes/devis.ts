@@ -4,6 +4,7 @@ import { eq, desc } from "drizzle-orm";
 import { z } from "zod";
 import type { DevisLine, DevisAddress } from "@workspace/db";
 import { sendDocument } from "../lib/canal-emission.js";
+import { toDateString } from "@nodaq/shared";
 import {
   ListDevisQueryParams,
   GetDevisParams,
@@ -110,7 +111,7 @@ function nextRef(count: number) {
 
 function toDateStr(v: Date | string | null | undefined): string | null {
   if (!v) return null;
-  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  if (v instanceof Date) return toDateString(v);
   return String(v);
 }
 
@@ -302,7 +303,7 @@ router.post("/devis/:id/convert", async (req, res): Promise<void> => {
       status: "ACCEPTEE",
       quotedAmountCents: d.totalTTCCents,
       ...(d.notes ? { notes: d.notes } : {}),
-      startDate: new Date().toISOString().slice(0, 10),
+      startDate: toDateString(new Date()),
     }).returning();
     await tx.update(devisTable).set({ status: "ACCEPTE", affaireId: affaire!.id }).where(eq(devisTable.id, d.id));
     return { affaire };

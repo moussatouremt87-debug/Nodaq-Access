@@ -1,12 +1,13 @@
 import { Router, type IRouter } from "express";
 import { withTenant, affairesTable, facturesTable, prospectsTable, pendingActionsTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
+import { toDateString } from "@nodaq/shared";
 
 const router: IRouter = Router();
 
 router.get("/brief", async (req, res): Promise<void> => {
   const today = new Date();
-  const todayStr = today.toISOString().split("T")[0]!;
+  const todayStr = toDateString(today);
   const tenantId = req.tenantId!;
 
   const data = await withTenant(tenantId, async (tx) => {

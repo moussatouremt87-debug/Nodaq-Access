@@ -19,6 +19,7 @@ import { Router, type IRouter } from "express";
 import { withTenant, facturesTable, activityTable, avoirsTable, settingsTable, archivedPdfsTable } from "@workspace/db";
 import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
+import { toDateString } from "@nodaq/shared";
 import {
   archiveFacturxPdf,
   buildFacturxInvoice,
@@ -108,8 +109,9 @@ router.post("/avoirs", async (req, res): Promise<void> => {
   const avoirTTC = d.montantHtCents + d.montantTvaCents;
 
   const seller = await loadSellerInfo(tenantId);
-  const issuedDate = new Date().toISOString().slice(0, 10);
-  const year = new Date(issuedDate).getFullYear();
+  const now = new Date();
+  const issuedDate = toDateString(now);
+  const year = now.getFullYear();
   const avoirId = crypto.randomUUID();
 
   // TX1 — Atomic claim of the invoice residual + sequence assignment.

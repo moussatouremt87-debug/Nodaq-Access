@@ -308,8 +308,8 @@ const TOOLS: LlmTool[] = [
 
 async function buildSystemPrompt(tenantId: string): Promise<string> {
   const today = new Date();
-  const todayStr = today.toISOString().split("T")[0]!;
-  const in30Days = new Date(today.getTime() + 30 * 24 * 60_000).toISOString().split("T")[0]!;
+  const todayStr = toDateString(today);
+  const in30Days = toDateString(new Date(today.getTime() + 30 * 24 * 60_000));
 
   const context = await withTenant(tenantId, async (tx) => {
     const affairesEnCours = await tx
@@ -496,7 +496,7 @@ async function executeTool(
 
     case "update_affaire_status": {
       const updateData: Record<string, unknown> = { status: args.status };
-      if (args.status === "TERMINEE") updateData.completedAt = new Date().toISOString().split("T")[0];
+      if (args.status === "TERMINEE") updateData.completedAt = toDateString(new Date());
       if (args.notes) updateData.notes = args.notes;
 
       const [updated] = await withTenant(tenantId, async (tx) => {

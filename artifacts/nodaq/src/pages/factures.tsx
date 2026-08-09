@@ -29,7 +29,7 @@ import {
   Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent,
 } from '@/components/ui/empty';
 import { useToast } from '@/hooks/use-toast';
-import { fmtEUR, fmtDate } from '@/lib/format';
+import { fmtEUR, fmtDate, toDateString } from '@/lib/format';
 import { containerVariants, itemVariants } from '@/lib/motion-variants';
 
 const API = '/api';
@@ -207,7 +207,7 @@ function FactureDialog({ open, onOpenChange, onSaved }: {
 }) {
   const { toast } = useToast();
   const [customerName, setCustomerName] = useState('');
-  const [issuedDate, setIssuedDate] = useState(new Date().toISOString().slice(0, 10));
+  const [issuedDate, setIssuedDate] = useState(toDateString(new Date()));
   const [dueDate, setDueDate] = useState('');
   const [autoliquidation, setAutoliquidation] = useState(false);
   const [attestationTvaFournie, setAttestationTvaFournie] = useState(false);

@@ -58,8 +58,13 @@ export function estimateIsImpact(
   const upcoming: string[] = [];
   for (let offset = 0; offset <= 1; offset++) {
     for (const { month, day } of IS_RATES.installmentDates) {
+      // LEGITIMATE toISOString() use — not a business-date bug: the date is
+      // both built (Date.UTC) and read back (toISOString) entirely in UTC,
+      // so the round-trip is timezone-invariant by construction. See
+      // period-bounds-timezone-guard.test.ts.
       const date = new Date(Date.UTC(year + offset, month - 1, day));
       if (date > now && upcoming.length < 4) {
+        // tz-guard-allow: date built with Date.UTC, read back with toISOString — both UTC, self-consistent.
         upcoming.push(date.toISOString().slice(0, 10));
       }
     }
