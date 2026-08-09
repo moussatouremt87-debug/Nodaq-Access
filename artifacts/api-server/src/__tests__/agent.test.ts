@@ -56,13 +56,9 @@ async function sendChat(cookie: string, content: string, conversationId?: string
 
 describe("Tool: create_prospect", () => {
   test("creates a prospect in the tenant DB when asked naturally", async () => {
-    // This test requires MISTRAL_API_KEY. If not set, we test the 503 response.
-    if (!process.env.MISTRAL_API_KEY) {
-      const res = await sendChat(sessionCookieA, "Ajoute un prospect nommé Jean Dupont");
-      expect(res.status).toBe(503);
-      expect(res.body.error).toMatch(/MISTRAL_API_KEY/i);
-      return;
-    }
+    // Le client LLM est intercepté par vitest.setup.ts : aucun fournisseur réel
+    // n'est appelé, et l'appel d'outil create_prospect est simulé. Le test
+    // s'exécute donc toujours, y compris en CI.
 
     const before = await withTenant(tenantA.id, (tx) =>
       tx.select().from(prospectsTable).where(eq(prospectsTable.name, "Jean Dupont"))
@@ -91,8 +87,6 @@ describe("Tool: create_prospect", () => {
 
 describe("Tool: create_affaire", () => {
   test("agent responds 200 with assistant message for affaire creation request", async () => {
-    if (!process.env.MISTRAL_API_KEY) return; // requires real key
-
     // Snapshot all tenant affaires before the call
     const before = await withTenant(tenantA.id, (tx) =>
       tx.select().from(affairesTable)
