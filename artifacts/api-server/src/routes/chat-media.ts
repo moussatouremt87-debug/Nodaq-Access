@@ -16,7 +16,7 @@ import {
   docTypeToCategory,
   generateDocumentName,
 } from "../lib/pixtralVision";
-import { transcribeAudio } from "../lib/scalewaySTT";
+import { transcribeAudio } from "@nodaq/llm";
 
 const router: IRouter = Router();
 
@@ -74,10 +74,10 @@ router.post(
       return;
     }
 
-    if (!process.env.MISTRAL_API_KEY) {
+    if (!process.env.LLM_API_KEY) {
       res.status(503).json({
         error: "Agent non configuré",
-        detail: "MISTRAL_API_KEY manquante.",
+        detail: "LLM_API_KEY manquante.",
       });
       return;
     }
@@ -279,10 +279,10 @@ router.post(
       return;
     }
 
-    if (!process.env.SCALEWAY_API_KEY) {
+    if (!process.env.LLM_API_KEY) {
       res.status(503).json({
         error: "Transcription non configurée",
-        detail: "SCALEWAY_API_KEY manquante.",
+        detail: "LLM_API_KEY manquante.",
       });
       return;
     }
@@ -295,7 +295,7 @@ router.post(
       );
       res.json({ text: result.text });
     } catch (err) {
-      req.log?.error({ err }, "scaleway STT error");
+      req.log?.error({ err }, "llm STT error");
       res.status(502).json({
         error: "La transcription audio a échoué.",
         detail: err instanceof Error ? err.message : String(err),

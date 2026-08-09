@@ -227,15 +227,15 @@ describe("GET /api/chat/suggestions", () => {
 // ─── Agent failure behavior ───────────────────────────────────────────────────
 
 describe("Agent failure behavior", () => {
-  test("returns 503 when MISTRAL_API_KEY is absent", async () => {
-    const savedKey = process.env.MISTRAL_API_KEY;
-    delete process.env.MISTRAL_API_KEY;
+  test("returns 503 when LLM_API_KEY is absent", async () => {
+    const savedKey = process.env.LLM_API_KEY;
+    delete process.env.LLM_API_KEY;
 
     const res = await sendChat(sessionCookieA, "Bonjour");
     expect(res.status).toBe(503);
     expect(res.body.error).toBeDefined();
 
-    process.env.MISTRAL_API_KEY = savedKey;
+    process.env.LLM_API_KEY = savedKey;
   });
 
   test("POST /api/chat/messages returns 400 for empty content", async () => {

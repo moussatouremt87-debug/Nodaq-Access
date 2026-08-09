@@ -3,34 +3,32 @@
  *
  * What this does:
  *
- *  1. Injects fake LITELLM env vars so `getConfig()` (from @nodaq/llm) never
+ *  1. Injects fake LLM env vars so `getConfig()` (from @nodaq/llm) never
  *     throws `LlmConfigError` inside test code.  The actual values point to a
  *     non-existent server — that is intentional.
  *
- *  2. Patches `globalThis.fetch` to intercept calls to the fake LiteLLM
- *     endpoint and return a benign text-only assistant response.  This means
- *     `chatCompletion()` succeeds in test code without making real HTTP calls.
- *     All other fetch destinations (Mistral direct, external URLs) are passed
- *     through to the real fetch implementation so existing tests that check
- *     the upload route's 503 behaviour (MISTRAL_API_KEY absent) are unaffected.
+ *  2. Patches `globalThis.fetch` to intercept calls to the fake LLM endpoint
+ *     and return benign responses:
+ *     - /chat/completions  → valid OpenAI-compatible chat completion
+ *     - /audio/transcriptions → valid STT response
+ *     All other fetch destinations are passed through to the real fetch.
  *
  * Why this is needed:
- *  The new architecture removed the @mistralai/mistralai SDK and replaced it
- *  with a plain-fetch LiteLLM client.  Existing adversarial tests that spied
- *  on `Mistral.prototype.chat.complete` now spy on a prototype that is never
- *  instantiated — those spies become harmless no-ops.  The security properties
- *  being tested (auth gate, injection isolation, DB state) are still fully
- *  exercised against a real PostgreSQL database.
+ *  The architecture routes all model traffic (chat, vision, STT) through a single
+ *  LLM_BASE_URL.  Tests must not call any real provider, so we intercept all
+ *  requests to FAKE_LLM_BASE and return minimal valid responses.
  */
 
-const FAKE_LITELLM_BASE = "http://fake-litellm.internal.test";
+const FAKE_LLM_BASE = "http://fake-llm.internal.test";
 
 // ── 1. Inject fake LLM env vars ───────────────────────────────────────────────
-process.env["LITELLM_BASE_URL"] = FAKE_LITELLM_BASE;
-process.env["LITELLM_API_KEY"] = "vitest-fake-key";
-process.env["LLM_MODEL"] = "test/fake-model";
+process.env["LLM_BASE_URL"]      = FAKE_LLM_BASE;
+process.env["LLM_API_KEY"]       = "vitest-fake-key";
+process.env["LLM_MODEL_CHAT"]    = "test/fake-chat-model";
+process.env["LLM_MODEL_VISION"]  = "test/fake-vision-model";
+process.env["LLM_MODEL_STT"]     = "test/fake-stt-model";
 
-// ── 2. Intercept fetch calls to the fake LiteLLM endpoint ────────────────────
+// ── 2. Intercept fetch calls to the fake LLM endpoint ────────────────────────
 const _originalFetch = globalThis.fetch;
 
 globalThis.fetch = async function patchedFetch(
@@ -44,19 +42,87 @@ globalThis.fetch = async function patchedFetch(
         ? input.href
         : (input as Request).url;
 
-  if (url.startsWith(FAKE_LITELLM_BASE)) {
-    // Return a minimal, valid OpenAI-compatible chat completion response.
-    // No tool_calls → runAgent exits after the first round with a text reply.
+  if (url.startsWith(FAKE_LLM_BASE)) {
+    // STT endpoint — return a minimal valid transcription response.
+    if (url.endsWith("/audio/transcriptions")) {
+      const body = JSON.stringify({ text: "transcription test (interceptée par vitest)" });
+      return new Response(body, {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    // Chat/vision endpoint — return a minimal, valid OpenAI-compatible response.
+    //
+    // Smart tool-call simulation: if the request body contains a user message
+    // that asks to create a specific prospect ("Jean Dupont") AND there are no
+    // pending tool-result messages yet, return a create_prospect tool call so
+    // that agent integration tests can verify full tool execution without a
+    // real LLM.  For all other requests, return a plain text response.
+    let parsedBody: { messages?: Array<{ role: string; content: unknown }> } = {};
+    try {
+      parsedBody = JSON.parse(init?.body as string ?? "{}");
+    } catch {
+      // ignore parse errors — fall through to text response
+    }
+    const msgs = parsedBody.messages ?? [];
+    const hasPendingToolResult = msgs.some((m) => m.role === "tool");
+    const lastUserContent = [...msgs]
+      .reverse()
+      .find((m) => m.role === "user");
+    const userText =
+      typeof lastUserContent?.content === "string"
+        ? lastUserContent.content.toLowerCase()
+        : "";
+
+    // create_prospect simulation: one round only (no pending tool result)
+    if (!hasPendingToolResult && userText.includes("jean dupont")) {
+      const toolCallBody = JSON.stringify({
+        id: "chatcmpl-vitest-tool",
+        object: "chat.completion",
+        model: "test/fake-chat-model",
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: "assistant",
+              content: null,
+              tool_calls: [
+                {
+                  id: "call_vitest_jean_dupont",
+                  type: "function",
+                  function: {
+                    name: "create_prospect",
+                    arguments: JSON.stringify({
+                      name: "Jean Dupont",
+                      phone: "0612345678",
+                    }),
+                  },
+                },
+              ],
+            },
+            finish_reason: "tool_calls",
+          },
+        ],
+        usage: { prompt_tokens: 12, completion_tokens: 8, total_tokens: 20 },
+      });
+      return new Response(toolCallBody, {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    // Default: plain text response — no tool calls, agent exits cleanly.
     const body = JSON.stringify({
       id: "chatcmpl-vitest",
       object: "chat.completion",
-      model: "test/fake-model",
+      model: "test/fake-chat-model",
       choices: [
         {
           index: 0,
           message: {
             role: "assistant",
-            content: "Réponse de l'agent (mode test — LiteLLM intercepté).",
+            content: "Réponse de l'agent (mode test — LLM intercepté).",
             tool_calls: null,
           },
           finish_reason: "stop",
@@ -74,6 +140,6 @@ globalThis.fetch = async function patchedFetch(
     });
   }
 
-  // All other destinations (Mistral vision API, etc.) use the real fetch.
+  // All other destinations use the real fetch.
   return _originalFetch(input, init);
 };

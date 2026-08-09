@@ -12,6 +12,7 @@ export default defineConfig({
     pool: "forks",
     singleFork: true,
 
+    setupFiles: ["src/__tests__/vitest.setup.ts"],
     include: ["src/__tests__/**/*.test.ts"],
     reporters: ["verbose"],
   },

@@ -2,7 +2,7 @@ export { LlmConfigError, LlmNetworkError, LlmResponseError } from "./errors.js";
 export {
   getConfig,
   chatCompletion,
-  mistralVisionCompletion,
+  transcribeAudio,
   type LlmConfig,
   type LlmMessage,
   type LlmContentPart,
@@ -12,4 +12,5 @@ export {
   type LlmChoice,
   type LlmResponse,
   type ChatCompletionOptions,
+  type TranscribeResult,
 } from "./client.js";

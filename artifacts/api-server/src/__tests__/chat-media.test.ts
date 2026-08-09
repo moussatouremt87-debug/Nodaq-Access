@@ -15,7 +15,7 @@ import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import app from "../app";
 import { adminPool, createTestTenant, createTestUser, createTestMembership, createTestSession, cookieHeader, cleanupTenants, cleanupUsers } from "./helpers";
-import { buildAgentMessageFromDoc } from "../lib/pixtralVision";
+import { buildAgentMessageFromDoc } from "../lib/visionExtraction";
 import { withTenant, prospectsTable } from "@workspace/db";
 import { like } from "drizzle-orm";
 
@@ -58,9 +58,9 @@ describe("POST /api/chat/upload", () => {
     expect(res.body.error).toMatch(/image/i);
   });
 
-  test("returns 503 when MISTRAL_API_KEY is absent", async () => {
-    const saved = process.env.MISTRAL_API_KEY;
-    delete process.env.MISTRAL_API_KEY;
+  test("returns 503 when LLM_API_KEY is absent", async () => {
+    const saved = process.env.LLM_API_KEY;
+    delete process.env.LLM_API_KEY;
     try {
       const res = await request(app)
         .post("/api/chat/upload")
@@ -68,7 +68,7 @@ describe("POST /api/chat/upload", () => {
         .attach("image", Buffer.from("fake"), { filename: "test.jpg", contentType: "image/jpeg" });
       expect(res.status).toBe(503);
     } finally {
-      if (saved) process.env.MISTRAL_API_KEY = saved;
+      if (saved) process.env.LLM_API_KEY = saved;
     }
   });
 
@@ -198,9 +198,9 @@ describe("POST /api/chat/transcribe", () => {
     expect(res.body.error).toMatch(/audio/i);
   });
 
-  test("returns 503 when SCALEWAY_API_KEY is absent", async () => {
-    const saved = process.env.SCALEWAY_API_KEY;
-    delete process.env.SCALEWAY_API_KEY;
+  test("returns 503 when LLM_API_KEY is absent", async () => {
+    const saved = process.env.LLM_API_KEY;
+    delete process.env.LLM_API_KEY;
     try {
       const res = await request(app)
         .post("/api/chat/transcribe")
@@ -208,7 +208,7 @@ describe("POST /api/chat/transcribe", () => {
         .attach("audio", Buffer.from("fake"), { filename: "test.webm", contentType: "audio/webm" });
       expect(res.status).toBe(503);
     } finally {
-      if (saved) process.env.SCALEWAY_API_KEY = saved;
+      if (saved) process.env.LLM_API_KEY = saved;
     }
   });
 });

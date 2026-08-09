@@ -1,9 +1,12 @@
 /**
- * LiteLLM gateway — thin fetch wrapper over the OpenAI-compatible HTTP API.
+ * LLM gateway — thin fetch wrapper over the Scaleway OpenAI-compatible HTTP API.
  *
  * INVARIANT: this file never imports any provider SDK (openai, @mistralai/mistralai,
  * @anthropic-ai/sdk, …).  All communication is through standard Node.js fetch.
  * The anti-SDK lint/test gate enforces this invariant automatically.
+ *
+ * Single exit point: all model traffic (chat, vision, STT) is routed through
+ * LLM_BASE_URL.  No default value — a missing variable fails loud with LlmConfigError.
  */
 
 import { LlmConfigError, LlmNetworkError, LlmResponseError } from "./errors.js";
@@ -78,6 +81,11 @@ export interface ChatCompletionOptions {
   response_format?: { type: "json_object" } | { type: "text" };
   /** Maximum number of tokens in the completion. */
   max_tokens?: number;
+  /**
+   * Override the model for this single call (e.g. LLM_MODEL_VISION).
+   * Falls back to config.model when absent.
+   */
+  model?: string;
 }
 
 // ─── Config resolution ────────────────────────────────────────────────────────
@@ -85,33 +93,31 @@ export interface ChatCompletionOptions {
 /**
  * Resolve LLM config from environment variables.
  *
- * Resolution order (supports gradual migration from direct-Mistral to LiteLLM):
- *   baseUrl → LITELLM_BASE_URL  → "https://api.mistral.ai/v1"
- *   apiKey  → LITELLM_API_KEY  → MISTRAL_API_KEY  (required if neither is set)
- *   model   → LLM_MODEL        → "mistral-large-latest"
- *
- * Throwing LlmConfigError("MISTRAL_API_KEY") when no key is available keeps
- * the 503 error surface backward-compatible with deployments that only
- * have MISTRAL_API_KEY set (no LiteLLM proxy yet).
+ * Reads: LLM_BASE_URL, LLM_API_KEY, LLM_MODEL_CHAT.
+ * No default values — every missing variable throws LlmConfigError.
+ * A destination by default is precisely the defect we are fixing:
+ * a configuration omission must never silently decide where data goes.
  */
 export function getConfig(): LlmConfig {
-  const baseUrl = (
-    process.env["LITELLM_BASE_URL"] ?? "https://api.mistral.ai/v1"
-  ).replace(/\/$/, "");
+  const baseUrl = process.env["LLM_BASE_URL"];
+  if (!baseUrl) throw new LlmConfigError("LLM_BASE_URL");
 
-  const apiKey =
-    process.env["LITELLM_API_KEY"] ?? process.env["MISTRAL_API_KEY"];
-  if (!apiKey) throw new LlmConfigError("MISTRAL_API_KEY");
+  const apiKey = process.env["LLM_API_KEY"];
+  if (!apiKey) throw new LlmConfigError("LLM_API_KEY");
 
-  const model = process.env["LLM_MODEL"] ?? "mistral-large-latest";
+  const model = process.env["LLM_MODEL_CHAT"];
+  if (!model) throw new LlmConfigError("LLM_MODEL_CHAT");
 
-  return { baseUrl, apiKey, model };
+  return { baseUrl: baseUrl.replace(/\/$/, ""), apiKey, model };
 }
 
 // ─── Core call ────────────────────────────────────────────────────────────────
 
 /**
- * Call LiteLLM's OpenAI-compatible `/chat/completions` endpoint.
+ * Call the OpenAI-compatible `/chat/completions` endpoint.
+ *
+ * Accepts an optional `options.model` that replaces `config.model` for this
+ * single call — used by vision callers that pass LLM_MODEL_VISION.
  *
  * Logging records only: model name, duration (ms), token counts, HTTP status.
  * Message content is NEVER logged.
@@ -124,14 +130,19 @@ export async function chatCompletion(
 ): Promise<LlmResponse> {
   const t0 = Date.now();
 
+  // Destructure model override out of options before spreading to avoid
+  // setting model twice in the request body.
+  const { model: modelOverride, ...restOptions } = options;
+  const effectiveModel = modelOverride ?? config.model;
+
   const body: Record<string, unknown> = {
-    model: config.model,
+    model: effectiveModel,
     messages,
-    ...options,
+    ...restOptions,
   };
   if (tools && tools.length > 0) {
     body["tools"] = tools;
-    body["tool_choice"] = options.tool_choice ?? "auto";
+    body["tool_choice"] = restOptions.tool_choice ?? "auto";
   }
 
   let httpStatus = 0;
@@ -152,7 +163,7 @@ export async function chatCompletion(
       const errorBody = await res.text().catch(() => "(no body)");
       console.info(
         "[llm] call failed",
-        JSON.stringify({ model: config.model, status: httpStatus, durationMs }),
+        JSON.stringify({ model: effectiveModel, status: httpStatus, durationMs }),
       );
       throw new LlmNetworkError(res.status, errorBody);
     }
@@ -162,7 +173,7 @@ export async function chatCompletion(
     console.info(
       "[llm] call ok",
       JSON.stringify({
-        model: data.model ?? config.model,
+        model: data.model ?? effectiveModel,
         status: httpStatus,
         durationMs,
         tokens_prompt: data.usage?.prompt_tokens ?? null,
@@ -180,63 +191,81 @@ export async function chatCompletion(
     const durationMs = Date.now() - t0;
     console.info(
       "[llm] call error",
-      JSON.stringify({ model: config.model, status: httpStatus, durationMs }),
+      JSON.stringify({ model: effectiveModel, status: httpStatus, durationMs }),
     );
     throw err;
   }
 }
 
-/**
- * Convenience: call Pixtral (or any vision model) at a Mistral-direct endpoint
- * using MISTRAL_API_KEY.  No SDK — plain fetch to the Mistral v1 API.
- *
- * This helper is intentionally separate from `chatCompletion` because Pixtral
- * uses the direct Mistral API key (not the LiteLLM proxy) and does not go
- * through the classifier.
- */
-export async function mistralVisionCompletion(
-  messages: LlmMessage[],
-  options: ChatCompletionOptions = {},
-): Promise<LlmResponse> {
-  const apiKey = process.env["MISTRAL_API_KEY"];
-  if (!apiKey) throw new LlmConfigError("MISTRAL_API_KEY");
+// ─── Audio transcription ──────────────────────────────────────────────────────
 
-  const model = process.env["PIXTRAL_MODEL"] ?? "pixtral-12b-2409";
+export interface TranscribeResult {
+  text: string;
+}
+
+/**
+ * Transcribe an audio buffer to text using the OpenAI-compatible
+ * `/audio/transcriptions` endpoint.
+ *
+ * Base URL and API key come from LLM_BASE_URL / LLM_API_KEY (same as chat).
+ * Model is LLM_MODEL_STT — throws LlmConfigError if absent.
+ *
+ * Logging records only: model name, duration (ms), HTTP status.
+ * Audio content is NEVER logged.
+ *
+ * @param audioBuffer  Raw audio bytes (webm/opus, mp4/aac, wav, etc.)
+ * @param mimeType     MIME type of the audio (e.g. "audio/webm;codecs=opus")
+ * @param filename     Suggested filename (extension matters for Whisper)
+ */
+export async function transcribeAudio(
+  audioBuffer: Buffer,
+  mimeType: string,
+  filename = "audio.webm",
+): Promise<TranscribeResult> {
+  const config = getConfig();
+
+  const sttModel = process.env["LLM_MODEL_STT"];
+  if (!sttModel) throw new LlmConfigError("LLM_MODEL_STT");
+
+  const formData = new FormData();
+  // Blob constructor accepts BufferSource; convert Buffer → Uint8Array for TypeScript.
+  formData.append(
+    "file",
+    new Blob([new Uint8Array(audioBuffer)], { type: mimeType }),
+    filename,
+  );
+  formData.append("model", sttModel);
+  formData.append("language", "fr");
+  formData.append("response_format", "json");
+
   const t0 = Date.now();
   let httpStatus = 0;
 
-  const res = await fetch("https://api.mistral.ai/v1/chat/completions", {
+  const res = await fetch(`${config.baseUrl}/audio/transcriptions`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({ model, messages, ...options }),
+    headers: { Authorization: `Bearer ${config.apiKey}` },
+    body: formData,
   });
 
   httpStatus = res.status;
   const durationMs = Date.now() - t0;
 
   if (!res.ok) {
-    const errorBody = await res.text().catch(() => "(no body)");
+    const body = await res.text().catch(() => "(no body)");
     console.info(
-      "[llm:pixtral] call failed",
-      JSON.stringify({ model, status: httpStatus, durationMs }),
+      "[llm:stt] call failed",
+      JSON.stringify({ model: sttModel, status: httpStatus, durationMs }),
     );
-    throw new LlmNetworkError(res.status, errorBody);
+    throw new LlmNetworkError(res.status, body);
   }
 
-  const data = (await res.json()) as LlmResponse;
   console.info(
-    "[llm:pixtral] call ok",
-    JSON.stringify({
-      model: data.model ?? model,
-      status: httpStatus,
-      durationMs,
-      tokens_prompt: data.usage?.prompt_tokens ?? null,
-      tokens_completion: data.usage?.completion_tokens ?? null,
-    }),
+    "[llm:stt] call ok",
+    JSON.stringify({ model: sttModel, status: httpStatus, durationMs }),
   );
 
-  return data;
+  const json = (await res.json()) as { text?: string };
+  const text = (json.text ?? "").trim();
+  if (!text) throw new LlmResponseError("STT returned empty transcription");
+  return { text };
 }

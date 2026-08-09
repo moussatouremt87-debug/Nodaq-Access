@@ -38,14 +38,15 @@ if (!process.env["PUBLIC_URL"]) {
 
 // ── LLM configuration guard ──────────────────────────────────────────────────
 // Fail fast at startup so a misconfigured deployment is immediately visible.
-// LITELLM_BASE_URL and LLM_MODEL have safe defaults in getConfig(), so only
-// the key is required — either LITELLM_API_KEY or the legacy MISTRAL_API_KEY.
-const hasLitellmKey = Boolean(process.env["LITELLM_API_KEY"]);
-const hasMistralKey = Boolean(process.env["MISTRAL_API_KEY"]);
-if (!hasLitellmKey && !hasMistralKey) {
-  throw new Error(
-    "LLM configuration error: either \"LITELLM_API_KEY\" or \"MISTRAL_API_KEY\" must be set.",
-  );
+// All three routing variables are required — no defaults, no fallbacks.
+if (!process.env["LLM_BASE_URL"]) {
+  throw new Error("LLM configuration error: LLM_BASE_URL must be set.");
+}
+if (!process.env["LLM_API_KEY"]) {
+  throw new Error("LLM configuration error: LLM_API_KEY must be set.");
+}
+if (!process.env["LLM_MODEL_CHAT"]) {
+  throw new Error("LLM configuration error: LLM_MODEL_CHAT must be set.");
 }
 
 app.listen(port, (err) => {
