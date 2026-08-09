@@ -22,9 +22,9 @@ import { like } from "drizzle-orm";
 // The mock returns an injection-bearing response — name, summary, and
 // description all contain mutation instructions.
 
-vi.mock("../lib/pixtralVision", async (importOriginal) => {
+vi.mock("../lib/visionExtraction", async (importOriginal) => {
   const original =
-    await importOriginal<typeof import("../lib/pixtralVision")>();
+    await importOriginal<typeof import("../lib/visionExtraction")>();
   return {
     ...original,
     analyzeDocumentImage: vi.fn().mockResolvedValue({

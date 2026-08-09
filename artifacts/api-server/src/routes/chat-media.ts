@@ -15,7 +15,7 @@ import {
   buildAgentMessageFromDoc,
   docTypeToCategory,
   generateDocumentName,
-} from "../lib/pixtralVision";
+} from "../lib/visionExtraction";
 import { transcribeAudio } from "@nodaq/llm";
 
 const router: IRouter = Router();
