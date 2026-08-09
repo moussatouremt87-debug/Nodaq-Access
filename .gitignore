@@ -50,3 +50,10 @@ Thumbs.db
 
 # Replit-uploaded attachments (chat/prompt scratch files, not source)
 attached_assets/
+
+# Secrets — real environment files are never committed (CLAUDE.md §6).
+# .env.example is the only tracked variant: it documents the keys with
+# placeholder values and must stay in the repository.
+.env
+.env.*
+!.env.example
