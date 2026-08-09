@@ -14,13 +14,15 @@ Cette commande enchaîne dans l'ordre :
 
 | Étape | Script | Connexion requise |
 |-------|--------|-------------------|
-| 1. Créer `app_user` | `create-app-role.cjs` | `DATABASE_URL` (propriétaire) |
-| 2. Créer toutes les tables | `migrate-multitenant.cjs` | `DATABASE_URL` (propriétaire) |
-| 3. Activer le RLS | `migrate-rls.cjs` | `DATABASE_URL` (propriétaire) |
-| 4. Créer le premier tenant + OWNER | `seed-owner.cjs` | `DATABASE_URL` (propriétaire) |
+| 1. Provisionner `app_user` | `create-app-role.cjs` | `DATABASE_URL` (propriétaire) |
+| 2. Appliquer les migrations SQL (schéma + RLS) | `migrate.mjs` | `DATABASE_URL` (propriétaire) |
+| 3. Créer le premier tenant + OWNER | `seed-owner.cjs` | `DATABASE_URL` (propriétaire) |
 
-Après l'étape 1, le script affiche `DATABASE_URL_APP` (URL avec mot de passe aléatoire).  
-**Copiez-la dans vos Secrets** avant de lancer l'API.
+L'étape 1 n'affiche `DATABASE_URL_APP` **que si elle a créé le rôle** (mot de passe
+généré). **Copiez-la dans vos Secrets** avant de lancer l'API.
+
+Si `app_user` existait déjà, son mot de passe est **conservé** et aucune chaîne n'est
+affichée : continuez d'utiliser le `DATABASE_URL_APP` que vous avez déjà.
 
 ---
 
@@ -37,8 +39,17 @@ Après l'étape 1, le script affiche `DATABASE_URL_APP` (URL avec mot de passe a
 ## Scripts individuels
 
 ```bash
-# Créer app_user (idempotent — réinitialise le mot de passe si déjà existant)
+# Provisionner app_user (idempotent). Si le rôle existe déjà, son mot de passe
+# est CONSERVÉ : seuls les attributs, les GRANT et la révocation append-only
+# sont réappliqués. Sans danger sur une instance partagée, production comprise.
 node lib/db/scripts/create-app-role.cjs
+
+# Faire tourner le mot de passe — À DEMANDER EXPRÈS.
+# DANGER : app_user est un rôle de CLUSTER, partagé par TOUTES les bases de
+# l'instance. Une rotation coupe la production tant que DATABASE_URL_APP n'a pas
+# été mis à jour partout. Ne jamais lancer ceci contre l'instance de production
+# « pour tester ».
+node lib/db/scripts/create-app-role.cjs --rotate-password
 
 # Créer toutes les tables (idempotent)
 node lib/db/scripts/migrate-multitenant.cjs
