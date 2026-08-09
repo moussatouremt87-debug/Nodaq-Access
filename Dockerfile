@@ -113,6 +113,10 @@ ENV NODE_ENV=production \
     # which in the container would be /app (not /app/migrations).
     MIGRATIONS_DIR=/app/migrations
 
+# Users are French companies — a "month" or "quarter" means Paris calendar
+# time. Pinning TZ avoids off-by-one period boundaries on hosts running UTC.
+ENV TZ=Europe/Paris
+
 EXPOSE 8080
 
 # ── Health check ──────────────────────────────────────────────────────────────
