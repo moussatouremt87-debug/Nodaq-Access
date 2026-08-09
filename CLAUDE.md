@@ -121,6 +121,18 @@ l'`id` doit être fourni explicitement.
 **Le superutilisateur contourne la RLS.** L'application tourne sous `app_user`, rôle
 non superutilisateur avec `NOBYPASSRLS`. Ne jamais la faire tourner sous `postgres`.
 
+**`app_user` est un rôle de CLUSTER, pas de base.** En PostgreSQL un rôle appartient à
+l'instance : le même `app_user` est partagé par toutes ses bases. Faire tourner son mot
+de passe affecte donc **TOUTES les bases de l'instance, production comprise** — même
+quand la commande vise une base de test jetable. L'application garde l'ancien mot de
+passe dans `DATABASE_URL_APP` et tombe aussitôt en `password authentication failed`.
+
+En conséquence : **ne jamais lancer une vérification « base vierge » sur l'instance de
+production.** Une base neuve sur l'instance de prod n'est pas un environnement isolé —
+elle en partage les rôles. Utiliser une instance séparée (un conteneur jetable sur un
+autre port suffit). Et `create-app-role.cjs` ne fait tourner le mot de passe que si on
+le lui demande explicitement, avec `--rotate-password`.
+
 **Un `SET` hors transaction fuit entre requêtes** à cause du pooling. Toujours
 `set_config(..., true)` **dans** la transaction.
 
