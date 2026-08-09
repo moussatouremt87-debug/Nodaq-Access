@@ -126,8 +126,6 @@ describe("Upload path — adversarial injection via Pixtral output", () => {
    * should occur because the route builds a static description and returns.
    */
   test("no-caption upload: no mutation tools triggered regardless of Pixtral content", async () => {
-    if (!process.env.MISTRAL_API_KEY) return; // MISTRAL_API_KEY required to pass route guard
-
     const before = {
       prospects: await countInjectedProspects(cleanupTenantId),
       affaires: await countInjectedAffaires(cleanupTenantId),
@@ -171,11 +169,9 @@ describe("Upload path — adversarial injection via Pixtral output", () => {
    *
    * We mock the Mistral client to return a tool call for `create_prospect`
    * while runAgent is called with a read-only allow-list.  No prospect should
-   * be created regardless.  No MISTRAL_API_KEY required.
+   * be created regardless. Le LLM est intercepte par vitest.setup.ts.
    */
   test("runAgent authorization gate rejects disallowed tool calls deterministically", async () => {
-    // runAgent checks MISTRAL_API_KEY before using any mocked client
-    if (!process.env.MISTRAL_API_KEY) return;
     const { runAgent } = await import("../lib/mistralAgent");
 
     // Stub the Mistral client to return a forged create_prospect tool call
@@ -246,11 +242,9 @@ describe("Upload path — adversarial injection via Pixtral output", () => {
    * rejected by the authorization gate before executeTool().
    *
    * This test verifies server-side tool policy, not model compliance.
-   * Passes when MISTRAL_API_KEY is present (agent is called with real LLM).
+   * Le LLM est intercepte par vitest.setup.ts : le test s'execute toujours.
    */
   test("captioned upload: mutation tools excluded from server-side allow-list", async () => {
-    if (!process.env.MISTRAL_API_KEY) return;
-
     const before = {
       prospects: await countInjectedProspects(cleanupTenantId),
       affaires: await countInjectedAffaires(cleanupTenantId),
@@ -308,8 +302,6 @@ describe("Upload history isolation — document content never persisted to chat 
    * receive it in its model context.
    */
   test("captioned upload: echoed injected content not persisted to chat history", async () => {
-    if (!process.env.MISTRAL_API_KEY) return;
-
     // Mock the agent to echo back the injection content
     const { Mistral } = await import("@mistralai/mistralai");
     const echoSpy = vi.spyOn(Mistral.prototype as any, "chat", "get").mockReturnValue({
@@ -380,8 +372,6 @@ describe("Upload history isolation — document content never persisted to chat 
    * model behaviour.
    */
   test("no-caption upload: chat history contains no document-derived content", async () => {
-    if (!process.env.MISTRAL_API_KEY) return;
-
     const res = await request(app)
       .post("/api/chat/upload")
       .set("Cookie", sessionCookie)
@@ -430,8 +420,6 @@ describe("Upload history isolation — document content never persisted to chat 
    * history-isolation policy is server-enforced, not model-compliance dependent.
    */
   test("follow-up chat after upload: injection content absent from model context", async () => {
-    if (!process.env.MISTRAL_API_KEY) return;
-
     // Step 1: upload a malicious document (injection content in mocked Pixtral)
     const uploadRes = await request(app)
       .post("/api/chat/upload")
