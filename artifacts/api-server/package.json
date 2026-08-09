@@ -15,6 +15,7 @@
     "@nodaq/facturx": "workspace:*",
     "@nodaq/llm": "workspace:*",
     "@nodaq/packs": "workspace:*",
+    "@nodaq/shared": "workspace:*",
     "@types/bcryptjs": "^3.0.0",
     "@types/multer": "^2.2.0",
     "@types/nodemailer": "^8.0.1",

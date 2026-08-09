@@ -494,3 +494,28 @@ describe("i — ISOLATION PAR TENANT", () => {
     console.log(`[i] Numéros indépendants : ${numA} (A) vs ${numB} (B) ✓`);
   });
 });
+
+// ── j. Date d'émission — round-trip fuseau horaire ───────────────────────────
+//
+// This whole suite runs under TZ=Europe/Paris (vitest.config.ts). Guards
+// against the class of bug fixed in "fuseau-paris" / "dates-metier": a date
+// written as issuedDate must be read back byte-for-byte identical, never
+// shifted a day by a stray toISOString() sliced to 10 chars somewhere in the path.
+
+describe("j — DATE D'ÉMISSION (round-trip fuseau horaire)", () => {
+  test("une facture émise avec une date connue la restitue identique via l'API", async () => {
+    // 2026-09-01: the exact date from the bug report — a value that
+    // toISOString() sliced to 10 chars would render as "2026-08-31" in Paris.
+    const issuedDate = "2026-09-01";
+    const { id } = await createBrouillon(cookieA, { issuedDate });
+    const emitted = await emettre(cookieA, id, { issuedDate }).expect(200);
+    expect(emitted.body.issuedDate).toBe(issuedDate);
+
+    const reread = await request(app)
+      .get(`/api/factures/${id}`)
+      .set("Cookie", cookieA)
+      .expect(200);
+    expect(reread.body.issuedDate).toBe(issuedDate);
+    console.log(`[j] issuedDate ${issuedDate} → relue identique via GET (TZ=${process.env["TZ"]}) ✓`);
+  });
+});

@@ -12,6 +12,7 @@ import { withTenant, facturesTable, avoirsTable, activityTable, settingsTable, a
 import { and, eq, desc, sql } from "drizzle-orm";
 import { z } from "zod";
 import { auditInvoice } from "@nodaq/facturx";
+import { toDateString } from "@nodaq/shared";
 import {
   archiveFacturxPdf,
   buildFacturxInvoice,
@@ -347,7 +348,7 @@ router.post("/factures/:id/emettre", async (req, res): Promise<void> => {
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const opts = parsed.data;
 
-  const issuedDate = opts.issuedDate ?? new Date().toISOString().slice(0, 10);
+  const issuedDate = opts.issuedDate ?? toDateString(new Date());
 
   // 1. Load seller info (informational read — not holding a row lock)
   const seller = await loadSellerInfo(tenantId);

@@ -1,4 +1,4 @@
-import { classifyReceivableAccount } from "@nodaq/shared";
+import { classifyReceivableAccount, toDateString } from "@nodaq/shared";
 import type { FecEntry } from "./parse.js";
 
 /*
@@ -80,14 +80,20 @@ function ecritureKey(entry: FecEntry): string {
   return `${entry.journalCode}␟${entry.ecritureNum}`;
 }
 
+// LEGITIMATE toISOString() USE — not a business-date bug: both the parse
+// (`T00:00:00Z`) and the format below are anchored to UTC, so the whole
+// computation is timezone-invariant by construction (never touches local
+// time). This is pure calendar-day arithmetic on a UTC-fixed instant, not a
+// local-time value coerced through UTC. See period-bounds-timezone-guard.test.ts.
 function addDays(iso: string, days: number): string {
   const date = new Date(`${iso}T00:00:00Z`);
+  // tz-guard-allow: parsed at UTC midnight above, formatted via toISOString below — both UTC, self-consistent.
   return new Date(date.getTime() + days * DAY_MS).toISOString().slice(0, 10);
 }
 
 export function deriveReceivables(entries: FecEntry[], options: DeriveOptions = {}): FecDerivation {
   const dueDays = options.dueDays ?? 30;
-  const todayIso = (options.today ?? new Date()).toISOString().slice(0, 10);
+  const todayIso = toDateString(options.today ?? new Date());
   const warnings: string[] = [];
 
   // 4117 (« Clients — Retenues de garantie ») est une SUBDIVISION de 411 :

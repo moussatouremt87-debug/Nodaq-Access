@@ -15,6 +15,22 @@ export const fmtEURCompact = (cents: number | null | undefined): string => {
   }).format(value);
 };
 
+/**
+ * Format a Date as "YYYY-MM-DD" from its LOCAL (browser) components — never
+ * via toISOString() sliced to 10 chars, which converts to UTC first and can
+ * render the wrong calendar day (e.g. right after local midnight). Used for
+ * default form values (today's date) on business-date fields like issuedDate.
+ * Duplicated from lib/shared's toDateString rather than imported, to avoid
+ * pulling the whole @nodaq/shared barrel (zod schemas, tax rules, …) into
+ * the browser bundle for one function.
+ */
+export const toDateString = (d: Date): string => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
 export const fmtDate = (iso: string | null | undefined): string => {
   if (!iso) return '—';
   const d = new Date(iso);

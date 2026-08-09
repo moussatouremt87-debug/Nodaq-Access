@@ -28,6 +28,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { apiFetch } from '@/lib/auth';
+import { toDateString } from '@/lib/format';
 
 const API = '/api';
 
@@ -465,7 +466,7 @@ function EquipeBlock({
 }) {
   const { toast } = useToast();
   const activeCount = members.filter(m => m.availability !== 'ABSENT').length;
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = toDateString(new Date());
 
   const affaireById = useMemo(
     () => new Map(affaires.map(a => [a.id, a])),

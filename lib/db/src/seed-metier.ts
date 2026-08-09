@@ -1,4 +1,5 @@
 import { db, withTenant, devisTable, classeurTable, echeancesTable, tenantsTable } from "./index.js";
+import { toDateString } from "@nodaq/shared";
 
 async function seedMetier() {
   // Resolve the Migration tenant — created by migrate-multitenant.cjs
@@ -103,7 +104,7 @@ async function seedMetier() {
       const d = (offset: number) => {
         const dt = new Date(today);
         dt.setDate(dt.getDate() + offset);
-        return dt.toISOString().slice(0, 10);
+        return toDateString(dt);
       };
 
       await tx.insert(echeancesTable).values([

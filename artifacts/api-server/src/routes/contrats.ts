@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { withTenant, contratsTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
+import { toDateString } from "@nodaq/shared";
 import {
   CreateContratBody,
   UpdateContratBody,
@@ -17,7 +18,7 @@ function nextOccurrence(startDate: string | null, cadence: string): string | nul
   };
   const months = cadenceMonths[cadence] ?? 1;
   while (d <= now) { d.setMonth(d.getMonth() + months); }
-  return d.toISOString().split("T")[0] ?? null;
+  return toDateString(d);
 }
 
 const router: IRouter = Router();
@@ -34,7 +35,7 @@ router.post("/contrats", async (req, res): Promise<void> => {
   const parsed = CreateContratBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const data = parsed.data;
-  const toStr = (v: unknown) => v instanceof Date ? v.toISOString().slice(0, 10) : (v as string | null | undefined) ?? null;
+  const toStr = (v: unknown) => v instanceof Date ? toDateString(v) : (v as string | null | undefined) ?? null;
   const tenantId = req.tenantId!;
 
   const [contrat] = await withTenant(tenantId, async (tx) =>

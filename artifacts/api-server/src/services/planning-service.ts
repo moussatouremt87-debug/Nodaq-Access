@@ -36,7 +36,14 @@ export function getMondayOf(d: Date): Date {
   return r;
 }
 
+// LEGITIMATE toISOString() use — this whole module does calendar arithmetic
+// entirely in UTC (getMondayOf, addDays, parseDate all use UTC accessors),
+// so the round-trip is self-consistent as long as every Date it touches was
+// itself built as a UTC-midnight anchor (via parseDate or Date.UTC), never a
+// real "now" instant. Callers MUST normalize "today" first — see
+// todayForPlanning() in routes/equipe.ts. See period-bounds-timezone-guard.test.ts.
 export function toISODate(d: Date): string {
+  // tz-guard-allow: this module's calendar arithmetic is entirely UTC-anchored; see comment above.
   return d.toISOString().slice(0, 10);
 }
 
@@ -74,6 +81,9 @@ export function easterSunday(year: number): Date {
 /** YYYY-MM-DD strings of French public holidays for a given year. */
 export function getFeriesAnnee(year: number): Set<string> {
   const e = easterSunday(year);
+  // LEGITIMATE toISOString() use — e and its offsets are UTC-anchored
+  // (easterSunday uses Date.UTC), so this round-trip is self-consistent.
+  // tz-guard-allow: see comment above.
   const fmt = (d: Date) => d.toISOString().slice(0, 10);
   return new Set([
     `${year}-01-01`,
