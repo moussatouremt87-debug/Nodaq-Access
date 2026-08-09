@@ -27,12 +27,12 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── Stage 1: Builder ──────────────────────────────────────────────────────────
-FROM node:20-slim AS builder
+FROM node:24-slim AS builder
 
 WORKDIR /workspace
 
 # Install pnpm at the exact version used in development
-RUN npm install -g pnpm@10.26.1 --quiet
+RUN npm install -g pnpm@10.34.5 --quiet
 
 # Copy workspace manifests first — Docker layer cache is only invalidated when
 # the lockfile or manifests change, not on source changes.
@@ -69,7 +69,7 @@ RUN pnpm --filter @workspace/api-server run build
 RUN pnpm --filter @workspace/api-server deploy --prod --legacy /standalone
 
 # ── Stage 2: Production image ─────────────────────────────────────────────────
-FROM node:20-slim AS production
+FROM node:24-slim AS production
 
 WORKDIR /app
 
