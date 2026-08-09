@@ -33,6 +33,7 @@ import {
   getLast12Months,
   assertDurationEqual,
   messageImpossible,
+  toDateString,
   type ComparaisonMode,
   COMPARAISON_MODES,
 } from "../lib/analytics-periods.js";
@@ -298,8 +299,8 @@ async function calcMargePour100(
       coalesce(sum(margin_cents), 0)::float                AS total_margin_cents
     FROM affaires
     WHERE completed_at IS NOT NULL
-      AND completed_at::date BETWEEN ${periode.debut.toISOString().slice(0, 10)}::date
-                                 AND ${periode.fin.toISOString().slice(0, 10)}::date
+      AND completed_at::date BETWEEN ${toDateString(periode.debut)}::date
+                                 AND ${toDateString(periode.fin)}::date
       AND invoiced_amount_cents IS NOT NULL
       AND invoiced_amount_cents > 0
   `));
@@ -345,8 +346,8 @@ async function calcDelaiPaiement(
       0)::float AS delai_moyen_pondere
     FROM factures
     WHERE settled = true
-      AND issued_date::date BETWEEN ${periode.debut.toISOString().slice(0, 10)}::date
-                                 AND ${periode.fin.toISOString().slice(0, 10)}::date
+      AND issued_date::date BETWEEN ${toDateString(periode.debut)}::date
+                                 AND ${toDateString(periode.fin)}::date
       AND total_ht_cents > 0
       AND updated_at > issued_date::timestamp
   `));
@@ -387,8 +388,8 @@ async function calcCaFacture(
        ORDER BY created_at DESC
        LIMIT 1
     ) d ON true
-    WHERE f.issued_date::date BETWEEN ${periode.debut.toISOString().slice(0, 10)}::date
-                                  AND ${periode.fin.toISOString().slice(0, 10)}::date
+    WHERE f.issued_date::date BETWEEN ${toDateString(periode.debut)}::date
+                                  AND ${toDateString(periode.fin)}::date
       AND f.statut NOT IN ('ANNULEE', 'AVOIR', 'BROUILLON')
   `));
 
@@ -414,8 +415,8 @@ async function calcCaEncaisse(
       coalesce(sum(total_ht_cents), 0)::int      AS total_ht
     FROM factures
     WHERE settled = true
-      AND issued_date::date BETWEEN ${periode.debut.toISOString().slice(0, 10)}::date
-                                AND ${periode.fin.toISOString().slice(0, 10)}::date
+      AND issued_date::date BETWEEN ${toDateString(periode.debut)}::date
+                                AND ${toDateString(periode.fin)}::date
       AND statut NOT IN ('ANNULEE', 'AVOIR')
   `));
 
@@ -445,8 +446,8 @@ async function calcResultatExploitation(
     SELECT coalesce(sum(total_ht_cents), 0)::float AS ca_cents
     FROM factures
     WHERE settled = true
-      AND issued_date::date BETWEEN ${periode.debut.toISOString().slice(0, 10)}::date
-                                AND ${periode.fin.toISOString().slice(0, 10)}::date
+      AND issued_date::date BETWEEN ${toDateString(periode.debut)}::date
+                                AND ${toDateString(periode.fin)}::date
       AND statut NOT IN ('ANNULEE', 'AVOIR')
   `));
 
@@ -530,8 +531,8 @@ async function calcTauxSignatureDevis(
       count(*) FILTER (WHERE status = 'ACCEPTE')::int                     AS nb_acceptes
     FROM devis
     WHERE date_envoi IS NOT NULL
-      AND date_envoi::date BETWEEN ${periode.debut.toISOString().slice(0, 10)}::date
-                               AND ${periode.fin.toISOString().slice(0, 10)}::date
+      AND date_envoi::date BETWEEN ${toDateString(periode.debut)}::date
+                               AND ${toDateString(periode.fin)}::date
       AND status NOT IN ('BROUILLON')
   `));
 
@@ -572,8 +573,8 @@ async function calcDelaiReponseDevis(
     WHERE status = 'ACCEPTE'
       AND date_envoi IS NOT NULL
       AND accepted_at IS NOT NULL
-      AND date_envoi::date BETWEEN ${periode.debut.toISOString().slice(0, 10)}::date
-                               AND ${periode.fin.toISOString().slice(0, 10)}::date
+      AND date_envoi::date BETWEEN ${toDateString(periode.debut)}::date
+                               AND ${toDateString(periode.fin)}::date
       AND accepted_at > date_envoi
   `));
 
@@ -666,8 +667,8 @@ async function calcEcartDeviseRealise(
     FROM affaires
     WHERE completed_at IS NOT NULL
       AND date_fin_prevue IS NOT NULL
-      AND completed_at::date BETWEEN ${periode.debut.toISOString().slice(0, 10)}::date
-                                 AND ${periode.fin.toISOString().slice(0, 10)}::date
+      AND completed_at::date BETWEEN ${toDateString(periode.debut)}::date
+                                 AND ${toDateString(periode.fin)}::date
       AND montant_vendu_ht IS NOT NULL
       AND montant_vendu_ht > 0
   `));
@@ -715,8 +716,8 @@ async function calcConcentrationClient(
       customer_name,
       sum(total_ht_cents)::float AS ca_client
     FROM factures
-    WHERE issued_date::date BETWEEN ${periode.debut.toISOString().slice(0, 10)}::date
-                                AND ${periode.fin.toISOString().slice(0, 10)}::date
+    WHERE issued_date::date BETWEEN ${toDateString(periode.debut)}::date
+                                AND ${toDateString(periode.fin)}::date
       AND statut NOT IN ('ANNULEE', 'AVOIR', 'BROUILLON')
     GROUP BY customer_name
     ORDER BY ca_client DESC
@@ -807,8 +808,8 @@ export async function computeComparaison(
     return {
       mode,
       periode: {
-        debut: compP.debut.toISOString().slice(0, 10),
-        fin: compP.fin.toISOString().slice(0, 10),
+        debut: toDateString(compP.debut),
+        fin: toDateString(compP.fin),
         label: compP.label,
       },
       valeur: partial.valeur,
@@ -828,8 +829,8 @@ export async function computeComparaison(
     return {
       mode,
       periode: {
-        debut: compP.debut.toISOString().slice(0, 10),
-        fin: compP.fin.toISOString().slice(0, 10),
+        debut: toDateString(compP.debut),
+        fin: toDateString(compP.fin),
         label: compP.label,
       },
       valeur: partial.valeur,
@@ -913,8 +914,8 @@ router.get("/analytics/indicateurs", async (req, res): Promise<void> => {
 
   const periode = parsePeriode(periodeRaw, debut, fin);
   const periodeJson = {
-    debut: periode.debut.toISOString().slice(0, 10),
-    fin: periode.fin.toISOString().slice(0, 10),
+    debut: toDateString(periode.debut),
+    fin: toDateString(periode.fin),
     label: periode.label,
   };
 
@@ -988,8 +989,8 @@ router.get("/analytics/indicateurs/:id", async (req, res): Promise<void> => {
   const id = idParsed.data;
   const periode = parsePeriode(periodeRaw, debut, fin);
   const periodeJson = {
-    debut: periode.debut.toISOString().slice(0, 10),
-    fin: periode.fin.toISOString().slice(0, 10),
+    debut: toDateString(periode.debut),
+    fin: toDateString(periode.fin),
     label: periode.label,
   };
 
@@ -1060,8 +1061,8 @@ router.get("/analytics/indicateurs/:id/serie", async (req, res): Promise<void> =
           }));
           return {
             periode: {
-              debut: m.debut.toISOString().slice(0, 10),
-              fin: m.fin.toISOString().slice(0, 10),
+              debut: toDateString(m.debut),
+              fin: toDateString(m.fin),
               label: m.label,
             },
             valeur: partial.valeur,

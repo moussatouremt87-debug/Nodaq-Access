@@ -18,6 +18,7 @@ import {
   periodePrecedente,
   getLast12Months,
   messageImpossible,
+  toDateString,
   type PeriodeBorne,
 } from "../lib/analytics-periods.js";
 
@@ -28,34 +29,34 @@ const TODAY = new Date("2026-08-07T12:00:00Z");
 describe("parsePeriode", () => {
   it("mois → 1er–31 août 2026", () => {
     const p = parsePeriode("mois", undefined, undefined, TODAY);
-    expect(p.debut.toISOString().slice(0, 10)).toBe("2026-08-01");
-    expect(p.fin.toISOString().slice(0, 10)).toBe("2026-08-31");
+    expect(toDateString(p.debut)).toBe("2026-08-01");
+    expect(toDateString(p.fin)).toBe("2026-08-31");
     expect(p.label).toContain("août");
   });
 
   it("trimestre → T3 2026 (juillet–septembre)", () => {
     const p = parsePeriode("trimestre", undefined, undefined, TODAY);
-    expect(p.debut.toISOString().slice(0, 10)).toBe("2026-07-01");
-    expect(p.fin.toISOString().slice(0, 10)).toBe("2026-09-30");
+    expect(toDateString(p.debut)).toBe("2026-07-01");
+    expect(toDateString(p.fin)).toBe("2026-09-30");
     expect(p.label).toBe("T3 2026");
   });
 
   it("exercice → 1er jan–31 déc 2026", () => {
     const p = parsePeriode("exercice", undefined, undefined, TODAY);
-    expect(p.debut.toISOString().slice(0, 10)).toBe("2026-01-01");
-    expect(p.fin.toISOString().slice(0, 10)).toBe("2026-12-31");
+    expect(toDateString(p.debut)).toBe("2026-01-01");
+    expect(toDateString(p.fin)).toBe("2026-12-31");
   });
 
   it("12_mois → 365 jours glissants se terminant aujourd'hui", () => {
     const p = parsePeriode("12_mois", undefined, undefined, TODAY);
-    expect(p.fin.toISOString().slice(0, 10)).toBe("2026-08-07");
-    expect(p.debut.toISOString().slice(0, 10)).toBe("2025-08-08");
+    expect(toDateString(p.fin)).toBe("2026-08-07");
+    expect(toDateString(p.debut)).toBe("2025-08-08");
   });
 
   it("période libre → bornes respectées", () => {
     const p = parsePeriode(undefined, "2026-03-01", "2026-03-31", TODAY);
-    expect(p.debut.toISOString().slice(0, 10)).toBe("2026-03-01");
-    expect(p.fin.toISOString().slice(0, 10)).toBe("2026-03-31");
+    expect(toDateString(p.debut)).toBe("2026-03-01");
+    expect(toDateString(p.fin)).toBe("2026-03-31");
   });
 });
 
@@ -65,8 +66,8 @@ describe("memePeriodeN1", () => {
   it("décale d'un an les deux bornes", () => {
     const mois = parsePeriode("mois", undefined, undefined, TODAY);
     const n1 = memePeriodeN1(mois);
-    expect(n1.debut.toISOString().slice(0, 10)).toBe("2025-08-01");
-    expect(n1.fin.toISOString().slice(0, 10)).toBe("2025-08-31");
+    expect(toDateString(n1.debut)).toBe("2025-08-01");
+    expect(toDateString(n1.fin)).toBe("2025-08-31");
   });
 });
 
@@ -91,8 +92,8 @@ describe("getLast12Months", () => {
   it("retourne 12 mois ordonnés du plus ancien au plus récent", () => {
     const months = getLast12Months(TODAY);
     expect(months).toHaveLength(12);
-    expect(months[0]!.debut.toISOString().slice(0, 7)).toBe("2025-09");
-    expect(months[11]!.debut.toISOString().slice(0, 7)).toBe("2026-08");
+    expect(toDateString(months[0]!.debut).slice(0, 7)).toBe("2025-09");
+    expect(toDateString(months[11]!.debut).slice(0, 7)).toBe("2026-08");
     // Strictly ordered
     for (let i = 1; i < months.length; i++) {
       expect(months[i]!.debut.getTime()).toBeGreaterThan(months[i - 1]!.debut.getTime());

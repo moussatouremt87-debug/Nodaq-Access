@@ -32,7 +32,7 @@ import {
   INDICATEUR_IDS,
   type IndicateurId,
 } from "../routes/analytics.js";
-import { parsePeriode } from "./analytics-periods.js";
+import { parsePeriode, toDateString } from "./analytics-periods.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -697,8 +697,8 @@ async function executeTool(
         // Log (fire-and-forget) — spec §16: no value, no question, no response
         logAnalyticsTool(
           tenantId, id,
-          periode.debut.toISOString().slice(0, 10),
-          periode.fin.toISOString().slice(0, 10),
+          toDateString(periode.debut),
+          toDateString(periode.fin),
           compMode,
           Date.now() - t0,
           logStatus,
@@ -710,8 +710,8 @@ async function executeTool(
             valeur: partial.valeur,
             unite: partial.unite,
             periode: {
-              debut: periode.debut.toISOString().slice(0, 10),
-              fin: periode.fin.toISOString().slice(0, 10),
+              debut: toDateString(periode.debut),
+              fin: toDateString(periode.fin),
               label: periode.label,
             },
             nbSources: partial.nbSources,
@@ -723,8 +723,8 @@ async function executeTool(
       } catch (err) {
         logAnalyticsTool(
           tenantId, id,
-          periode.debut.toISOString().slice(0, 10),
-          periode.fin.toISOString().slice(0, 10),
+          toDateString(periode.debut),
+          toDateString(periode.fin),
           compMode,
           Date.now() - t0,
           "erreur",

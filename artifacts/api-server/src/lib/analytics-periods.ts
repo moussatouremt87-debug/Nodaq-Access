@@ -41,6 +41,19 @@ export function fmtDate(d: Date): string {
   return `${j === 1 ? "1er" : j} ${m} ${d.getFullYear()}`;
 }
 
+/**
+ * Format a Date as "YYYY-MM-DD" using its LOCAL components.
+ * Never use `toISOString().slice(0, 10)` on a period bound: period bounds are
+ * built with `new Date(y, m, d)` (local time), and toISOString() converts to
+ * UTC first — off by one day in any timezone ahead of UTC (e.g. Europe/Paris).
+ */
+export function toDateString(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 export function endOfDay(d: Date): Date {
   const r = new Date(d);
   r.setHours(23, 59, 59, 999);
