@@ -111,7 +111,7 @@ jobs:
         run: pnpm run typecheck
 
       # ── Tests ───────────────────────────────────────────────────────────
-      - name: Run RLS isolation tests
-        run: pnpm --filter @workspace/api-server run test
+      - name: Run all workspace tests
+        run: pnpm -r --if-present run test
         env:
           DATABASE_URL_APP: ${{ steps.setup_appuser.outputs.db_app_url }}
