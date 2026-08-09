@@ -47,3 +47,6 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Replit-uploaded attachments (chat/prompt scratch files, not source)
+attached_assets/
