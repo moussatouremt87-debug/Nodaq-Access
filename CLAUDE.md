@@ -10,7 +10,7 @@ strict, données hébergées en France, assistant IA intégré.
 
 ## Stack
 
-Monorepo **pnpm workspaces**, pnpm **10.34.5** (voir `packageManager`), Node **20**.
+Monorepo **pnpm workspaces**, pnpm **10.34.5** (voir `packageManager`), Node **24**.
 
 - `artifacts/api-server` — API Express, TypeScript ESM, bundle esbuild
 - `artifacts/nodaq` — front React + Vite

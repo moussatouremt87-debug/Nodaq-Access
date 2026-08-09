@@ -56,6 +56,7 @@ let testEmails: string[] = [];
 const BUSINESS_TABLES = [
   "activity", "affaires", "analytics_tool_logs", "archived_pdfs", "chat_messages", "classeur_documents",
   "connectors", "contrats", "cr_entries", "devis", "echeances", "factures",
+  "avoirs", "facture_sequences",
   "pending_actions", "prospects", "settings", "team_members", "absences",
 ] as const;
 
