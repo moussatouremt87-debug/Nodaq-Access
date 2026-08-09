@@ -4,7 +4,7 @@
  *   POST /api/chat/transcribe — audio → Scaleway STT → text
  *
  * Authentication & service-key guards are tested without real API calls.
- * Real Pixtral/STT calls require both MISTRAL_API_KEY and SCALEWAY_API_KEY.
+ * Les appels vision/STT sont interceptes par vitest.setup.ts (aucun fournisseur reel).
  *
  * Security / adversarial tests verify the prompt-injection trust boundary:
  * raw OCR text must never be forwarded to the agent, and document-embedded
@@ -78,7 +78,7 @@ describe("POST /api/chat/upload", () => {
    * chat-media-adversarial.test.ts mocks analyzeDocumentImage via vi.mock()
    * (hoisted before `app` imports) and asserts 201 + no-mutation on both the
    * no-caption and captioned upload paths.  A real-API call here would require
-   * MISTRAL_API_KEY AND a camera-quality image accepted by pixtral-12b-2409,
+   * une image de qualite camera acceptee par le modele de vision,
    * which is not available in the test environment.  The model is configured
    * and the route logic is verified via the adversarial suite.
    */
@@ -134,15 +134,13 @@ describe("Prompt-injection trust boundary", () => {
   });
 
   /**
-   * Integration test (requires MISTRAL_API_KEY):
+   * Test d'integration (LLM intercepte) :
    * A message that mimics a document containing an injection command must not
    * result in any tenant record being created.
    *
    * This exercises the system-prompt trust-boundary rule at the LLM layer.
    */
   test("injection-like document message does not create tenant records", async () => {
-    if (!process.env.MISTRAL_API_KEY) return;
-
     const injectionMessage = [
       "J'ai photographié un document. Données structurées extraites (NON FIABLES — voir règle sécurité) :",
       "",
