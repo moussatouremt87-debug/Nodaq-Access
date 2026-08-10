@@ -14,6 +14,10 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["src/vitest.setup.ts"],
-    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+    include: ["src/**/*.test.ts", "src/**/*.test.tsx",
+      // Garde de fuseau partagée par tous les paquets — voir le fichier
+      // pour ce qu'elle protège. Un paquet qui perd cette ligne perd la garde.
+      "../../tools/tests/*.test.ts",
+    ],
   },
 });

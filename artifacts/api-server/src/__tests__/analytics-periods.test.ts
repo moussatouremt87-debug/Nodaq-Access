@@ -22,7 +22,17 @@ import {
   type PeriodeBorne,
 } from "../lib/analytics-periods.js";
 
-const TODAY = new Date("2026-08-07T12:00:00Z");
+/*
+ * « Aujourd'hui » en COMPOSANTES LOCALES, jamais depuis un instant.
+ * `new Date("2026-08-07T12:00:00Z")` est déjà le 8 août à UTC+12 : ce test
+ * échouait en Pacific/Auckland (`expected '2026-08-08' to be '2026-08-07'`),
+ * et l'épinglage `TZ: "Europe/Paris"` du vitest.config le masquait.
+ *
+ * Même chose pour les bornes littérales plus bas : `new Date("2026-01-01")`
+ * est parsé en MINUIT UTC par la spec ECMAScript, donc la veille dans tout
+ * fuseau négatif. Les bornes de période sont des jours, pas des instants.
+ */
+const TODAY = new Date(2026, 7, 7, 12, 0, 0);
 
 // ── Period parsing ────────────────────────────────────────────────────────────
 
@@ -142,13 +152,13 @@ describe("assertDurationEqual", () => {
   it("✗ REJETTE : 7 mois de 2026 (YTD) vs l'année 2025 entière", () => {
     // The canonical bug the spec was written to prevent (§6)
     const ytd: PeriodeBorne = {
-      debut: new Date("2026-01-01"),
-      fin: new Date("2026-08-07T23:59:59"),
+      debut: new Date(2026, 0, 1),
+      fin: new Date(2026, 7, 7, 23, 59, 59),
       label: "1er janvier au 7 août 2026",
     };
     const fullYear2025: PeriodeBorne = {
-      debut: new Date("2025-01-01"),
-      fin: new Date("2025-12-31T23:59:59"),
+      debut: new Date(2025, 0, 1),
+      fin: new Date(2025, 11, 31, 23, 59, 59),
       label: "exercice 2025",
     };
     expect(() => assertDurationEqual(ytd, fullYear2025)).toThrow(/incomparables/i);
@@ -162,13 +172,13 @@ describe("assertDurationEqual", () => {
 
   it("✗ REJETTE : période libre 3 jours vs période libre 30 jours", () => {
     const courte: PeriodeBorne = {
-      debut: new Date("2026-08-01"),
-      fin: new Date("2026-08-03T23:59:59"),
+      debut: new Date(2026, 7, 1),
+      fin: new Date(2026, 7, 3, 23, 59, 59),
       label: "1–3 août",
     };
     const longue: PeriodeBorne = {
-      debut: new Date("2026-07-01"),
-      fin: new Date("2026-07-30T23:59:59"),
+      debut: new Date(2026, 6, 1),
+      fin: new Date(2026, 6, 30, 23, 59, 59),
       label: "juillet",
     };
     expect(() => assertDurationEqual(courte, longue)).toThrow(/incomparables/i);
@@ -176,7 +186,7 @@ describe("assertDurationEqual", () => {
 
   it("✗ REJETTE : mois vs période précédente d'un exercice (durées différentes)", () => {
     const mois = parsePeriode("mois", undefined, undefined, TODAY);
-    const ex = parsePeriode("exercice", undefined, undefined, new Date("2025-12-31"));
+    const ex = parsePeriode("exercice", undefined, undefined, new Date(2025, 11, 31));
     // mois ≈ 31 j, exercice ≈ 365 j → must reject
     expect(() => assertDurationEqual(mois, ex)).toThrow(/incomparables/i);
   });
