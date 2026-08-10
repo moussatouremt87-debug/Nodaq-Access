@@ -55,6 +55,9 @@ node lib/db/scripts/create-app-role.cjs --rotate-password
 node lib/db/scripts/migrate-multitenant.cjs
 
 # Activer FORCE ROW LEVEL SECURITY + policies tenant_isolation (idempotent)
+# Y compris la policy publique `devis_public_token_lookup`, qui compare le
+# CONDENSAT du jeton d'acceptation depuis la migration 014 — la colonne en clair
+# `accept_token` n'existe plus.
 node lib/db/scripts/migrate-rls.cjs
 
 # Créer le premier tenant + utilisateur OWNER (à lancer une seule fois)

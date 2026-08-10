@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { withTenant, devisTable, affairesTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { z } from "zod";
+import { createHash } from "node:crypto";
 import type { DevisLine, DevisAddress } from "@workspace/db";
 import { sendDocument } from "../lib/canal-emission.js";
 import { toDateString } from "@nodaq/shared";
@@ -249,18 +250,25 @@ router.post("/devis/:id/envoyer", async (req, res): Promise<void> => {
   const updated = await withTenant(tenantId, async tx => {
     const [devis] = await tx.select().from(devisTable).where(eq(devisTable.id, id!));
     if (!devis) return null;
-    const acceptToken = devis.acceptToken ?? crypto.randomUUID();
+    // Le jeton est engendré ICI et ne sera écrit NULLE PART : seul son
+    // condensat va en base. Il ne vit donc que dans le lien envoyé au client.
+    //
+    // Conséquence assumée : un renvoi du même devis produit un NOUVEAU jeton et
+    // invalide le lien précédent. On ne peut pas faire autrement — le jeton
+    // d'origine n'est plus retrouvable, c'est précisément le but.
+    const acceptToken = crypto.randomUUID();
     const [u] = await tx.update(devisTable).set({
       status: "ENVOYE",
       dateEnvoi: new Date(),
-      acceptToken,
+      acceptTokenSha256: createHash("sha256").update(acceptToken).digest("hex"),
     }).where(eq(devisTable.id, id!)).returning();
-    return u;
+    return u ? { ...u, acceptToken } : null;
   });
 
   if (!updated) { res.status(404).json({ error: "Devis introuvable" }); return; }
 
   // Send email (dev: logged)
+  // La SEULE apparition du jeton en clair de tout le produit.
   const acceptUrl = `${process.env.APP_URL ?? "https://nodaq.fr"}/devis/accepter/${updated.acceptToken}`;
   const envoi = await sendDocument({
     canal: "EMAIL",

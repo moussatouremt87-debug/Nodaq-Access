@@ -39,7 +39,9 @@ type Devis = {
   id: string; reference: string; clientName: string; status: string;
   lines: DevisLine[]; totalHTCents: number; totalTTCCents: number; tvaRate: number; remise: number;
   notes?: string | null; validUntil?: string | null; affaireId?: string | null;
-  acceptToken?: string | null; dateEnvoi?: string | null;
+  // Plus d'`acceptToken` : le jeton n'est plus stocké, seul son condensat l'est.
+  // L'URL d'acceptation n'existe qu'UNE fois, dans la réponse à l'envoi.
+  dateEnvoi?: string | null;
   createdAt: string; updatedAt: string;
 };
 
@@ -85,7 +87,8 @@ export default function DevisPage() {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Devis | null>(null);
-  const [linkDialogDevis, setLinkDialogDevis] = useState<Devis | null>(null);
+  /** Rempli par la réponse à l'envoi — la seule occasion de voir le lien. */
+  const [linkDialogDevis, setLinkDialogDevis] = useState<(Devis & { acceptUrl: string }) | null>(null);
   /** Devis currently open in the "Envoyer" email-input dialog */
   const [sendDialogDevis, setSendDialogDevis] = useState<Devis | null>(null);
 
@@ -323,7 +326,7 @@ function DevisRowMenu({ devis, onEdit, onDelete, onConvert, onSend, convertPendi
           {(devis.status === 'BROUILLON' || devis.status === 'ENVOYE') && (
             <DropdownMenuItem onClick={onSend} disabled={sendPending}>
               <Send className="h-3.5 w-3.5 mr-2" />
-              {devis.acceptToken ? 'Afficher le lien d\'acceptation' : 'Envoyer au client'}
+              {devis.dateEnvoi ? 'Renvoyer au client' : 'Envoyer au client'}
             </DropdownMenuItem>
           )}
           {devis.status === 'ACCEPTE' && !devis.affaireId && (
@@ -422,14 +425,18 @@ function SendDevisDialog({ devis, open, onOpenChange, onSend, sending, sendError
 
 /** Dialog showing the accept link for a sent devis. */
 function AcceptLinkDialog({ devis, open, onOpenChange }: {
-  devis: Devis | null; open: boolean; onOpenChange: (v: boolean) => void;
+  devis: (Devis & { acceptUrl: string }) | null;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
 }) {
   const { toast } = useToast();
   if (!devis) return null;
 
-  const acceptUrl = devis.acceptToken
-    ? `${window.location.origin}/api/public/devis/${devis.acceptToken}/accept-page`
-    : null;
+  // L'URL vient de la RÉPONSE À L'ENVOI et de nulle part ailleurs : le jeton
+  // n'étant plus stocké, il n'est pas reconstructible après coup. C'est le prix
+  // de ne plus garder un porteur en base, et il est assumé — l'artisan renvoie
+  // le devis, ce qui engendre un nouveau lien.
+  const acceptUrl = devis.acceptUrl ?? null;
 
   const copyLink = () => {
     if (!acceptUrl) return;
@@ -467,7 +474,10 @@ function AcceptLinkDialog({ devis, open, onOpenChange }: {
               </Button>
             </div>
           ) : (
-            <p className="text-sm text-destructive">Aucun token d'acceptation disponible.</p>
+            <p className="text-sm text-destructive">
+              Ce lien ne s'affiche qu'une fois, juste après l'envoi. Renvoyez le
+              devis au client pour en obtenir un nouveau.
+            </p>
           )}
           {devis.dateEnvoi && (
             <p className="text-xs text-muted-foreground">
