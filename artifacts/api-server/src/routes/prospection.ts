@@ -11,7 +11,7 @@
  * compris en B2B. Rien dans ce module n'insère d'image dans un message, et une
  * garde le vérifie sur le CORPS produit.
  */
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response, type RequestHandler } from "express";
 import { z } from "zod";
 import { and, eq, sql, desc } from "drizzle-orm";
 import {
@@ -20,6 +20,7 @@ import {
   contactBasesTable,
   clientsTable,
   facturesTable,
+  settingsTable,
 } from "@workspace/db";
 import {
   TYPES_CONTACT,
@@ -29,6 +30,9 @@ import {
   agregatPubliable,
   RETENTION_PROSPECTION_JOURS,
   canauxAutorises,
+  axesPourMetier,
+  raisonSilence,
+  MESSAGES_SILENCE,
   toDateString,
   type TypeContact,
   type BaseLegale,
@@ -42,6 +46,13 @@ import {
   chargerContact,
 } from "../lib/prospection.js";
 import { sendDocument } from "../lib/canal-emission.js";
+import {
+  chercherEntreprises,
+  configAnnuaire,
+  AnnuaireConfigError,
+  AnnuaireError,
+  type TransportAnnuaire,
+} from "../lib/annuaire-entreprises.js";
 
 const router: IRouter = Router();
 
@@ -402,6 +413,173 @@ router.post("/prospection/envoyer", async (req, res): Promise<void> => {
 
   res.json({ canal: "email", envoye: envoi.success, lienOpposition, corps });
 });
+
+// ── Axes de prospection, depuis des sources PUBLIQUES ───────────────────────
+
+/** Lit un réglage du tenant, sans valeur inventée. */
+async function reglage(tenantId: string, cle: string): Promise<string | null> {
+  const rows = await withTenant(tenantId, (tx) =>
+    tx.select({ value: settingsTable.value }).from(settingsTable).where(eq(settingsTable.key, cle)),
+  );
+  const v = rows[0]?.value;
+  return typeof v === "string" && v.trim().length > 0 ? v.trim() : null;
+}
+
+/**
+ * GET /prospection/axes — QUI démarcher, et pourquoi.
+ *
+ * ╔═══════════════════════════════════════════════════════════════════════════╗
+ * ║  UNIQUEMENT DES CIBLES PROFESSIONNELLES. Le type de sortie ne porte      ║
+ * ║  aucune valeur « particulier » — ce n'est pas un filtre qu'on applique,   ║
+ * ║  c'est un champ qui n'existe pas.                                        ║
+ * ╚═══════════════════════════════════════════════════════════════════════════╝
+ *
+ * Chaque axe CITE sa source. Quand aucune source n'est configurée, la route
+ * rend zéro axe et DIT pourquoi : une suggestion que l'artisan ne pourrait pas
+ * vérifier ne s'affiche pas.
+ */
+router.get("/prospection/axes", async (req, res): Promise<void> => {
+  const tenantId = req.tenantId!;
+
+  // La source vient de la CONFIGURATION. Absente ⇒ aucune suggestion, et on le
+  // dit — jamais une piste qu'on ne pourrait pas justifier.
+  let sources: Array<{ label: string; url: string }> = [];
+  try {
+    sources = [configAnnuaire().source];
+  } catch (err) {
+    if (!(err instanceof AnnuaireConfigError)) throw err;
+  }
+
+  const contexte = {
+    secteur: await reglage(tenantId, "metier.secteur"),
+    zone: (await reglage(tenantId, "company.adresse_ville")) ?? (await reglage(tenantId, "company.adresse_cp")),
+    sources,
+  };
+
+  const axes = axesPourMetier(contexte);
+  const raison = raisonSilence(contexte);
+
+  res.json({
+    axes,
+    // Le rappel est affiché en PERMANENCE, pas seulement quand il y a des axes.
+    avertissement:
+      "Ces pistes ne visent que des PROFESSIONNELS. Le démarchage téléphonique " +
+      "d'un particulier exige son consentement préalable.",
+    raisonSilence: raison,
+    messageSilence: raison ? MESSAGES_SILENCE[raison] : null,
+  });
+});
+
+/**
+ * POST /prospection/contacts/:id/enrichir
+ *
+ * Complète un contact PROFESSIONNEL depuis un registre public, et n'écrit que
+ * ce qui manque : l'artisan a pu corriger une adresse, et une source publique
+ * n'a pas à écraser sa correction.
+ *
+ * ── PAS DE BASE LÉGALE, PAS D'ENRICHISSEMENT ────────────────────────────────
+ * Aucune donnée n'est stockée sans base légale documentée. Un contact qui n'en
+ * a pas est refusé en 409 — enrichir d'abord et régulariser ensuite serait
+ * exactement l'inverse de ce que le registre décrit.
+ *
+ * L'origine de l'enrichissement est consignée dans une NOUVELLE ligne de
+ * `contact_bases`, table append-only : on saura d'où viennent ces champs.
+ */
+export function creerRouteEnrichissement(transport?: TransportAnnuaire): RequestHandler {
+  return async (req: Request, res: Response): Promise<void> => {
+    const tenantId = req.tenantId!;
+    const { id } = req.params;
+
+    const contact = await chargerContact(tenantId, typeof id === "string" ? id : "");
+    if (!contact) { res.status(404).json({ error: "Contact introuvable" }); return; }
+
+    // Un PARTICULIER ne s'enrichit pas depuis un registre d'entreprises : la
+    // donnée n'y serait pas, et l'y chercher reviendrait à traiter une
+    // personne physique comme une cible professionnelle.
+    if (contact.type !== "PRO") {
+      res.status(422).json({
+        error: "L'enrichissement ne vise que des contacts PROFESSIONNELS.",
+      });
+      return;
+    }
+
+    const base = await baseCourante(tenantId, contact.id);
+    if (!base) {
+      res.status(409).json({
+        error:
+          "Ce contact n'a aucune base légale enregistrée. Documentez-la avant " +
+          "d'enrichir : aucune donnée n'est stockée sans base légale.",
+      });
+      return;
+    }
+
+    let trouvees;
+    try {
+      trouvees = await chercherEntreprises(
+        { quoi: contact.nom, ou: contact.ville ?? contact.codePostal ?? "" },
+        transport,
+      );
+    } catch (err) {
+      if (err instanceof AnnuaireConfigError) {
+        res.status(503).json({
+          error: "Aucune source publique n'est configurée sur ce déploiement.",
+          variableManquante: err.variableManquante,
+        });
+        return;
+      }
+      if (err instanceof AnnuaireError) {
+        res.status(502).json({ error: err.message });
+        return;
+      }
+      throw err;
+    }
+
+    const trouvee = trouvees[0];
+    if (!trouvee) {
+      // Rien trouvé est un RÉSULTAT, pas une panne — et surtout pas une
+      // invitation à inventer.
+      res.json({ enrichi: false, motif: "Aucune correspondance dans le registre public." });
+      return;
+    }
+
+    const complement = {
+      ...(contact.adresse ? {} : trouvee.adresse ? { adresse: trouvee.adresse } : {}),
+      ...(contact.codePostal ? {} : trouvee.codePostal ? { codePostal: trouvee.codePostal } : {}),
+      ...(contact.ville ? {} : trouvee.ville ? { ville: trouvee.ville } : {}),
+      ...(contact.siret ? {} : trouvee.siren ? { siret: trouvee.siren } : {}),
+    };
+
+    if (Object.keys(complement).length > 0) {
+      await withTenant(tenantId, (tx) =>
+        tx
+          .update(contactsProspectionTable)
+          .set(complement)
+          .where(eq(contactsProspectionTable.id, contact.id)),
+      );
+      // La provenance est consignée : append-only, donc une nouvelle ligne.
+      await withTenant(tenantId, (tx) =>
+        tx.insert(contactBasesTable).values({
+          tenantId,
+          contactId: contact.id,
+          contactType: contact.type,
+          base: base.base,
+          source: `${base.source} · enrichi depuis ${trouvee.source.label}`,
+          obtenueLe: toDateString(new Date()),
+          ...(base.informeeLe ? { informeeLe: base.informeeLe } : {}),
+        }),
+      );
+    }
+
+    res.json({
+      enrichi: Object.keys(complement).length > 0,
+      champs: Object.keys(complement),
+      // La source est CITÉE dans la réponse, pas seulement stockée.
+      source: trouvee.source,
+    });
+  };
+}
+
+router.post("/prospection/contacts/:id/enrichir", creerRouteEnrichissement());
 
 // ── Signaux de zone ──────────────────────────────────────────────────────────
 
