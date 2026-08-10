@@ -115,6 +115,35 @@ export default function ParametresEnvoi() {
     onError: (e: Error) => toast({ title: 'Échec', description: e.message, variant: 'destructive' }),
   });
 
+  /**
+   * Enrôlement automatique du domaine.
+   *
+   * Remplace le geste manuel — un humain qui enrôlait dans la console du
+   * fournisseur, relevait le sélecteur DKIM et le recopiait — qui cessait de
+   * tenir vers le dixième client.
+   *
+   * En cas de 503, le déploiement n'est pas configuré : on le DIT, sans
+   * laisser croire qu'une préparation est en cours. Le chemin manuel reste
+   * ouvert.
+   */
+  const enroler = useMutation({
+    mutationFn: async () => {
+      const r = await apiFetch(`${API}/parametres-envoi/enroler`, { method: 'POST' });
+      const j = (await r.json().catch(() => ({}))) as { error?: string; replManuel?: boolean };
+      if (!r.ok) throw new Error(j.error ?? "Enrôlement impossible");
+      return j;
+    },
+    onSuccess: () => {
+      setDiagnostic(null);
+      toast({
+        title: 'Domaine préparé',
+        description: 'Publiez les trois enregistrements, puis lancez la vérification.',
+      });
+      void queryClient.invalidateQueries({ queryKey: ['parametres-envoi'] });
+    },
+    onError: (e: Error) => toast({ title: 'Échec', description: e.message, variant: 'destructive' }),
+  });
+
   const verifier = useMutation({
     mutationFn: async (): Promise<Diagnostic> => {
       const r = await apiFetch(`${API}/parametres-envoi/verifier`, { method: 'POST' });
@@ -271,13 +300,26 @@ export default function ParametresEnvoi() {
                   Tant que l'enrôlement automatique n'est pas branché, la seule
                   question posée est le nom de domaine, et l'écran dit
                   honnêtement comment la suite arrive. */}
+              {/* L'enrôlement est désormais BRANCHÉ : l'écran propose le geste
+                  au lieu de promettre qu'un humain le fera. Quand il n'est pas
+                  configuré sur ce déploiement, la route rend 503 et l'écran le
+                  dit — sans laisser croire que quelque chose est en cours. */}
               <div className="rounded-lg border border-card-border bg-muted/40 p-3 text-xs text-muted-foreground">
-                Nous préparons l'authentification de votre domaine et vous envoyons par e-mail
-                les trois lignes à recopier chez votre hébergeur de domaine. Vous n'avez rien à
-                chercher de votre côté.
+                {data?.parametres?.dkimSelecteur
+                  ? "Votre domaine est enrôlé. Publiez les trois enregistrements ci-dessous chez votre hébergeur, puis lancez la vérification."
+                  : "Nous préparons l'authentification de votre domaine et vous rendons les trois lignes à recopier chez votre hébergeur. Vous n'avez rien à chercher de votre côté."}
               </div>
 
               <div className="flex flex-wrap gap-2 pt-1">
+                <Button
+                  variant="outline"
+                  onClick={() => enroler.mutate()}
+                  disabled={enroler.isPending || !form.domaine}
+                  data-testid="bouton-enroler"
+                >
+                  {enroler.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  {data?.parametres?.dkimSelecteur ? "Ré-enrôler le domaine" : "Préparer mon domaine"}
+                </Button>
                 <Button onClick={() => enregistrer.mutate()} disabled={enregistrer.isPending}>
                   {enregistrer.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Enregistrer

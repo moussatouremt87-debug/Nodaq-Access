@@ -16,6 +16,12 @@ import { resolveTxt } from "node:dns/promises";
 import { withTenant, parametresEnvoiTable, envoisJournalTable, CLE_SMTP_PASSWORD } from "@workspace/db";
 import { enregistrerSecret, secretExiste, revoquerSecret } from "../lib/tenant-secrets.js";
 import {
+  enrolerDomaine,
+  TemConfigError,
+  TemEnrolementError,
+  type TransportTem,
+} from "../lib/tem.js";
+import {
   verifierDomaine,
   enregistrementsAttendus,
   type EnregistrementsResolus,
@@ -198,6 +204,87 @@ router.put("/parametres-envoi", async (req, res): Promise<void> => {
   res.json({ ...enregistre, smtpMotDePasseEnregistre: await secretExiste(tenantId, CLE_SMTP_PASSWORD) });
 });
 
+// ── Enrôlement automatique du domaine ────────────────────────────────────────
+
+/**
+ * POST /parametres-envoi/enroler
+ *
+ * Enrôle le domaine auprès du service d'envoi et RANGE le sélecteur DKIM et sa
+ * clé publique. L'artisan n'a plus qu'à publier trois lignes chez son
+ * hébergeur — c'est la route de vérification qui lui dira lesquelles.
+ *
+ * Le transport est injectable pour les tests, comme le résolveur DNS.
+ *
+ * ── CE QUE CETTE ROUTE NE FAIT PAS ──────────────────────────────────────────
+ * Elle ne marque JAMAIS le domaine vérifié. L'enrôlement dit seulement que le
+ * fournisseur connaît le domaine et a émis une clé ; il ne dit rien de ce qui
+ * est publié dans le DNS. Confondre les deux ferait expédier depuis un domaine
+ * dont SPF et DKIM ne sont pas en place — pire que le repli, parce que
+ * l'artisan croirait avoir envoyé.
+ *
+ * ── EN CAS D'ÉCHEC ──────────────────────────────────────────────────────────
+ * Le chemin manuel reste ouvert : l'écran continue de proposer la saisie du
+ * sélecteur et de la valeur. On ne remplace pas une béquille par un trou.
+ */
+export function creerRouteEnrolement(transport?: TransportTem): RequestHandler {
+  return async (req: Request, res: Response): Promise<void> => {
+    const tenantId = req.tenantId!;
+
+    const [params] = await withTenant(tenantId, (tx) =>
+      tx.select().from(parametresEnvoiTable).where(eq(parametresEnvoiTable.tenantId, tenantId)),
+    );
+    if (!params?.domaine) {
+      res.status(409).json({
+        error: "Renseignez d'abord votre domaine, puis relancez l'enrôlement.",
+      });
+      return;
+    }
+
+    let enrole;
+    try {
+      enrole = await enrolerDomaine(params.domaine, transport);
+    } catch (err) {
+      if (err instanceof TemConfigError) {
+        // Configuration absente : c'est le DÉPLOIEMENT qui est en cause, pas la
+        // requête. 503, et le nom de la variable — jamais sa valeur.
+        res.status(503).json({
+          error: "L'enrôlement automatique n'est pas configuré sur ce déploiement.",
+          variableManquante: err.variableManquante,
+          replManuel: true,
+        });
+        return;
+      }
+      if (err instanceof TemEnrolementError) {
+        res.status(502).json({ error: err.message, replManuel: true });
+        return;
+      }
+      throw err;
+    }
+
+    const [maj] = await withTenant(tenantId, (tx) =>
+      tx
+        .update(parametresEnvoiTable)
+        .set({
+          dkimSelecteur: enrole.selecteur,
+          dkimValeur: enrole.valeur,
+          // L'enrôlement REMET la vérification à zéro : le domaine n'est
+          // vérifié que lorsque le DNS le confirme.
+          verifieLe: null,
+        })
+        .where(eq(parametresEnvoiTable.id, params.id))
+        .returning(),
+    );
+
+    res.json({
+      enrole: true,
+      dkimSelecteur: maj?.dkimSelecteur ?? null,
+      // La clé DKIM est PUBLIQUE : elle est faite pour être publiée dans le DNS.
+      dkimValeur: maj?.dkimValeur ?? null,
+      prochaineEtape: "Publiez les trois enregistrements, puis lancez la vérification.",
+    });
+  };
+}
+
 // ── Vérification DNS ──────────────────────────────────────────────────────────
 
 /**
@@ -252,6 +339,7 @@ export function creerRouteVerification(
   };
 }
 
+router.post("/parametres-envoi/enroler", creerRouteEnrolement());
 router.post("/parametres-envoi/verifier", creerRouteVerification());
 
 // ── Journal ───────────────────────────────────────────────────────────────────
