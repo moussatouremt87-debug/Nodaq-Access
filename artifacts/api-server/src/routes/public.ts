@@ -29,6 +29,7 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { toDateString } from "@nodaq/shared";
+import { genererPdfDevis, chargerEmetteur, nomFichierDevis } from "../lib/pdf-devis.js";
 
 const router: IRouter = Router();
 
@@ -201,6 +202,9 @@ router.get("/public/devis/:token/accept-page", limiterDebit, async (req, res): P
       reference: devis.reference,
       clientName: devis.clientName,
       entreprise,
+      // Le document reste téléchargeable APRÈS acceptation : c'est là que le
+      // client veut le garder.
+      pdfUrl: `/api/public/devis/${token}/pdf`,
     });
     return;
   }
@@ -211,6 +215,7 @@ router.get("/public/devis/:token/accept-page", limiterDebit, async (req, res): P
       validUntil: devis.validUntil,
       reference: devis.reference,
       entreprise,
+      pdfUrl: `/api/public/devis/${token}/pdf`,
     });
     return;
   }
@@ -247,6 +252,8 @@ router.get("/public/devis/:token/accept-page", limiterDebit, async (req, res): P
     validUntil: devis.validUntil,
     alreadyAccepted: false,
     expired: false,
+    /** Chemin du PDF, servi par le même jeton. Jamais l'identifiant du devis. */
+    pdfUrl: `/api/public/devis/${token}/pdf`,
   });
 });
 
@@ -317,6 +324,41 @@ router.post("/public/devis/:token/accept", limiterDebit, async (req, res): Promi
     acceptedBy: updated.acceptedBy,
     reference: devis.reference,
   });
+});
+
+/**
+ * GET /public/devis/:token/pdf — le PDF, servi par le JETON.
+ *
+ * Pas par une session : le client de l'artisan n'en a aucune. Mêmes règles que
+ * le reste de cette page — la policy étroite ne laisse voir que CE devis, et
+ * un jeton inconnu rend la même réponse qu'un devis inexistant.
+ *
+ * SERVI MÊME APRÈS ACCEPTATION, et c'est délibéré : c'est précisément à ce
+ * moment-là que le client veut garder son document. Le lui retirer une fois
+ * qu'il a signé serait le priver de la seule trace de ce qu'il a accepté.
+ *
+ * Un devis PÉRIMÉ reste téléchargeable lui aussi : il ne peut plus être
+ * accepté, mais le client a le droit de relire ce qu'on lui avait proposé.
+ */
+router.get("/public/devis/:token/pdf", limiterDebit, async (req, res): Promise<void> => {
+  const { token } = req.params;
+  if (typeof token !== "string" || token.length === 0) {
+    res.status(404).json(INTROUVABLE);
+    return;
+  }
+
+  const devis = await lookupByToken(token);
+  if (!devis) { res.status(404).json(INTROUVABLE); return; }
+
+  const emetteur = await chargerEmetteur(devis.tenantId);
+  const pdf = await genererPdfDevis(devis, emetteur);
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="${nomFichierDevis(devis.reference)}"`,
+  );
+  res.send(pdf);
 });
 
 export default router;

@@ -63,6 +63,34 @@ export function ObjectifsParametres() {
 
   const valide = Number(chargesEuros) > 0 && Number(tauxPct) > 0 && Number(tauxPct) <= 100;
 
+  /**
+   * L'ÉCHO — ce que la borne ne peut pas faire.
+   *
+   * Une borne attrape `35` au lieu de `3500`, mais pas 120 000 centimes saisis
+   * en croyant écrire des euros : 1 200 € reste plausible pour une très petite
+   * structure, et refuser une valeur plausible refuserait aussi des cas
+   * légitimes.
+   *
+   * Ce qu'une borne ne peut pas distinguer, l'utilisateur le voit d'un coup
+   * d'œil : personne ne laisse passer « 100 € par mois » pour une entreprise
+   * avec trois salariés. On rend donc la valeur comprise, mise en forme, et
+   * ramenée à une échelle que l'artisan connaît — le mois.
+   */
+  const echoCharges = (() => {
+    const annuel = Number(chargesEuros);
+    if (!Number.isFinite(annuel) || annuel <= 0) return null;
+    const fmt = (n: number) =>
+      n.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+    return `${fmt(annuel)} de charges fixes par an, soit ${fmt(annuel / 12)} par mois.`;
+  })();
+
+  const echoTaux = (() => {
+    const pct = Number(tauxPct);
+    if (!Number.isFinite(pct) || pct <= 0) return null;
+    const reste = Math.round(pct);
+    return `Sur 100 € facturés, il vous reste ${reste} € après matériaux et sous-traitance.`;
+  })();
+
   return (
     <div className="rounded-xl border border-card-border bg-card p-5">
       <div className="mb-1 flex items-center gap-2 text-sm font-medium">
@@ -85,6 +113,11 @@ export function ObjectifsParametres() {
         value={chargesEuros}
         onChange={(e) => setChargesEuros(e.target.value)}
       />
+      {echoCharges && (
+        <p className="mb-1 text-xs font-medium text-primary" data-testid="echo-charges">
+          {echoCharges}
+        </p>
+      )}
       <p className="mb-4 text-xs text-muted-foreground">
         Ce que vous payez même sans chantier : loyer, assurances, salaires permanents,
         crédits, comptable.
@@ -102,6 +135,11 @@ export function ObjectifsParametres() {
         value={tauxPct}
         onChange={(e) => setTauxPct(e.target.value)}
       />
+      {echoTaux && (
+        <p className="mb-1 text-xs font-medium text-primary" data-testid="echo-taux">
+          {echoTaux}
+        </p>
+      )}
       <p className="mb-4 text-xs text-muted-foreground">
         Sur 100 € facturés, ce qu'il vous reste <strong>après</strong> les matériaux et la
         sous-traitance de ce chantier — avant vos frais fixes. Ce n'est pas votre marge

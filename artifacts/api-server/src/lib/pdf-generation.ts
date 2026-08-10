@@ -141,7 +141,14 @@ function fmtCents(cents: number): string {
   return (cents / 100).toFixed(2).replace(".", ",") + " €";
 }
 
-async function generateHumanPdf(data: FactureForPdf): Promise<Buffer> {
+/**
+ * PDF lisible, sans pièce jointe XML.
+ *
+ * EXPORTÉ pour les DEVIS : Factur-X est un format de facture, et un devis n'en
+ * est pas une. Les factures et avoirs passent par `archiveFacturxPdf`, qui
+ * ajoute le XML par-dessus ce même rendu.
+ */
+export async function generateHumanPdf(data: FactureForPdf): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: "A4", margin: 50, autoFirstPage: true });
     const chunks: Buffer[] = [];

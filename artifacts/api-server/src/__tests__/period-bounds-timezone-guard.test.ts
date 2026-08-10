@@ -42,7 +42,7 @@ const FIX_MESSAGE =
   "Une DATE MÉTIER (jour calendaire) ne doit jamais être formatée avec toISOString().slice(0, 10) " +
   "ou toISOString().split(\"T\")[0] — utilise toDateString() (composantes locales) depuis @nodaq/shared. " +
   "Si ce cas est un INSTANT légitime (timestamptz, ou construction+lecture entièrement en UTC), " +
-  "documente-le avec un commentaire `tz-guard-allow: <raison>` sur la ligne ou la ligne au-dessus.";
+  "documente-le avec un commentaire `tz-guard-allow: <raison>` sur la ligne, ou dans le bloc de commentaires qui la précède.";
 
 // ─── File collection (mirrors llm-single-exit.test.ts pattern) ───────────────
 
@@ -113,7 +113,26 @@ function findViolatingLines(file: string, content: string): string[] {
     const line = lines[i]!;
     if (!FORBIDDEN_RE.test(line)) continue;
     const markedOnSameLine = line.includes(ALLOW_MARKER);
-    const markedOnLineAbove = i > 0 && lines[i - 1]!.includes(ALLOW_MARKER);
+
+    // Le marqueur est cherché dans TOUT le bloc de commentaires contigu qui
+    // précède, et non sur la seule ligne du dessus.
+    //
+    // La dérogation exige une RAISON, et une raison sérieuse tient rarement
+    // sur une ligne : n'en lire qu'une mettait cette garde en contradiction
+    // avec sa propre exigence — une justification correctement rédigée
+    // n'était pas reconnue, et la seule façon de passer était de TRONQUER la
+    // raison jusqu'à ce que ça tienne. Une garde qu'on contourne ainsi finit
+    // par ne plus documenter que des phrases coupées.
+    //
+    // Même défaut, même correction que la garde `secrets-magasin-unique`.
+    // On s'arrête à la première ligne non commentée : un marqueur posé pour
+    // une autre ligne ne peut donc pas déteindre sur celle-ci.
+    let markedOnLineAbove = false;
+    for (let j = i - 1; j >= 0; j--) {
+      const precedente = lines[j]!;
+      if (!/^\s*(\/\/.*|\*.*|\/\*.*|\*\/)?\s*$/.test(precedente)) break;
+      if (precedente.includes(ALLOW_MARKER)) { markedOnLineAbove = true; break; }
+    }
     if (markedOnSameLine || markedOnLineAbove) continue;
     violations.push(`${file.replace(WORKSPACE_ROOT, "")}:${i + 1}: ${line.trim()}`);
   }

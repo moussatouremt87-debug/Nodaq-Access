@@ -10,7 +10,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { CheckCircle2, Clock, XCircle, FileText, Loader2 } from 'lucide-react';
+import { CheckCircle2, Clock, XCircle, FileText, Loader2, Download } from 'lucide-react';
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
 const API = `${BASE}/api`;
@@ -40,6 +40,8 @@ type AcceptPageData = {
   acceptedAt?: string;
   acceptedBy?: string;
   expired?: boolean;
+  /** Servi par le même jeton, sans session. */
+  pdfUrl?: string | null;
 };
 
 const euros = (cents: number): string =>
@@ -102,6 +104,7 @@ export default function DevisAccepterPage() {
         icon={<Clock className="h-12 w-12 text-yellow-500" />}
         title="Devis expiré"
         message={`Le devis ${data.reference} n'est plus valable depuis le ${data.validUntil ? new Date(data.validUntil).toLocaleDateString('fr-FR') : '—'}. Contactez ${data.entreprise?.nom ?? 'votre prestataire'} pour obtenir un devis actualisé.`}
+        pdfUrl={data.pdfUrl}
       />
     );
   }
@@ -114,6 +117,7 @@ export default function DevisAccepterPage() {
         icon={<CheckCircle2 className="h-12 w-12 text-green-500" />}
         title="Devis accepté"
         message={`Le devis ${data.reference} a été accepté${by ? ` par ${by}` : ''}${when ? ` le ${new Date(when).toLocaleDateString('fr-FR', { dateStyle: 'long' })}` : ''}. ${data.entreprise?.nom ?? 'Votre prestataire'} a été notifié.`}
+        pdfUrl={data.pdfUrl}
       />
     );
   }
@@ -221,6 +225,8 @@ export default function DevisAccepterPage() {
           </div>
         )}
 
+        <BoutonPdf url={data.pdfUrl} />
+
         {/* Acceptance form */}
         <div className="space-y-4">
           <div className="space-y-1.5">
@@ -265,13 +271,35 @@ export default function DevisAccepterPage() {
   );
 }
 
-function StatusScreen({ icon, title, message }: { icon: React.ReactNode; title: string; message: string }) {
+/**
+ * Le devis en PDF, téléchargeable.
+ *
+ * Un lien, pas un `fetch` : le navigateur sait télécharger un fichier, et le
+ * jeton suffit à l'autoriser. Passer par du JavaScript demanderait de garder
+ * les octets en mémoire pour rien.
+ */
+function BoutonPdf({ url }: { url?: string | null }) {
+  if (!url) return null;
+  return (
+    <Button asChild variant="outline" className="w-full gap-2" data-testid="lien-pdf-devis">
+      <a href={url} download>
+        <Download className="h-4 w-4" />
+        Télécharger le devis en PDF
+      </a>
+    </Button>
+  );
+}
+
+function StatusScreen({ icon, title, message, pdfUrl }: {
+  icon: React.ReactNode; title: string; message: string; pdfUrl?: string | null;
+}) {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-sm text-center space-y-4">
         <div className="flex justify-center">{icon}</div>
         <h1 className="text-xl font-bold">{title}</h1>
         <p className="text-muted-foreground text-sm leading-relaxed">{message}</p>
+        <BoutonPdf url={pdfUrl} />
       </div>
     </div>
   );

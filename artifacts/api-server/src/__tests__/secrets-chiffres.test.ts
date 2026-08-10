@@ -302,6 +302,19 @@ describe("d — la sentinelle n'atteint jamais un journal", () => {
 // ── e. Rotation ──────────────────────────────────────────────────────────────
 
 describe("e — rotation de la clé", () => {
+  /**
+   * CE TEST JUGE LA SORTIE GLOBALE DU SCRIPT, donc il exige une base dont TOUS
+   * les secrets sont lisibles avec les deux clés fournies.
+   *
+   * `rotate-encryption-key.mjs` traverse tous les tenants — c'est son rôle — et
+   * sort en 1 dès qu'une ligne résiste. Une ligne laissée par une exécution
+   * interrompue, chiffrée avec une clé morte, fait donc échouer ce test sans
+   * qu'il y ait de défaut. En CI la base est neuve à chaque exécution ; en
+   * local, purger `tenant_secrets` avant de relancer.
+   *
+   * Découvert en ajoutant les jetons de devis au magasin : le test tenait par
+   * chance tant qu'il était le seul à y écrire.
+   */
   test("version 1 → version 2, puis relance sans effet", async () => {
     const rotation = await inscrire("rot");
     const secret = sentinelle();
