@@ -142,6 +142,27 @@ function fmtCents(cents: number): string {
 }
 
 /**
+ * Une date métier `AAAA-MM-JJ` en `JJ/MM/AAAA`.
+ *
+ * Les documents affichaient la date TELLE QU'ELLE EST STOCKÉE : « 2026-08-10 »
+ * sur une facture française. C'est le format d'échange, pas celui qu'on montre
+ * à un client.
+ *
+ * PAR DÉCOUPAGE DE CHAÎNE, jamais par `new Date(…)`. Analyser « 2026-08-10 »
+ * donne minuit UTC, donc la veille dans tout fuseau négatif : mettre en forme
+ * une date ne doit pas pouvoir la changer. C'est le défaut que ce dépôt a
+ * corrigé partout ailleurs, et il n'a pas sa place dans un formateur.
+ *
+ * Ce qui ne ressemble pas à une date métier ressort tel quel : mieux vaut
+ * afficher une valeur inattendue que la déformer en silence.
+ */
+function fmtDateFr(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso.trim());
+  if (!m) return iso;
+  return `${m[3]}/${m[2]}/${m[1]}`;
+}
+
+/**
  * PDF lisible, sans pièce jointe XML.
  *
  * EXPORTÉ pour les DEVIS : Factur-X est un format de facture, et un devis n'en
@@ -169,10 +190,10 @@ export async function generateHumanPdf(data: FactureForPdf): Promise<Buffer> {
     y += 28;
 
     const dateLabel = data.type === "DEVIS" ? "Date :" : "Date d'émission :";
-    doc.fontSize(10).font("Helvetica").text(`${dateLabel} ${data.issuedDate}`, 50, y);
+    doc.fontSize(10).font("Helvetica").text(`${dateLabel} ${fmtDateFr(data.issuedDate)}`, 50, y);
     y += 14;
-    if (data.dueDate) { doc.text(`Échéance : ${data.dueDate}`, 50, y); y += 14; }
-    if (data.validUntil) { doc.text(`Valable jusqu'au : ${data.validUntil}`, 50, y); y += 14; }
+    if (data.dueDate) { doc.text(`Échéance : ${fmtDateFr(data.dueDate)}`, 50, y); y += 14; }
+    if (data.validUntil) { doc.text(`Valable jusqu'au : ${fmtDateFr(data.validUntil)}`, 50, y); y += 14; }
     if (data.factureRefNumero) { doc.text(`Correction de la facture n° ${data.factureRefNumero}`, 50, y); y += 14; }
     y += 10;
 
@@ -211,7 +232,14 @@ export async function generateHumanPdf(data: FactureForPdf): Promise<Buffer> {
     doc.text("PU HT", 345, y, { width: 55, align: "right" });
     doc.text("TVA", 405, y, { width: 35, align: "right" });
     doc.text("Total HT", 445, y, { width: 55, align: "right" });
-    y += 5;
+
+    // Le filet passe SOUS l'en-tête, pas au travers.
+    //
+    // Il était tracé à `y + 5` alors que la ligne de texte fait une dizaine de
+    // points de haut : le trait barrait « Désignation … Total HT ». On avance
+    // de la hauteur RÉELLE de la ligne, que pdfkit connaît — une constante en
+    // dur redeviendrait fausse au premier changement de corps.
+    y += doc.currentLineHeight() + 3;
     doc.moveTo(50, y).lineTo(500, y).lineWidth(0.5).stroke();
     y += 8;
 
