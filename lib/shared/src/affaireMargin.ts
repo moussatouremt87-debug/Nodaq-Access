@@ -39,14 +39,33 @@ export interface AffaireImputationInput {
   readonly subcontract: boolean;
 }
 
+/**
+ * Heures d'UN membre sur l'affaire, avec SON coût horaire.
+ *
+ * Une liste et non un couple de scalaires : les pointages sont par membre, et
+ * deux membres n'ont pas le même coût. Sommer les heures avant de multiplier
+ * par un coût moyen fabriquerait un coût de main-d'œuvre faux dès qu'une
+ * équipe est hétérogène — un apprenti et un chef d'équipe sur le même chantier
+ * suffisent.
+ */
+export interface AffaireLabourEntry {
+  readonly hours: number;
+  /** Coût horaire chargé de CE membre, en centimes. `null` = INCONNU. */
+  readonly hourlyCostCents: number | null;
+}
+
 export interface AffaireCostInput {
   /** Montant DEVISÉ HT. `null` = pas de devis, donc pas de marge. */
   readonly quotedAmountCents: number | null;
   readonly imputations: readonly AffaireImputationInput[];
-  /** Heures passées. `null` = INCONNU (pas de table de temps aujourd'hui) ; 0 = déclaré nul. */
-  readonly hoursWorked: number | null;
-  /** Coût horaire chargé du tenant. `null` = non renseigné, jamais deviné. */
-  readonly hourlyCostCents: number | null;
+  /**
+   * Main-d'œuvre pointée, une entrée par membre.
+   *
+   * `null`  = aucune donnée de pointage — heures INCONNUES, jamais nulles ;
+   * `[]`    = pointages consultés, aucune heure sur cette affaire (déclaré nul) ;
+   * entrée à `hourlyCostCents: null` = heures connues, coût inconnu.
+   */
+  readonly labour: readonly AffaireLabourEntry[] | null;
   readonly invoicedCents: number;
   /**
    * Base du montant facturé. Les factures dérivées du FEC sont la somme des
@@ -212,12 +231,30 @@ export function computeAffaireMargin(input: AffaireCostInput): AffaireMargin {
   // n'existe pas. On le dit même quand tout le reste est connu.
   if (input.imputations.length === 0) missing.push("aucune_piece_rattachee");
 
+  // ── Main-d'œuvre ────────────────────────────────────────────────────────────
+  // Sommée PAR MEMBRE : chaque entrée porte son propre coût horaire. Une entrée
+  // dont le coût est inconnu apporte ses heures mais aucun montant — elle ne
+  // peut donc que faire baisser la marge réelle sous ce qu'on sait calculer.
+  const labourEntries = input.labour;
+  const hoursTotal =
+    labourEntries === null ? null : labourEntries.reduce((acc, e) => acc + e.hours, 0);
+  const labourCents =
+    labourEntries === null
+      ? 0
+      : labourEntries.reduce(
+          (acc, e) => (e.hourlyCostCents === null ? acc : acc + Math.round(e.hours * e.hourlyCostCents)),
+          0,
+        );
+  const hasUncostedHours =
+    labourEntries !== null &&
+    labourEntries.some((e) => e.hours > 0 && e.hourlyCostCents === null);
+
   const hasAnyCost =
     sums.materialCents > 0 ||
     sums.subcontractCents > 0 ||
     sums.ttcOnlyCount > 0 ||
     sums.unknownAmountCount > 0 ||
-    (input.hoursWorked !== null && input.hoursWorked > 0);
+    (hoursTotal !== null && hoursTotal > 0);
 
   // Aucun coût du tout : la marge serait égale au devis, soit 100 %. Le chiffre
   // est exact et le message est un mensonge — on refuse de l'afficher.
@@ -229,15 +266,13 @@ export function computeAffaireMargin(input: AffaireCostInput): AffaireMargin {
     return { ...base, kind: "couts_seuls", missing };
   }
 
-  const labourKnown = input.hoursWorked !== null && input.hourlyCostCents !== null;
-  if (input.hoursWorked === null) missing.push("heures");
-  if (input.hourlyCostCents === null && (input.hoursWorked === null || input.hoursWorked > 0)) {
-    missing.push("cout_horaire");
-  }
+  // Heures inconnues : « non mesuré ». Distinct de zéro heure déclarée, qui est
+  // une information et non une absence d'information.
+  if (hoursTotal === null) missing.push("heures");
+  // Des heures réelles dont le coût du membre est introuvable : on connaît le
+  // temps passé mais pas ce qu'il coûte. Le dire, jamais le compter à zéro.
+  if (hasUncostedHours) missing.push("cout_horaire");
 
-  const labourCents = labourKnown
-    ? Math.round((input.hoursWorked as number) * (input.hourlyCostCents as number))
-    : 0;
   const knownCostCents = sums.materialCents + sums.subcontractCents + labourCents;
   // Le reste à facturer EXCLUT la retenue de garantie : elle est due, pas
   // exigible. La compter ici déclencherait des relances injustifiées.
@@ -256,12 +291,18 @@ export function computeAffaireMargin(input: AffaireCostInput): AffaireMargin {
 
   // Un coût manquant ne peut que RÉDUIRE la marge : ce qu'on sait calculer est
   // donc un plafond, et il porte un type qui interdit de l'afficher autrement.
-  // « aucune_piece_rattachee » nuance une marge, elle ne l'empêche pas : les
-  // coûts sont connus (il n'y en a pas), la marge reste exacte. Idem pour une
-  // base de facturation TTC, qui ne touche que le reste à facturer.
-  const blocking = missing.filter(
-    (item) => item !== "aucune_piece_rattachee" && item !== "facture_base_ttc",
-  );
+  //
+  // « aucune_piece_rattachee » est BLOQUANTE. Elle ne l'était pas : on
+  // considérait que des coûts connus comme nuls donnaient une marge exacte.
+  // C'est vrai arithmétiquement et faux sur le terrain — aucune table
+  // d'imputation n'existe encore dans le produit, donc TOUTE affaire a zéro
+  // pièce rattachée, et la marge main-d'œuvre seule serait présentée comme
+  // exacte alors qu'il manque tous les achats. Tant qu'il n'y a pas de quoi
+  // rattacher un achat, le résultat est une borne supérieure.
+  //
+  // Seule « facture_base_ttc » reste non bloquante : elle ne touche que le
+  // reste à facturer, pas la marge.
+  const blocking = missing.filter((item) => item !== "facture_base_ttc");
   if (blocking.length > 0) {
     return {
       ...base,

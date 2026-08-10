@@ -34,9 +34,25 @@ router.get("/rapports/mensuel", async (req, res): Promise<void> => {
     return d >= monthStart && d < monthEnd && p.stage === "GAGNE";
   }).length;
 
+  // Une marge inconnue n'entre pas dans le total comme un zéro : elle serait
+  // lue comme « ce chantier n'a rien rapporté ». On ne somme que le connu, on
+  // rapporte au CA des seules affaires à marge connue, et on dit combien
+  // manquent.
+  const affairesMargeConnue = moisAffaires.filter((a) => a.marginCents !== null);
+  const affairesMargeInconnue = moisAffaires.length - affairesMargeConnue.length;
+
   const totalRev    = moisAffaires.reduce((acc, a) => acc + (a.invoicedAmountCents ?? 0), 0);
-  const totalMargin = moisAffaires.reduce((acc, a) => acc + (a.marginCents ?? 0), 0);
-  const tauxMarge   = totalRev > 0 ? Math.round((totalMargin / totalRev) * 1000) / 10 : 0;
+  const totalMargin = affairesMargeConnue.length
+    ? affairesMargeConnue.reduce((acc, a) => acc + (a.marginCents ?? 0), 0)
+    : null;
+  const revMargeConnue = affairesMargeConnue.reduce(
+    (acc, a) => acc + (a.invoicedAmountCents ?? 0),
+    0,
+  );
+  const tauxMarge =
+    totalMargin !== null && revMargeConnue > 0
+      ? Math.round((totalMargin / revMargeConnue) * 1000) / 10
+      : null;
 
   const topAffaires = moisAffaires
     .filter(a => (a.invoicedAmountCents ?? 0) > 0)
@@ -44,9 +60,11 @@ router.get("/rapports/mensuel", async (req, res): Promise<void> => {
     .slice(0, 5)
     .map(a => ({
       id: a.id, label: a.label, clientName: a.clientName, status: a.status,
-      invoicedAmountCents: a.invoicedAmountCents, marginCents: a.marginCents,
-      marginPct: a.invoicedAmountCents && a.invoicedAmountCents > 0
-        ? Math.round(((a.marginCents ?? 0) / a.invoicedAmountCents) * 1000) / 10 : null,
+      invoicedAmountCents: a.invoicedAmountCents,
+      /** `null` = marge non mesurée. */
+      marginCents: a.marginCents,
+      marginPct: a.marginCents !== null && a.invoicedAmountCents && a.invoicedAmountCents > 0
+        ? Math.round((a.marginCents / a.invoicedAmountCents) * 1000) / 10 : null,
     }));
 
   const clientMap = new Map<string, number>();
@@ -58,7 +76,16 @@ router.get("/rapports/mensuel", async (req, res): Promise<void> => {
 
   res.json({
     mois,
-    summary: { caMois, nouvellesAffaires, nouveauxClients, facturesEncaissees, tauxMarge },
+    summary: {
+      caMois,
+      nouvellesAffaires,
+      nouveauxClients,
+      facturesEncaissees,
+      /** `null` = aucune marge mesurée ce mois-ci. */
+      tauxMarge,
+      /** Nombre d'affaires du mois dont la marge n'est pas mesurée. */
+      affairesMargeInconnue,
+    },
     topAffaires, topClients,
   });
 });

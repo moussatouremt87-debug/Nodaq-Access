@@ -22,7 +22,11 @@ type MargeAffaire = {
 };
 type MargeMensuelle = { month: string; revenueCents: number; marginCents: number };
 type MargeStats = {
-  totalRevenueCents: number; totalMarginCents: number; marginPct: number;
+  totalRevenueCents: number;
+  /** null = aucune marge mesurée sur la période. */
+  totalMarginCents: number | null;
+  marginPct: number | null;
+  affairesMargeInconnue?: number;
   affaires: MargeAffaire[]; mensuelle: MargeMensuelle[];
 };
 
@@ -106,20 +110,28 @@ export default function MargePage() {
           </motion.div>
 
           <motion.div variants={itemVariants} className={`rounded-xl border p-5 ${
-            (data?.totalMarginCents ?? 0) >= 0
-              ? 'border-primary/25 bg-primary/5'
-              : 'border-destructive/25 bg-destructive/5'
+            data?.totalMarginCents == null
+              ? 'border-card-border bg-card'
+              : data.totalMarginCents >= 0
+                ? 'border-primary/25 bg-primary/5'
+                : 'border-destructive/25 bg-destructive/5'
           }`}>
             <div className="text-[11px] uppercase tracking-wide text-muted-foreground flex items-center gap-1.5 mb-3">
-              {(data?.totalMarginCents ?? 0) >= 0
-                ? <TrendingUp className="h-3.5 w-3.5 text-primary" />
-                : <TrendingDown className="h-3.5 w-3.5 text-destructive" />
+              {data?.totalMarginCents == null
+                ? <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
+                : data.totalMarginCents >= 0
+                  ? <TrendingUp className="h-3.5 w-3.5 text-primary" />
+                  : <TrendingDown className="h-3.5 w-3.5 text-destructive" />
               }
               Marge brute
             </div>
-            {isLoading ? <Skeleton className="h-8 w-32" /> : (
-              <div className={`text-2xl font-semibold font-mono-nums ${(data?.totalMarginCents ?? 0) >= 0 ? 'text-primary' : 'text-destructive'}`}>
-                {fmtEUR(data?.totalMarginCents ?? 0)}
+            {isLoading ? <Skeleton className="h-8 w-32" /> : data?.totalMarginCents == null ? (
+              /* Une marge inconnue affichée « 0 € » se lit « ce chantier n'a rien
+                 rapporté ». On dit qu'elle n'est pas mesurée. */
+              <div className="text-base font-medium text-muted-foreground">Non mesurée</div>
+            ) : (
+              <div className={`text-2xl font-semibold font-mono-nums ${data.totalMarginCents >= 0 ? 'text-primary' : 'text-destructive'}`}>
+                {fmtEUR(data.totalMarginCents)}
               </div>
             )}
           </motion.div>
@@ -128,11 +140,18 @@ export default function MargePage() {
             <div className="text-[11px] uppercase tracking-wide text-muted-foreground flex items-center gap-1.5 mb-3">
               <TrendingUp className="h-3.5 w-3.5" /> Taux de marge
             </div>
-            {isLoading ? <Skeleton className="h-8 w-20" /> : (
+            {isLoading ? <Skeleton className="h-8 w-20" /> : data?.marginPct == null ? (
+              <div className="text-base font-medium text-muted-foreground">Non mesuré</div>
+            ) : (
               <div className={`text-2xl font-semibold font-mono-nums ${
-                (data?.marginPct ?? 0) >= 30 ? 'text-primary' : (data?.marginPct ?? 0) >= 15 ? 'text-yellow-400' : 'text-destructive'
+                data.marginPct >= 30 ? 'text-primary' : data.marginPct >= 15 ? 'text-yellow-400' : 'text-destructive'
               }`}>
-                {(data?.marginPct ?? 0).toFixed(1)} %
+                {data.marginPct.toFixed(1)} %
+              </div>
+            )}
+            {!isLoading && (data?.affairesMargeInconnue ?? 0) > 0 && (
+              <div className="mt-2 text-[11px] text-muted-foreground">
+                {data!.affairesMargeInconnue} affaire(s) sans marge mesurée, exclue(s) du calcul
               </div>
             )}
           </motion.div>

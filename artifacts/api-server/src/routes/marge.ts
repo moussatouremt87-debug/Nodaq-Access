@@ -35,29 +35,52 @@ router.get("/marge", async (req, res): Promise<void> => {
     return { affaires, monthly };
   });
 
+  // Une marge INCONNUE n'est pas une marge NULLE. `?? 0` la faisait entrer dans
+  // les totaux comme un zéro : une affaire dont personne n'a jamais calculé la
+  // marge tirait la moyenne vers le bas et s'affichait « 0 % », ce qui se lit
+  // « ce chantier n'a rien rapporté ». On ne totalise que le connu, et on dit
+  // combien d'affaires ne le sont pas.
+  const affairesMargeConnue = affaires.filter((a) => a.marginCents !== null);
+  const affairesMargeInconnue = affaires.length - affairesMargeConnue.length;
+
   const totalRevenueCents = affaires.reduce((acc, a) => acc + (a.invoicedAmountCents ?? 0), 0);
-  const totalMarginCents  = affaires.reduce((acc, a) => acc + (a.marginCents ?? 0), 0);
-  const marginPct         = totalRevenueCents > 0 ? (totalMarginCents / totalRevenueCents) * 100 : 0;
+  const totalMarginCents = affairesMargeConnue.length
+    ? affairesMargeConnue.reduce((acc, a) => acc + (a.marginCents ?? 0), 0)
+    : null;
+  // Le CA de référence est celui des SEULES affaires à marge connue : rapporter
+  // une marge partielle au CA total inventerait un pourcentage trop bas.
+  const revenueMargeConnueCents = affairesMargeConnue.reduce(
+    (acc, a) => acc + (a.invoicedAmountCents ?? 0),
+    0,
+  );
+  const marginPct =
+    totalMarginCents !== null && revenueMargeConnueCents > 0
+      ? Math.round((totalMarginCents / revenueMargeConnueCents) * 1000) / 10
+      : null;
 
   const margeAffaires = affaires
-    .filter(a => (a.invoicedAmountCents ?? 0) > 0 || (a.marginCents ?? 0) !== 0)
+    .filter(a => (a.invoicedAmountCents ?? 0) > 0 || a.marginCents !== null)
     .map(a => ({
       id: a.id,
       label: a.label,
       clientName: a.clientName,
       status: a.status,
       invoicedAmountCents: a.invoicedAmountCents,
+      /** `null` = marge non mesurée. À afficher comme telle, jamais comme 0. */
       marginCents: a.marginCents,
-      marginPct: a.invoicedAmountCents && a.invoicedAmountCents > 0
-        ? ((a.marginCents ?? 0) / a.invoicedAmountCents) * 100
+      marginPct: a.marginCents !== null && a.invoicedAmountCents && a.invoicedAmountCents > 0
+        ? (a.marginCents / a.invoicedAmountCents) * 100
         : null,
     }))
     .sort((a, b) => (b.invoicedAmountCents ?? 0) - (a.invoicedAmountCents ?? 0));
 
   res.json({
     totalRevenueCents,
+    /** `null` = aucune marge mesurée sur la période. */
     totalMarginCents,
-    marginPct: Math.round(marginPct * 10) / 10,
+    marginPct,
+    /** Combien d'affaires n'ont AUCUNE marge mesurée — l'écran doit le dire. */
+    affairesMargeInconnue,
     affaires: margeAffaires,
     mensuelle: monthly.rows,
   });
