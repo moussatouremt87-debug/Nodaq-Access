@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { verifierConfigurationChiffrement } from "@nodaq/crypto";
 
 const rawPort = process.env["PORT"];
 
@@ -48,6 +49,17 @@ if (!process.env["LLM_API_KEY"]) {
 if (!process.env["LLM_MODEL_CHAT"]) {
   throw new Error("LLM configuration error: LLM_MODEL_CHAT must be set.");
 }
+
+// ── Encryption configuration guard ───────────────────────────────────────────
+// ENCRYPTION_KEY absente, mal encodée ou de mauvaise longueur : on s'arrête.
+//
+// JAMAIS DE REPLI EN CLAIR. Un démarrage qui « fonctionne » sans clé et range
+// les secrets en clair est le pire résultat possible — personne ne le remarque,
+// et le jour où on s'en aperçoit tous les secrets sont à révoquer.
+//
+// Le message d'erreur ne porte que le NOM de la variable. La valeur, même
+// tronquée, n'apparaît nulle part : les journaux de démarrage sont archivés.
+verifierConfigurationChiffrement();
 
 app.listen(port, (err) => {
   if (err) {

@@ -9,7 +9,7 @@
     { "path": "./lib/shared" },
     { "path": "./lib/classifier" },
     { "path": "./lib/llm" },
-    { "path": "./lib/facturx" }
+    { "path": "./lib/facturx" },
+    { "path": "./lib/crypto" }
   ]
 }
-

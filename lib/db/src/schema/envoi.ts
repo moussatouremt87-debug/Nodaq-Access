@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, index, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, uuid, index, unique } from "drizzle-orm/pg-core";
 import { tenantsTable } from "./tenants";
 
 /**
@@ -10,20 +10,31 @@ import { tenantsTable } from "./tenants";
  * base. Sans cette séparation, brancher l'enrôlement automatique du domaine
  * demanderait une migration.
  *
- * Aucun secret n'est stocké : la signature DKIM est faite par le fournisseur
- * d'envoi, la clé privée ne transite jamais par ce produit.
+ * Aucun secret n'est stocké DANS CETTE TABLE : la clé privée DKIM appartient
+ * au fournisseur d'envoi, et le mot de passe SMTP de l'artisan vit chiffré
+ * dans `tenant_secrets`. `dkimValeur` est la clé PUBLIQUE, publiée dans le DNS
+ * par construction — la chiffrer n'aurait aucun sens.
  */
 export const parametresEnvoiTable = pgTable(
   "parametres_envoi",
   {
     id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
     tenantId: uuid("tenant_id").notNull().references(() => tenantsTable.id),
-    /** 'domaine_authentifie' (principal) | 'repli_nodaq' (repli). */
+    /** 'domaine_authentifie' | 'smtp_artisan' | 'repli_nodaq' (repli). */
     mode: text("mode").notNull().default("repli_nodaq"),
     /** Domaine de l'artisan, sans @ ni protocole : « toituremartin.fr ». */
     domaine: text("domaine"),
     emailExpediteur: text("email_expediteur"),
     nomExpediteur: text("nom_expediteur"),
+    /**
+     * SMTP de l'artisan — champs NON SECRETS. Un hôte et un identifiant sans
+     * mot de passe n'ouvrent aucun accès : ils restent en clair. Le mot de
+     * passe, lui, vit dans `tenant_secrets` sous « envoi.smtp_password » et ne
+     * transite jamais par cette table ni par aucune réponse HTTP.
+     */
+    smtpHote: text("smtp_hote"),
+    smtpPort: integer("smtp_port"),
+    smtpUtilisateur: text("smtp_utilisateur"),
     /** PAR DOMAINE — recopiés depuis la console du service d'envoi. */
     dkimSelecteur: text("dkim_selecteur"),
     dkimValeur: text("dkim_valeur"),
@@ -40,7 +51,7 @@ export const parametresEnvoiTable = pgTable(
 
 export type ParametresEnvoi = typeof parametresEnvoiTable.$inferSelect;
 
-export const MODES_ENVOI = ["domaine_authentifie", "repli_nodaq"] as const;
+export const MODES_ENVOI = ["domaine_authentifie", "smtp_artisan", "repli_nodaq"] as const;
 export type ModeEnvoi = (typeof MODES_ENVOI)[number];
 
 /**

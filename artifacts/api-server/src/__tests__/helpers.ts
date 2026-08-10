@@ -114,6 +114,7 @@ export async function createTestTeamMember(
 // deleted before them.
 const BUSINESS_TABLES = [
   "pointages", "catalogue_lignes", "envois_journal", "parametres_envoi", "objectifs_franchissements",
+  "tenant_secrets",
   "absences", "activity", "affaires", "analytics_tool_logs", "archived_pdfs", "chat_messages", "classeur_documents",
   "connectors", "contrats", "cr_entries", "devis", "echeances",
   "avoirs", "facture_sequences", "factures",
@@ -170,6 +171,9 @@ export function tableInsertSql(table: string, tenantId: string, memberAId?: stri
     archived_pdfs:    [`INSERT INTO archived_pdfs (id, tenant_id, document_type, document_id, bytes, sha256, byte_size) VALUES ($1, $2::uuid, 'FACTURE', $3, $4, $5, $6) ON CONFLICT DO NOTHING`, [id, tenantId, crypto.randomUUID(), Buffer.from("rls-test-pdf"), "rls-test-sha256-placeholder", 12]],
     // avoirs: id is a TEXT PK with no default — must be supplied in raw SQL.
     // facture_ref_id carries no FK, so an arbitrary id is fine here.
+    // tenant_secrets : PK composite (tenant_id, cle), pas d'id. La valeur est
+    // un chiffré factice — cette insertion éprouve la RLS, pas le chiffrement.
+    tenant_secrets:   [`INSERT INTO tenant_secrets (tenant_id, cle, valeur_chiffree) VALUES ($2::uuid, 'rls.test.' || $1, 'v1:1:aaaa:bbbb:cccc') ON CONFLICT DO NOTHING`, [id, tenantId]],
     avoirs:           [`INSERT INTO avoirs (id, tenant_id, numero, facture_ref_id, issued_date, montant_ht_cents, motif) VALUES ($1, $2::uuid, 'RLS-AV-001', $3, CURRENT_DATE, 1000, 'rls-test') ON CONFLICT DO NOTHING`, [id, tenantId, crypto.randomUUID()]],
     // facture_sequences: composite PK (tenant_id, year) — NO id column.
     // One row per tenant per year, so both test tenants can hold year 2020.
