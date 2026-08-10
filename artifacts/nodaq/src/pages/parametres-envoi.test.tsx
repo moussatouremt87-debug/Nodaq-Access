@@ -81,9 +81,28 @@ describe("aucune valeur DKIM n'est demandée à l'artisan", () => {
     expect(screen.queryByPlaceholderText(/Valeur DKIM/i)).toBeNull();
   });
 
-  test("l'écran dit honnêtement comment la suite arrive", async () => {
+  /**
+   * ASSERTION ACTUALISÉE, ET RENFORCÉE.
+   *
+   * Elle vérifiait que l'écran promet l'envoi des trois lignes « par e-mail ».
+   * C'était juste tant que l'enrôlement était MANUEL : un humain enrôlait le
+   * domaine dans la console du fournisseur et recopiait le sélecteur DKIM.
+   *
+   * Ce geste est désormais branché. La promesse a donc disparu, et l'écran
+   * PROPOSE l'action au lieu de l'annoncer. Vérifier qu'il dit encore
+   * « par e-mail » reviendrait à exiger qu'il mente.
+   *
+   * On vérifie donc les deux : qu'il explique comment les lignes arrivent, ET
+   * qu'il offre le bouton — ce qui est plus fort que l'ancienne assertion.
+   */
+  test("l'écran PROPOSE l'enrôlement au lieu de le promettre", async () => {
     serviceConfigure = true;
     monter();
-    expect(await screen.findByText(/par e-mail/i)).toBeTruthy();
+    await screen.findByPlaceholderText("toituremartin.fr");
+
+    expect(screen.getByText(/trois lignes à recopier/i)).toBeTruthy();
+    const bouton = screen.getByTestId("bouton-enroler");
+    expect(bouton).toBeTruthy();
+    expect(bouton.textContent).toMatch(/Préparer mon domaine/i);
   });
 });
