@@ -5,18 +5,23 @@ import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 import { mockupPreviewPlugin } from "./mockupPreviewPlugin";
 
-const rawPort = process.env.PORT;
+// FRONTEND_PORT takes precedence over PORT — see artifacts/nodaq/vite.config.ts
+// for the rationale. Same collision applies here: this sandbox and the API
+// server would otherwise both bind PORT.
+const portSource = process.env.FRONTEND_PORT ? "FRONTEND_PORT" : "PORT";
+const rawPort = process.env.FRONTEND_PORT ?? process.env.PORT;
 
 if (!rawPort) {
   throw new Error(
-    "PORT environment variable is required but was not provided.",
+    "PORT environment variable is required but was not provided " +
+      "(set FRONTEND_PORT to run this server alongside the API).",
   );
 }
 
 const port = Number(rawPort);
 
 if (Number.isNaN(port) || port <= 0) {
-  throw new Error(`Invalid PORT value: "${rawPort}"`);
+  throw new Error(`Invalid ${portSource} value: "${rawPort}"`);
 }
 
 const basePath = process.env.BASE_PATH;
