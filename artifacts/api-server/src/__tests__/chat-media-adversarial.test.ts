@@ -158,8 +158,8 @@ describe("Upload path — adversarial injection via Pixtral output", () => {
     // Response contains a static description (no suggestedAction executed)
     expect(res.body.conversationId).toBeDefined();
     expect(res.body.binaryDiscarded).toBe(true);
-    // actions_performed must be empty (no tools called)
-    expect(res.body.actions_performed ?? []).toHaveLength(0);
+    // actions_proposees must be empty (no tools called)
+    expect(res.body.actions_proposees ?? []).toHaveLength(0);
   });
 
   /**
@@ -281,12 +281,12 @@ describe("Upload path — adversarial injection via Pixtral output", () => {
     expect(after.affaires).toBe(before.affaires);
     expect(after.activity).toBe(before.activity);
 
-    // actions_performed must contain ONLY read operations
+    // actions_proposees must contain ONLY read operations
     const mutatingTypes = [
       "create_prospect", "create_affaire", "update_affaire_status",
       "create_echeance", "create_classeur_entry", "log_activity",
     ];
-    const actions: Array<{ type: string }> = res.body.actions_performed ?? [];
+    const actions: Array<{ type: string }> = res.body.actions_proposees ?? [];
     for (const action of actions) {
       expect(mutatingTypes).not.toContain(action.type);
     }

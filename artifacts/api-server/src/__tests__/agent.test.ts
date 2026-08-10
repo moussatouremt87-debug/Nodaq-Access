@@ -55,31 +55,50 @@ async function sendChat(cookie: string, content: string, conversationId?: string
 // ─── Tool execution — prospect creation ──────────────────────────────────────
 
 describe("Tool: create_prospect", () => {
-  test("creates a prospect in the tenant DB when asked naturally", async () => {
-    // Le client LLM est intercepté par vitest.setup.ts : aucun fournisseur réel
-    // n'est appelé, et l'appel d'outil create_prospect est simulé. Le test
-    // s'exécute donc toujours, y compris en CI.
-
+  /**
+   * ASSERTION INVERSÉE, ET C'EST LE SUJET DU LOT.
+   *
+   * Ce test exigeait auparavant que le prospect SOIT EN BASE après la demande.
+   * Il encodait donc le défaut : l'agent écrivait directement, `pending_actions`
+   * restait vide, et la règle 4 du dépôt n'était pas tenue. Sur un produit
+   * vocal, ce n'est pas une question de conformité — si la transcription entend
+   * « Dupont » au lieu de « Dubois », l'erreur était écrite avant que l'artisan
+   * l'ait vue.
+   *
+   * L'assertion n'est pas assouplie : elle est remplacée par une plus forte —
+   * RIEN en base, un plan en attente, puis la ligne après validation.
+   */
+  test("PROPOSE le prospect sans l'écrire, puis l'écrit après validation", async () => {
     const before = await withTenant(tenantA.id, (tx) =>
       tx.select().from(prospectsTable).where(eq(prospectsTable.name, "Jean Dupont"))
     );
     expect(before).toHaveLength(0);
 
     const res = await sendChat(sessionCookieA, "Ajoute un prospect nommé Jean Dupont, téléphone 0612345678");
-    // Accept 200 (success) or 502 (Mistral rate-limit during heavy test runs)
-    if (res.status === 502) {
-      console.warn("Mistral rate-limit during create_prospect test:", res.body);
-      return;
-    }
     expect(res.status).toBe(200);
-    expect(res.body.conversationId).toBeDefined();
     expect(res.body.message.role).toBe("assistant");
 
-    const after = await withTenant(tenantA.id, (tx) =>
+    // RIEN n'a été écrit.
+    const apresProposition = await withTenant(tenantA.id, (tx) =>
       tx.select().from(prospectsTable).where(eq(prospectsTable.name, "Jean Dupont"))
     );
-    expect(after.length).toBeGreaterThanOrEqual(1);
-    expect(after[0]?.tenantId).toBe(tenantA.id);
+    expect(apresProposition).toHaveLength(0);
+
+    // Un plan attend la validation.
+    expect(res.body.planId).toBeTruthy();
+
+    // Après validation, la ligne apparaît — et une seule.
+    await request(app)
+      .post("/api/voix/executer")
+      .set("Cookie", sessionCookieA)
+      .send({ planId: res.body.planId })
+      .expect(200);
+
+    const apresValidation = await withTenant(tenantA.id, (tx) =>
+      tx.select().from(prospectsTable).where(eq(prospectsTable.name, "Jean Dupont"))
+    );
+    expect(apresValidation).toHaveLength(1);
+    expect(apresValidation[0]?.tenantId).toBe(tenantA.id);
   });
 });
 
@@ -112,8 +131,8 @@ describe("Tool: create_affaire", () => {
       expect(row.tenantId).toBe(tenantA.id);
     }
 
-    // If the agent actually used the tool, actions_performed should be typed correctly
-    const actions: Array<{ type: string; label: string; entityType?: string }> = res.body.actions_performed ?? [];
+    // Les écritures sont désormais PROPOSÉES : le champ dit ce qu'il est.
+    const actions: Array<{ type: string; label: string; entityType?: string }> = res.body.actions_proposees ?? [];
     for (const action of actions) {
       expect(typeof action.type).toBe("string");
       expect(typeof action.label).toBe("string");

@@ -416,7 +416,7 @@ export interface AgentAction {
 export interface ChatReply {
   conversationId: string;
   message: ChatMessage;
-  actions_performed?: AgentAction[];
+  actions_proposees?: AgentAction[];
 }
 
 export interface ChatSuggestions {
@@ -433,7 +433,7 @@ export type ChatUploadReplyDocument = {
 export interface ChatUploadReply {
   conversationId: string;
   message: ChatMessage;
-  actions_performed?: AgentAction[];
+  actions_proposees?: AgentAction[];
   /** Always true in this version — the image binary is not stored. Binary storage (object storage + classeur thumbnail) is tracked in a follow-up task. */
   binaryDiscarded: boolean;
   document: ChatUploadReplyDocument;

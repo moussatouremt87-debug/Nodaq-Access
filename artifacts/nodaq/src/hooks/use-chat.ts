@@ -109,7 +109,7 @@ export function useChat() {
       const newConvId = reply.conversationId;
       if (newConvId) applyConvId(newConvId);
 
-      const actions = reply.actions_performed ?? [];
+      const actions = reply.actions_proposees ?? [];
       const msgId = reply.message?.id;
       if (actions.length > 0 && msgId) {
         setActionsMap((prev) => new Map(prev).set(msgId, actions));

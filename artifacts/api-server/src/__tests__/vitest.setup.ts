@@ -129,6 +129,44 @@ globalThis.fetch = async function patchedFetch(
       });
     }
 
+    // ── Commande vocale ────────────────────────────────────────────────────
+    //
+    // Le simulateur rend des INTENTIONS et jamais autre chose. Le cas
+    // « interdit » rend délibérément un identifiant : c'est le schéma Zod qui
+    // doit le refuser, pas ce simulateur qui doit s'abstenir de le produire.
+    if (userText.includes("voix-test-")) {
+      const intentions =
+        userText.includes("voix-test-illisible")
+          ? { intentions: [], nonCompris: ["brrr grzzz"] }
+          : userText.includes("voix-test-interdit")
+            ? { intentions: [{ type: "creer_affaire", label: "X", id: "aff-123" }], nonCompris: [] }
+            : userText.includes("voix-test-ambigu")
+              ? { intentions: [{ type: "maj_statut_affaire", affaireMentionnee: "Dupont", statut: "EN_COURS" }], nonCompris: [] }
+              : userText.includes("voix-test-trois")
+                ? {
+                    intentions: [
+                      { type: "consigner_activite", libelle: "Première" },
+                      { type: "maj_statut_affaire", affaireMentionnee: "Fantome Introuvable Xyz", statut: "TERMINEE" },
+                      { type: "consigner_activite", libelle: "Troisième" },
+                    ],
+                    nonCompris: [],
+                  }
+                : userText.includes("voix-test-date")
+                  ? { intentions: [{ type: "creer_echeance", libelle: "Acompte", dateMentionnee: "le 27 août" }], nonCompris: [] }
+                  : { intentions: [{ type: "creer_affaire", label: "Carrelage Dupont", clientMentionne: "M. Dupont" }], nonCompris: [] };
+
+      return new Response(
+        JSON.stringify({
+          id: "chatcmpl-vitest-voix",
+          object: "chat.completion",
+          model: "test/fake-chat-model",
+          choices: [{ index: 0, message: { role: "assistant", content: JSON.stringify(intentions) }, finish_reason: "stop" }],
+          usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
     // create_prospect simulation: one round only (no pending tool result)
     if (!hasPendingToolResult && userText.includes("jean dupont")) {
       const toolCallBody = JSON.stringify({
