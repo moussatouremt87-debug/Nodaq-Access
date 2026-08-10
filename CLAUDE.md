@@ -28,14 +28,19 @@ Tests : **Vitest**, sur une vraie base PostgreSQL — jamais de base simulée.
 ```bash
 pnpm install                       # pnpm uniquement ; npm et yarn sont refusés
 pnpm run typecheck                 # tsc --build puis chaque paquet
-pnpm -r --if-present run test      # TOUS les paquets, pas seulement l'API
+
+# TOUS les paquets, pas seulement l'API. `--workspace-concurrency=1` n'est pas
+# décoratif : les paquets lancés ensemble se disputent les ports éphémères de la
+# machine, ce qui produit des ECONNRESET intermittents dans la suite api-server.
+pnpm -r --workspace-concurrency=1 --if-present run test
 
 pnpm db:setup                      # create-app-role → migrate.mjs → seed-owner
 pnpm db:migrate                    # migrations seules
 ```
 
 **Avant de considérer une tâche terminée** : `pnpm run typecheck` **et**
-`pnpm -r --if-present run test`, tous deux verts, sur une base **vierge**.
+`pnpm -r --workspace-concurrency=1 --if-present run test`, tous deux verts, sur
+une base **vierge**.
 
 ---
 
@@ -158,6 +163,13 @@ Le LLM est simulé par `vitest.setup.ts` : aucun test n'a besoin d'une clé rée
 
 **Un vert obtenu avec une variable d'environnement locale n'est pas un vert.** Vérifier
 sans les secrets, sur une base vierge, comme la CI.
+
+**Les ports éphémères sont une ressource de la MACHINE.** Supertest monte un serveur
+`app.listen(0)` par requête, et la suite api-server en compte plus de 300. Lancer les
+paquets en parallèle les fait puiser tous dans la même réserve : d'où des `ECONNRESET`
+intermittents, sur un test différent à chaque fois, jamais reproductibles en isolation.
+D'où `--workspace-concurrency=1`. Ne jamais « régler » un flottement avec `retry` — une
+garde l'interdit dans `flottements-suite.test.ts`.
 
 ---
 

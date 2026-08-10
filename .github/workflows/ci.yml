@@ -130,23 +130,36 @@ jobs:
       # `tools/tests/fuseau-attendu.test.ts` compare au fuseau RÉELLEMENT
       # résolu. Sans elle, un paquet qui ré-épinglerait son fuseau passerait
       # les trois étapes en vert sans jamais quitter Paris.
+      #
+      # ── `--workspace-concurrency=1` : les paquets, un par un ──────────────
+      # La suite api-server monte un serveur éphémère PAR requête supertest —
+      # plus de 300 appels — et la réserve de ports éphémères appartient à la
+      # MACHINE, pas au processus. Huit paquets lancés ensemble y puisent tous.
+      #
+      # Mesuré : 5000 cycles listen/requête/close en isolation ne produisent
+      # aucune erreur ; les mêmes à huit processus simultanés épuisent la
+      # réserve (`EADDRNOTAVAIL`). C'est cette contention qui rendait des
+      # `ECONNRESET` intermittents, sur un test différent à chaque fois.
+      #
+      # Sérialiser coûte du temps de mur et rend le vert signifiant. Le détail
+      # de l'enquête est dans `flottements-suite.test.ts`.
 
       - name: Tests — TZ=UTC
-        run: pnpm -r --if-present run test
+        run: pnpm -r --workspace-concurrency=1 --if-present run test
         env:
           DATABASE_URL_APP: ${{ steps.setup_appuser.outputs.db_app_url }}
           TZ: UTC
           TZ_ATTENDU: UTC
 
       - name: Tests — TZ=Europe/Paris
-        run: pnpm -r --if-present run test
+        run: pnpm -r --workspace-concurrency=1 --if-present run test
         env:
           DATABASE_URL_APP: ${{ steps.setup_appuser.outputs.db_app_url }}
           TZ: Europe/Paris
           TZ_ATTENDU: Europe/Paris
 
       - name: Tests — TZ=Pacific/Auckland
-        run: pnpm -r --if-present run test
+        run: pnpm -r --workspace-concurrency=1 --if-present run test
         env:
           DATABASE_URL_APP: ${{ steps.setup_appuser.outputs.db_app_url }}
           TZ: Pacific/Auckland

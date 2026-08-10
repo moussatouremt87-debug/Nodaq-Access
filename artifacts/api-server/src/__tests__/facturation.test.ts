@@ -172,23 +172,37 @@ describe("b — NUMÉROTATION SÉQUENTIELLE", () => {
     );
 
     // Emit all in parallel
-    const results = await Promise.all(
-      ids.map(id => emettre(cookieA, id).then(r => r.body)),
-    );
+    const reponses = await Promise.all(ids.map(id => emettre(cookieA, id)));
 
-    const numbers = results.map(r => r.number as string).filter(Boolean);
+    // ── NE PAS FILTRER LES RÉPONSES SANS NUMÉRO ──────────────────────────────
+    //
+    // Ce test rendait auparavant `results.map(r => r.number).filter(Boolean)`.
+    // Le jour où une émission sur vingt a échoué, il a annoncé « attendu 20,
+    // reçu 19 » — et le `.filter(Boolean)` avait jeté la seule chose utile : ce
+    // que le serveur avait répondu. On perd un diagnostic pour gagner un
+    // message d'erreur plus court.
+    //
+    // Ici la réponse fautive est DANS l'assertion. Si cela se reproduit, le
+    // rapport porte son statut et son corps.
+    const fautives = reponses
+      .filter(r => r.status !== 200 || typeof r.body?.number !== "string")
+      .map(r => ({ status: r.status, body: r.body }));
+    expect(fautives).toEqual([]);
+
+    const numbers = reponses.map(r => r.body.number as string);
     expect(numbers).toHaveLength(20);
 
     const unique = new Set(numbers);
     expect(unique.size).toBe(20);
 
     // Extract sequence numbers and verify they form a contiguous range
+    // Même raison qu'au-dessus : un numéro au mauvais format doit se NOMMER,
+    // pas se faire retirer du compte.
+    const malFormes = numbers.filter(n => !/FACT-\d{4}-(\d{4})$/.test(n));
+    expect(malFormes).toEqual([]);
+
     const seqs = numbers
-      .map(n => {
-        const m = n.match(/FACT-\d{4}-(\d{4})$/);
-        return m ? Number(m[1]) : null;
-      })
-      .filter((n): n is number => n !== null)
+      .map(n => Number(n.match(/FACT-\d{4}-(\d{4})$/)![1]))
       .sort((a, b) => a - b);
 
     expect(seqs).toHaveLength(20);
