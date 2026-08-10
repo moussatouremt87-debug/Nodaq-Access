@@ -75,6 +75,38 @@ globalThis.fetch = async function patchedFetch(
         ? lastUserContent.content.toLowerCase()
         : "";
 
+    // Dictée de devis : le simulateur rend un DÉCOUPAGE (libellé, quantité,
+    // unité) et JAMAIS de prix — exactement ce que le vrai modèle a le droit de
+    // produire. Un simulateur qui renverrait un prix masquerait une régression :
+    // la route doit rester incapable d'en faire passer un.
+    if (userText.includes("cloison") || userText.includes("dictee-test")) {
+      const decoupage = JSON.stringify({
+        id: "chatcmpl-vitest-dictee",
+        object: "chat.completion",
+        model: "test/fake-chat-model",
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: "assistant",
+              content: JSON.stringify({
+                intentions: [
+                  { libelle: "Cloison BA13", quantite: 30, unite: "m2" },
+                  { libelle: "Pose d'une veranda en aluminium", quantite: 1, unite: "u" },
+                ],
+              }),
+            },
+            finish_reason: "stop",
+          },
+        ],
+        usage: { prompt_tokens: 20, completion_tokens: 30, total_tokens: 50 },
+      });
+      return new Response(decoupage, {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
     // create_prospect simulation: one round only (no pending tool result)
     if (!hasPendingToolResult && userText.includes("jean dupont")) {
       const toolCallBody = JSON.stringify({

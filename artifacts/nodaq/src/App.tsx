@@ -19,6 +19,7 @@ import Devis from '@/pages/devis';
 import Classeur from '@/pages/classeur';
 import Marge from '@/pages/marge';
 import Pointages from '@/pages/pointages';
+import DevisDictee from '@/pages/devis-dictee';
 import Analytique from '@/pages/analytique';
 import Rapports from '@/pages/rapports';
 import CompteResultat from '@/pages/compte-resultat';
@@ -140,6 +141,7 @@ function AppRouter() {
               <Route path="/analytique" component={PlatformRoute(Analytique)} />
               <Route path="/marge" component={PlatformRoute(Marge)} />
               <Route path="/pointages" component={PlatformRoute(Pointages)} />
+              <Route path="/devis/dictee" component={PlatformRoute(DevisDictee)} />
               <Route path="/rapports" component={PlatformRoute(Rapports)} />
               <Route path="/compte-resultat" component={PlatformRoute(CompteResultat)} />
               <Route path="/echeancier" component={PlatformRoute(Echeancier)} />

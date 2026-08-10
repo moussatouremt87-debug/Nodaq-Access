@@ -58,7 +58,7 @@ const BUSINESS_TABLES = [
   "connectors", "contrats", "cr_entries", "devis", "echeances", "factures",
   "avoirs", "facture_sequences",
   "pending_actions", "prospects", "settings", "team_members", "absences",
-  "pointages",
+  "pointages", "catalogue_lignes",
 ] as const;
 
 // ────────────────────────────────────────────────────────────────────────────

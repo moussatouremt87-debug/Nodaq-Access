@@ -26,6 +26,8 @@ import publicRouter from "./public";
 import { onboardingReadRouter, onboardingWriteRouter } from "./onboarding";
 import analyticsRouter from "./analytics";
 import pointagesRouter from "./pointages";
+import catalogueRouter from "./catalogue";
+import devisDicteeRouter from "./devis-dictee";
 
 import { requireAuth } from "../middleware/requireAuth";
 import { resolveTenant } from "../middleware/resolveTenant";
@@ -64,6 +66,8 @@ router.use(biz, votreMetierRouter);
 router.use(biz, onboardingReadRouter);
 router.use(biz, analyticsRouter);
 router.use(biz, pointagesRouter);
+router.use(biz, catalogueRouter);
+router.use(biz, devisDicteeRouter);
 
 // ── OWNER-only routes ─────────────────────────────────────────────────────
 router.use(ownerOnly, equipeRouter);
