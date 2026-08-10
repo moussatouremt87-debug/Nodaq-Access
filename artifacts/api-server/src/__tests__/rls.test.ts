@@ -588,3 +588,97 @@ describe("h — GARDE STRUCTURELLE", () => {
     expect(violations, "See [STRUCTURAL GUARD] output above for details").toEqual([]);
   });
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// CASE h — IMMUTABILITÉ DES TABLES APPEND-ONLY
+//
+// Un journal que l'application peut modifier ou effacer n'est pas un journal.
+// Ce test ne lit AUCUN fichier : il éprouve les privilèges EFFECTIFS en tentant
+// réellement l'écriture avec la connexion applicative. Vérifier la présence
+// d'un GRANT dans un .sql prouverait seulement qu'une ligne a été écrite, pas
+// que le moteur l'applique — et c'est précisément ce qui a échappé à la
+// migration 009, dont le GRANT ne retirait rien.
+//
+// Le code 42501 (insufficient_privilege) est exigé NOMMÉMENT : un `catch`
+// attrape-tout passerait aussi sur une faute de frappe SQL ou une table
+// absente, et le test serait vert pour une mauvaise raison.
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Exécute une requête sous app_user et rend le SQLSTATE en cas de refus. */
+async function sqlstateDe(
+  tenantId: string,
+  requete: ReturnType<typeof sql>,
+): Promise<string | null> {
+  try {
+    await withTenant(tenantId, (tx) => tx.execute(requete));
+    return null; // aucune erreur : la requête est passée
+  } catch (err) {
+    let courant: unknown = err;
+    for (let i = 0; courant !== null && courant !== undefined && i < 5; i++) {
+      const code = (courant as { code?: string }).code;
+      if (typeof code === "string") return code;
+      courant = (courant as { cause?: unknown }).cause;
+    }
+    return "inconnu";
+  }
+}
+
+describe("h — APPEND-ONLY (privilèges effectifs, pas déclaratifs)", () => {
+  const APPEND_ONLY = ["envois_journal", "archived_pdfs"] as const;
+
+  test("envois_journal : INSERT et SELECT passent, UPDATE et DELETE sont REFUSÉS", async () => {
+    const ligneId = `append-only-${Date.now()}`;
+
+    // INSERT — doit réussir.
+    const insertion = await sqlstateDe(
+      tenantA.id,
+      sql`INSERT INTO envois_journal (id, tenant_id, destinataire, document_type, mode, statut)
+          VALUES (${ligneId}, ${tenantA.id}::uuid, 'append-only@test.nodaq', 'DEVIS', 'repli_nodaq', 'envoye')`,
+    );
+    expect(insertion, "INSERT doit être autorisé sur un journal").toBeNull();
+
+    // SELECT — doit réussir.
+    const lecture = await sqlstateDe(
+      tenantA.id,
+      sql`SELECT id FROM envois_journal WHERE id = ${ligneId}`,
+    );
+    expect(lecture, "SELECT doit être autorisé").toBeNull();
+
+    // UPDATE — doit être refusé par le moteur, code 42501.
+    const modification = await sqlstateDe(
+      tenantA.id,
+      sql`UPDATE envois_journal SET statut = 'echec' WHERE id = ${ligneId}`,
+    );
+    expect(modification, "UPDATE doit être refusé (42501)").toBe("42501");
+
+    // DELETE — doit être refusé par le moteur, code 42501.
+    const suppression = await sqlstateDe(
+      tenantA.id,
+      sql`DELETE FROM envois_journal WHERE id = ${ligneId}`,
+    );
+    expect(suppression, "DELETE doit être refusé (42501)").toBe("42501");
+
+    // Et la ligne est intacte, vue par l'administrateur.
+    const { rows } = await adminPool.query<{ statut: string }>(
+      "SELECT statut FROM envois_journal WHERE id = $1",
+      [ligneId],
+    );
+    expect(rows[0]?.statut).toBe("envoye");
+
+    await adminPool.query("DELETE FROM envois_journal WHERE id = $1", [ligneId]);
+  });
+
+  test.each(APPEND_ONLY)(
+    "%s : app_user n'a NI UPDATE NI DELETE au niveau du moteur",
+    async (table) => {
+      // has_table_privilege interroge le moteur, pas un fichier de migration.
+      const { rows } = await adminPool.query<{ peut_modifier: boolean; peut_supprimer: boolean }>(
+        `SELECT has_table_privilege('app_user', $1, 'UPDATE') AS peut_modifier,
+                has_table_privilege('app_user', $1, 'DELETE') AS peut_supprimer`,
+        [table],
+      );
+      expect(rows[0]?.peut_modifier, `${table} ne doit pas être modifiable`).toBe(false);
+      expect(rows[0]?.peut_supprimer, `${table} ne doit pas être supprimable`).toBe(false);
+    },
+  );
+});

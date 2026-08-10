@@ -201,9 +201,17 @@ describe("④ archived_pdfs est non modifiable par app_user", () => {
       expect(rows[0]?.sha256).toBe("immutability-sha256"); // untouched
       console.log("[④] Ligne intacte après tentatives de modification ✓");
     } finally {
-      // Cleanup and restore privileges (idempotent in CI, necessary in dev).
       await adminPool.query("DELETE FROM archived_pdfs WHERE id = $1", [pdfId]);
-      await adminPool.query("GRANT UPDATE, DELETE ON archived_pdfs TO app_user");
+      // NE PAS re-accorder UPDATE/DELETE ici.
+      //
+      // Ce nettoyage faisait « GRANT UPDATE, DELETE ON archived_pdfs TO app_user »
+      // pour « restaurer les privilèges ». Il restaurait l'état FAUX : l'état de
+      // repos voulu par la migration 006 est RÉVOQUÉ. Conséquence, toute
+      // exécution de la suite laissait la table des PDF archivés modifiable par
+      // l'application — l'inverse de ce que ce test venait de vérifier.
+      //
+      // Le REVOKE en tête de ce test suffit et laisse la base dans l'état juste.
+      // La garde « h — APPEND-ONLY » de rls.test.ts échoue si on revient ici.
     }
   });
 });
