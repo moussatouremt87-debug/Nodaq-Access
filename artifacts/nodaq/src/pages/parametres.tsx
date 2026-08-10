@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { ObjectifsParametres } from '@/components/objectifs-parametres';
 import { motion } from 'framer-motion';
 import { Building2, Bell, Puzzle, Save } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -165,6 +166,13 @@ export default function ParametresPage() {
       />
 
       <div className="px-5 md:px-8 pt-6">
+        {/* Seuil de rentabilité — hors onglets, parce que c'est la seule
+            valeur de cette page que le produit ne peut PAS deviner, et qu'un
+            objectif non renseigné ne s'affiche nulle part ailleurs. */}
+        <div className="mb-6 max-w-2xl">
+          <ObjectifsParametres />
+        </div>
+
         {/* Tab bar */}
         <div className="flex gap-1 rounded-xl bg-muted p-1 w-fit mb-6">
           {TABS.map(tab => {

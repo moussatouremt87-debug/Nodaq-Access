@@ -27,3 +27,4 @@ export * from "./analytics_tool_logs";
 export * from "./pointages";
 export * from "./catalogue_lignes";
 export * from "./envoi";
+export * from "./objectifs";

@@ -64,6 +64,7 @@ export * from "./affaireMargin.js";
 export * from "./coutMainOeuvre.js";
 export * from "./rapprochementCatalogue.js";
 export * from "./envoiDomaine.js";
+export * from "./objectifsCockpit.js";
 export * from "./verticalPacks.js";
 export * from "./recurrence.js";
 export * from "./revenusAcquis.js";

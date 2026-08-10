@@ -1,6 +1,12 @@
 import { Router, type IRouter } from "express";
 import { withTenant, affairesTable, contratsTable, facturesTable, prospectsTable, pendingActionsTable, activityTable } from "@workspace/db";
 import { sql, eq, and } from "drizzle-orm";
+import {
+  toDateString,
+  debutExercice,
+  debutExercicePrecedent,
+  memeJourExercicePrecedent,
+} from "@nodaq/shared";
 
 const router: IRouter = Router();
 
@@ -14,11 +20,18 @@ router.get("/cockpit/kpis", async (req, res): Promise<void> => {
       .where(eq(affairesTable.status, "EN_COURS"));
 
     const now = new Date();
-    const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    // Date métier d'émission, en composantes locales. `created_at` est la date
+    // d'insertion de la ligne : une facture saisie le 28 décembre et émise le
+    // 3 janvier tombait sur le mauvais exercice.
+    const firstOfMonth = toDateString(new Date(now.getFullYear(), now.getMonth(), 1));
     const [caMonth] = await tx
       .select({ total: sql<number>`coalesce(sum(amount_cents), 0)` })
       .from(facturesTable)
-      .where(and(eq(facturesTable.settled, true), sql`created_at >= ${firstOfMonth}`));
+      // PAS de filtre `settled` : le chiffre d'affaires est ce qui est
+      // FACTURÉ. Filtrer sur l'encaissement donnait le règlement reçu sous le
+      // nom de « chiffre d'affaires » — deux notions qu'un artisan distingue
+      // parfaitement et qu'on lui mélangeait.
+      .where(sql`issued_date::date >= ${firstOfMonth}::date`);
 
     const [facturesEnAttente] = await tx
       .select({ count: sql<number>`count(*)::int` })
@@ -48,46 +61,49 @@ router.get("/cockpit/kpis", async (req, res): Promise<void> => {
     // Monthly revenue series (last 6 months)
     const monthlySeries = await tx.execute(sql`
       SELECT
-        to_char(date_trunc('month', created_at), 'YYYY-MM') as month,
+        to_char(date_trunc('month', issued_date::date), 'YYYY-MM') as month,
         coalesce(sum(amount_cents), 0)::int as "revenueCents",
         count(*)::int as "invoiceCount"
       FROM factures
-      WHERE settled = true AND created_at >= now() - interval '6 months'
-      GROUP BY date_trunc('month', created_at)
+      WHERE issued_date::date >= (CURRENT_DATE - interval '6 months')
+      GROUP BY date_trunc('month', issued_date::date)
       ORDER BY month ASC
     `);
 
     // ── YTD (year-to-date) ────────────────────────────────────────────────────
-    const year = now.getFullYear();
-    const firstOfYear     = `${year}-01-01`;
-    const firstOfLastYear = `${year - 1}-01-01`;
-    const sameDayLastYear = `${year - 1}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const firstOfYear     = debutExercice(now);
+    const firstOfLastYear = debutExercicePrecedent(now);
+    // Le recollage de composantes produisait « 2027-02-29 » un 29 février quand
+    // le millésime précédent n'est pas bissextile : date inexistante, requête
+    // en échec. La borne est désormais ramenée au dernier jour du mois visé.
+    const sameDayLastYear = memeJourExercicePrecedent(now);
 
     const [caYtdRow] = await tx
       .select({ total: sql<number>`coalesce(sum(amount_cents), 0)` })
       .from(facturesTable)
-      .where(and(eq(facturesTable.settled, true), sql`created_at >= ${firstOfYear}`));
+      .where(sql`issued_date::date >= ${firstOfYear}::date`);
 
     const [caPrevYearRow] = await tx
       .select({ total: sql<number>`coalesce(sum(amount_cents), 0)` })
       .from(facturesTable)
       .where(and(
-        eq(facturesTable.settled, true),
-        sql`created_at >= ${firstOfLastYear}`,
-        sql`created_at <  ${sameDayLastYear}`,
+        sql`issued_date::date >= ${firstOfLastYear}::date`,
+        sql`issued_date::date <  ${sameDayLastYear}::date`,
       ));
 
     const [facturesYtdRow] = await tx
       .select({ count: sql<number>`count(*)::int` })
       .from(facturesTable)
-      .where(sql`created_at >= ${firstOfYear}`);
+      .where(sql`issued_date::date >= ${firstOfYear}::date`);
 
+    // Le taux de recouvrement, LUI, parle bien d'encaissement : `settled` y est
+    // à sa place. C'est le seul endroit de ce fichier où il l'est.
     const recRow = await tx.execute(sql`
       SELECT
         coalesce(sum(CASE WHEN settled = true THEN amount_cents ELSE 0 END), 0)::float AS paid,
         coalesce(sum(amount_cents), 0)::float AS total
       FROM factures
-      WHERE created_at >= ${firstOfYear}
+      WHERE issued_date::date >= ${firstOfYear}::date
     `);
 
     return {

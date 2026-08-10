@@ -113,7 +113,7 @@ export async function createTestTeamMember(
 // Order matters — pointages has FKs to team_members and affaires, so it must be
 // deleted before them.
 const BUSINESS_TABLES = [
-  "pointages", "catalogue_lignes", "envois_journal", "parametres_envoi",
+  "pointages", "catalogue_lignes", "envois_journal", "parametres_envoi", "objectifs_franchissements",
   "absences", "activity", "affaires", "analytics_tool_logs", "archived_pdfs", "chat_messages", "classeur_documents",
   "connectors", "contrats", "cr_entries", "devis", "echeances",
   "avoirs", "facture_sequences", "factures",
@@ -174,6 +174,8 @@ export function tableInsertSql(table: string, tenantId: string, memberAId?: stri
     // facture_sequences: composite PK (tenant_id, year) — NO id column.
     // One row per tenant per year, so both test tenants can hold year 2020.
     facture_sequences: [`INSERT INTO facture_sequences (tenant_id, year) VALUES ($1::uuid, 2020) ON CONFLICT DO NOTHING`, [tenantId]],
+    // objectifs_franchissements : append-only, unicité (tenant, objectif, exercice).
+    objectifs_franchissements: [`INSERT INTO objectifs_franchissements (id, tenant_id, objectif, exercice, montant_cents) VALUES ($1, $2::uuid, 'seuil_rentabilite', 2020, 1000) ON CONFLICT DO NOTHING`, [id, tenantId]],
     // parametres_envoi : un seul par tenant (contrainte d'unicité).
     parametres_envoi: [`INSERT INTO parametres_envoi (id, tenant_id, mode, domaine) VALUES ($1, $2::uuid, 'repli_nodaq', 'rls-test.example') ON CONFLICT DO NOTHING`, [id, tenantId]],
     // envois_journal : append-only, aucune donnée de contenu.
