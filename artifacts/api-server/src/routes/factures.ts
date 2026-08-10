@@ -14,6 +14,7 @@ import { z } from "zod";
 import { auditInvoice } from "@nodaq/facturx";
 import { toDateString } from "@nodaq/shared";
 import { encaisseSurFacture, recalculerFacture } from "../lib/reglement-facture.js";
+import { evaluerFranchissements, messageFranchissement } from "../lib/franchissement-objectifs.js";
 import {
   archiveFacturxPdf,
   buildFacturxInvoice,
@@ -531,7 +532,27 @@ router.post("/factures/:id/emettre", async (req, res): Promise<void> => {
     }
   }
 
-  res.json(emitted);
+  // 9. Objectifs — l'émission vient de changer le chiffre d'affaires.
+  //
+  // ÉVALUÉ ICI, PAS À LA LECTURE DU COCKPIT. Un franchissement horodaté au
+  // moment où quelqu'un REGARDE ne dit rien : un artisan qui n'ouvre pas son
+  // cockpit pendant trois semaines verrait son objectif « franchi
+  // aujourd'hui ».
+  //
+  // `evaluerFranchissements` ne lève jamais : la facture est émise, immuable
+  // et déjà écrite — l'annonce d'un objectif ne vaut pas qu'on la remette en
+  // cause.
+  const franchis = await evaluerFranchissements(tenantId);
+
+  res.json({
+    ...emitted,
+    /** Objectifs franchis PAR CETTE ÉMISSION. Vide le reste du temps. */
+    objectifsFranchis: franchis.map((f) => ({
+      objectif: f.objectif,
+      montantCents: f.montantCents,
+      message: messageFranchissement(f),
+    })),
+  });
 });
 
 /** GET /api/factures/:id/pdf — serves the archived PDF (always same bytes). */
