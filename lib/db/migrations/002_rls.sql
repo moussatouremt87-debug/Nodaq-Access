@@ -3,10 +3,27 @@
 --
 -- Run with DATABASE_URL (owner/superuser credentials).
 --
--- IMPORTANT: This migration creates app_user with a placeholder password
--- if the role does not already exist. In production, always run
--- lib/db/scripts/create-app-role.cjs afterward to rotate to a strong
--- randomly-generated password and obtain the DATABASE_URL_APP connection string.
+-- MUST run after 002_columns.sql, which adds the tenant_id columns the policies
+-- below reference. The shared 002 prefix is deliberate: migrate.mjs applies
+-- files alphabetically, and 'c' < 'r' gives exactly that order. Neither file may
+-- be renamed — _migrations keys on the filename. See 002_columns.sql for the
+-- full explanation.
+--
+-- IMPORTANT: This migration creates app_user with a PLACEHOLDER password
+-- ('REPLACE_ME_run_create-app-role.cjs') if the role does not already exist —
+-- a value that is public, since it sits in this repository.
+--
+-- On the normal path (`pnpm db:setup`) this never happens: create-app-role.cjs
+-- runs FIRST and creates the role with a generated password, so the block below
+-- takes its ELSE branch and only enforces attributes.
+--
+-- But if migrations are applied on their own (`pnpm db:migrate` on a fresh
+-- database), this migration creates the role with that placeholder. Running
+-- create-app-role.cjs WITHOUT a flag will then PRESERVE it — the script cannot
+-- read a password back from PostgreSQL, so it cannot tell a placeholder from a
+-- real secret. Rotate explicitly in that case:
+--
+--   node lib/db/scripts/create-app-role.cjs --rotate-password
 -- ─────────────────────────────────────────────────────────────────────────────
 
 -- ── app_user role ────────────────────────────────────────────────────────────

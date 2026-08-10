@@ -109,6 +109,15 @@ fois par `migrate.mjs` et tracé dans `_migrations`. Une migration déjà appliq
 jamais rejouée — si une propriété doit survivre à une réexécution d'un script, c'est le
 script qui doit la porter.
 
+**Ne jamais renommer une migration déjà livrée.** L'ordre d'application est
+*alphabétique* et `_migrations` indexe par **nom de fichier** : le préfixe numérique est
+une étiquette lisible, pas une clé. Renommer un fichier déjà appliqué le fait paraître
+en attente et le rejoue sur toutes les bases existantes. C'est pourquoi deux fichiers
+partagent le préfixe `002` (`002_columns.sql` puis `002_rls.sql` — 'c' < 'r' donne
+l'ordre de dépendance voulu) : c'est délibéré, pas un doublon à corriger. Et pourquoi
+`003_legacy_upgrade.sql` est un no-op conservé — la cicatrice de la dernière
+renumérotation.
+
 **Identifiants `TEXT`** : générés côté application (Drizzle `$defaultFn`). En SQL brut,
 l'`id` doit être fourni explicitement.
 
