@@ -108,8 +108,46 @@ jobs:
       - name: Typecheck all workspaces
         run: pnpm run typecheck
 
-      # ── Tests ───────────────────────────────────────────────────────────
-      - name: Run all workspace tests
+      # ── Tests, dans les trois fuseaux ───────────────────────────────────
+      #
+      # Chaque ticket de ce dépôt exige la suite sous UTC, Europe/Paris et
+      # Pacific/Auckland. La CI ne la lançait qu'UNE fois, sur des coureurs en
+      # UTC : rien n'avait jamais vérifié quoi que ce soit dans les trois
+      # fuseaux. La promesse reposait sur des exécutions locales, elles-mêmes
+      # neutralisées par l'épinglage du vitest.config de l'api-server.
+      #
+      # Auckland n'est pas décoratif : en avance sur UTC, c'est le fuseau qui
+      # révèle une date métier construite depuis un instant — un `…T12:00:00Z`
+      # y est déjà le lendemain.
+      #
+      # TROIS ÉTAPES ET NON UNE MATRICE DE JOBS, délibérément : une matrice
+      # triplerait le service PostgreSQL, l'installation, la création de
+      # `app_user`, les migrations, le seed, la garde `pg_class` et le
+      # typecheck — tout ce qui précède, et qui ne dépend pas du fuseau. Seule
+      # l'étape de test en dépend, donc seule l'étape de test est répétée.
+      #
+      # `TZ_ATTENDU` n'est pas une redite de `TZ` : c'est ce que
+      # `tools/tests/fuseau-attendu.test.ts` compare au fuseau RÉELLEMENT
+      # résolu. Sans elle, un paquet qui ré-épinglerait son fuseau passerait
+      # les trois étapes en vert sans jamais quitter Paris.
+
+      - name: Tests — TZ=UTC
         run: pnpm -r --if-present run test
         env:
           DATABASE_URL_APP: ${{ steps.setup_appuser.outputs.db_app_url }}
+          TZ: UTC
+          TZ_ATTENDU: UTC
+
+      - name: Tests — TZ=Europe/Paris
+        run: pnpm -r --if-present run test
+        env:
+          DATABASE_URL_APP: ${{ steps.setup_appuser.outputs.db_app_url }}
+          TZ: Europe/Paris
+          TZ_ATTENDU: Europe/Paris
+
+      - name: Tests — TZ=Pacific/Auckland
+        run: pnpm -r --if-present run test
+        env:
+          DATABASE_URL_APP: ${{ steps.setup_appuser.outputs.db_app_url }}
+          TZ: Pacific/Auckland
+          TZ_ATTENDU: Pacific/Auckland

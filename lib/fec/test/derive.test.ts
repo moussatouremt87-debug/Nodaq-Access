@@ -3,7 +3,14 @@ import { deriveReceivables, parseFec } from "../src/index.js";
 import { balancedRows, build, row } from "./fixtures.js";
 
 // Après l'échéance estimée de F-003 (01/07) — « échue » = strictement dépassée.
-const TODAY = new Date("2026-07-05T12:00:00Z");
+/*
+ * « Aujourd'hui » se construit en COMPOSANTES LOCALES, jamais depuis un
+ * instant. `new Date("2026-07-05T12:00:00Z")` est déjà le 6 juillet à UTC+13 :
+ * la fixture changeait de jour selon le fuseau du coureur, et avec elle le
+ * verdict « échue » de chaque facture. C'est la doctrine du dépôt : une date
+ * métier n'est pas un instant.
+ */
+const TODAY = new Date(2026, 6, 5, 12, 0, 0);
 
 function entriesOf(rows: string[][]) {
   const parsed = parseFec(build(rows));
