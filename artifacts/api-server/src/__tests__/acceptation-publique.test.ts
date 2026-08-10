@@ -27,6 +27,20 @@ import { adminPool, cleanupTenants, cleanupUsers } from "./helpers";
 
 interface Locataire { cookie: string; tenantId: string }
 
+/**
+ * Une adresse distincte par appel public.
+ *
+ * La limitation de débit est réelle et compte par IP : sans cela la suite
+ * entière partagerait un compteur et finirait en 429. On ne la désactive PAS —
+ * un test qui désarme la garde qu'il traverse ne prouve rien — on se présente
+ * simplement comme des clients différents, ce que sont de vrais clients.
+ */
+let compteurIp = 0;
+const ipUnique = (): string => `203.0.113.${(compteurIp++ % 250) + 1}`;
+
+const publicGet = (chemin: string) => request(app).get(chemin).set("X-Forwarded-For", ipUnique());
+const publicPost = (chemin: string) => request(app).post(chemin).set("X-Forwarded-For", ipUnique());
+
 const cleanupTenantIds: string[] = [];
 const cleanupEmails: string[] = [];
 
@@ -76,6 +90,7 @@ beforeAll(async () => {
 }, 90_000);
 
 afterAll(async () => {
+  await adminPool.query(`DELETE FROM tenant_secrets WHERE tenant_id = ANY($1::uuid[])`, [cleanupTenantIds]);
   await adminPool.query(`DELETE FROM devis WHERE tenant_id = ANY($1::uuid[])`, [cleanupTenantIds]);
   await cleanupTenants(...cleanupTenantIds);
   await cleanupUsers(...cleanupEmails);
@@ -85,8 +100,7 @@ afterAll(async () => {
 
 describe("a — un jeton inconnu ne dit rien de plus qu'un devis inexistant", () => {
   test("jeton inconnu → 404", async () => {
-    const r = await request(app)
-      .get(`/api/public/devis/${crypto.randomUUID()}/accept-page`)
+    const r = await publicGet(`/api/public/devis/${crypto.randomUUID()}/accept-page`)
       .expect(404);
     expect(r.body.error).toBeTruthy();
   });
@@ -94,16 +108,16 @@ describe("a — un jeton inconnu ne dit rien de plus qu'un devis inexistant", ()
   test("deux jetons inconnus rendent EXACTEMENT le même corps", async () => {
     // Un message qui distinguerait « jeton inconnu » de « devis supprimé »
     // confirmerait à un curieux qu'un jeton a existé. Même réponse, même code.
-    const un = await request(app).get(`/api/public/devis/${crypto.randomUUID()}/accept-page`).expect(404);
-    const deux = await request(app).get(`/api/public/devis/aaaa-bbbb-cccc/accept-page`).expect(404);
+    const un = await publicGet(`/api/public/devis/${crypto.randomUUID()}/accept-page`).expect(404);
+    const deux = await publicGet(`/api/public/devis/aaaa-bbbb-cccc/accept-page`).expect(404);
     expect(un.body).toEqual(deux.body);
   });
 
   test("un jeton VALIDE mais dont le devis a été supprimé rend le même 404", async () => {
     const d = await devisEnvoye(a);
     await adminPool.query(`DELETE FROM devis WHERE id = $1`, [d.id]);
-    const r = await request(app).get(`/api/public/devis/${d.token}/accept-page`).expect(404);
-    const temoin = await request(app).get(`/api/public/devis/${crypto.randomUUID()}/accept-page`).expect(404);
+    const r = await publicGet(`/api/public/devis/${d.token}/accept-page`).expect(404);
+    const temoin = await publicGet(`/api/public/devis/${crypto.randomUUID()}/accept-page`).expect(404);
     expect(r.body).toEqual(temoin.body);
   });
 });
@@ -111,7 +125,7 @@ describe("a — un jeton inconnu ne dit rien de plus qu'un devis inexistant", ()
 describe("b — un jeton valide ouvre la page", () => {
   test("200 avec référence, nom du client et montant", async () => {
     const d = await devisEnvoye(a, { montantCents: 987_600 });
-    const r = await request(app).get(`/api/public/devis/${d.token}/accept-page`).expect(200);
+    const r = await publicGet(`/api/public/devis/${d.token}/accept-page`).expect(200);
     expect(r.body.reference).toBe(d.reference);
     expect(r.body.clientName).toBe("Madame Client");
     expect(r.body.totalTTCCents).toBe(987_600);
@@ -125,8 +139,7 @@ describe("b — un jeton valide ouvre la page", () => {
 describe("c — l'acceptation engage", () => {
   test("status ACCEPTE, horodatage, signataire et adresse IP renseignés", async () => {
     const d = await devisEnvoye(a);
-    const r = await request(app)
-      .post(`/api/public/devis/${d.token}/accept`)
+    const r = await publicPost(`/api/public/devis/${d.token}/accept`)
       .send({ signataire: "Jean Client" })
       .expect(200);
     expect(r.body.accepted).toBe(true);
@@ -145,8 +158,7 @@ describe("c — l'acceptation engage", () => {
 describe("d — on n'accepte pas deux fois", () => {
   test("deuxième acceptation → 409, et le PREMIER horodatage est inchangé", async () => {
     const d = await devisEnvoye(a);
-    await request(app)
-      .post(`/api/public/devis/${d.token}/accept`)
+    await publicPost(`/api/public/devis/${d.token}/accept`)
       .send({ signataire: "Premier Signataire" })
       .expect(200);
 
@@ -155,8 +167,7 @@ describe("d — on n'accepte pas deux fois", () => {
       [d.id],
     );
 
-    await request(app)
-      .post(`/api/public/devis/${d.token}/accept`)
+    await publicPost(`/api/public/devis/${d.token}/accept`)
       .send({ signataire: "Second Signataire" })
       .expect(409);
 
@@ -175,8 +186,8 @@ describe("e — concurrence", () => {
   test("deux acceptations simultanées : une seule gagne", async () => {
     const d = await devisEnvoye(a);
     const [un, deux] = await Promise.all([
-      request(app).post(`/api/public/devis/${d.token}/accept`).send({ signataire: "A" }),
-      request(app).post(`/api/public/devis/${d.token}/accept`).send({ signataire: "B" }),
+      publicPost(`/api/public/devis/${d.token}/accept`).send({ signataire: "A" }),
+      publicPost(`/api/public/devis/${d.token}/accept`).send({ signataire: "B" }),
     ]);
     const codes = [un.status, deux.status].sort();
     expect(codes).toEqual([200, 409]);
@@ -198,8 +209,7 @@ describe("f — la validité couvre le JOUR entier", () => {
   test("valable jusqu'à HIER → 410", async () => {
     const hier = toDateString(new Date(Date.now() - 86_400_000));
     const d = await devisEnvoye(a, { validUntil: hier });
-    const r = await request(app)
-      .post(`/api/public/devis/${d.token}/accept`)
+    const r = await publicPost(`/api/public/devis/${d.token}/accept`)
       .send({ signataire: "Trop Tard" })
       .expect(410);
     expect(r.body.validUntil).toBe(hier);
@@ -214,8 +224,7 @@ describe("f — la validité couvre le JOUR entier", () => {
     // le révèle.
     const aujourdhui = toDateString(new Date());
     const d = await devisEnvoye(a, { validUntil: aujourdhui });
-    await request(app)
-      .post(`/api/public/devis/${d.token}/accept`)
+    await publicPost(`/api/public/devis/${d.token}/accept`)
       .send({ signataire: "Juste à Temps" })
       .expect(200);
   });
@@ -224,10 +233,10 @@ describe("f — la validité couvre le JOUR entier", () => {
     const hier = await devisEnvoye(a, { validUntil: toDateString(new Date(Date.now() - 86_400_000)) });
     const ce_jour = await devisEnvoye(a, { validUntil: toDateString(new Date()) });
 
-    const rHier = await request(app).get(`/api/public/devis/${hier.token}/accept-page`).expect(200);
+    const rHier = await publicGet(`/api/public/devis/${hier.token}/accept-page`).expect(200);
     expect(rHier.body.expired).toBe(true);
 
-    const rCeJour = await request(app).get(`/api/public/devis/${ce_jour.token}/accept-page`).expect(200);
+    const rCeJour = await publicGet(`/api/public/devis/${ce_jour.token}/accept-page`).expect(200);
     expect(rCeJour.body.expired).toBe(false);
   });
 });
@@ -269,9 +278,9 @@ describe("h — le jeton d'un tenant n'ouvre rien chez un autre", () => {
     const chezB = await devisEnvoye(b);
 
     // Chaque jeton n'ouvre QUE son devis.
-    const rA = await request(app).get(`/api/public/devis/${chezA.token}/accept-page`).expect(200);
+    const rA = await publicGet(`/api/public/devis/${chezA.token}/accept-page`).expect(200);
     expect(rA.body.reference).toBe(chezA.reference);
-    const rB = await request(app).get(`/api/public/devis/${chezB.token}/accept-page`).expect(200);
+    const rB = await publicGet(`/api/public/devis/${chezB.token}/accept-page`).expect(200);
     expect(rB.body.reference).toBe(chezB.reference);
     expect(rA.body.reference).not.toBe(rB.body.reference);
   });
@@ -309,5 +318,141 @@ describe("h — le jeton d'un tenant n'ouvre rien chez un autre", () => {
     } finally {
       client.release();
     }
+  });
+});
+
+// ── i. Renvoyer ne casse pas le lien du client ──────────────────────────────
+
+describe("i — « renvoyer » réutilise le lien, « nouveau lien » le remplace", () => {
+  /** Crée un devis par l'API et l'envoie une première fois. */
+  async function creerEtEnvoyer(l: Locataire): Promise<{ id: string; url: string }> {
+    const { body: cree } = await request(app)
+      .post("/api/devis")
+      .set("Cookie", l.cookie)
+      .send({ clientName: "Madame Client", lines: [{ description: "Pose", quantity: 1, unitPriceCents: 100_000 }] })
+      .expect(201);
+    const { body: envoye } = await request(app)
+      .post(`/api/devis/${cree.id}/envoyer`)
+      .set("Cookie", l.cookie)
+      .send({ emailTo: "client@example.test" })
+      .expect(200);
+    expect(envoye.acceptUrl).toBeTruthy();
+    expect(envoye.lienReutilise).toBe(false);
+    return { id: cree.id, url: envoye.acceptUrl as string };
+  }
+
+  const jetonDe = (url: string): string => url.split("/").pop()!;
+
+  test("un renvoi rend EXACTEMENT le même lien", async () => {
+    const premier = await creerEtEnvoyer(a);
+    const { body: renvoi } = await request(app)
+      .post(`/api/devis/${premier.id}/envoyer`)
+      .set("Cookie", a.cookie)
+      .send({ emailTo: "client@example.test" })
+      .expect(200);
+
+    // C'est tout le sujet : l'artisan dont le client dit ne pas avoir reçu le
+    // devis renvoie le même lien, et l'ancien e-mail continue de marcher.
+    expect(renvoi.acceptUrl).toBe(premier.url);
+    expect(renvoi.lienReutilise).toBe(true);
+  });
+
+  test("après un renvoi, le lien du PREMIER e-mail fonctionne toujours", async () => {
+    const premier = await creerEtEnvoyer(a);
+    await request(app)
+      .post(`/api/devis/${premier.id}/envoyer`)
+      .set("Cookie", a.cookie)
+      .send({ emailTo: "client@example.test" })
+      .expect(200);
+
+    // Le client retrouve l'ancien message et clique : il doit voir son devis,
+    // pas « lien invalide ou expiré ».
+    const r = await publicGet(`/api/public/devis/${jetonDe(premier.url)}/accept-page`)
+      .expect(200);
+    expect(r.body.clientName).toBe("Madame Client");
+  });
+
+  test("« nouveau lien » en rend un AUTRE et invalide le précédent", async () => {
+    const premier = await creerEtEnvoyer(a);
+    const { body: nouveau } = await request(app)
+      .post(`/api/devis/${premier.id}/nouveau-lien`)
+      .set("Cookie", a.cookie)
+      .expect(200);
+
+    expect(nouveau.acceptUrl).not.toBe(premier.url);
+    expect(nouveau.ancienLienInvalide).toBe(true);
+
+    // L'ancien ne répond plus — et avec la réponse indifférenciée.
+    await publicGet(`/api/public/devis/${jetonDe(premier.url)}/accept-page`).expect(404);
+    // Le nouveau, lui, ouvre bien le devis.
+    await publicGet(`/api/public/devis/${jetonDe(nouveau.acceptUrl)}/accept-page`).expect(200);
+  });
+
+  test("« nouveau lien » est refusé sur un devis déjà accepté", async () => {
+    const premier = await creerEtEnvoyer(a);
+    await publicPost(`/api/public/devis/${jetonDe(premier.url)}/accept`)
+      .send({ signataire: "Jean Client" })
+      .expect(200);
+
+    await request(app)
+      .post(`/api/devis/${premier.id}/nouveau-lien`)
+      .set("Cookie", a.cookie)
+      .expect(409);
+  });
+
+  test("le jeton est chiffré dans le magasin, jamais en clair", async () => {
+    const premier = await creerEtEnvoyer(a);
+    const jeton = jetonDe(premier.url);
+
+    const { rows } = await adminPool.query(
+      `SELECT to_jsonb(t) AS ligne FROM tenant_secrets t
+        WHERE tenant_id = $1::uuid AND cle = $2`,
+      [a.tenantId, `devis.${premier.id}.accept_token`],
+    );
+    expect(rows).toHaveLength(1);
+    // Le jeton est reconstructible par l'APPLICATION, jamais par la seule base :
+    // la clé vit dans l'environnement. Une sauvegarde ne suffit pas.
+    expect(JSON.stringify(rows[0].ligne)).not.toContain(jeton);
+    expect(String(rows[0].ligne.valeur_chiffree).startsWith("v1:")).toBe(true);
+
+    // Et `devis` ne le porte toujours pas non plus.
+    const d = await adminPool.query(`SELECT to_jsonb(t) AS ligne FROM devis t WHERE id = $1`, [premier.id]);
+    expect(JSON.stringify(d.rows[0].ligne)).not.toContain(jeton);
+  });
+
+  test("supprimer un devis emporte son jeton", async () => {
+    const premier = await creerEtEnvoyer(a);
+    await request(app).delete(`/api/devis/${premier.id}`).set("Cookie", a.cookie).expect(204);
+    const { rows } = await adminPool.query(
+      `SELECT count(*)::int AS n FROM tenant_secrets WHERE tenant_id = $1::uuid AND cle = $2`,
+      [a.tenantId, `devis.${premier.id}.accept_token`],
+    );
+    expect(rows[0].n).toBe(0);
+  });
+});
+
+// ── j. La limitation de débit ───────────────────────────────────────────────
+
+describe("j — une route publique n'est pas une route sans limite", () => {
+  test("au-delà du quota par IP, la route répond 429", async () => {
+    // IP FIXE, contrairement au reste de la suite : c'est le point du test.
+    const ip = "198.51.100.7";
+    const inconnu = () => `/api/public/devis/${crypto.randomUUID()}/accept-page`;
+
+    let vus429 = 0;
+    for (let i = 0; i < 30; i++) {
+      const r = await request(app).get(inconnu()).set("X-Forwarded-For", ip);
+      if (r.status === 429) vus429++;
+    }
+    expect(vus429).toBeGreaterThan(0);
+  }, 60_000);
+
+  test("une AUTRE adresse n'est pas pénalisée par la précédente", async () => {
+    // Sans cette assertion, un compteur global passerait le test précédent tout
+    // en bloquant tout le monde dès qu'un seul client insiste.
+    const r = await request(app)
+      .get(`/api/public/devis/${crypto.randomUUID()}/accept-page`)
+      .set("X-Forwarded-For", "198.51.100.200");
+    expect(r.status).toBe(404);
   });
 });

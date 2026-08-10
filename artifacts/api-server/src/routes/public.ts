@@ -59,12 +59,20 @@ const FENETRE_MS = 60_000;
 const MAX_PAR_FENETRE = 20;
 const compteurs = new Map<string, { debut: number; n: number }>();
 
+/**
+ * L'adresse du client, telle qu'Express la résout.
+ *
+ * `req.ip` et NON `req.headers["x-forwarded-for"]` : l'en-tête est fourni par
+ * le CLIENT. Le lire directement laissait n'importe qui contourner la limite de
+ * débit en le faisant varier, et — plus grave — inscrire l'adresse de son choix
+ * dans `devis.accepted_ip`, qui est une preuve d'engagement.
+ *
+ * `req.ip` respecte le réglage `trust proxy` de l'application : adresse de la
+ * socket par défaut, adresse réelle du client quand le déploiement a déclaré
+ * son mandataire. La décision revient ainsi à l'exploitant, pas à l'attaquant.
+ */
 function adresse(req: Request): string {
-  return (
-    (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ??
-    req.socket.remoteAddress ??
-    "unknown"
-  );
+  return req.ip ?? req.socket.remoteAddress ?? "unknown";
 }
 
 function limiterDebit(req: Request, res: Response, next: NextFunction): void {

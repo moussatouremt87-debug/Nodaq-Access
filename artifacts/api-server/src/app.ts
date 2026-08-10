@@ -9,6 +9,25 @@ import { pool } from "@workspace/db";
 
 const app: Express = express();
 
+// ── Confiance dans le mandataire ─────────────────────────────────────────────
+// `req.ip` détermine deux choses qui comptent : la limitation de débit des
+// routes publiques, et `devis.accepted_ip`, qui est une preuve d'engagement.
+//
+// Lire `x-forwarded-for` à la main, comme le faisait ce serveur, revient à
+// laisser le CLIENT choisir son adresse : il contourne la limite en variant
+// l'en-tête, et il inscrit l'adresse de son choix dans la preuve. L'en-tête
+// n'est digne de foi que derrière un mandataire qui le réécrit.
+//
+// `trust proxy` non défini ⇒ Express rend l'adresse de la SOCKET, qui ne se
+// forge pas. C'est le défaut sûr. En production derrière un répartiteur, poser
+// TRUST_PROXY=1 (ou le nombre de sauts) pour retrouver l'adresse du client —
+// sans quoi tous les clients partagent le compteur du répartiteur.
+const trustProxy = process.env["TRUST_PROXY"];
+if (trustProxy) {
+  const sauts = Number(trustProxy);
+  app.set("trust proxy", Number.isInteger(sauts) && sauts > 0 ? sauts : trustProxy);
+}
+
 // ── CORS ─────────────────────────────────────────────────────────────────────
 // Allowed origins, in priority order:
 //   1. localhost / 127.0.0.1 (any port) — dev convenience
