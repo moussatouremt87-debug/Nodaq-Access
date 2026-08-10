@@ -8,7 +8,7 @@
  */
 
 /** Catalog snapshot date — bump on every template/rule change. */
-export const RGPD_REGISTER_VERSION = "2026-07-30";
+export const RGPD_REGISTER_VERSION = "2026-08-10";
 
 /** Article 6 legal bases. */
 export const LEGAL_BASES = [
@@ -123,6 +123,27 @@ export const PROCESSING_TEMPLATES: readonly ProcessingTemplate[] = [
     source: {
       label: "CNIL — prospection commerciale",
       url: "https://www.cnil.fr/fr/la-prospection-commerciale-par-courrier-electronique",
+    },
+  },
+  {
+    id: "prospection-signaux-publics",
+    name: "Constitution de pistes à partir de registres publics d'entreprises",
+    purpose:
+      "Proposer des axes de prospection et enrichir des fiches PROSPECTS " +
+      "PROFESSIONNELS à partir de registres publics d'entreprises. Les personnes " +
+      "physiques — entrepreneurs individuels — sont écartées à la source : une " +
+      "donnée publiquement accessible n'est pas librement réutilisable, et la " +
+      "prospection téléphonique vers un particulier exige un consentement " +
+      "préalable depuis le 11 août 2026",
+    legalBasis: "interet_legitime",
+    dataCategories: ["identite", "contact", "vie_professionnelle"],
+    dataSubjects: ["prospects"],
+    recipients: "Service commercial",
+    retention: "3 ans après le dernier contact du prospect (référentiel CNIL)",
+    sensitiveData: false,
+    source: {
+      label: "CNIL — réutilisation des données publiquement accessibles",
+      url: "https://www.cnil.fr/fr/la-reutilisation-des-donnees-publiquement-accessibles-en-ligne-des-fins-de-demarchage-commercial",
     },
   },
   {
