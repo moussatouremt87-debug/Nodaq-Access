@@ -14,6 +14,16 @@ import { useMutation } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { useLocation } from 'wouter';
 import { Mic, Plus, Trash2, Loader2, AlertTriangle } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -57,6 +67,7 @@ export default function DevisDictee() {
   const [texte, setTexte] = useState('');
   const [lignes, setLignes] = useState<Ligne[] | null>(null);
   const [clientName, setClientName] = useState('');
+  const [confirmationOuverte, setConfirmationOuverte] = useState(false);
   const [avertissements, setAvertissements] = useState<{ illisible: boolean; catalogueVide: boolean }>({
     illisible: false,
     catalogueVide: false,
@@ -122,9 +133,29 @@ export default function DevisDictee() {
         : acc,
     0,
   );
-  const aCompleter = (lignes ?? []).filter(
+  // Les lignes qui ne partiront PAS dans le devis, nommées. Un compteur ne
+  // suffit pas : l'artisan doit reconnaître SES ouvrages pour décider.
+  const lignesPerdues = (lignes ?? []).filter(
     (l) => l.prixUnitaireHtCents === null || l.quantite === null,
-  ).length;
+  );
+  const aCompleter = lignesPerdues.length;
+
+  /**
+   * Au clic, on ne crée JAMAIS le devis en silence s'il manque des lignes.
+   *
+   * Le défaut d'origine : le .filter() de la mutation supprimait les lignes non
+   * chiffrées sans rien dire, et le message « Devis créé » laissait croire que
+   * tout y était. Le seul avertissement présent parlait du TOTAL — « ces lignes
+   * ne sont pas comptées dans ce total » — ce qui se lit « le total est
+   * provisoire », pas « ces ouvrages ne seront pas dans le document ».
+   */
+  const demanderCreation = () => {
+    if (lignesPerdues.length > 0) {
+      setConfirmationOuverte(true);
+      return;
+    }
+    creerDevis.mutate();
+  };
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-6">
@@ -209,25 +240,43 @@ export default function DevisDictee() {
                   value={l.unite ?? ''}
                   onChange={(e) => majLigne(i, { unite: e.target.value || null })}
                 />
-                <Input
-                  type="number"
-                  inputMode="decimal"
-                  placeholder="Prix HT (€)"
-                  className="h-9 w-32 text-right font-mono-nums"
-                  value={l.prixUnitaireHtCents === null ? '' : l.prixUnitaireHtCents / 100}
-                  onChange={(e) =>
-                    majLigne(i, {
-                      prixUnitaireHtCents:
-                        e.target.value === '' ? null : Math.round(Number(e.target.value) * 100),
-                      // Un prix retouché à la main n'est plus « du catalogue » :
-                      // le dire, sinon l'écran ment sur l'origine du chiffre.
-                      provenance: e.target.value === '' ? 'a_completer' : l.provenance,
-                    })
-                  }
-                />
+                <div className="flex items-center gap-1">
+                  {/* Étiquette visible : une fois le champ rempli, le placeholder
+                      disparaît et il ne resterait qu'un nombre nu. */}
+                  <span className="text-[11px] uppercase tracking-wide text-muted-foreground">PU HT</span>
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    placeholder="0,00"
+                    aria-label="Prix unitaire HT en euros"
+                    className="h-9 w-28 text-right font-mono-nums"
+                    value={l.prixUnitaireHtCents === null ? '' : l.prixUnitaireHtCents / 100}
+                    onChange={(e) =>
+                      majLigne(i, {
+                        prixUnitaireHtCents:
+                          e.target.value === '' ? null : Math.round(Number(e.target.value) * 100),
+                        // Un prix retouché à la main n'est plus « du catalogue » :
+                        // le dire, sinon l'écran ment sur l'origine du chiffre.
+                        provenance: e.target.value === '' ? 'a_completer' : l.provenance,
+                      })
+                    }
+                  />
+                </div>
                 <span className={`text-[11px] uppercase tracking-wide ${ETIQUETTE[l.provenance].classe}`}>
                   {ETIQUETTE[l.provenance].texte}
                 </span>
+                {/* Montant de la ligne — sinon l'artisan doit faire 30 × 42 de
+                    tête, cinq fois, sur le seul écran fait pour relire.
+                    Affichage uniquement : le serveur reste seul à faire foi. */}
+                <div className="ml-auto text-right">
+                  {l.prixUnitaireHtCents !== null && l.quantite !== null ? (
+                    <span className="font-mono-nums text-sm font-semibold">
+                      {fmtEUR(l.prixUnitaireHtCents * l.quantite)}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-yellow-400">à compléter</span>
+                  )}
+                </div>
               </div>
             </motion.div>
           ))}
@@ -273,7 +322,7 @@ export default function DevisDictee() {
               className="w-full"
               size="lg"
               disabled={clientName.trim().length === 0 || creerDevis.isPending || total === 0}
-              onClick={() => creerDevis.mutate()}
+              onClick={demanderCreation}
             >
               {creerDevis.isPending ? (
                 <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Création…</>
@@ -284,6 +333,36 @@ export default function DevisDictee() {
           </div>
         </motion.div>
       )}
+
+      <AlertDialog open={confirmationOuverte} onOpenChange={setConfirmationOuverte}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {aCompleter} ouvrage{aCompleter > 1 ? 's' : ''} sans prix
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {lignesPerdues.map((l) => l.libelle || '(ligne sans libellé)').join(', ')}
+              {' — '}
+              {aCompleter > 1 ? 'ils ne figureront pas' : 'il ne figurera pas'} dans le devis.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            {/* Action par défaut : revenir compléter. Créer un devis amputé doit
+                être un choix explicite, pas le chemin de moindre résistance. */}
+            <AlertDialogAction onClick={() => setConfirmationOuverte(false)}>
+              Revenir les compléter
+            </AlertDialogAction>
+            <AlertDialogCancel
+              onClick={() => {
+                setConfirmationOuverte(false);
+                creerDevis.mutate();
+              }}
+            >
+              Créer le devis sans {aCompleter === 1 ? 'cette ligne' : `ces ${aCompleter} lignes`}
+            </AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
