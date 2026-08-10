@@ -2,6 +2,19 @@
 -- Migration 002 — Column additions for legacy schema upgrade
 --
 -- MUST run before 002_rls.sql (sorts before it alphabetically: 'c' < 'r').
+--
+-- ── Why two files share the 002 prefix ───────────────────────────────────────
+-- This is deliberate, not a numbering accident. migrate.mjs applies files in
+-- ALPHABETICAL order and tracks each one in _migrations BY FILENAME — the
+-- numeric prefix is a readable label, never a key. "002_columns.sql" sorting
+-- before "002_rls.sql" is exactly the required dependency order: the columns
+-- must exist before RLS policies referencing tenant_id are created.
+--
+-- DO NOT RENAME EITHER FILE. _migrations keys on the filename, so a rename
+-- makes an already-applied migration look pending and replays it on every
+-- existing database. 003_legacy_upgrade.sql is the scar from the last time
+-- this happened — it is an intentional no-op kept solely to preserve the
+-- _migrations record. See lib/db/README.md, "Numérotation des migrations".
 -- On fresh installs (001 created the full schema): all statements are no-ops.
 -- On databases that pre-date the migration system: adds the columns that were
 -- originally introduced by the legacy CJS scripts (migrate-multitenant.cjs,

@@ -63,6 +63,41 @@ node lib/db/scripts/seed-owner.cjs
 
 ---
 
+## Numérotation des migrations
+
+`migrate.mjs` lit `lib/db/migrations/*.sql`, les applique dans l'ordre **alphabétique**
+et trace chaque fichier appliqué dans la table `_migrations`, **par nom de fichier**.
+
+Deux conséquences :
+
+**Le préfixe numérique est une étiquette, pas une clé.** Rien n'impose qu'il soit
+unique. Deux fichiers portent volontairement le préfixe `002` :
+
+| Fichier | Rôle |
+|---------|------|
+| `002_columns.sql` | Ajoute les colonnes `tenant_id` et celles héritées des anciens scripts |
+| `002_rls.sql` | Crée `app_user`, les GRANT, et active RLS `ENABLE`+`FORCE` |
+
+L'ordre alphabétique (`'c' < 'r'`) donne exactement l'ordre de dépendance requis : les
+colonnes doivent exister avant les policies qui référencent `tenant_id`. **Ce n'est pas
+un doublon à corriger.**
+
+**Ne jamais renommer une migration déjà livrée.** `_migrations` indexant par nom, un
+renommage fait paraître « en attente » une migration déjà appliquée et la **rejoue sur
+toutes les bases existantes**. Les fichiers de ce dépôt sont idempotents, donc un rejeu
+passerait sans doute sans dommage — mais il laisserait deux lignes pour la même
+migration, et cette propriété n'est garantie par rien.
+
+Une renumérotation reste techniquement possible, à condition de réconcilier
+`_migrations` (`UPDATE` de l'ancien nom vers le nouveau) sur **chaque** base existante
+avant le déploiement. Le coût dépasse le bénéfice : `003_legacy_upgrade.sql` est un
+no-op conservé précisément parce que ce problème s'est déjà posé une fois.
+
+Pour ajouter une migration : prendre le numéro suivant, ne jamais éditer un fichier déjà
+livré (le rejeu n'aura pas lieu), et écrire du SQL idempotent.
+
+---
+
 ## Seeds de démonstration
 
 ```bash
