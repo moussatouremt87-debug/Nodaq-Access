@@ -31,6 +31,9 @@ import devisDicteeRouter from "./devis-dictee";
 import parametresEnvoiRouter from "./parametres-envoi";
 import objectifsRouter from "./objectifs";
 import voixRouter from "./voix";
+import clientsRouter from "./clients";
+import paiementsRouter from "./paiements";
+import affectationsRouter from "./affectations";
 
 import { requireAuth } from "../middleware/requireAuth";
 import { resolveTenant } from "../middleware/resolveTenant";
@@ -74,6 +77,9 @@ router.use(biz, devisDicteeRouter);
 router.use(biz, parametresEnvoiRouter);
 router.use(biz, objectifsRouter);
 router.use(biz, voixRouter);
+router.use(biz, clientsRouter);
+router.use(biz, paiementsRouter);
+router.use(biz, affectationsRouter);
 
 // ── OWNER-only routes ─────────────────────────────────────────────────────
 router.use(ownerOnly, equipeRouter);

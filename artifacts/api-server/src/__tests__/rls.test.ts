@@ -60,6 +60,7 @@ const BUSINESS_TABLES = [
   "pending_actions", "prospects", "settings", "team_members", "absences",
   "pointages", "catalogue_lignes", "envois_journal", "parametres_envoi", "objectifs_franchissements",
   "tenant_secrets",
+  "clients", "paiements", "affectations",
 ] as const;
 
 // ────────────────────────────────────────────────────────────────────────────

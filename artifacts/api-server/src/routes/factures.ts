@@ -8,11 +8,12 @@
  */
 import { Router, type IRouter } from "express";
 import { requireRole } from "../middleware/requireRole.js";
-import { withTenant, facturesTable, avoirsTable, activityTable, settingsTable, archivedPdfsTable } from "@workspace/db";
+import { withTenant, facturesTable, avoirsTable, activityTable, settingsTable, archivedPdfsTable, paiementsTable } from "@workspace/db";
 import { and, eq, desc, sql } from "drizzle-orm";
 import { z } from "zod";
 import { auditInvoice } from "@nodaq/facturx";
 import { toDateString } from "@nodaq/shared";
+import { encaisseSurFacture, recalculerFacture } from "../lib/reglement-facture.js";
 import {
   archiveFacturxPdf,
   buildFacturxInvoice,
@@ -592,10 +593,29 @@ router.post("/factures/:id/payer", async (req, res): Promise<void> => {
     // Only an EMISE facture can be marked as paid; all other statuts are rejected.
     if (f.statut !== "EMISE") return { kind: "wrong_status" as const, statut: f.statut };
 
-    const [updated] = await tx.update(facturesTable)
-      .set({ statut: "PAYEE", settled: true })
-      .where(and(eq(facturesTable.id, id!), eq(facturesTable.statut, "EMISE")))
-      .returning();
+    // ── Passe par le JOURNAL, comme tout le reste ─────────────────────────
+    // Deux façons d'écrire le même fait, ce sont deux façons de le rendre
+    // faux. Cette route n'écrit donc plus l'état de la facture : elle
+    // enregistre un paiement du RESTE DÛ, et le recalcul commun s'occupe du
+    // statut. Sans quoi une facture pourrait être « payée » sans qu'aucun
+    // règlement n'existe au journal.
+    const dejaEncaisse = await encaisseSurFacture(tx, id!);
+    const resteDu = Math.round(f.amountCents - dejaEncaisse);
+    if (resteDu > 0) {
+      await tx.insert(paiementsTable).values({
+        tenantId,
+        factureId: id!,
+        clientId: f.clientId ?? null,
+        affaireId: f.affaireId ?? null,
+        date: toDateString(new Date()),
+        montantCents: resteDu,
+        sens: "ENCAISSEMENT",
+        moyen: "AUTRE",
+        nature: "SOLDE",
+      });
+    }
+    await recalculerFacture(tx, id!);
+    const [updated] = await tx.select().from(facturesTable).where(eq(facturesTable.id, id!));
     await tx.insert(activityTable).values({
       tenantId,
       type: "facture_paid",

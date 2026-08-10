@@ -115,10 +115,13 @@ export async function createTestTeamMember(
 const BUSINESS_TABLES = [
   "pointages", "catalogue_lignes", "envois_journal", "parametres_envoi", "objectifs_franchissements",
   "tenant_secrets",
+  // Ordre : les enfants avant les parents (client_id référence clients).
+  "paiements", "affectations",
   "absences", "activity", "affaires", "analytics_tool_logs", "archived_pdfs", "chat_messages", "classeur_documents",
   "connectors", "contrats", "cr_entries", "devis", "echeances",
   "avoirs", "facture_sequences", "factures",
   "pending_actions", "prospects", "settings", "team_members",
+  "clients",
 ];
 
 export async function cleanupTenants(...tenantIds: string[]): Promise<void> {
@@ -173,6 +176,10 @@ export function tableInsertSql(table: string, tenantId: string, memberAId?: stri
     // facture_ref_id carries no FK, so an arbitrary id is fine here.
     // tenant_secrets : PK composite (tenant_id, cle), pas d'id. La valeur est
     // un chiffré factice — cette insertion éprouve la RLS, pas le chiffrement.
+    clients:          [`INSERT INTO clients (id, tenant_id, nom) VALUES ($1, $2::uuid, 'RLS Client') ON CONFLICT DO NOTHING`, [id, tenantId]],
+    // paiements : append-only, montant > 0, date métier.
+    paiements:        [`INSERT INTO paiements (id, tenant_id, date, montant_cents) VALUES ($1, $2::uuid, CURRENT_DATE, 1000) ON CONFLICT DO NOTHING`, [id, tenantId]],
+    affectations:     [`INSERT INTO affectations (id, tenant_id, affaire_id, membre_id, date_debut, date_fin, heures_par_jour) VALUES ($1, $2::uuid, $3, $3, CURRENT_DATE, CURRENT_DATE, 7) ON CONFLICT DO NOTHING`, [id, tenantId, crypto.randomUUID()]],
     tenant_secrets:   [`INSERT INTO tenant_secrets (tenant_id, cle, valeur_chiffree) VALUES ($2::uuid, 'rls.test.' || $1, 'v1:1:aaaa:bbbb:cccc') ON CONFLICT DO NOTHING`, [id, tenantId]],
     avoirs:           [`INSERT INTO avoirs (id, tenant_id, numero, facture_ref_id, issued_date, montant_ht_cents, motif) VALUES ($1, $2::uuid, 'RLS-AV-001', $3, CURRENT_DATE, 1000, 'rls-test') ON CONFLICT DO NOTHING`, [id, tenantId, crypto.randomUUID()]],
     // facture_sequences: composite PK (tenant_id, year) — NO id column.

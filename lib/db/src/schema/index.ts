@@ -29,3 +29,6 @@ export * from "./catalogue_lignes";
 export * from "./envoi";
 export * from "./objectifs";
 export * from "./tenant_secrets";
+export * from "./clients";
+export * from "./paiements";
+export * from "./affectations";
