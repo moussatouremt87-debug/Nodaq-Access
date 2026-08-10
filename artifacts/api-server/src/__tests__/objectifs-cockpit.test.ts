@@ -204,7 +204,7 @@ describe("b — SILENCE : aucun seuil inventé", () => {
   });
 
   test("un taux saisi SANS charges reste un silence", async () => {
-    await reglage(tenantA, "objectifs.taux_marge", "3500");
+    await reglage(tenantA, "objectifs.taux_marge_bp", "3500");
     const { body } = await request(app)
       .get("/api/cockpit/objectifs")
       .set("Cookie", cookieOwnerA)
@@ -215,8 +215,8 @@ describe("b — SILENCE : aucun seuil inventé", () => {
   });
 
   test("les deux saisis : le seuil apparaît, avec sa provenance", async () => {
-    await reglage(tenantA, "objectifs.charges_fixes_annuelles", "12000000");
-    await reglage(tenantA, "objectifs.taux_marge", "3500");
+    await reglage(tenantA, "objectifs.charges_fixes_annuelles_cents", "12000000");
+    await reglage(tenantA, "objectifs.taux_marge_bp", "3500");
     const { body } = await request(app)
       .get("/api/cockpit/objectifs")
       .set("Cookie", cookieOwnerA)

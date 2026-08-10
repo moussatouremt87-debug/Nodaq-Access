@@ -24,7 +24,7 @@
  * POST /public/devis/:token/accept       — enregistre le « bon pour accord »
  */
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
-import { db, devisTable, withTenant } from "@workspace/db";
+import { db, devisTable, withTenant, settingsTable } from "@workspace/db";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import { z } from "zod";
@@ -149,6 +149,29 @@ function estPerime(validUntil: string | null): boolean {
   return validUntil < toDateString(new Date());
 }
 
+/**
+ * Qui parle au client — nom de l'entreprise et SIRET.
+ *
+ * La page disait « transmis à votre prestataire » et ne nommait PERSONNE. Le
+ * client reçoit un e-mail, clique, et arrive sur une page qui ne dit pas qui
+ * s'adresse à lui : c'est la première chose qu'il cherche avant de s'engager,
+ * et c'est ce qui distingue cette page d'une tentative d'hameçonnage.
+ *
+ * Lu par `withTenant` une fois la ligne — donc le tenant — identifiée par le
+ * jeton. La route publique ne voit jamais un autre tenant.
+ */
+async function emetteur(tenantId: string): Promise<{ nom: string | null; siret: string | null }> {
+  const rows = await withTenant(tenantId, (tx) =>
+    tx.select({ key: settingsTable.key, value: settingsTable.value }).from(settingsTable),
+  );
+  const parCle = new Map(rows.map((r) => [r.key, r.value]));
+  const lire = (cle: string): string | null => {
+    const v = parCle.get(cle);
+    return typeof v === "string" && v.trim().length > 0 ? v.trim() : null;
+  };
+  return { nom: lire("company.nom"), siret: lire("company.siret") };
+}
+
 // ── Routes ───────────────────────────────────────────────────────────────────
 
 /** Public : métadonnées de la page d'acceptation (sans authentification). */
@@ -168,6 +191,8 @@ router.get("/public/devis/:token/accept-page", limiterDebit, async (req, res): P
     return;
   }
 
+  const entreprise = await emetteur(devis.tenantId);
+
   if (devis.acceptedAt) {
     res.json({
       alreadyAccepted: true,
@@ -175,19 +200,50 @@ router.get("/public/devis/:token/accept-page", limiterDebit, async (req, res): P
       acceptedBy: devis.acceptedBy,
       reference: devis.reference,
       clientName: devis.clientName,
+      entreprise,
     });
     return;
   }
 
   if (estPerime(devis.validUntil)) {
-    res.json({ expired: true, validUntil: devis.validUntil, reference: devis.reference });
+    res.json({
+      expired: true,
+      validUntil: devis.validUntil,
+      reference: devis.reference,
+      entreprise,
+    });
     return;
   }
 
+  // ── Ce que le client accepte, en entier ──────────────────────────────────
+  //
+  // La page n'affichait que la référence, le montant TTC et le nom du client.
+  // PAS UNE SEULE LIGNE du devis. On demandait un « bon pour accord » sur un
+  // nombre dont on ne montrait pas la composition : faible commercialement —
+  // un client qui ne peut pas relire ne signe pas — et faible juridiquement,
+  // l'accord portant sur un contenu que le signataire n'a pas eu sous les yeux.
+  //
+  // On ne renvoie QUE ce qui concerne ce devis. Aucune autre donnée du tenant
+  // ne traverse cette route publique.
   res.json({
     reference: devis.reference,
     clientName: devis.clientName,
+    entreprise,
+    lignes: (devis.lines ?? []).map((l) => ({
+      description: l.description,
+      quantity: l.quantity,
+      unit: l.unit ?? null,
+      unitPriceCents: l.unitPriceCents,
+      vatRate: l.vatRate,
+      // Calculé ici : le front n'a pas à refaire une arithmétique de prix,
+      // et deux calculs du même montant finissent par diverger.
+      montantHTCents: Math.round(l.quantity * l.unitPriceCents),
+    })),
+    totalHTCents: devis.totalHTCents,
+    totalTVACents: devis.totalTTCCents - devis.totalHTCents,
     totalTTCCents: devis.totalTTCCents,
+    remise: devis.remise,
+    autoliquidation: devis.autoliquidation,
     validUntil: devis.validUntil,
     alreadyAccepted: false,
     expired: false,

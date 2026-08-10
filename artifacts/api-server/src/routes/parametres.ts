@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { withTenant, settingsTable } from "@workspace/db";
 import { inArray } from "drizzle-orm";
 import { z } from "zod";
+import { verifierReglagesObjectifs } from "@nodaq/shared";
 
 const router: IRouter = Router();
 
@@ -38,6 +39,20 @@ router.get("/parametres", async (req, res): Promise<void> => {
 router.patch("/parametres", async (req, res): Promise<void> => {
   const parsed = SetSettingsBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+  // ── Bornes des réglages d'objectif ──────────────────────────────────────
+  //
+  // C'est LA ROUTE qui refuse, pas l'écran. Le formulaire convertissait déjà
+  // correctement ; rien ne protégeait une valeur arrivant autrement — reprise
+  // de données, support, ou couche vocale. Un taux de 35 points de base au
+  // lieu de 3500 produisait un seuil de rentabilité vingt fois trop grand,
+  // affiché sans le moindre avertissement.
+  const refus = verifierReglagesObjectifs(parsed.data);
+  if (refus.length > 0) {
+    res.status(400).json({ error: refus.map((r) => r.message).join(" "), refus });
+    return;
+  }
+
   const tenantId = req.tenantId!;
 
   const updated = await withTenant(tenantId, async (tx) => {

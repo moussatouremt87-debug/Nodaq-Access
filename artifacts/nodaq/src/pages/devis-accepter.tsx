@@ -15,16 +15,35 @@ import { CheckCircle2, Clock, XCircle, FileText, Loader2 } from 'lucide-react';
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
 const API = `${BASE}/api`;
 
+type LigneDevis = {
+  description: string;
+  quantity: number;
+  unit?: string | null;
+  unitPriceCents: number;
+  vatRate: number;
+  montantHTCents: number;
+};
+
 type AcceptPageData = {
   reference: string;
   clientName: string;
+  /** Qui parle au client. Sans ce nom, la page ressemble à un hameçonnage. */
+  entreprise?: { nom: string | null; siret: string | null };
+  lignes?: LigneDevis[];
+  totalHTCents?: number;
+  totalTVACents?: number;
   totalTTCCents: number;
+  remise?: number;
+  autoliquidation?: boolean;
   validUntil?: string | null;
   alreadyAccepted: boolean;
   acceptedAt?: string;
   acceptedBy?: string;
   expired?: boolean;
 };
+
+const euros = (cents: number): string =>
+  (cents / 100).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
 
 export default function DevisAccepterPage() {
   const [, params] = useRoute('/devis/accepter/:token');
@@ -82,7 +101,7 @@ export default function DevisAccepterPage() {
       <StatusScreen
         icon={<Clock className="h-12 w-12 text-yellow-500" />}
         title="Devis expiré"
-        message={`Le devis ${data.reference} n'est plus valable depuis le ${data.validUntil ? new Date(data.validUntil).toLocaleDateString('fr-FR') : '—'}. Contactez votre prestataire pour obtenir un devis actualisé.`}
+        message={`Le devis ${data.reference} n'est plus valable depuis le ${data.validUntil ? new Date(data.validUntil).toLocaleDateString('fr-FR') : '—'}. Contactez ${data.entreprise?.nom ?? 'votre prestataire'} pour obtenir un devis actualisé.`}
       />
     );
   }
@@ -94,14 +113,14 @@ export default function DevisAccepterPage() {
       <StatusScreen
         icon={<CheckCircle2 className="h-12 w-12 text-green-500" />}
         title="Devis accepté"
-        message={`Le devis ${data.reference} a été accepté${by ? ` par ${by}` : ''}${when ? ` le ${new Date(when).toLocaleDateString('fr-FR', { dateStyle: 'long' })}` : ''}. Votre prestataire a été notifié.`}
+        message={`Le devis ${data.reference} a été accepté${by ? ` par ${by}` : ''}${when ? ` le ${new Date(when).toLocaleDateString('fr-FR', { dateStyle: 'long' })}` : ''}. ${data.entreprise?.nom ?? 'Votre prestataire'} a été notifié.`}
       />
     );
   }
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-md space-y-6">
+      <div className="w-full max-w-2xl space-y-6">
         {/* Header */}
         <div className="text-center space-y-2">
           <div className="flex justify-center">
@@ -109,9 +128,18 @@ export default function DevisAccepterPage() {
               <FileText className="h-8 w-8 text-primary" />
             </div>
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">Acceptation de devis</h1>
+          <h1 className="text-2xl font-bold tracking-tight">
+            {data.entreprise?.nom ?? 'Acceptation de devis'}
+          </h1>
+          {data.entreprise?.siret && (
+            <p className="text-xs text-muted-foreground" data-testid="siret-entreprise">
+              SIRET {data.entreprise.siret}
+            </p>
+          )}
           <p className="text-muted-foreground text-sm">
-            Vous êtes invité(e) à accepter le devis suivant.
+            {data.entreprise?.nom
+              ? `${data.entreprise.nom} vous transmet le devis suivant.`
+              : 'Vous êtes invité(e) à accepter le devis suivant.'}
           </p>
         </div>
 
@@ -140,6 +168,58 @@ export default function DevisAccepterPage() {
             </div>
           )}
         </div>
+
+        {/* ── LE DÉTAIL ─────────────────────────────────────────────────────
+            On demandait un « bon pour accord » sur un nombre dont on ne
+            montrait pas la composition. Un client qui ne peut pas relire ne
+            signe pas — et un accord porte mal sur un contenu que le
+            signataire n'a jamais eu sous les yeux. */}
+        {data.lignes && data.lignes.length > 0 && (
+          <div className="rounded-xl border border-border bg-card p-5" data-testid="detail-devis">
+            <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Détail
+            </p>
+            <div className="space-y-2">
+              {data.lignes.map((l, i) => (
+                <div key={i} className="flex flex-wrap items-baseline justify-between gap-2 border-b border-border/60 pb-2 text-sm last:border-0">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium">{l.description}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {l.quantity}{l.unit ? ` ${l.unit}` : ''} × {euros(l.unitPriceCents)}
+                      {' · TVA '}{l.vatRate} %
+                    </p>
+                  </div>
+                  <p className="shrink-0 font-medium tabular-nums">{euros(l.montantHTCents)}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4 space-y-1 border-t border-border pt-3 text-sm">
+              {typeof data.remise === 'number' && data.remise > 0 && (
+                <div className="flex justify-between text-muted-foreground">
+                  <span>Remise</span><span className="tabular-nums">−{data.remise} %</span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Total HT</span>
+                <span className="tabular-nums" data-testid="total-ht">{euros(data.totalHTCents ?? 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">TVA</span>
+                <span className="tabular-nums" data-testid="total-tva">{euros(data.totalTVACents ?? 0)}</span>
+              </div>
+              <div className="flex justify-between pt-1 text-base font-semibold">
+                <span>Total TTC</span>
+                <span className="tabular-nums" data-testid="total-ttc">{euros(data.totalTTCCents)}</span>
+              </div>
+              {data.autoliquidation && (
+                <p className="pt-2 text-xs text-muted-foreground">
+                  Autoliquidation de la TVA — article 283-2 nonies du CGI.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Acceptance form */}
         <div className="space-y-4">
@@ -178,7 +258,7 @@ export default function DevisAccepterPage() {
         </div>
 
         <p className="text-center text-xs text-muted-foreground">
-          Cette page est sécurisée. Votre accord est horodaté et transmis à votre prestataire.
+          Votre accord est horodaté et transmis à {data.entreprise?.nom ?? 'votre prestataire'}.
         </p>
       </div>
     </div>

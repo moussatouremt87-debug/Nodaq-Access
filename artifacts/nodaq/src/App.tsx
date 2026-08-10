@@ -101,7 +101,45 @@ const queryClient = new QueryClient({
   },
 });
 
+/**
+ * ROUTES PUBLIQUES — rendues NUES, hors de l'AppShell.
+ *
+ * ╔═══════════════════════════════════════════════════════════════════════════╗
+ * ║  Elles étaient rendues À L'INTÉRIEUR de l'AppShell. Le client de          ║
+ * ║  l'artisan, qui n'a aucune session, voyait donc la barre de navigation    ║
+ * ║  complète du logiciel : Cockpit, Affaires, Factures, Marge, Fiscal,      ║
+ * ║  Équipe, Connecteurs, Paramètres — et le sélecteur de thème.             ║
+ * ║                                                                           ║
+ * ║  Deux conséquences. Il croit être entré dans le logiciel de quelqu'un    ║
+ * ║  d'autre, sur la page même où on lui demande de s'engager. Et quiconque  ║
+ * ║  détient un lien de devis obtient la carte complète des fonctions du      ║
+ * ║  produit.                                                                 ║
+ * ║                                                                           ║
+ * ║  Effet de bord corrigé du même coup : l'AppShell appelle `useIsOwner()`,  ║
+ * ║  donc `GET /api/auth/me`. La page publique émettait une requête           ║
+ * ║  authentifiée et recevait 401 dans la console du client.                  ║
+ * ╚═══════════════════════════════════════════════════════════════════════════╝
+ *
+ * La garde `app-routes.test.ts` échoue si l'une d'elles retourne dans la
+ * coquille.
+ */
+export const ROUTES_PUBLIQUES = ['/devis/accepter/:token', '/login', '/register'] as const;
+
 function AppRouter() {
+  return (
+    <Switch>
+      {/* ── Routes PUBLIQUES : aucune navigation, aucun thème, rien de l'app ── */}
+      <Route path="/devis/accepter/:token" component={DevisAccepter} />
+      <Route path="/login" component={Login} />
+      <Route path="/register" component={Register} />
+
+      {/* Tout le reste vit dans l'application interne. */}
+      <Route component={ApplicationInterne} />
+    </Switch>
+  );
+}
+
+function ApplicationInterne() {
   const [location] = useLocation();
   const reducedMotion = useReducedMotion();
 
@@ -122,11 +160,8 @@ function AppRouter() {
             transition={reducedMotion ? { duration: 0 } : { duration: 0.18, ease: [0.25, 0.1, 0.25, 1] }}
           >
             <Switch>
-              {/* Public routes — no auth required */}
-              <Route path="/login" component={Login} />
-              <Route path="/register" component={Register} />
-              <Route path="/devis/accepter/:token" component={DevisAccepter} />
-
+              {/* Les routes publiques sont montées PLUS HAUT, hors de cette
+                  coquille. Ne pas les remettre ici. */}
               {/* All business routes require authentication */}
               <Route path="/" component={PlatformRoute(Cockpit)} />
               <Route path="/affaires/:id" component={PlatformRoute(AffaireDetail)} />
