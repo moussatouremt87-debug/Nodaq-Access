@@ -33,6 +33,7 @@ import {
   type IndicateurId,
 } from "../routes/analytics.js";
 import { parsePeriode, toDateString } from "./analytics-periods.js";
+import type { OperationPlanifiee } from "./plan-vocal.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -46,6 +47,12 @@ export interface AgentAction {
 export interface AgentResult {
   content: string;
   actions: AgentAction[];
+  /**
+   * Écritures PROPOSÉES, au futur. Elles ne sont pas encore en base : la route
+   * en fait un plan à valider. Le champ s'appelait `actions_performed`, au
+   * passé, alors que rien n'avait été validé.
+   */
+  operations: OperationPlanifiee[];
 }
 
 // ─── Tool definitions ─────────────────────────────────────────────────────────
@@ -462,12 +469,123 @@ async function logAnalyticsTool(
 
 // ─── Tool executor ────────────────────────────────────────────────────────────
 
+/**
+ * Outils qui ÉCRIVENT. Ils ne s'exécutent plus : ils PROPOSENT.
+ *
+ * ╔═══════════════════════════════════════════════════════════════════════════╗
+ * ║  L'agent exécutait ces outils DIRECTEMENT en base et rendait un champ    ║
+ * ║  `actions_performed`, au passé, pendant que `pending_actions` restait     ║
+ * ║  vide. Contraire à la règle 4 du dépôt — et sur un produit vocal, ce      ║
+ * ║  n'est pas une question de conformité : si la transcription entend        ║
+ * ║  « Dupont » au lieu de « Dubois », l'erreur était écrite avant que        ║
+ * ║  l'artisan l'ait vue.                                                     ║
+ * ╚═══════════════════════════════════════════════════════════════════════════╝
+ *
+ * Les outils de LECTURE (`list_*`, `get_*`) restent directs : ils n'écrivent
+ * rien, et les faire passer par une validation rendrait l'agent inutilisable.
+ */
+export const OUTILS_ECRITURE = [
+  "create_affaire",
+  "update_affaire_status",
+  "create_prospect",
+  "update_prospect",
+  "create_echeance",
+  "create_classeur_entry",
+  "log_activity",
+] as const;
+
+/**
+ * Traduit un appel d'outil d'écriture en OPÉRATION PLANIFIÉE.
+ *
+ * Aucune écriture, aucun identifiant engendré, aucun montant retenu : les
+ * champs monétaires que le modèle aurait pu proposer (`quotedAmountCents`,
+ * `estimatedValueCents`, `estimatedCents`) sont délibérément ignorés — un
+ * chiffre affiché à l'utilisateur vient d'un calcul déterministe, jamais du
+ * modèle (règle 3 du dépôt).
+ */
+function proposerEcriture(
+  name: string,
+  args: Record<string, unknown>,
+): OperationPlanifiee {
+  const texte = (cle: string): string | null => {
+    const v = args[cle];
+    return typeof v === "string" && v.trim().length > 0 ? v.trim() : null;
+  };
+
+  switch (name) {
+    case "create_affaire":
+      return {
+        type: "creer_affaire",
+        libelle: `Créer l'affaire « ${texte("label") ?? "sans nom"} »`,
+        champs: { label: texte("label") ?? "Sans nom", clientNom: texte("clientName"), ville: null, dateDebut: null },
+        certitude: "aucune_resolution",
+      };
+    case "update_affaire_status":
+      return {
+        type: "maj_statut_affaire",
+        libelle: `Passer une affaire en ${texte("status") ?? "?"}`,
+        champs: { affaireId: texte("id") ?? "", statut: texte("status") ?? "" },
+        certitude: "aucune_resolution",
+      };
+    case "create_prospect":
+      return {
+        type: "creer_prospect",
+        libelle: `Créer le prospect « ${texte("name") ?? "sans nom"} »`,
+        champs: { nom: texte("name") ?? "Sans nom", telephone: texte("phone"), ville: null },
+        certitude: "aucune_resolution",
+      };
+    case "update_prospect":
+      return {
+        type: "consigner_activite",
+        libelle: `Modifier un prospect (${texte("stage") ?? "mise à jour"})`,
+        champs: { libelle: `Prospect mis à jour : ${texte("stage") ?? "—"}` },
+        certitude: "aucune_resolution",
+      };
+    case "create_echeance":
+      return {
+        type: "creer_echeance",
+        libelle: `Créer l'échéance « ${texte("label") ?? "sans nom"} »`,
+        champs: { libelle: texte("label") ?? "Sans nom", date: texte("dueDate") },
+        certitude: "aucune_resolution",
+      };
+    case "create_classeur_entry":
+      return {
+        type: "creer_entree_classeur",
+        libelle: `Classer « ${texte("name") ?? "sans nom"} »`,
+        champs: { titre: texte("name") ?? "Sans nom", categorie: texte("category") },
+        certitude: "aucune_resolution",
+      };
+    default:
+      return {
+        type: "consigner_activite",
+        libelle: `Consigner « ${texte("label") ?? "activité"} »`,
+        champs: { libelle: texte("label") ?? "Activité" },
+        certitude: "aucune_resolution",
+      };
+  }
+}
+
 async function executeTool(
   tenantId: string,
   name: string,
   args: Record<string, unknown>,
-): Promise<{ result: string; action?: AgentAction }> {
+): Promise<{ result: string; action?: AgentAction; operation?: OperationPlanifiee }> {
   const limit = (args.limit as number | undefined) ?? 10;
+
+  // ── LES ÉCRITURES NE S'EXÉCUTENT PLUS : ELLES SE PROPOSENT ────────────────
+  //
+  // Interception AVANT le switch, et les anciens `case` d'écriture ont été
+  // supprimés : un code mort qui écrit en base est exactement ce qui se
+  // rebranche par accident. Il ne reste rien à rebrancher.
+  if ((OUTILS_ECRITURE as readonly string[]).includes(name)) {
+    const operation = proposerEcriture(name, args);
+    return {
+      result:
+        `Opération PROPOSÉE, pas encore appliquée : ${operation.libelle}. ` +
+        `Elle attend la validation de l'utilisateur.`,
+      operation,
+    };
+  }
 
   switch (name) {
     case "list_affaires": {
@@ -494,62 +612,7 @@ async function executeTool(
       return { result: JSON.stringify(rows) };
     }
 
-    case "update_affaire_status": {
-      const updateData: Record<string, unknown> = { status: args.status };
-      if (args.status === "TERMINEE") updateData.completedAt = toDateString(new Date());
-      if (args.notes) updateData.notes = args.notes;
 
-      const [updated] = await withTenant(tenantId, async (tx) => {
-        const rows = await tx
-          .update(affairesTable)
-          .set(updateData)
-          .where(eq(affairesTable.id, args.id as string))
-          .returning();
-        if (rows[0]) {
-          await tx.insert(activityTable).values({
-            tenantId,
-            type: "affaire_status_changed",
-            label: `Affaire "${rows[0].label}" → ${args.status}`,
-            meta: rows[0].clientName ?? null,
-          });
-        }
-        return rows;
-      });
-      if (!updated) return { result: "Affaire introuvable." };
-      return {
-        result: `Statut mis à jour : "${updated.label}" est maintenant ${updated.status}.`,
-        action: { type: "update_affaire_status", label: `${updated.label} → ${updated.status}`, entityId: updated.id, entityType: "affaire" },
-      };
-    }
-
-    case "create_affaire": {
-      const refNum = String(Date.now()).slice(-6);
-      const [affaire] = await withTenant(tenantId, async (tx) => {
-        const rows = await tx.insert(affairesTable).values({
-          tenantId,
-          label: args.label as string,
-          clientName: (args.clientName as string | undefined) ?? null,
-          status: (args.status as string | undefined) ?? "PROSPECT",
-          quotedAmountCents: (args.quotedAmountCents as number | undefined) ?? null,
-          notes: (args.notes as string | undefined) ?? null,
-          reference: `AFF-${refNum}`,
-        }).returning();
-        if (rows[0]) {
-          await tx.insert(activityTable).values({
-            tenantId,
-            type: "affaire_created",
-            label: `Nouvelle affaire : ${rows[0].label}`,
-            meta: rows[0].clientName ?? null,
-          });
-        }
-        return rows;
-      });
-      if (!affaire) return { result: "Erreur lors de la création." };
-      return {
-        result: `Affaire "${affaire.label}" créée (réf: ${affaire.reference}, id: ${affaire.id}).`,
-        action: { type: "create_affaire", label: `Affaire créée : ${affaire.label}`, entityId: affaire.id, entityType: "affaire" },
-      };
-    }
 
     case "list_prospects": {
       const rows = await withTenant(tenantId, async (tx) => {
@@ -560,105 +623,10 @@ async function executeTool(
       return { result: JSON.stringify(rows) };
     }
 
-    case "create_prospect": {
-      const [prospect] = await withTenant(tenantId, async (tx) => {
-        const rows = await tx.insert(prospectsTable).values({
-          tenantId,
-          name: args.name as string,
-          companyName: (args.companyName as string | undefined) ?? null,
-          phone: (args.phone as string | undefined) ?? null,
-          email: (args.email as string | undefined) ?? null,
-          stage: (args.stage as string | undefined) ?? "NOUVEAU",
-          source: "AUTRE",
-          estimatedValueCents: (args.estimatedValueCents as number | undefined) ?? null,
-          notes: (args.notes as string | undefined) ?? null,
-        }).returning();
-        if (rows[0]) {
-          await tx.insert(activityTable).values({
-            tenantId,
-            type: "prospect_added",
-            label: `Nouveau prospect : ${rows[0].name}`,
-            meta: rows[0].companyName ?? null,
-          });
-        }
-        return rows;
-      });
-      if (!prospect) return { result: "Erreur lors de la création." };
-      return {
-        result: `Prospect "${prospect.name}" créé (id: ${prospect.id}).`,
-        action: { type: "create_prospect", label: `Prospect créé : ${prospect.name}`, entityId: prospect.id, entityType: "prospect" },
-      };
-    }
 
-    case "update_prospect": {
-      const updateData: Record<string, unknown> = {};
-      if (args.stage !== undefined) updateData.stage = args.stage;
-      if (args.notes !== undefined) updateData.notes = args.notes;
-      if (args.phone !== undefined) updateData.phone = args.phone;
-      if (args.email !== undefined) updateData.email = args.email;
-      if (args.estimatedValueCents !== undefined) updateData.estimatedValueCents = args.estimatedValueCents;
 
-      const [updated] = await withTenant(tenantId, async (tx) =>
-        tx.update(prospectsTable).set(updateData).where(eq(prospectsTable.id, args.id as string)).returning()
-      );
-      if (!updated) return { result: "Prospect introuvable." };
-      return {
-        result: `Prospect "${updated.name}" mis à jour.`,
-        action: { type: "update_prospect", label: `${updated.name} — étape: ${updated.stage}`, entityId: updated.id, entityType: "prospect" },
-      };
-    }
 
-    case "create_echeance": {
-      const [echeance] = await withTenant(tenantId, async (tx) =>
-        tx.insert(echeancesTable).values({
-          tenantId,
-          type: args.type as string,
-          label: args.label as string,
-          dueDate: args.dueDate as string,
-          estimatedCents: (args.estimatedCents as number | undefined) ?? null,
-          notes: (args.notes as string | undefined) ?? null,
-          status: "A_VENIR",
-        }).returning()
-      );
-      if (!echeance) return { result: "Erreur lors de la création." };
-      return {
-        result: `Échéance "${echeance.label}" créée pour le ${echeance.dueDate}.`,
-        action: { type: "create_echeance", label: `Échéance : ${echeance.label} (${echeance.dueDate})`, entityId: echeance.id, entityType: "echeance" },
-      };
-    }
 
-    case "create_classeur_entry": {
-      const [doc] = await withTenant(tenantId, async (tx) =>
-        tx.insert(classeurTable).values({
-          tenantId,
-          name: args.name as string,
-          category: (args.category as string | undefined) ?? "DIVERS",
-          notes: (args.notes as string | undefined) ?? null,
-          affaireId: (args.affaireId as string | undefined) ?? null,
-        }).returning()
-      );
-      if (!doc) return { result: "Erreur lors de la création." };
-      return {
-        result: `Document "${doc.name}" archivé dans la catégorie ${doc.category}.`,
-        action: { type: "create_classeur_entry", label: `Archivé : ${doc.name}`, entityId: doc.id, entityType: "classeur" },
-      };
-    }
-
-    case "log_activity": {
-      const [activity] = await withTenant(tenantId, async (tx) =>
-        tx.insert(activityTable).values({
-          tenantId,
-          type: args.type as string,
-          label: args.label as string,
-          meta: (args.meta as string | undefined) ?? null,
-        }).returning()
-      );
-      if (!activity) return { result: "Erreur lors de l'enregistrement." };
-      return {
-        result: `Activité enregistrée : "${activity.label}".`,
-        action: { type: "log_activity", label: activity.label, entityId: activity.id, entityType: "activity" },
-      };
-    }
 
     case "get_indicateur": {
       const id = args.id as string;
@@ -778,12 +746,14 @@ export async function runAgent(
           "Par mesure de sécurité, ce contenu n'est pas transmis à un modèle externe. " +
           "Pouvez-vous reformuler votre demande sans inclure ces informations ?",
         actions: [],
+        operations: [],
       };
     }
   }
 
   const systemPrompt = await buildSystemPrompt(tenantId);
   const actions: AgentAction[] = [];
+  const operations: OperationPlanifiee[] = [];
 
   // Apply server-side tool policy
   const allowedTools =
@@ -820,7 +790,7 @@ export async function runAgent(
     // No tool calls → final text response
     if (!toolCalls || toolCalls.length === 0) {
       const content = msg.content ?? "";
-      return { content, actions };
+      return { content, actions, operations };
     }
 
     // Append assistant message (with tool_calls) to the conversation
@@ -844,8 +814,9 @@ export async function runAgent(
         // keep empty
       }
 
-      const { result, action } = await executeTool(tenantId, call.function.name, argsObj);
+      const { result, action, operation } = await executeTool(tenantId, call.function.name, argsObj);
       if (action) actions.push(action);
+      if (operation) operations.push(operation);
 
       messages.push({ role: "tool", tool_call_id: call.id, content: result });
     }
@@ -853,8 +824,12 @@ export async function runAgent(
 
   // Fallback if MAX_ROUNDS exhausted
   return {
-    content: "J'ai effectué les actions demandées. Vérifiez les résultats dans l'application.",
+    content:
+      operations.length > 0
+        ? "J'ai préparé ces opérations. Validez-les pour qu'elles soient enregistrées."
+        : "Vérifiez les résultats dans l'application.",
     actions,
+    operations,
   };
 }
 

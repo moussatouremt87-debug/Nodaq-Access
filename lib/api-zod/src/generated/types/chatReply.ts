@@ -11,5 +11,5 @@ import type { ChatMessage } from './chatMessage';
 export interface ChatReply {
   conversationId: string;
   message: ChatMessage;
-  actions_performed?: AgentAction[];
+  actions_proposees?: AgentAction[];
 }

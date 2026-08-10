@@ -1001,7 +1001,7 @@ export const SendChatMessageResponse = zod.object({
   "content": zod.string(),
   "createdAt": zod.coerce.date()
 }),
-  "actions_performed": zod.array(zod.object({
+  "actions_proposees": zod.array(zod.object({
   "type": zod.string().describe('Tool name that was executed (e.g. create_prospect, update_affaire_status)'),
   "label": zod.string().describe('Human-readable description of what was done'),
   "entityId": zod.string().optional().describe('UUID of the created\/updated entity'),
@@ -1030,7 +1030,7 @@ export const UploadChatImageResponse = zod.object({
   "content": zod.string(),
   "createdAt": zod.coerce.date()
 }),
-  "actions_performed": zod.array(zod.object({
+  "actions_proposees": zod.array(zod.object({
   "type": zod.string().describe('Tool name that was executed (e.g. create_prospect, update_affaire_status)'),
   "label": zod.string().describe('Human-readable description of what was done'),
   "entityId": zod.string().optional().describe('UUID of the created\/updated entity'),

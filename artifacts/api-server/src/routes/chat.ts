@@ -7,6 +7,7 @@ import {
 } from "@workspace/api-zod";
 import { runAgent, getContextualSuggestions } from "../lib/mistralAgent";
 import { LlmConfigError } from "@nodaq/llm";
+import { enregistrerPlan } from "../lib/plan-vocal.js";
 
 const router: IRouter = Router();
 
@@ -79,6 +80,19 @@ router.post("/chat/messages", async (req, res): Promise<void> => {
     return;
   }
 
+  // 3 bis. Les écritures proposées deviennent un PLAN à valider.
+  //
+  // C'est la règle 4 du dépôt : une écriture agentique crée une
+  // `pending_action`, elle ne s'exécute jamais directement.
+  const planId =
+    agentResult.operations.length > 0
+      ? await enregistrerPlan(tenantId, {
+          operations: agentResult.operations,
+          questions: [],
+          nonCompris: [],
+        })
+      : null;
+
   // 4. Persist assistant reply via withTenant (RLS maintained)
   const assistantMessage = await withTenant(tenantId, async (tx) => {
     const [msg] = await tx.insert(chatMessagesTable).values({
@@ -93,7 +107,11 @@ router.post("/chat/messages", async (req, res): Promise<void> => {
   res.json({
     conversationId: convId,
     message: assistantMessage,
-    actions_performed: agentResult.actions,
+    // `actions_proposees` et non `actions_performed` : rien n'est écrit tant
+    // que le plan n'a pas été validé. Le passé était un mensonge.
+    actions_proposees: agentResult.actions,
+    /** Plan à valider, quand l'agent a proposé des écritures. */
+    planId,
   });
 });
 

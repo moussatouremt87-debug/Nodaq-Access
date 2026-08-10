@@ -31,6 +31,7 @@ import { useToast } from '@/hooks/use-toast';
 import { apiFetch } from '@/lib/auth';
 import { fmtEUR } from '@/lib/format';
 import { containerVariants, itemVariants } from '@/lib/motion-variants';
+import { useDictee } from '@/hooks/use-dictee';
 
 const API = '/api';
 
@@ -65,6 +66,9 @@ export default function DevisDictee() {
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const [texte, setTexte] = useState('');
+  // La transcription s'AJOUTE au texte existant : on dicte souvent en
+  // plusieurs fois, et écraser perdrait la première moitié.
+  const dictee = useDictee((t) => setTexte((prec) => (prec ? `${prec} ${t}` : t)));
   const [lignes, setLignes] = useState<Ligne[] | null>(null);
   const [clientName, setClientName] = useState('');
   const [confirmationOuverte, setConfirmationOuverte] = useState(false);
@@ -164,13 +168,38 @@ export default function DevisDictee() {
         <h1 className="text-lg font-semibold">Devis dicté</h1>
       </div>
 
-      <Textarea
-        value={texte}
-        onChange={(e) => setTexte(e.target.value)}
-        rows={4}
-        placeholder="Dictez ou collez la transcription : « pose de cloison BA13, trente mètres carrés, plus la peinture… »"
-        className="mb-3"
-      />
+      {/* L'écran s'appelait « Devis dicté » et affichait « Dictez… » sans
+          proposer AUCUN micro : il fallait dicter ailleurs et coller ici.
+          Le bouton APPEND la transcription plutôt que de l'écraser — on dicte
+          souvent en plusieurs fois, et perdre la première moitié serait pire
+          que de ne rien proposer. */}
+      <div className="mb-3 flex items-start gap-2">
+        <Textarea
+          value={texte}
+          onChange={(e) => setTexte(e.target.value)}
+          rows={4}
+          placeholder="Dictez ou collez la transcription : « pose de cloison BA13, trente mètres carrés, plus la peinture… »"
+          className="flex-1"
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          aria-label="Dicter"
+          data-testid="bouton-micro-dictee"
+          className="mt-1 shrink-0"
+          onPointerDown={() => void dictee.demarrer()}
+          onPointerUp={dictee.arreter}
+          onPointerLeave={dictee.arreter}
+          disabled={dictee.transcrit}
+        >
+          {dictee.transcrit ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Mic className={dictee.enregistre ? 'h-4 w-4 animate-pulse text-destructive' : 'h-4 w-4'} />
+          )}
+        </Button>
+      </div>
       <Button
         onClick={() => proposer.mutate()}
         disabled={texte.trim().length === 0 || proposer.isPending}

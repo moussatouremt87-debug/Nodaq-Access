@@ -30,6 +30,7 @@ import catalogueRouter from "./catalogue";
 import devisDicteeRouter from "./devis-dictee";
 import parametresEnvoiRouter from "./parametres-envoi";
 import objectifsRouter from "./objectifs";
+import voixRouter from "./voix";
 
 import { requireAuth } from "../middleware/requireAuth";
 import { resolveTenant } from "../middleware/resolveTenant";
@@ -72,6 +73,7 @@ router.use(biz, catalogueRouter);
 router.use(biz, devisDicteeRouter);
 router.use(biz, parametresEnvoiRouter);
 router.use(biz, objectifsRouter);
+router.use(biz, voixRouter);
 
 // ── OWNER-only routes ─────────────────────────────────────────────────────
 router.use(ownerOnly, equipeRouter);

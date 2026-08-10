@@ -254,7 +254,10 @@ router.post(
       // The persisted record (genericRecord) is intentionally NOT used here —
       // the UI shows the richer response, history stores only the safe record.
       message: { ...assistantMessage, content: assistantContent },
-      actions_performed: agentActions,
+      // `actions_proposees` : rien n'est écrit tant que le plan n'a pas été
+      // validé. Ce chemin n'expose que des outils de LECTURE, donc la liste
+      // est vide en pratique — le nom reste juste quand même.
+      actions_proposees: agentActions,
       // Image binary is NOT stored in this version (metadata-only archival).
       // Full binary storage with object-storage is tracked in the follow-up
       // classeur task.

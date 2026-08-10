@@ -1590,7 +1590,7 @@ components:
           type: string
         message:
           $ref: "#/components/schemas/ChatMessage"
-        actions_performed:
+        actions_proposees:
           type: array
           items:
             $ref: "#/components/schemas/AgentAction"
@@ -1612,7 +1612,7 @@ components:
           type: string
         message:
           $ref: "#/components/schemas/ChatMessage"
-        actions_performed:
+        actions_proposees:
           type: array
           items:
             $ref: "#/components/schemas/AgentAction"

@@ -5,6 +5,7 @@ import { NAV_SECTIONS, MOBILE_NAV, navIsActive } from '@/lib/nav';
 import { TopRibbon } from './top-ribbon';
 import { ThemeToggle } from './theme-toggle';
 import { useIsOwner } from '@/hooks/use-auth';
+import { MicroFlottant } from '@/components/micro-flottant';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
@@ -109,6 +110,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <main className="flex-1 min-w-0">{children}</main>
       </div>
+
+      {/* Monté ICI, donc présent sur TOUTES les pages de l'application.
+          Le poser page par page garantirait qu'on en oublie une — et la
+          promesse « vous ne tapez plus jamais rien » ne souffre pas d'écran
+          où le micro manque. */}
+      <MicroFlottant />
     </div>
   );
 }
