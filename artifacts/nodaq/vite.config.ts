@@ -5,18 +5,27 @@ import { defineConfig } from 'vite';
 
 import runtimeErrorOverlay from '@replit/vite-plugin-runtime-error-modal';
 
-const rawPort = process.env.PORT;
+// FRONTEND_PORT takes precedence over PORT so this dev server and the API
+// server can run side by side: both read PORT otherwise, and `strictPort: true`
+// below turns the clash into a hard failure ("Port 8080 is already in use")
+// rather than a silent reassignment.
+//
+// Production is unaffected: the built SPA is served by the API server, so only
+// PORT matters there, and the Docker build sets it alone.
+const portSource = process.env.FRONTEND_PORT ? 'FRONTEND_PORT' : 'PORT';
+const rawPort = process.env.FRONTEND_PORT ?? process.env.PORT;
 
 if (!rawPort) {
   throw new Error(
-    'PORT environment variable is required but was not provided.',
+    'PORT environment variable is required but was not provided ' +
+      '(set FRONTEND_PORT to run this server alongside the API).',
   );
 }
 
 const port = Number(rawPort);
 
 if (Number.isNaN(port) || port <= 0) {
-  throw new Error(`Invalid PORT value: "${rawPort}"`);
+  throw new Error(`Invalid ${portSource} value: "${rawPort}"`);
 }
 
 const basePath = process.env.BASE_PATH;
