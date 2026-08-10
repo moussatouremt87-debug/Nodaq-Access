@@ -25,3 +25,4 @@ export * from "./absences";
 export * from "./archived_pdfs";
 export * from "./analytics_tool_logs";
 export * from "./pointages";
+export * from "./catalogue_lignes";
