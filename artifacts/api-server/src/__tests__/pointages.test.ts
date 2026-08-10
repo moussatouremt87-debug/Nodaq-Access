@@ -254,6 +254,52 @@ describe("d — RÉCAPITULATIF DE SEMAINE", () => {
     expect(body.pointages).toHaveLength(0);
   });
 
+  test("une semaine À VENIR est REFUSÉE, et rien n'entre en base", async () => {
+    // Défaut relevé à l'usage : quatre clics sur « Suivante » puis
+    // « Confirmer » enregistraient des heures sur une semaine future. La marge
+    // par affaire intégrait alors du temps que personne n'a travaillé.
+    const semaineProchaine = jourDeLaSemaine(7);
+
+    const res = await request(app)
+      .post("/api/pointages/recapitulatif-semaine/confirmer")
+      .set("Cookie", cookie)
+      .send({
+        date: semaineProchaine,
+        lignes: [{ membreId, affaireId, date: semaineProchaine, heures: 7 }],
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/n'a pas encore eu lieu/i);
+
+    // ZÉRO ligne : le refus doit être total, pas partiel.
+    const { body } = await request(app)
+      .get(`/api/pointages?debut=${semaineProchaine}&fin=${jourDeLaSemaine(13)}`)
+      .set("Cookie", cookie)
+      .expect(200);
+    expect(body.pointages).toHaveLength(0);
+  });
+
+  test("la semaine EN COURS reste acceptée", async () => {
+    const jour = jourDeLaSemaine(2);
+    await request(app)
+      .post("/api/pointages/recapitulatif-semaine/confirmer")
+      .set("Cookie", cookie)
+      .send({ date: jour, lignes: [{ membreId, affaireId, date: jour, heures: 6 }] })
+      .expect(200);
+  });
+
+  test("une semaine PASSÉE reste acceptée — on rattrape un oubli", async () => {
+    const semainePassee = jourDeLaSemaine(-7);
+    await request(app)
+      .post("/api/pointages/recapitulatif-semaine/confirmer")
+      .set("Cookie", cookie)
+      .send({
+        date: semainePassee,
+        lignes: [{ membreId, affaireId, date: semainePassee, heures: 4 }],
+      })
+      .expect(200);
+  });
+
   test("une ligne hors de la semaine annoncée est REFUSÉE", async () => {
     const jour = jourDeLaSemaine(0);
     const horsSemaine = jourDeLaSemaine(20);

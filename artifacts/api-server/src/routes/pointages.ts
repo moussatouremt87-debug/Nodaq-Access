@@ -272,6 +272,20 @@ router.post("/pointages/recapitulatif-semaine/confirmer", async (req, res): Prom
   const { date, lignes } = parsed.data;
   const { debut, fin } = bornesSemaine(new Date(`${date}T12:00:00`));
 
+  // Une semaine à venir n'a pas eu lieu : personne n'y a travaillé. Accepter ces
+  // heures ferait entrer dans la marge par affaire du temps que personne n'a
+  // passé — exactement l'indicateur que le pointage doit rendre vrai.
+  //
+  // La garde est ICI et pas seulement dans l'interface : désactiver un bouton
+  // n'empêche pas un appel direct, et c'est la base qui porte la conséquence.
+  // Bornes comparées en composantes locales via bornesSemaine/toDateString,
+  // jamais via toISOString.
+  const { debut: lundiCourant } = bornesSemaine(new Date());
+  if (debut > lundiCourant) {
+    res.status(400).json({ error: "Cette semaine n'a pas encore eu lieu." });
+    return;
+  }
+
   // Une ligne hors de la semaine annoncée est refusée : accepter silencieusement
   // laisserait écrire n'importe quelle date sous couvert d'une confirmation.
   const horsSemaine = lignes.filter((l) => l.date < debut || l.date > fin);

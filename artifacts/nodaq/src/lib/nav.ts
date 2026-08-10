@@ -65,7 +65,6 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: '/analytique', label: 'Activité',          icon: BarChart2,     testId: 'nav-analytique' },
       { href: '/pointages',  label: 'Heures',           icon: CalendarCheck, testId: 'nav-pointages' },
       { href: '/devis/dictee', label: 'Devis dicté',    icon: Mic,           testId: 'nav-devis-dictee' },
-      { href: '/parametres/envoi', label: 'Envoi',      icon: Send,          testId: 'nav-parametres-envoi' },
       { href: '/marge',      label: 'Marge',            icon: TrendingUp,    testId: 'nav-marge' },
       { href: '/rapports',   label: 'Rapports',         icon: FileBarChart,  testId: 'nav-rapports' },
       { href: '/echeancier',      label: 'Échéancier fiscal',   icon: CalendarClock,   testId: 'nav-echeancier' },
@@ -85,6 +84,8 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: '/votre-metier', label: 'Votre métier',       icon: Hammer,   testId: 'nav-votre-metier' },
       { href: '/connecteurs',  label: 'Connecteurs',        icon: Plug2,    testId: 'nav-connecteurs' },
       { href: '/parametres',   label: 'Paramètres',         icon: Settings2, testId: 'nav-parametres' },
+      // Sous-entrée de Paramètres : l'envoi se règle une fois, on n'y revient pas.
+      { href: '/parametres/envoi', label: 'Envoi des documents', icon: Send, testId: 'nav-parametres-envoi' },
       { href: '/onboarding',   label: 'Profil entreprise',   icon: Building2,   testId: 'nav-onboarding',  ownerOnly: true },
       { href: '/reprise',      label: 'Reprise des données', icon: DatabaseZap, testId: 'nav-reprise',     ownerOnly: true },
     ],
@@ -93,6 +94,10 @@ export const NAV_SECTIONS: NavSection[] = [
 
 export const MOBILE_NAV = [
   { href: '/',             label: 'Cockpit',    icon: LayoutDashboard },
+  // Deuxième position, délibérément : le devis dicté est la fonction sur
+  // laquelle repose le produit, et l'artisan qui la veut est justement celui
+  // qui est sur un chantier avec son téléphone.
+  { href: '/devis/dictee', label: 'Devis dicté', icon: Mic },
   { href: '/affaires',     label: 'Affaires',   icon: Briefcase },
   { href: '/devis',        label: 'Devis',      icon: FileText },
   { href: '/factures',     label: 'Factures',   icon: Receipt },

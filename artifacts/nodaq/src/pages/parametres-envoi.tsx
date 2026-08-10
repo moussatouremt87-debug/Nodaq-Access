@@ -137,13 +137,37 @@ export default function ParametresEnvoi() {
             </div>
           )}
 
+          {/* Quand le service d'envoi n'est pas configuré, on MASQUE le
+              formulaire au lieu de l'afficher inerte. L'écran affichait
+              simultanément « l'authentification ne peut pas être proposée » et
+              le formulaire qui la propose, avec « Enregistrer » actif et
+              « Vérifier » désactivé : il se contredisait. */}
           {data?.spfIncludeConfigure === false && (
-            <div className="mb-5 rounded-xl border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive">
-              Le service d'envoi n'est pas configuré côté serveur (<code>EMAIL_SPF_INCLUDE</code>).
-              L'authentification de domaine ne peut pas être proposée.
+            <div className="space-y-4">
+              <div className="rounded-xl border border-card-border bg-card p-5 text-sm">
+                <div className="mb-2 font-medium">L'envoi depuis votre domaine n'est pas encore disponible</div>
+                <p className="text-muted-foreground">
+                  Le service d'envoi n'est pas encore raccordé de notre côté. En attendant, vos
+                  documents partent depuis nodaq.fr avec votre adresse en « répondre à ».
+                  Nous vous préviendrons dès que vous pourrez authentifier votre domaine.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => { maj({ mode: 'repli_nodaq' }); enregistrer.mutate(); }}
+                disabled={enregistrer.isPending}
+              >
+                Continuer avec l'envoi depuis nodaq.fr
+              </Button>
             </div>
           )}
 
+          {/* Rendu CONDITIONNEL et non masquage CSS : une classe `hidden`
+              laisse les champs dans le DOM, donc atteignables au clavier et
+              par un lecteur d'écran, et l'écran continue de proposer ce qu'il
+              vient de déclarer impossible. */}
+          {data?.spfIncludeConfigure !== false && (
           <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-3">
             <motion.div variants={itemVariants} className="rounded-xl border border-card-border bg-card p-4 space-y-3">
               <div className="text-sm font-medium">Votre domaine</div>
@@ -163,19 +187,20 @@ export default function ParametresEnvoi() {
                 onChange={(e) => maj({ nomExpediteur: e.target.value || null })}
               />
 
-              <div className="pt-2 text-xs text-muted-foreground">
-                Sélecteur et valeur DKIM : recopiez-les depuis la console de votre service d'envoi.
+              {/* On ne demande PLUS le sélecteur ni la valeur DKIM.
+                  Un couvreur de cinq salariés n'a pas de console de service
+                  d'envoi : la demande était irréalisable pour l'utilisateur
+                  visé, sur le dernier écran d'une fonction dont dépend
+                  l'arrivée de ses devis.
+
+                  Tant que l'enrôlement automatique n'est pas branché, la seule
+                  question posée est le nom de domaine, et l'écran dit
+                  honnêtement comment la suite arrive. */}
+              <div className="rounded-lg border border-card-border bg-muted/40 p-3 text-xs text-muted-foreground">
+                Nous préparons l'authentification de votre domaine et vous envoyons par e-mail
+                les trois lignes à recopier chez votre hébergeur de domaine. Vous n'avez rien à
+                chercher de votre côté.
               </div>
-              <Input
-                placeholder="Sélecteur DKIM"
-                value={form.dkimSelecteur ?? ''}
-                onChange={(e) => maj({ dkimSelecteur: e.target.value || null })}
-              />
-              <Input
-                placeholder="Valeur DKIM (v=DKIM1; k=rsa; p=…)"
-                value={form.dkimValeur ?? ''}
-                onChange={(e) => maj({ dkimValeur: e.target.value || null })}
-              />
 
               <div className="flex flex-wrap gap-2 pt-1">
                 <Button onClick={() => enregistrer.mutate()} disabled={enregistrer.isPending}>
@@ -191,7 +216,7 @@ export default function ParametresEnvoi() {
                   Vérifier le DNS
                 </Button>
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   onClick={() => { maj({ mode: 'repli_nodaq' }); enregistrer.mutate(); }}
                 >
                   Rester en envoi nodaq.fr
@@ -231,6 +256,7 @@ export default function ParametresEnvoi() {
               </motion.div>
             )}
           </motion.div>
+          )}
         </>
       )}
     </div>
