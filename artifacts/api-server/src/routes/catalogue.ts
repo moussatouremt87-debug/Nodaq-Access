@@ -7,9 +7,10 @@
  */
 import { Router, type IRouter } from "express";
 import { z } from "zod";
-import { and, asc, eq } from "drizzle-orm";
-import { withTenant, catalogueLignesTable, devisTable } from "@workspace/db";
+import { and, asc, desc, eq } from "drizzle-orm";
+import { withTenant, catalogueLignesTable, catalogueAliasTable, devisTable } from "@workspace/db";
 import type { DevisLine } from "@workspace/db";
+import { apprendreAlias, oublierAlias, messageRefus } from "../lib/alias-catalogue.js";
 import { normaliser } from "@nodaq/shared";
 
 const router: IRouter = Router();
@@ -188,6 +189,91 @@ router.post("/catalogue/amorcer", async (req, res): Promise<void> => {
   });
 
   res.json(resultat);
+});
+
+// ── Alias appris ─────────────────────────────────────────────────────────────
+
+/**
+ * GET /catalogue/alias — ce que le produit a retenu.
+ *
+ * Affiché, jamais implicite : un artisan doit pouvoir relire ce qu'on a appris
+ * de lui, et le défaire. Un apprentissage invisible est un apprentissage qu'on
+ * ne peut pas corriger.
+ */
+router.get("/catalogue/alias", async (req, res): Promise<void> => {
+  const tenantId = req.tenantId!;
+  const lignes = await withTenant(tenantId, (tx) =>
+    tx
+      .select({
+        id: catalogueAliasTable.id,
+        libelleDicte: catalogueAliasTable.libelleDicte,
+        catalogueLigneId: catalogueAliasTable.catalogueLigneId,
+        libelleCatalogue: catalogueLignesTable.libelle,
+        createdAt: catalogueAliasTable.createdAt,
+      })
+      .from(catalogueAliasTable)
+      .leftJoin(
+        catalogueLignesTable,
+        eq(catalogueAliasTable.catalogueLigneId, catalogueLignesTable.id),
+      )
+      .orderBy(desc(catalogueAliasTable.createdAt)),
+  );
+  res.json({ alias: lignes, total: lignes.length });
+});
+
+/**
+ * POST /catalogue/alias — retient une CORRECTION de l'artisan.
+ *
+ * Appelée quand il a désigné lui-même la ligne qui convenait, jamais quand le
+ * rapprochement a réussi tout seul. Le corps porte le libellé qu'il a DICTÉ et
+ * la ligne qu'il a CHOISIE : les deux viennent de lui.
+ */
+router.post("/catalogue/alias", async (req, res): Promise<void> => {
+  const parsed = z
+    .object({
+      // `.trim()` AVANT `.min(1)` : une chaîne d'espaces passait la validation
+      // et n'était refusée que plus loin, avec un code qui parlait d'un
+      // conflit d'état alors que c'est l'entrée qui est vide.
+      libelleDicte: z.string().trim().min(1, "Le libellé dicté est obligatoire").max(300),
+      catalogueLigneId: z.string().min(1),
+      /** Remplacer un apprentissage antérieur — jamais implicite. */
+      remplacer: z.boolean().default(false),
+    })
+    .safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const tenantId = req.tenantId!;
+
+  const resultat = await apprendreAlias(
+    tenantId,
+    parsed.data.libelleDicte,
+    parsed.data.catalogueLigneId,
+    { remplacer: parsed.data.remplacer },
+  );
+
+  if (!resultat.ok) {
+    // 409 et non 400 : la demande est bien formée, c'est l'ÉTAT du catalogue
+    // qui s'y oppose. Le message dit lequel, pour que l'artisan puisse décider.
+    // 404 pour une cible absente, 400 pour une entrée vide, 409 sinon : la
+    // demande est alors bien formée et c'est l'ÉTAT du catalogue qui s'y
+    // oppose.
+    const code =
+      resultat.refus.motif === "ligne_introuvable" ? 404
+      : resultat.refus.motif === "libelle_vide" ? 400
+      : 409;
+    res.status(code).json({ error: messageRefus(resultat.refus), motif: resultat.refus.motif });
+    return;
+  }
+
+  res.status(201).json({ alias: resultat.alias, remplace: resultat.remplace });
+});
+
+/** DELETE /catalogue/alias/:id — oublier. Une erreur doit pouvoir se défaire. */
+router.delete("/catalogue/alias/:id", async (req, res): Promise<void> => {
+  const tenantId = req.tenantId!;
+  const { id } = req.params;
+  const oublie = await oublierAlias(tenantId, typeof id === "string" ? id : "");
+  if (!oublie) { res.status(404).json({ error: "Alias introuvable" }); return; }
+  res.status(204).send();
 });
 
 export default router;

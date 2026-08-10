@@ -58,7 +58,7 @@ const BUSINESS_TABLES = [
   "connectors", "contrats", "cr_entries", "devis", "echeances", "factures",
   "avoirs", "facture_sequences",
   "pending_actions", "prospects", "settings", "team_members", "absences",
-  "pointages", "catalogue_lignes", "envois_journal", "parametres_envoi", "objectifs_franchissements",
+  "pointages", "catalogue_alias", "catalogue_lignes", "envois_journal", "parametres_envoi", "objectifs_franchissements",
   "tenant_secrets",
   "clients", "paiements", "affectations",
   "contacts_prospection", "contact_bases", "oppositions",
