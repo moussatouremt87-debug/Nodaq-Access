@@ -258,6 +258,9 @@ router.get("/cockpit/objectifs", async (req, res): Promise<void> => {
       caExerciceCents: Math.round(calcul.caN),
       conversion,
       dejaFranchi: calcul.franchissements.some((f) => f.objectif === "exercice_precedent"),
+      /** QUAND il a été franchi — la date de l'émission, pas celle du regard. */
+      franchiLe:
+        calcul.franchissements.find((f) => f.objectif === "exercice_precedent")?.franchiLe ?? null,
     });
   }
 
@@ -285,6 +288,8 @@ router.get("/cockpit/objectifs", async (req, res): Promise<void> => {
       caExerciceCents: Math.round(calcul.caN),
       conversion,
       dejaFranchi: calcul.franchissements.some((f) => f.objectif === "seuil_rentabilite"),
+      franchiLe:
+        calcul.franchissements.find((f) => f.objectif === "seuil_rentabilite")?.franchiLe ?? null,
     });
   }
 
