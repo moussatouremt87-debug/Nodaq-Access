@@ -61,6 +61,7 @@ export * from "./receivableAccounts.js";
 export * from "./moduleCatalog.js";
 export * from "./pendingActionCatalog.js";
 export * from "./affaireMargin.js";
+export * from "./coutMainOeuvre.js";
 export * from "./verticalPacks.js";
 export * from "./recurrence.js";
 export * from "./revenusAcquis.js";

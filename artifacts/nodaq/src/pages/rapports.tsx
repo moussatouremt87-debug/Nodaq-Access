@@ -16,7 +16,10 @@ const API = '/api';
 
 type RapportSummary = {
   caMois: number; nouvellesAffaires: number; nouveauxClients: number;
-  facturesEncaissees: number; tauxMarge: number;
+  facturesEncaissees: number;
+  /** null = aucune marge mesurée ce mois-ci. */
+  tauxMarge: number | null;
+  affairesMargeInconnue?: number;
 };
 type MargeAffaire = {
   id: string; label: string; clientName?: string | null; status: string;
@@ -110,18 +113,25 @@ export default function RapportsPage() {
         {/* Summary KPIs */}
         <motion.div variants={containerVariants} initial="hidden" animate="visible"
           className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          {[
+          {([
             { label: "CA du mois", icon: TrendingUp, value: data?.summary.caMois ?? 0,
-              fmt: (v: number) => fmtEUR(v), highlight: true },
+              fmt: (v: number | null) => (v === null ? '—' : fmtEUR(v)), highlight: true },
             { label: "Nouvelles affaires", icon: Briefcase, value: data?.summary.nouvellesAffaires ?? 0,
-              fmt: (v: number) => String(v) },
+              fmt: (v: number | null) => String(v ?? '—') },
             { label: "Nouveaux clients", icon: Users, value: data?.summary.nouveauxClients ?? 0,
-              fmt: (v: number) => String(v) },
+              fmt: (v: number | null) => String(v ?? '—') },
             { label: "Factures encaissées", icon: Receipt, value: data?.summary.facturesEncaissees ?? 0,
-              fmt: (v: number) => String(v) },
-            { label: "Taux de marge", icon: Percent, value: data?.summary.tauxMarge ?? 0,
-              fmt: (v: number) => `${v.toFixed(1)} %` },
-          ].map((kpi, i) => {
+              fmt: (v: number | null) => String(v ?? '—') },
+            // Un taux inconnu affiché « 0,0 % » se lit « vous ne gagnez rien ».
+            { label: "Taux de marge", icon: Percent, value: data?.summary.tauxMarge ?? null,
+              fmt: (v: number | null) => (v === null ? 'Non mesuré' : `${v.toFixed(1)} %`) },
+          ] satisfies ReadonlyArray<{
+            label: string;
+            icon: typeof Percent;
+            value: number | null;
+            fmt: (v: number | null) => string;
+            highlight?: boolean;
+          }>).map((kpi, i) => {
             const Icon = kpi.icon;
             return (
               <motion.div key={i} variants={itemVariants}

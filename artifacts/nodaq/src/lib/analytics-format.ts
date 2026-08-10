@@ -77,12 +77,24 @@ const BUILDERS: Record<IndicateurId, Builder> = {
 
   marge_pour_100_euros: (r) => {
     const v = Math.round(r.valeur ?? 0);
+    // Tant qu'aucun achat n'est rattachable à une affaire, ce chiffre est un
+    // PLAFOND : la marge réelle ne peut qu'être plus basse. L'annoncer nu
+    // ferait accepter des chantiers qui perdent de l'argent.
+    const borneSuperieure = r.estime === true || r.detail?.borneSuperieure === true;
     return {
-      phrase: `Sur 100 € facturés, il vous reste ${v} €`,
-      sous: null,
+      phrase: borneSuperieure
+        ? `Au mieux ${v} € sur 100 € facturés`
+        : `Sur 100 € facturés, il vous reste ${v} €`,
+      sous: borneSuperieure
+        ? 'Aucune pièce d’achat rattachée : seule la main-d’œuvre pointée est déduite. La marge réelle est plus basse.'
+        : null,
       explication:
         "Pour chaque tranche de 100 € facturée, c'est ce qu'il reste une fois les achats et la main-d'œuvre déduits. En dessous de 15 €, les coûts laissent peu de marge.",
-      tone: v < 10 ? 'critique' : v < 20 ? 'attention' : v >= 30 ? 'bon' : 'default',
+      // Un plafond ne se peint jamais en vert : il ne dit pas que ça va bien,
+      // il dit que ça ne va pas MIEUX que ça.
+      tone: borneSuperieure
+        ? (v < 10 ? 'critique' : v < 20 ? 'attention' : 'default')
+        : (v < 10 ? 'critique' : v < 20 ? 'attention' : v >= 30 ? 'bon' : 'default'),
     };
   },
 
@@ -161,12 +173,21 @@ const BUILDERS: Record<IndicateurId, Builder> = {
       "Valeur moyenne d'une affaire sur la période. Augmenter ce montant en ciblant des chantiers plus importants peut avoir plus d'impact que multiplier les petites affaires.",
   }),
 
-  jours_factures_sur_payes: (_r) => ({
-    phrase: 'Données de pointage non disponibles',
-    sous: null,
-    explication:
-      "Cet indicateur nécessite l'enregistrement du temps de travail par affaire. Il sera disponible quand le module de pointage sera activé.",
-  }),
+  jours_factures_sur_payes: (r) => {
+    const pct = Math.round(r.valeur ?? 0);
+    const joursPayes = r.detail?.joursPayes as number | undefined;
+    const joursFactures = r.detail?.joursFactures as number | undefined;
+    return {
+      phrase: `${pct} % des journées payées sont facturées`,
+      sous:
+        joursPayes !== undefined && joursFactures !== undefined
+          ? `${joursFactures} jours facturés sur ${joursPayes} jours payés`
+          : null,
+      explication:
+        "Sur les journées que vous payez, la part qui finit facturée à un client. Le reste — reprises, trajets, chantiers non refacturés — est du temps réel qui ne rentre pas.",
+      tone: pct < 50 ? 'critique' : pct < 70 ? 'attention' : pct >= 85 ? 'bon' : 'default',
+    };
+  },
 
   ecart_devise_realise: (r) => {
     const jours = r.valeur ?? 0;

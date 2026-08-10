@@ -24,3 +24,24 @@ export function toDateString(d: Date): string {
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
+
+/**
+ * Monday and Sunday of the week containing `d`, as business dates.
+ *
+ * Built from LOCAL components throughout — the week an artisan confirms on
+ * Friday evening is their week, not UTC's. A boundary derived via toISOString
+ * would shift by a day near midnight and file Monday's hours under the previous
+ * week. ISO convention: the week starts on Monday.
+ */
+export function bornesSemaine(d: Date): { debut: string; fin: string } {
+  const jour = d.getDay(); // 0 = dimanche
+  const versLundi = jour === 0 ? -6 : 1 - jour;
+
+  const lundi = new Date(d);
+  lundi.setDate(d.getDate() + versLundi);
+
+  const dimanche = new Date(lundi);
+  dimanche.setDate(lundi.getDate() + 6);
+
+  return { debut: toDateString(lundi), fin: toDateString(dimanche) };
+}

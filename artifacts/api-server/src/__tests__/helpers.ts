@@ -110,7 +110,10 @@ export async function createTestTeamMember(
 // Cleans everything owned by the given test tenants.
 // Order matters — FK constraints cascade from business tables → infra tables.
 
+// Order matters — pointages has FKs to team_members and affaires, so it must be
+// deleted before them.
 const BUSINESS_TABLES = [
+  "pointages",
   "absences", "activity", "affaires", "analytics_tool_logs", "archived_pdfs", "chat_messages", "classeur_documents",
   "connectors", "contrats", "cr_entries", "devis", "echeances",
   "avoirs", "facture_sequences", "factures",
@@ -171,6 +174,22 @@ export function tableInsertSql(table: string, tenantId: string, memberAId?: stri
     // facture_sequences: composite PK (tenant_id, year) — NO id column.
     // One row per tenant per year, so both test tenants can hold year 2020.
     facture_sequences: [`INSERT INTO facture_sequences (tenant_id, year) VALUES ($1::uuid, 2020) ON CONFLICT DO NOTHING`, [tenantId]],
+    // pointages: needs BOTH a member and an affaire (real FKs). The affaire is
+    // created in the same statement via a CTE, so the helper keeps its
+    // (table, tenantId, memberAId) signature.
+    pointages: memberAId
+      ? [
+          `WITH nouvelle_affaire AS (
+             INSERT INTO affaires (id, label, tenant_id) VALUES ($1, 'rls-test-pointage', $2::uuid)
+             RETURNING id
+           )
+           INSERT INTO pointages (id, tenant_id, membre_id, affaire_id, date, heures)
+           SELECT $3, $2::uuid, $4, nouvelle_affaire.id, DATE '2020-01-06', 7.00
+           FROM nouvelle_affaire
+           ON CONFLICT DO NOTHING`,
+          [crypto.randomUUID(), tenantId, id, memberAId],
+        ]
+      : [`SELECT 1`, []], // skip if no member provided
   };
 
   return map[table] ?? [`SELECT 1`, []];

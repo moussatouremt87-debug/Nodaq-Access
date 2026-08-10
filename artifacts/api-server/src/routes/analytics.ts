@@ -27,6 +27,11 @@ import {
 } from "@workspace/db";
 import { sql, and, eq, gte, lte, isNotNull, isNull, ne } from "drizzle-orm";
 import {
+  computeAffaireMargin,
+  resoudreCoutHoraireMembreCents,
+  HEURES_PAR_JOUR_STANDARD,
+} from "@nodaq/shared";
+import {
   parsePeriode,
   periodePrecedente,
   memePeriodeN1,
@@ -143,6 +148,83 @@ export type Tx = Parameters<Parameters<typeof withTenant>[1]>[0];
  */
 function execRows<T>(result: unknown): T[] {
   return (result as { rows: T[] }).rows;
+}
+
+// ── Main-d'œuvre : heures pointées et coûts par membre ───────────────────────
+
+/**
+ * Heures pointées par affaire, détaillées par membre.
+ *
+ * Une affaire ABSENTE de la Map n'a pas « zéro heure » : elle n'a AUCUNE
+ * donnée de pointage. Les deux se traduisent différemment en marge — `null`
+ * donne « non mesuré », `[]` donne « zéro heure déclarée ».
+ */
+async function heuresParAffaire(
+  tx: Tx,
+  affaireIds: string[],
+): Promise<Map<string, Array<{ membreId: string; heures: number }>>> {
+  const parAffaire = new Map<string, Array<{ membreId: string; heures: number }>>();
+  if (affaireIds.length === 0) return parAffaire;
+
+  const rows = execRows<{ affaire_id: string; membre_id: string; heures: number }>(
+    await tx.execute(sql`
+      SELECT affaire_id, membre_id, sum(heures)::float AS heures
+      FROM pointages
+      WHERE affaire_id = ANY(${affaireIds}::text[])
+      GROUP BY affaire_id, membre_id
+    `),
+  );
+
+  for (const row of rows) {
+    const liste = parAffaire.get(row.affaire_id) ?? [];
+    liste.push({ membreId: row.membre_id, heures: row.heures });
+    parAffaire.set(row.affaire_id, liste);
+  }
+  return parAffaire;
+}
+
+/** Réglage `equipe.coutJourCharge`, en euros. `null` = non renseigné. */
+async function coutJourChargeEquipe(tx: Tx): Promise<number | null> {
+  const rows = execRows<{ value: string }>(
+    await tx.execute(sql`SELECT value FROM settings WHERE key = 'equipe.coutJourCharge'`),
+  );
+  const brut = rows[0]?.value;
+  if (brut === undefined) return null;
+  const n = Number(brut);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
+ * Coût horaire chargé de chaque membre, en centimes.
+ *
+ * Un membre absent de la Map a un coût INCONNU — jamais zéro. La résolution
+ * (mensuel du membre, sinon coût jour d'équipe, sinon inconnu) vit dans
+ * lib/shared pour qu'il n'existe qu'une seule convention dans le produit.
+ */
+async function coutsHorairesMembres(
+  tx: Tx,
+  coutJourEquipeEuros: number | null,
+): Promise<Map<string, number>> {
+  const rows = execRows<{
+    id: string;
+    cout_mensuel_charge: number | null;
+    jours_par_semaine: number | null;
+  }>(
+    await tx.execute(sql`
+      SELECT id, cout_mensuel_charge, jours_par_semaine FROM team_members
+    `),
+  );
+
+  const couts = new Map<string, number>();
+  for (const membre of rows) {
+    const cents = resoudreCoutHoraireMembreCents({
+      coutMensuelChargeEuros: membre.cout_mensuel_charge,
+      joursParSemaine: membre.jours_par_semaine,
+      coutJourChargeEquipeEuros: coutJourEquipeEuros,
+    });
+    if (cents !== null) couts.set(membre.id, cents);
+  }
+  return couts;
 }
 
 
@@ -292,11 +374,19 @@ async function calcMargePour100(
   tx: Tx,
   periode: { debut: Date; fin: Date },
 ): Promise<Omit<IndicateurResult, "id" | "periode">> {
-  const [res] = execRows<{ nb_affaires: number; total_ca_cents: number; total_margin_cents: number }>(await tx.execute(sql`
+  // La marge est RECALCULÉE, plus lue dans affaires.margin_cents : cette
+  // colonne n'est écrite par aucun calcul, seulement par un PATCH manuel. La
+  // sommer revenait à additionner des NULL coalescés à zéro et à présenter le
+  // résultat comme une marge mesurée.
+  const affaires = execRows<{
+    id: string;
+    quoted_cents: number | null;
+    invoiced_cents: number | null;
+  }>(await tx.execute(sql`
     SELECT
-      count(*)::int                                        AS nb_affaires,
-      coalesce(sum(invoiced_amount_cents), 0)::float       AS total_ca_cents,
-      coalesce(sum(margin_cents), 0)::float                AS total_margin_cents
+      id,
+      coalesce(montant_vendu_ht * 100, quoted_amount_cents) AS quoted_cents,
+      invoiced_amount_cents                                 AS invoiced_cents
     FROM affaires
     WHERE completed_at IS NOT NULL
       AND completed_at::date BETWEEN ${toDateString(periode.debut)}::date
@@ -305,25 +395,75 @@ async function calcMargePour100(
       AND invoiced_amount_cents > 0
   `));
 
-  const nb = res.nb_affaires ?? 0;
+  const nb = affaires.length;
   if (nb < 3) {
-    return { valeur: null, unite: "centimes par 100 € facturés", nbSources: nb, donneesInsuffisantes: true };
+    return { valeur: null, unite: "€ sur 100 €", nbSources: nb, donneesInsuffisantes: true };
   }
 
-  const ca = res.total_ca_cents ?? 0;
-  const marge = res.total_margin_cents ?? 0;
-  if (ca <= 0) {
-    return { valeur: null, unite: "centimes par 100 € facturés", nbSources: nb, donneesInsuffisantes: true };
+  const labourParAffaire = await heuresParAffaire(tx, affaires.map((a) => a.id));
+  const coutJourEquipe = await coutJourChargeEquipe(tx);
+  const coutsMembres = await coutsHorairesMembres(tx, coutJourEquipe);
+
+  let totalCa = 0;
+  let totalMargeAuMieux = 0;
+  const manquants = new Set<string>();
+
+  for (const affaire of affaires) {
+    const ca = affaire.invoiced_cents ?? 0;
+    if (ca <= 0) continue;
+
+    const pointages = labourParAffaire.get(affaire.id) ?? null;
+    const marge = computeAffaireMargin({
+      quotedAmountCents: affaire.quoted_cents,
+      // Aucune table d'imputation n'existe encore : les achats ne sont pas
+      // rattachables. Le module en tient compte et refuse de rendre une marge
+      // présentée comme exacte (« aucune_piece_rattachee » est bloquante).
+      imputations: [],
+      labour:
+        pointages === null
+          ? null
+          : pointages.map((p) => ({
+              hours: p.heures,
+              hourlyCostCents: coutsMembres.get(p.membreId) ?? null,
+            })),
+      invoicedCents: ca,
+      invoicedBasis: "ht",
+      depositsCents: 0,
+      retentionRateBps: null,
+      estimatedMaterialCents: null,
+    });
+
+    for (const m of marge.missing) manquants.add(m);
+
+    // Seules les variantes qui portent un montant entrent dans l'agrégat.
+    const montant =
+      marge.kind === "marge"
+        ? marge.marginCents
+        : marge.kind === "marge_borne_superieure"
+          ? marge.upperBoundCents
+          : null;
+    if (montant === null) continue;
+
+    totalCa += ca;
+    totalMargeAuMieux += montant;
   }
 
-  // "Sur 100 € facturés, il vous reste X €" → marge / ca × 100
-  const margePour100 = Math.round((marge / ca) * 10000) / 100; // in €
+  if (totalCa <= 0) {
+    return { valeur: null, unite: "€ sur 100 €", nbSources: nb, donneesInsuffisantes: true };
+  }
 
   return {
-    valeur: margePour100,
+    valeur: Math.round((totalMargeAuMieux / totalCa) * 10000) / 100,
     unite: "€ sur 100 €",
     nbSources: nb,
     donneesInsuffisantes: false,
+    // `estime` commande l'affichage : tant qu'aucun achat n'est rattachable,
+    // ce chiffre est un PLAFOND. L'écran doit le dire — jamais un pourcentage nu.
+    estime: true,
+    detail: {
+      borneSuperieure: true,
+      manquants: [...manquants].sort(),
+    },
   };
 }
 
@@ -625,22 +765,70 @@ async function calcMontantMoyenAffaire(
 
 /**
  * 12. jours_factures_sur_payes
- * Ratio of billable days actually invoiced vs. days paid.
- * Requires a timesheet / pointage table that does not yet exist.
- * Returns donneesInsuffisantes: true with nbSources = 0 until the table is created.
- * Spec threshold: 2 weeks of tracked entries.
+ *
+ * Sur les journées que l'entreprise PAIE, quelle part finit facturée à un
+ * client ? Le reste est du temps réel — reprises, trajets, chantiers non
+ * refacturés — qui ne rentre jamais.
+ *
+ * Payés    : toutes les heures pointées sur la période.
+ * Facturés : les heures pointées sur des affaires effectivement facturées
+ *            (invoiced_amount_cents > 0).
+ *
+ * Les heures sont converties en jours par HEURES_PAR_JOUR_STANDARD, la
+ * convention unique du produit (lib/shared/coutMainOeuvre.ts).
+ *
+ * Seuil : 10 journées distinctes pointées, soit deux semaines de relevés.
+ * En deçà, l'échantillon décrit une semaine particulière, pas une habitude.
  */
 async function calcJoursFacturesSurPayes(
-  _tx: Tx,
-  _periode: { debut: Date; fin: Date },
+  tx: Tx,
+  periode: { debut: Date; fin: Date },
 ): Promise<Omit<IndicateurResult, "id" | "periode">> {
+  const [res] = execRows<{
+    jours_pointes: number;
+    heures_payees: number;
+    heures_facturees: number;
+  }>(await tx.execute(sql`
+    SELECT
+      count(DISTINCT p.date)::int                             AS jours_pointes,
+      coalesce(sum(p.heures), 0)::float                       AS heures_payees,
+      coalesce(sum(p.heures) FILTER (
+        WHERE a.invoiced_amount_cents IS NOT NULL
+          AND a.invoiced_amount_cents > 0
+      ), 0)::float                                            AS heures_facturees
+    FROM pointages p
+    JOIN affaires a ON a.id = p.affaire_id
+    WHERE p.date BETWEEN ${toDateString(periode.debut)}::date
+                     AND ${toDateString(periode.fin)}::date
+  `));
+
+  const joursPointes = res.jours_pointes ?? 0;
+  if (joursPointes < 10) {
+    return {
+      valeur: null,
+      unite: "jours sur jours",
+      nbSources: joursPointes,
+      donneesInsuffisantes: true,
+    };
+  }
+
+  const heuresPayees = res.heures_payees ?? 0;
+  if (heuresPayees <= 0) {
+    return { valeur: null, unite: "jours sur jours", nbSources: joursPointes, donneesInsuffisantes: true };
+  }
+
+  const joursPayes = heuresPayees / HEURES_PAR_JOUR_STANDARD;
+  const joursFactures = (res.heures_facturees ?? 0) / HEURES_PAR_JOUR_STANDARD;
+
   return {
-    valeur: null,
-    unite: "jours sur jours",
-    nbSources: 0,
-    donneesInsuffisantes: true,
-    // Note: this indicator requires a pointage (timesheet) table.
-    // It will become available once time-tracking is implemented.
+    valeur: Math.round((joursFactures / joursPayes) * 1000) / 10, // en %
+    unite: "% des jours payés",
+    nbSources: joursPointes,
+    donneesInsuffisantes: false,
+    detail: {
+      joursPayes: Math.round(joursPayes * 10) / 10,
+      joursFactures: Math.round(joursFactures * 10) / 10,
+    },
   };
 }
 

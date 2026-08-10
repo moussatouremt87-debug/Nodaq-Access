@@ -356,7 +356,10 @@ describe("e — ANTI-HALLUCINATION (structure)", () => {
     expect(result.valeur).toBeNull();
   });
 
-  test("jours_factures_sur_payes retourne donneesInsuffisantes = true (table manquante)", async () => {
+  // La table `pointages` existe depuis le lot 1 : l'indicateur n'est plus un
+  // bouchon. Il reste « données insuffisantes » sous le seuil de 10 journées
+  // pointées — un tenant neuf n'en a aucune.
+  test("jours_factures_sur_payes retourne donneesInsuffisantes = true sous le seuil de 2 semaines", async () => {
     const tenant = await createTestTenant("Analytics-JFP");
     tenantIds.push(tenant.id);
 
