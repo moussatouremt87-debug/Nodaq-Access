@@ -19,6 +19,7 @@ import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { withTenant, catalogueLignesTable } from "@workspace/db";
+import { chargerAlias } from "../lib/alias-catalogue.js";
 import { getConfig, chatCompletion, LlmConfigError } from "@nodaq/llm";
 import {
   rapprocherDictee,
@@ -123,8 +124,12 @@ router.post("/devis/dictee/proposer", async (req, res): Promise<void> => {
     motsCles: c.motsCles,
   }));
 
-  // Les alias appris arrivent avec la PR B ; la signature les accepte déjà.
-  const lignes = rapprocherDictee(intentions, entrees);
+  // Les alias appris par CE tenant — des corrections humaines antérieures.
+  // Ils passent AVANT le libellé dans l'ordre de rapprochement : c'est tout
+  // l'intérêt, et c'est pourquoi on refuse d'en apprendre un qui recouvrirait
+  // le libellé exact d'une autre ligne.
+  const alias = await chargerAlias(tenantId);
+  const lignes = rapprocherDictee(intentions, entrees, alias);
   const total = totalProposition(lignes);
 
   res.json({

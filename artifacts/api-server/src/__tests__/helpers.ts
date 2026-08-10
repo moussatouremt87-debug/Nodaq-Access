@@ -113,7 +113,7 @@ export async function createTestTeamMember(
 // Order matters — pointages has FKs to team_members and affaires, so it must be
 // deleted before them.
 const BUSINESS_TABLES = [
-  "pointages", "catalogue_lignes", "envois_journal", "parametres_envoi", "objectifs_franchissements",
+  "pointages", "catalogue_alias", "catalogue_lignes", "envois_journal", "parametres_envoi", "objectifs_franchissements",
   "tenant_secrets",
   // Ordre : les enfants avant les parents (client_id référence clients).
   "paiements", "affectations",
@@ -178,6 +178,18 @@ export function tableInsertSql(table: string, tenantId: string, memberAId?: stri
     // facture_ref_id carries no FK, so an arbitrary id is fine here.
     // tenant_secrets : PK composite (tenant_id, cle), pas d'id. La valeur est
     // un chiffré factice — cette insertion éprouve la RLS, pas le chiffrement.
+    // catalogue_alias : clé étrangère vers catalogue_lignes. Le fixture crée
+    // SA PROPRE ligne plutôt que d'en chercher une — la liste est ordonnée
+    // pour la SUPPRESSION (enfants d'abord), donc l'alias est inséré avant le
+    // catalogue et n'aurait rien à référencer.
+    catalogue_alias:  [`WITH l AS (
+        INSERT INTO catalogue_lignes (id, tenant_id, libelle, prix_unitaire_ht_cents)
+        VALUES ('cl-' || $1, $2::uuid, 'RLS Catalogue', 1000)
+        ON CONFLICT DO NOTHING RETURNING id
+      )
+      INSERT INTO catalogue_alias (id, tenant_id, alias_normalise, libelle_dicte, catalogue_ligne_id)
+      SELECT $1, $2::uuid, 'rls-alias-' || $1, 'rls', l.id FROM l
+      ON CONFLICT DO NOTHING`, [id, tenantId]],
     contacts_prospection: [`INSERT INTO contacts_prospection (id, tenant_id, nom, type) VALUES ($1, $2::uuid, 'RLS Contact', 'PRO') ON CONFLICT DO NOTHING`, [id, tenantId]],
     // contact_bases : append-only, exige un contact existant.
     contact_bases:    [`INSERT INTO contact_bases (id, tenant_id, contact_id, contact_type, base, source, obtenue_le) SELECT $1, $2::uuid, c.id, 'PRO', 'INTERET_LEGITIME_PRO', 'rls-test', CURRENT_DATE FROM contacts_prospection c WHERE c.tenant_id = $2::uuid LIMIT 1 ON CONFLICT DO NOTHING`, [id, tenantId]],
