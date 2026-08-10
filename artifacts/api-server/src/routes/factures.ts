@@ -516,6 +516,9 @@ router.post("/factures/:id/emettre", async (req, res): Promise<void> => {
     try {
       await sendDocument({
         canal: "EMAIL",
+        tenantId,
+        documentType: "FACTURE",
+        documentId: id!,
         to: opts.emailTo,
         subject: `Facture ${numero} — ${seller.nom}`,
         body: `Bonjour,\n\nVeuillez trouver ci-joint la facture ${numero} de ${seller.nom}.\n\nCordialement,\n${seller.nom}`,

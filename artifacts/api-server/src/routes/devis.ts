@@ -262,8 +262,11 @@ router.post("/devis/:id/envoyer", async (req, res): Promise<void> => {
 
   // Send email (dev: logged)
   const acceptUrl = `${process.env.APP_URL ?? "https://nodaq.fr"}/devis/accepter/${updated.acceptToken}`;
-  await sendDocument({
+  const envoi = await sendDocument({
     canal: "EMAIL",
+    tenantId,
+    documentType: "DEVIS",
+    documentId: updated.id,
     to: parsed.data.emailTo,
     subject: `Devis ${updated.reference} — bon pour accord`,
     body: [
@@ -275,7 +278,13 @@ router.post("/devis/:id/envoyer", async (req, res): Promise<void> => {
     ].filter(Boolean).join("\n"),
   });
 
-  res.json({ ...updated, acceptUrl });
+  res.json({
+    ...updated,
+    acceptUrl,
+    // L'écran doit pouvoir dire à l'artisan que son devis est parti en repli.
+    modeEnvoi: envoi.mode,
+    avertissementDelivrabilite: envoi.avertissementDelivrabilite ?? false,
+  });
 });
 
 router.post("/devis/:id/convert", async (req, res): Promise<void> => {

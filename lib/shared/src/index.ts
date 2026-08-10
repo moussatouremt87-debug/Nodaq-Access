@@ -63,6 +63,7 @@ export * from "./pendingActionCatalog.js";
 export * from "./affaireMargin.js";
 export * from "./coutMainOeuvre.js";
 export * from "./rapprochementCatalogue.js";
+export * from "./envoiDomaine.js";
 export * from "./verticalPacks.js";
 export * from "./recurrence.js";
 export * from "./revenusAcquis.js";
