@@ -39,6 +39,8 @@ import {
   choisirTon,
   joursRestantsExercice,
   MIN_AFFAIRES_POUR_CONVERSION,
+  CLE_TAUX_MARGE,
+  CLE_CHARGES_FIXES,
   type AffaireTerminee,
   type ConversionChantiers,
   type TonObjectif,
@@ -202,8 +204,8 @@ router.get("/cockpit/objectifs", async (req, res): Promise<void> => {
     const franchissements = await tx.select().from(objectifsFranchissementsTable)
       .where(eq(objectifsFranchissementsTable.exercice, exercice));
 
-    const chargesFixes = nombreOuNull(await reglage(tx, "objectifs.charges_fixes_annuelles"));
-    const tauxMarge = nombreOuNull(await reglage(tx, "objectifs.taux_marge"));
+    const chargesFixes = nombreOuNull(await reglage(tx, CLE_CHARGES_FIXES));
+    const tauxMarge = nombreOuNull(await reglage(tx, CLE_TAUX_MARGE));
 
     return {
       caN: caN?.total ?? 0,

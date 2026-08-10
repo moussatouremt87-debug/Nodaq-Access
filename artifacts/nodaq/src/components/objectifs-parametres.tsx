@@ -31,8 +31,8 @@ export function ObjectifsParametres() {
       const r = await apiFetch(`${API}/parametres`);
       if (!r.ok) throw new Error('Chargement impossible');
       const j = (await r.json()) as Record<string, string>;
-      const charges = j['objectifs.charges_fixes_annuelles'];
-      const taux = j['objectifs.taux_marge'];
+      const charges = j['objectifs.charges_fixes_annuelles_cents'];
+      const taux = j['objectifs.taux_marge_bp'];
       if (charges) setChargesEuros(String(Number(charges) / 100));
       if (taux) setTauxPct(String(Number(taux) / 100));
       return j;
@@ -47,8 +47,8 @@ export function ObjectifsParametres() {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          'objectifs.charges_fixes_annuelles': String(Math.round(Number(chargesEuros) * 100)),
-          'objectifs.taux_marge': String(Math.round(Number(tauxPct) * 100)),
+          'objectifs.charges_fixes_annuelles_cents': String(Math.round(Number(chargesEuros) * 100)),
+          'objectifs.taux_marge_bp': String(Math.round(Number(tauxPct) * 100)),
         }),
       });
       if (!r.ok) throw new Error('Enregistrement impossible');
