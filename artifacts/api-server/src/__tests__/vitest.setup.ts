@@ -42,6 +42,14 @@ process.env["LLM_MODEL_STT"]     = "test/fake-stt-model";
 // rotation a besoin pour piloter les deux générations.
 process.env["ENCRYPTION_KEY"] ??= randomBytes(32).toString("base64");
 
+// ── 1 ter. Confiance dans le mandataire ──────────────────────────────────────
+//
+// C'est la posture de PRODUCTION derrière un répartiteur, et c'est elle qu'on
+// veut éprouver. Elle permet en outre à chaque test de se présenter avec sa
+// propre adresse via X-Forwarded-For : sans cela toute la suite partage le
+// compteur de 127.0.0.1 et déclenche la limite de débit des routes publiques.
+process.env["TRUST_PROXY"] ??= "1";
+
 // ── 2. Intercept fetch calls to the fake LLM endpoint ────────────────────────
 const _originalFetch = globalThis.fetch;
 

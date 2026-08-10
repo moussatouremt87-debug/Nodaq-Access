@@ -48,3 +48,21 @@ export const CLE_SMTP_PASSWORD = "envoi.smtp_password";
 export function cleConnecteur(connecteurId: string, champ: string): string {
   return `connecteur.${connecteurId}.${champ}`;
 }
+
+/**
+ * Jeton d'acceptation publique d'un devis : `devis.<id>.accept_token`.
+ *
+ * C'est un PORTEUR — pas un identifiant chez un tiers — et il a pourtant sa
+ * place ici. Le magasin sert à ce qui ouvre un accès et ne doit pas être
+ * lisible depuis une sauvegarde ; un jeton qui vaut signature d'un devis entre
+ * exactement dans cette définition.
+ *
+ * Il est chiffré et NON condensé, parce que le renvoi d'un devis doit pouvoir
+ * reproduire le MÊME lien : le condensat, lui, reste dans
+ * `devis.accept_token_sha256`, où la policy publique le compare par égalité.
+ * Les deux coexistent et servent à deux choses différentes — vérifier, et
+ * reconstruire.
+ */
+export function cleJetonDevis(devisId: string): string {
+  return `devis.${devisId}.accept_token`;
+}

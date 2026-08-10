@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Search, FileText, MoreVertical, Pencil, Trash2,
-  ArrowRightLeft, CheckCircle2, Send, XCircle, Clock, Copy, ExternalLink,
+  ArrowRightLeft, CheckCircle2, Send, XCircle, Clock, Copy, ExternalLink, Link2,
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PageHeader } from '@/components/page-header';
@@ -39,7 +39,9 @@ type Devis = {
   id: string; reference: string; clientName: string; status: string;
   lines: DevisLine[]; totalHTCents: number; totalTTCCents: number; tvaRate: number; remise: number;
   notes?: string | null; validUntil?: string | null; affaireId?: string | null;
-  acceptToken?: string | null; dateEnvoi?: string | null;
+  // Plus d'`acceptToken` : le jeton n'est plus stocké, seul son condensat l'est.
+  // L'URL d'acceptation n'existe qu'UNE fois, dans la réponse à l'envoi.
+  dateEnvoi?: string | null;
   createdAt: string; updatedAt: string;
 };
 
@@ -85,9 +87,12 @@ export default function DevisPage() {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Devis | null>(null);
-  const [linkDialogDevis, setLinkDialogDevis] = useState<Devis | null>(null);
+  /** Rempli par la réponse à l'envoi — la seule occasion de voir le lien. */
+  const [linkDialogDevis, setLinkDialogDevis] = useState<(Devis & { acceptUrl: string }) | null>(null);
   /** Devis currently open in the "Envoyer" email-input dialog */
   const [sendDialogDevis, setSendDialogDevis] = useState<Devis | null>(null);
+  /** Devis pour lequel on demande confirmation avant de REMPLACER le lien. */
+  const [nouveauLienDevis, setNouveauLienDevis] = useState<Devis | null>(null);
 
   const { data, isLoading, isError } = useDevis({
     statut: statusFilter !== 'ALL' ? statusFilter : undefined,
@@ -122,12 +127,43 @@ export default function DevisPage() {
         body: JSON.stringify({ emailTo, message }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'Envoi impossible');
-      return res.json() as Promise<Devis & { acceptUrl: string }>;
+      return res.json() as Promise<Devis & { acceptUrl: string; lienReutilise: boolean }>;
     },
     onSuccess: (updated) => {
       qc.invalidateQueries({ queryKey: ['devis'] });
       setSendDialogDevis(null);
-      setLinkDialogDevis(updated);
+      if (updated.lienReutilise) {
+        // Renvoi : le MÊME lien est reparti, l'ancien e-mail reste valide. Rien
+        // de neuf à montrer, et surtout rien à faire croire qu'on a remplacé.
+        toast({
+          title: 'Devis renvoyé',
+          description: 'Le même lien d\'acceptation a été renvoyé. Le précédent reste valide.',
+        });
+      } else {
+        setLinkDialogDevis(updated);
+      }
+    },
+    onError: (err: Error) => {
+      toast({ title: 'Erreur', description: err.message, variant: 'destructive' });
+    },
+  });
+
+  /**
+   * Remplace le lien d'acceptation. Action SÉPARÉE du renvoi, et destructrice :
+   * l'ancien lien cesse de fonctionner. Elle n'existe que pour l'artisan qui
+   * doit transmettre le lien autrement — SMS, messagerie — et a donc besoin de
+   * le voir. Confirmation exigée avant appel.
+   */
+  const nouveauLienMut = useMutation({
+    mutationFn: async (devis: Devis) => {
+      const res = await fetch(`${API}/devis/${devis.id}/nouveau-lien`, { method: 'POST' });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'Impossible d\'engendrer un lien');
+      const j = await res.json() as { acceptUrl: string };
+      return { ...devis, acceptUrl: j.acceptUrl };
+    },
+    onSuccess: (avecLien) => {
+      setNouveauLienDevis(null);
+      setLinkDialogDevis(avecLien);
     },
     onError: (err: Error) => {
       toast({ title: 'Erreur', description: err.message, variant: 'destructive' });
@@ -269,6 +305,7 @@ export default function DevisPage() {
                           onDelete={() => deleteMut.mutate(d.id)}
                           onConvert={() => convertMut.mutate(d.id)}
                           onSend={() => setSendDialogDevis(d)}
+                          onNouveauLien={() => setNouveauLienDevis(d)}
                           convertPending={convertMut.isPending}
                           sendPending={sendMut.isPending && sendMut.variables?.id === d.id}
                         />
@@ -295,6 +332,36 @@ export default function DevisPage() {
         sendError={sendMut.error instanceof Error ? sendMut.error.message : null}
       />
 
+      {/* Remplacement du lien — confirmation obligatoire, parce que l'action
+          est destructrice et que ses dégâts tombent sur le CLIENT. */}
+      <AlertDialog
+        open={!!nouveauLienDevis}
+        onOpenChange={(open) => { if (!open) setNouveauLienDevis(null); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Engendrer un nouveau lien d'acceptation ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Le lien déjà envoyé à {nouveauLienDevis?.clientName} cessera de
+              fonctionner immédiatement. S'il clique sur l'ancien message, il
+              lira « lien invalide ou expiré ».
+              <br /><br />
+              Pour simplement renvoyer le devis, employez « Renvoyer au
+              client » : le même lien repart et reste valide.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { if (nouveauLienDevis) nouveauLienMut.mutate(nouveauLienDevis); }}
+              disabled={nouveauLienMut.isPending}
+            >
+              Engendrer un nouveau lien
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Step 2: display accept link after successful send */}
       <AcceptLinkDialog
         devis={linkDialogDevis}
@@ -305,9 +372,9 @@ export default function DevisPage() {
   );
 }
 
-function DevisRowMenu({ devis, onEdit, onDelete, onConvert, onSend, convertPending, sendPending }: {
+function DevisRowMenu({ devis, onEdit, onDelete, onConvert, onSend, onNouveauLien, convertPending, sendPending }: {
   devis: Devis; onEdit: () => void; onDelete: () => void; onConvert: () => void;
-  onSend: () => void; convertPending: boolean; sendPending: boolean;
+  onSend: () => void; onNouveauLien: () => void; convertPending: boolean; sendPending: boolean;
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   return (
@@ -323,7 +390,18 @@ function DevisRowMenu({ devis, onEdit, onDelete, onConvert, onSend, convertPendi
           {(devis.status === 'BROUILLON' || devis.status === 'ENVOYE') && (
             <DropdownMenuItem onClick={onSend} disabled={sendPending}>
               <Send className="h-3.5 w-3.5 mr-2" />
-              {devis.acceptToken ? 'Afficher le lien d\'acceptation' : 'Envoyer au client'}
+              {devis.dateEnvoi ? 'Renvoyer au client' : 'Envoyer au client'}
+            </DropdownMenuItem>
+          )}
+          {/* Action DISTINCTE du renvoi, et nommée pour ce qu'elle fait.
+              Le renvoi réutilise le lien existant ; celle-ci le REMPLACE, et
+              l'ancien cesse de fonctionner. Elle n'a de sens qu'une fois le
+              devis parti, et seulement pour l'artisan qui doit transmettre le
+              lien autrement — SMS, messagerie — donc le voir. */}
+          {devis.dateEnvoi && devis.status !== 'ACCEPTE' && (
+            <DropdownMenuItem onClick={onNouveauLien}>
+              <Link2 className="h-3.5 w-3.5 mr-2" />
+              Engendrer un nouveau lien…
             </DropdownMenuItem>
           )}
           {devis.status === 'ACCEPTE' && !devis.affaireId && (
@@ -422,14 +500,18 @@ function SendDevisDialog({ devis, open, onOpenChange, onSend, sending, sendError
 
 /** Dialog showing the accept link for a sent devis. */
 function AcceptLinkDialog({ devis, open, onOpenChange }: {
-  devis: Devis | null; open: boolean; onOpenChange: (v: boolean) => void;
+  devis: (Devis & { acceptUrl: string }) | null;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
 }) {
   const { toast } = useToast();
   if (!devis) return null;
 
-  const acceptUrl = devis.acceptToken
-    ? `${window.location.origin}/api/public/devis/${devis.acceptToken}/accept-page`
-    : null;
+  // L'URL vient de la RÉPONSE À L'ENVOI et de nulle part ailleurs : le jeton
+  // n'étant plus stocké, il n'est pas reconstructible après coup. C'est le prix
+  // de ne plus garder un porteur en base, et il est assumé — l'artisan renvoie
+  // le devis, ce qui engendre un nouveau lien.
+  const acceptUrl = devis.acceptUrl ?? null;
 
   const copyLink = () => {
     if (!acceptUrl) return;
@@ -467,7 +549,12 @@ function AcceptLinkDialog({ devis, open, onOpenChange }: {
               </Button>
             </div>
           ) : (
-            <p className="text-sm text-destructive">Aucun token d'acceptation disponible.</p>
+            <p className="text-sm text-destructive">
+              Ce lien ne s'affiche qu'une fois. Il reste valide et « Renvoyer au
+              client » le réexpédie tel quel ; pour en obtenir un affichable,
+              employez « Engendrer un nouveau lien » — l'ancien cessera alors de
+              fonctionner.
+            </p>
           )}
           {devis.dateEnvoi && (
             <p className="text-xs text-muted-foreground">

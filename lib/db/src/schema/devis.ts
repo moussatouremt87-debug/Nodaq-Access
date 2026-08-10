@@ -48,8 +48,14 @@ export const devisTable = pgTable("devis", {
   autoliquidation: boolean("autoliquidation").notNull().default(false),
   /** Retention guarantee percentage (retenue de garantie) */
   retenueGarantiePct: real("retenue_garantie_pct").notNull().default(0),
-  /** One-time token for the public "bon pour accord" acceptance page */
-  acceptToken: text("accept_token"),
+  /**
+   * CONDENSAT SHA-256 du jeton d'acceptation publique — jamais le jeton.
+   *
+   * Le jeton ne vit que dans le lien envoyé au client. Le conserver en clair
+   * faisait de la base une preuve d'engagement falsifiable : qui lit une
+   * sauvegarde ou un réplica pouvait accepter un devis à la place du client.
+   */
+  acceptTokenSha256: text("accept_token_sha256"),
   /** When the devis was accepted via the public page */
   acceptedAt: timestamp("accepted_at", { withTimezone: true }),
   /** Signataire name captured on the acceptance page */

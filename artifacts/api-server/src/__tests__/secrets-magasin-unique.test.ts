@@ -155,8 +155,24 @@ function scanner(): Trouvaille[] {
       if (table === MAGASIN) continue;
       if (!MOTS.some((m) => colonne!.includes(m))) continue;
 
-      // Marqueur sur la ligne elle-même, ou sur celle juste au-dessus.
-      const voisinage = `${lignes[i - 1] ?? ""}\n${ligne}`;
+      // Marqueur sur la ligne elle-même, ou N'IMPORTE OÙ dans le bloc de
+      // commentaires contigu qui la précède.
+      //
+      // Le bloc entier, et non la seule ligne du dessus : la dérogation exige
+      // une RAISON, et une raison sérieuse tient rarement sur une ligne. La
+      // première version de cette garde ne regardait qu'une ligne au-dessus,
+      // ce qui la mettait en contradiction avec sa propre exigence — une
+      // justification correctement rédigée n'était pas reconnue. Découvert en
+      // rédigeant la dérogation de `accept_token_sha256`.
+      //
+      // On s'arrête à la première ligne non commentée : un marqueur posé pour
+      // une autre colonne ne peut donc pas déteindre sur celle-ci.
+      let voisinage = ligne;
+      for (let j = i - 1; j >= 0; j--) {
+        const precedente = lignes[j]!;
+        if (!/^\s*(--.*)?$/.test(precedente)) break;
+        voisinage = `${precedente}\n${voisinage}`;
+      }
       if (voisinage.includes(MARQUEUR)) continue;
 
       const historique = DEROGATIONS_HISTORIQUES.some(
@@ -212,6 +228,23 @@ describe("garde — un secret ne se range que dans tenant_secrets", () => {
     const colonne = (ajout ? ajout[2] : dansCreate?.[1])?.toLowerCase();
     expect(colonne, `« ${ligne} » n'a pas été reconnue comme une colonne`).toBe(attendue);
     expect(MOTS.some((m) => colonne!.includes(m))).toBe(true);
+  });
+
+  test("le marqueur est reconnu même sur une justification de plusieurs lignes", () => {
+    // C'est le cas réel de `accept_token_sha256` en migration 014 : la raison
+    // occupe huit lignes, et le marqueur est sur la première. Une garde qui
+    // n'aurait regardé que la ligne du dessus l'aurait refusée — elle exigeait
+    // une raison sérieuse tout en n'acceptant qu'une raison d'une ligne.
+    const sql = readFileSync(join(MIGRATIONS, "014_devis_accept_token_sha256.sql"), "utf8");
+    const lignes = sql.split("\n");
+    const iColonne = lignes.findIndex((l) => /ADD COLUMN.*accept_token_sha256/.test(l));
+    expect(iColonne).toBeGreaterThan(0);
+    const iMarqueur = lignes.findIndex((l) => l.includes(MARQUEUR));
+    expect(iMarqueur).toBeGreaterThan(0);
+    // Le marqueur est bien à PLUSIEURS lignes de la définition.
+    expect(iColonne - iMarqueur).toBeGreaterThan(1);
+    // Et la garde ne signale pas cette colonne.
+    expect(scanner().some((t) => t.colonne === "accept_token_sha256")).toBe(false);
   });
 
   test("les dérogations historiques disent POURQUOI", () => {

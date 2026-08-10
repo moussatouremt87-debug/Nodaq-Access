@@ -1,7 +1,9 @@
 import { Router, type IRouter } from "express";
-import { withTenant, devisTable, affairesTable } from "@workspace/db";
+import { withTenant, devisTable, affairesTable, cleJetonDevis } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { z } from "zod";
+import { createHash } from "node:crypto";
+import { enregistrerSecret, lireSecret, revoquerSecret } from "../lib/tenant-secrets.js";
 import type { DevisLine, DevisAddress } from "@workspace/db";
 import { sendDocument } from "../lib/canal-emission.js";
 import { toDateString } from "@nodaq/shared";
@@ -236,32 +238,81 @@ router.delete("/devis/:id", async (req, res): Promise<void> => {
   await withTenant(tenantId, async (tx) =>
     tx.delete(devisTable).where(eq(devisTable.id, parsed.data.id))
   );
+  // Le jeton part avec le devis : un secret orphelin ne sert plus qu'à être
+  // oublié, et le magasin n'a pas de nettoyage automatique.
+  await revoquerSecret(tenantId, cleJetonDevis(parsed.data.id));
   res.status(204).send();
 });
 
-/** POST /api/devis/:id/envoyer — envoie le devis par email + génère un accept_token. */
+/**
+ * Engendre un jeton, range son condensat en base et le jeton lui-même CHIFFRÉ
+ * dans le magasin. Rend le jeton en clair à l'appelant, une seule fois.
+ *
+ * Le condensat sert à VÉRIFIER (policy publique, égalité sur colonne indexée).
+ * Le chiffré sert à RECONSTRUIRE le lien lors d'un renvoi. Les deux répondent à
+ * deux questions différentes, d'où les deux rangements.
+ */
+async function poserNouveauJeton(tenantId: string, devisId: string): Promise<string> {
+  const acceptToken = crypto.randomUUID();
+  await withTenant(tenantId, (tx) =>
+    tx
+      .update(devisTable)
+      .set({ acceptTokenSha256: createHash("sha256").update(acceptToken).digest("hex") })
+      .where(eq(devisTable.id, devisId)),
+  );
+  await enregistrerSecret(tenantId, cleJetonDevis(devisId), acceptToken);
+  return acceptToken;
+}
+
+/** L'URL publique d'acceptation. La seule apparition du jeton en clair. */
+function urlAcceptation(token: string): string {
+  return `${process.env.APP_URL ?? "https://nodaq.fr"}/devis/accepter/${token}`;
+}
+
+/**
+ * POST /api/devis/:id/envoyer — envoie le devis par e-mail.
+ *
+ * RENVOYER RÉUTILISE LE JETON EXISTANT. Un artisan dont le client dit ne pas
+ * avoir reçu le devis renvoie le même lien, et l'ancien e-mail continue de
+ * fonctionner. Régénérer ici transformerait une action serviable en action
+ * destructrice, dont les dégâts tomberaient sur le CLIENT — qui retrouve
+ * l'ancien message, clique, et lit « lien invalide ou expiré » sur la seule
+ * page du produit qu'il voit jamais.
+ *
+ * Le remplacement d'un lien est une décision distincte : `POST
+ * /devis/:id/nouveau-lien`, explicite et confirmée.
+ */
 router.post("/devis/:id/envoyer", async (req, res): Promise<void> => {
   const parsed = SendDevisBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const tenantId = req.tenantId!;
   const { id } = req.params;
 
-  const updated = await withTenant(tenantId, async tx => {
+  const existant = await withTenant(tenantId, async (tx) => {
     const [devis] = await tx.select().from(devisTable).where(eq(devisTable.id, id!));
-    if (!devis) return null;
-    const acceptToken = devis.acceptToken ?? crypto.randomUUID();
-    const [u] = await tx.update(devisTable).set({
-      status: "ENVOYE",
-      dateEnvoi: new Date(),
-      acceptToken,
-    }).where(eq(devisTable.id, id!)).returning();
-    return u;
+    return devis ?? null;
   });
+  if (!existant) { res.status(404).json({ error: "Devis introuvable" }); return; }
 
+  // Réutilisation si — et seulement si — le jeton est retrouvable en entier :
+  // condensat en base ET valeur dans le magasin. Un condensat orphelin (devis
+  // envoyé avant ce lot) ne permet pas de reconstruire le lien ; on en pose un
+  // neuf plutôt que d'envoyer un e-mail sans lien.
+  const dejaPose = existant.acceptTokenSha256
+    ? await lireSecret(tenantId, cleJetonDevis(existant.id))
+    : null;
+  const acceptToken = dejaPose ?? (await poserNouveauJeton(tenantId, existant.id));
+
+  const [updated] = await withTenant(tenantId, (tx) =>
+    tx
+      .update(devisTable)
+      .set({ status: "ENVOYE", dateEnvoi: new Date() })
+      .where(eq(devisTable.id, existant.id))
+      .returning(),
+  );
   if (!updated) { res.status(404).json({ error: "Devis introuvable" }); return; }
 
-  // Send email (dev: logged)
-  const acceptUrl = `${process.env.APP_URL ?? "https://nodaq.fr"}/devis/accepter/${updated.acceptToken}`;
+  const acceptUrl = urlAcceptation(acceptToken);
   const envoi = await sendDocument({
     canal: "EMAIL",
     tenantId,
@@ -281,9 +332,52 @@ router.post("/devis/:id/envoyer", async (req, res): Promise<void> => {
   res.json({
     ...updated,
     acceptUrl,
+    /** Vrai quand le lien envoyé est celui d'un envoi précédent. */
+    lienReutilise: dejaPose !== null,
     // L'écran doit pouvoir dire à l'artisan que son devis est parti en repli.
     modeEnvoi: envoi.mode,
     avertissementDelivrabilite: envoi.avertissementDelivrabilite ?? false,
+  });
+});
+
+/**
+ * POST /api/devis/:id/nouveau-lien — REMPLACE le lien d'acceptation.
+ *
+ * Action explicite et nommée, séparée du renvoi. Elle existe pour le cas réel
+ * où l'artisan doit transmettre le lien autrement — SMS, messagerie — et a donc
+ * besoin de le VOIR. Comme le jeton précédent n'est plus affichable, la seule
+ * façon d'en obtenir un lisible est d'en poser un neuf.
+ *
+ * Elle invalide le lien précédent, et c'est le fond de l'affaire : c'est
+ * pourquoi elle est explicite, confirmée côté interface, et jamais déclenchée
+ * par un renvoi.
+ */
+router.post("/devis/:id/nouveau-lien", async (req, res): Promise<void> => {
+  const tenantId = req.tenantId!;
+  const { id } = req.params;
+  if (typeof id !== "string" || id.length === 0) {
+    res.status(404).json({ error: "Devis introuvable" });
+    return;
+  }
+
+  const [devis] = await withTenant(tenantId, (tx) =>
+    tx.select().from(devisTable).where(eq(devisTable.id, id)),
+  );
+  if (!devis) { res.status(404).json({ error: "Devis introuvable" }); return; }
+
+  // Un devis déjà accepté ne se rouvre pas : le lien n'ouvrirait qu'une page
+  // « déjà accepté », et en engendrer un neuf laisserait croire le contraire.
+  if (devis.acceptedAt) {
+    res.status(409).json({ error: "Ce devis a déjà été accepté." });
+    return;
+  }
+
+  const acceptToken = await poserNouveauJeton(tenantId, devis.id);
+  res.json({
+    acceptUrl: urlAcceptation(acceptToken),
+    /** L'ancien lien ne fonctionne plus. L'écran l'a annoncé avant d'appeler. */
+    ancienLienInvalide: true,
+    reference: devis.reference,
   });
 });
 
