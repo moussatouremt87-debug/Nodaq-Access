@@ -58,7 +58,7 @@ const BUSINESS_TABLES = [
   "connectors", "contrats", "cr_entries", "devis", "echeances", "factures",
   "avoirs", "facture_sequences",
   "pending_actions", "prospects", "settings", "team_members", "absences",
-  "pointages", "catalogue_lignes", "envois_journal", "parametres_envoi",
+  "pointages", "catalogue_lignes", "envois_journal", "parametres_envoi", "objectifs_franchissements",
 ] as const;
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -624,7 +624,7 @@ async function sqlstateDe(
 }
 
 describe("h — APPEND-ONLY (privilèges effectifs, pas déclaratifs)", () => {
-  const APPEND_ONLY = ["envois_journal", "archived_pdfs"] as const;
+  const APPEND_ONLY = ["envois_journal", "archived_pdfs", "objectifs_franchissements"] as const;
 
   test("envois_journal : INSERT et SELECT passent, UPDATE et DELETE sont REFUSÉS", async () => {
     const ligneId = `append-only-${Date.now()}`;

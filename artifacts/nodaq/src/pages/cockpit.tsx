@@ -1,4 +1,5 @@
 import { useMemo, useState, useCallback } from 'react';
+import { ObjectifsCockpit } from '@/components/objectifs-cockpit';
 import { Link } from 'wouter';
 import {
   Briefcase,
@@ -291,6 +292,12 @@ export default function Cockpit() {
             <span className="text-[11px] font-medium uppercase tracking-[0.09em] text-muted-foreground">
               Bilan {currentYear} — du 1er janvier à aujourd'hui
             </span>
+          </div>
+
+          {/* Objectifs — le bloc se retire lui-même si le rôle n'y a pas droit
+              ou si le patron l'a désactivé : la réponse est alors vide. */}
+          <div className="mb-4">
+            <ObjectifsCockpit />
           </div>
 
           <motion.div
