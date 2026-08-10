@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, integer, uuid } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, uuid, date } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { tenantsTable } from "./tenants";
@@ -15,6 +15,13 @@ export const avoirsTable = pgTable("avoirs", {
   numero: text("numero").notNull(),
   /** ID of the EMISE facture this avoir corrects */
   factureRefId: text("facture_ref_id").notNull(),
+  /**
+   * Date métier d'émission (`YYYY-MM-DD`), et non `created_at` qui est un
+   * INSTANT. Les agrégations de chiffre d'affaires filtrent sur cette
+   * colonne : comparer un `timestamptz` à une borne d'exercice ferait tomber
+   * un avoir émis le 31 décembre à 23 h à Paris sur l'exercice suivant.
+   */
+  issuedDate: date("issued_date").notNull(),
   /** Amount of the credit note in HT cents (≤ facture total HT) */
   montantHtCents: integer("montant_ht_cents").notNull(),
   /** VAT amount in cents */

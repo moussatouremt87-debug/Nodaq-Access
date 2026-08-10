@@ -279,6 +279,10 @@ router.post("/avoirs", async (req, res): Promise<void> => {
         tenantId,
         numero,
         factureRefId: d.factureRefId,
+        // La même date que celle portée par le PDF. Elle était calculée puis
+        // jamais persistée : le CA ne pouvait donc déduire l'avoir que sur
+        // `created_at`, un instant, avec le décalage de fuseau qui va avec.
+        issuedDate,
         montantHtCents: d.montantHtCents,
         montantTvaCents: d.montantTvaCents,
         motif: d.motif,

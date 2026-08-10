@@ -24,6 +24,19 @@ describe("toDateString — composantes locales", () => {
   test("zéros de tête sur le mois et le jour", () => {
     expect(toDateString(new Date(2026, 0, 5))).toBe("2026-01-05");
   });
+
+  test("31 décembre 23 h reste dans l'exercice qui se termine", () => {
+    // C'est la date que `avoirs.ts` calcule et persiste désormais dans
+    // `avoirs.issued_date`, et sur laquelle le chiffre d'affaires filtre.
+    //
+    // Un avoir émis la veille du Nouvel An à 23 h doit diminuer le CA de
+    // l'exercice qui se termine — celui sur lequel le patron a déjà lu sa
+    // jauge — et non celui qui commence. Une borne dérivée d'un toISOString
+    // le rangerait sur l'exercice suivant partout à l'est de Greenwich.
+    expect(toDateString(new Date(2025, 11, 31, 23, 0, 0))).toBe("2025-12-31");
+    // Et une minute plus tard, il bascule bien — la borne n'est pas collée.
+    expect(toDateString(new Date(2026, 0, 1, 0, 1, 0))).toBe("2026-01-01");
+  });
 });
 
 describe("bornesSemaine — lundi au dimanche", () => {

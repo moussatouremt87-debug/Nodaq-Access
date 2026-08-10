@@ -170,7 +170,7 @@ export function tableInsertSql(table: string, tenantId: string, memberAId?: stri
     archived_pdfs:    [`INSERT INTO archived_pdfs (id, tenant_id, document_type, document_id, bytes, sha256, byte_size) VALUES ($1, $2::uuid, 'FACTURE', $3, $4, $5, $6) ON CONFLICT DO NOTHING`, [id, tenantId, crypto.randomUUID(), Buffer.from("rls-test-pdf"), "rls-test-sha256-placeholder", 12]],
     // avoirs: id is a TEXT PK with no default — must be supplied in raw SQL.
     // facture_ref_id carries no FK, so an arbitrary id is fine here.
-    avoirs:           [`INSERT INTO avoirs (id, tenant_id, numero, facture_ref_id, montant_ht_cents, motif) VALUES ($1, $2::uuid, 'RLS-AV-001', $3, 1000, 'rls-test') ON CONFLICT DO NOTHING`, [id, tenantId, crypto.randomUUID()]],
+    avoirs:           [`INSERT INTO avoirs (id, tenant_id, numero, facture_ref_id, issued_date, montant_ht_cents, motif) VALUES ($1, $2::uuid, 'RLS-AV-001', $3, CURRENT_DATE, 1000, 'rls-test') ON CONFLICT DO NOTHING`, [id, tenantId, crypto.randomUUID()]],
     // facture_sequences: composite PK (tenant_id, year) — NO id column.
     // One row per tenant per year, so both test tenants can hold year 2020.
     facture_sequences: [`INSERT INTO facture_sequences (tenant_id, year) VALUES ($1::uuid, 2020) ON CONFLICT DO NOTHING`, [tenantId]],
