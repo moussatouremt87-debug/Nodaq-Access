@@ -25,10 +25,10 @@ import { Router, type IRouter } from "express";
 import { sql, eq, and, isNotNull } from "drizzle-orm";
 import {
   withTenant,
-  facturesTable,
   affairesTable,
   objectifsFranchissementsTable,
 } from "@workspace/db";
+import { caNetCentsSql, statutsCaSql } from "../lib/chiffreAffaires.js";
 import {
   toDateString,
   debutExercice,
@@ -152,30 +152,33 @@ router.get("/cockpit/objectifs", async (req, res): Promise<void> => {
     const debutN = debutExercice(maintenant);
     const debutN1 = debutExercicePrecedent(maintenant);
     const memeJourN1 = memeJourExercicePrecedent(maintenant);
-    const finN1 = toDateString(new Date(exercice - 1, 11, 31));
 
-    // Chiffre d'affaires FACTURÉ — jamais filtré sur l'encaissement.
-    const [caN] = execRows<{ total: number }>(await tx.execute(sql`
-      SELECT coalesce(sum(amount_cents), 0)::float AS total FROM factures
-      WHERE issued_date::date >= ${debutN}::date
-    `));
-    const [caN1MemePeriode] = execRows<{ total: number }>(await tx.execute(sql`
-      SELECT coalesce(sum(amount_cents), 0)::float AS total FROM factures
-      WHERE issued_date::date >= ${debutN1}::date AND issued_date::date < ${memeJourN1}::date
-    `));
-    const [caN1Total] = execRows<{ total: number; nb: number; premiere: string | null }>(
+    // Chiffre d'affaires FACTURÉ, net des avoirs, brouillons exclus. La
+    // définition et le raisonnement qui interdit de déduire deux fois vivent
+    // dans `lib/chiffreAffaires.ts` — un seul endroit pour tout le serveur.
+    // L'écart annoncé au patron doit bouger quand un avoir est émis.
+    const [caN] = execRows<{ total: number }>(
+      await tx.execute(sql`SELECT ${caNetCentsSql({ debut: debutN })} AS total`),
+    );
+    const [caN1MemePeriode] = execRows<{ total: number }>(
       await tx.execute(sql`
-        SELECT coalesce(sum(amount_cents), 0)::float AS total,
-               count(*)::int AS nb,
-               min(issued_date::date)::text AS premiere
-        FROM factures
-        WHERE issued_date::date >= ${debutN1}::date AND issued_date::date <= ${finN1}::date
+        SELECT ${caNetCentsSql({ debut: debutN1, finExclue: memeJourN1 })} AS total
+      `),
+    );
+    // Borne haute EXCLUE : le 1er janvier suivant, et non le 31 décembre
+    // inclus, pour n'avoir qu'une seule convention de bornes dans le fichier.
+    const finN1Exclue = toDateString(new Date(exercice, 0, 1));
+    const [caN1Total] = execRows<{ total: number }>(
+      await tx.execute(sql`
+        SELECT ${caNetCentsSql({ debut: debutN1, finExclue: finN1Exclue })} AS total
       `),
     );
 
-    // Douze mois d'historique exigés — la plus ancienne facture émise.
+    // Douze mois d'historique exigés — la plus ancienne facture ÉMISE. Un
+    // brouillon vieux d'un an ne prouve pas qu'on a un exercice à comparer.
     const [historique] = execRows<{ premiere: string | null }>(await tx.execute(sql`
       SELECT min(issued_date::date)::text AS premiere FROM factures
+      WHERE statut IN (${statutsCaSql})
     `));
 
     // Affaires terminées sur douze mois glissants, avec montant et dates.

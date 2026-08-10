@@ -1,14 +1,19 @@
 import { Router, type IRouter } from "express";
 import { withTenant, affairesTable, contratsTable, facturesTable, prospectsTable, pendingActionsTable, activityTable } from "@workspace/db";
-import { sql, eq, and } from "drizzle-orm";
+import { sql, eq } from "drizzle-orm";
 import {
   toDateString,
   debutExercice,
   debutExercicePrecedent,
   memeJourExercicePrecedent,
 } from "@nodaq/shared";
+import { caNetCentsSql, nbFacturesCaSql, conditionFactureCa } from "../lib/chiffreAffaires.js";
 
 const router: IRouter = Router();
+
+function execRows<T>(result: unknown): T[] {
+  return (result as { rows: T[] }).rows;
+}
 
 router.get("/cockpit/kpis", async (req, res): Promise<void> => {
   const tenantId = req.tenantId!;
@@ -23,15 +28,15 @@ router.get("/cockpit/kpis", async (req, res): Promise<void> => {
     // Date métier d'émission, en composantes locales. `created_at` est la date
     // d'insertion de la ligne : une facture saisie le 28 décembre et émise le
     // 3 janvier tombait sur le mauvais exercice.
+    //
+    // La définition du CA — liste blanche de statuts, avoirs déduits, jamais de
+    // filtre `settled` — vit dans `lib/chiffreAffaires.ts`. Le raisonnement qui
+    // interdit de déduire deux fois y est écrit en entier ; ne le ré-invente
+    // pas ici.
     const firstOfMonth = toDateString(new Date(now.getFullYear(), now.getMonth(), 1));
-    const [caMonth] = await tx
-      .select({ total: sql<number>`coalesce(sum(amount_cents), 0)` })
-      .from(facturesTable)
-      // PAS de filtre `settled` : le chiffre d'affaires est ce qui est
-      // FACTURÉ. Filtrer sur l'encaissement donnait le règlement reçu sous le
-      // nom de « chiffre d'affaires » — deux notions qu'un artisan distingue
-      // parfaitement et qu'on lui mélangeait.
-      .where(sql`issued_date::date >= ${firstOfMonth}::date`);
+    const [caMonth] = execRows<{ total: number }>(
+      await tx.execute(sql`SELECT ${caNetCentsSql({ debut: firstOfMonth })} AS total`),
+    );
 
     const [facturesEnAttente] = await tx
       .select({ count: sql<number>`count(*)::int` })
@@ -58,15 +63,30 @@ router.get("/cockpit/kpis", async (req, res): Promise<void> => {
       .from(pendingActionsTable)
       .where(eq(pendingActionsTable.status, "EN_ATTENTE"));
 
-    // Monthly revenue series (last 6 months)
+    // Série mensuelle sur six mois — même définition du CA que partout
+    // ailleurs. Les avoirs entrent comme des lignes négatives dans le mois où
+    // ils sont émis, et ne comptent pas dans `invoiceCount` : un avoir n'est
+    // pas une facture.
+    const sixMois = toDateString(new Date(now.getFullYear(), now.getMonth() - 6, 1));
     const monthlySeries = await tx.execute(sql`
       SELECT
-        to_char(date_trunc('month', issued_date::date), 'YYYY-MM') as month,
-        coalesce(sum(amount_cents), 0)::int as "revenueCents",
-        count(*)::int as "invoiceCount"
-      FROM factures
-      WHERE issued_date::date >= (CURRENT_DATE - interval '6 months')
-      GROUP BY date_trunc('month', issued_date::date)
+        to_char(mois, 'YYYY-MM') as month,
+        sum(montant)::int as "revenueCents",
+        sum(nb)::int as "invoiceCount"
+      FROM (
+        SELECT date_trunc('month', issued_date::date) AS mois,
+               amount_cents AS montant,
+               1 AS nb
+          FROM factures
+         WHERE ${conditionFactureCa({ debut: sixMois })}
+        UNION ALL
+        SELECT date_trunc('month', issued_date),
+               -(montant_ht_cents + montant_tva_cents),
+               0
+          FROM avoirs
+         WHERE issued_date >= ${sixMois}::date
+      ) t
+      GROUP BY mois
       ORDER BY month ASC
     `);
 
@@ -78,23 +98,19 @@ router.get("/cockpit/kpis", async (req, res): Promise<void> => {
     // en échec. La borne est désormais ramenée au dernier jour du mois visé.
     const sameDayLastYear = memeJourExercicePrecedent(now);
 
-    const [caYtdRow] = await tx
-      .select({ total: sql<number>`coalesce(sum(amount_cents), 0)` })
-      .from(facturesTable)
-      .where(sql`issued_date::date >= ${firstOfYear}::date`);
+    const [caYtdRow] = execRows<{ total: number }>(
+      await tx.execute(sql`SELECT ${caNetCentsSql({ debut: firstOfYear })} AS total`),
+    );
 
-    const [caPrevYearRow] = await tx
-      .select({ total: sql<number>`coalesce(sum(amount_cents), 0)` })
-      .from(facturesTable)
-      .where(and(
-        sql`issued_date::date >= ${firstOfLastYear}::date`,
-        sql`issued_date::date <  ${sameDayLastYear}::date`,
-      ));
+    const [caPrevYearRow] = execRows<{ total: number }>(
+      await tx.execute(sql`
+        SELECT ${caNetCentsSql({ debut: firstOfLastYear, finExclue: sameDayLastYear })} AS total
+      `),
+    );
 
-    const [facturesYtdRow] = await tx
-      .select({ count: sql<number>`count(*)::int` })
-      .from(facturesTable)
-      .where(sql`issued_date::date >= ${firstOfYear}::date`);
+    const [facturesYtdRow] = execRows<{ count: number }>(
+      await tx.execute(sql`SELECT ${nbFacturesCaSql({ debut: firstOfYear })} AS count`),
+    );
 
     // Le taux de recouvrement, LUI, parle bien d'encaissement : `settled` y est
     // à sa place. C'est le seul endroit de ce fichier où il l'est.
