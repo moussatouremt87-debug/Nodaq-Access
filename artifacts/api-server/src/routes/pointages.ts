@@ -20,6 +20,7 @@ import {
   teamMembersTable,
   affairesTable,
   absencesTable,
+  affectationsTable,
 } from "@workspace/db";
 import { toDateString, bornesSemaine, HEURES_PAR_JOUR_STANDARD } from "@nodaq/shared";
 
@@ -156,7 +157,17 @@ router.get("/pointages/recapitulatif-semaine", async (req, res): Promise<void> =
       .select()
       .from(pointagesTable)
       .where(and(gte(pointagesTable.date, debut), lte(pointagesTable.date, fin)));
-    return { membres, affaires, absences, existants };
+    // Affectations qui RECOUVRENT la semaine, et non celles qui y commencent :
+    // une affectation du 27 août au 27 septembre concerne la semaine du
+    // 1er septembre sans y débuter.
+    const affectations = await tx
+      .select()
+      .from(affectationsTable)
+      .where(and(
+        lte(affectationsTable.dateDebut, fin),
+        gte(affectationsTable.dateFin, debut),
+      ));
+    return { membres, affaires, absences, existants, affectations };
   });
 
   const affairesActives = new Map(
@@ -200,24 +211,48 @@ router.get("/pointages/recapitulatif-semaine", async (req, res): Promise<void> =
       const jour = toDateString(jourDate);
       if (estAbsent(membre.id, jour)) continue;
 
+      // L'AFFECTATION L'EMPORTE SUR LA SEMAINE TYPE.
+      //
+      // La semaine type est un défaut : « Thomas est au carrelage le mardi ».
+      // Une affectation est une décision datée : « Thomas est sur ce chantier
+      // du 27 août au 27 septembre ». Quand les deux existent, c'est la
+      // décision qui vaut — sinon l'artisan qui vient de planifier son mois
+      // verrait le produit lui proposer autre chose.
+      //
+      // Elle reste une PROPOSITION : rien n'est écrit tant que
+      // `POST .../confirmer` n'a pas eu lieu. Une heure prévue n'entre dans
+      // aucune marge.
+      const affectationsDuJour = data.affectations.filter(
+        (a) => a.membreId === membre.id && a.dateDebut <= jour && jour <= a.dateFin,
+      );
+
       const creneau = planning.find((p) => p.day === JOURS_OUVRES[i]);
-      const affaireId = creneau?.affaireId ?? null;
-      if (!affaireId) continue;
+      const candidats: Array<{ affaireId: string; heures: number }> =
+        affectationsDuJour.length > 0
+          ? affectationsDuJour.map((a) => ({
+              affaireId: a.affaireId,
+              heures: Number(a.heuresParJour),
+            }))
+          : creneau?.affaireId
+            ? [{ affaireId: creneau.affaireId, heures: HEURES_PAR_JOUR_STANDARD }]
+            : [];
 
-      const affaire = affairesActives.get(affaireId);
-      if (!affaire) continue;
+      for (const candidat of candidats) {
+        const affaire = affairesActives.get(candidat.affaireId);
+        if (!affaire) continue;
 
-      const cle = `${membre.id}|${affaireId}|${jour}`;
-      const existant = dejaPointe.get(cle);
-      lignes.push({
-        membreId: membre.id,
-        membreNom: membre.name,
-        affaireId,
-        affaireLabel: affaire.label,
-        date: jour,
-        heures: existant ? heuresEnNombre(existant.heures) : HEURES_PAR_JOUR_STANDARD,
-        origine: existant ? "pointe" : "propose",
-      });
+        const cle = `${membre.id}|${candidat.affaireId}|${jour}`;
+        const existant = dejaPointe.get(cle);
+        lignes.push({
+          membreId: membre.id,
+          membreNom: membre.name,
+          affaireId: candidat.affaireId,
+          affaireLabel: affaire.label,
+          date: jour,
+          heures: existant ? heuresEnNombre(existant.heures) : candidat.heures,
+          origine: existant ? "pointe" : "propose",
+        });
+      }
     }
   }
 

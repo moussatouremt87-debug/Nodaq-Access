@@ -24,6 +24,13 @@ export const affairesTable = pgTable("affaires", {
   dateFinPrevue: text("date_fin_prevue"),
   /** Origine du chantier : DEVIS | DIRECT | RECOMMANDATION | APPEL_OFFRE */
   origine: text("origine"),
+  /**
+   * Lien vers la fiche client. NULLABLE, et le nom en clair de cette table
+   * reste la valeur AFFICHÉE sur un document émis : le texte est un
+   * instantané, `clientId` est le lien. Renommer une fiche ne doit pas
+   * réécrire un document déjà imprimé.
+   */
+  clientId: text("client_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
