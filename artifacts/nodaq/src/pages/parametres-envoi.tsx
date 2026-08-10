@@ -24,17 +24,22 @@ import { containerVariants, itemVariants } from '@/lib/motion-variants';
 const API = '/api';
 
 type Parametres = {
-  mode: 'domaine_authentifie' | 'repli_nodaq';
+  mode: 'domaine_authentifie' | 'smtp_artisan' | 'repli_nodaq';
   domaine: string | null;
   emailExpediteur: string | null;
   nomExpediteur: string | null;
   dkimSelecteur: string | null;
   dkimValeur: string | null;
   verifieLe: string | null;
+  smtpHote: string | null;
+  smtpPort: number | null;
+  smtpUtilisateur: string | null;
 };
 
 type Reponse = {
   parametres: Parametres | null;
+  /** Un mot de passe est-il enregistré ? Jamais la valeur — elle ne sort pas du serveur. */
+  smtpMotDePasseEnregistre: boolean;
   spfIncludeConfigure: boolean;
   avertissementDelivrabilite: boolean;
   messageAvertissement: string | null;
@@ -57,6 +62,12 @@ export default function ParametresEnvoi() {
   const queryClient = useQueryClient();
   const [diagnostic, setDiagnostic] = useState<Diagnostic | null>(null);
   const [form, setForm] = useState<Partial<Parametres>>({});
+  /**
+   * Le mot de passe SMTP n'entre QUE dans un sens : le serveur ne le rend
+   * jamais, donc il ne peut pas être pré-rempli. `null` = ne pas y toucher,
+   * ce qui permet de réenregistrer les autres champs sans le ressaisir.
+   */
+  const [motDePasse, setMotDePasse] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery<Reponse>({
     queryKey: ['parametres-envoi'],
@@ -81,6 +92,13 @@ export default function ParametresEnvoi() {
           nomExpediteur: form.nomExpediteur ?? null,
           dkimSelecteur: form.dkimSelecteur ?? null,
           dkimValeur: form.dkimValeur ?? null,
+          smtpHote: form.smtpHote ?? null,
+          smtpPort: form.smtpPort ?? null,
+          smtpUtilisateur: form.smtpUtilisateur ?? null,
+          // `undefined` disparaît du JSON : le serveur comprend « ne pas y
+          // toucher ». Une chaîne vide, elle, serait refusée par le schéma —
+          // c'est voulu, on ne veut pas d'un mot de passe vide.
+          ...(motDePasse !== null ? { smtpMotDePasse: motDePasse } : {}),
         }),
       });
       if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error ?? 'Enregistrement impossible');
@@ -88,6 +106,9 @@ export default function ParametresEnvoi() {
     },
     onSuccess: () => {
       setDiagnostic(null);
+      // Le champ se vide dès l'enregistrement : le mot de passe ne reste pas
+      // dans l'état du navigateur plus longtemps que nécessaire.
+      setMotDePasse(null);
       toast({ title: 'Paramètres enregistrés', description: 'Lancez la vérification DNS.' });
       void queryClient.invalidateQueries({ queryKey: ['parametres-envoi'] });
     },
@@ -186,6 +207,60 @@ export default function ParametresEnvoi() {
                 value={form.nomExpediteur ?? ''}
                 onChange={(e) => maj({ nomExpediteur: e.target.value || null })}
               />
+
+              {/* ── SMTP de l'artisan ────────────────────────────────────────
+                  Ajout du lot chiffrement, dans le formulaire EXISTANT : cet
+                  écran a d'autres défauts, ils font l'objet d'un autre lot et
+                  on ne le redessine pas ici.
+
+                  Le mot de passe n'est jamais pré-rempli parce que le serveur
+                  ne le rend jamais — pas même masqué. L'écran dit seulement
+                  s'il y en a un. */}
+              <div className="rounded-lg border border-card-border p-3 space-y-2">
+                <div className="text-xs font-medium text-muted-foreground">
+                  Ou envoyez depuis votre propre messagerie
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    className="flex-1"
+                    placeholder="smtp.votre-messagerie.fr"
+                    value={form.smtpHote ?? ''}
+                    onChange={(e) => maj({ smtpHote: e.target.value || null, mode: 'smtp_artisan' })}
+                    data-testid="input-smtp-hote"
+                  />
+                  <Input
+                    className="w-24"
+                    placeholder="587"
+                    inputMode="numeric"
+                    value={form.smtpPort ?? ''}
+                    onChange={(e) =>
+                      maj({ smtpPort: e.target.value ? Number(e.target.value) : null })
+                    }
+                    data-testid="input-smtp-port"
+                  />
+                </div>
+                <Input
+                  placeholder="Identifiant — contact@toituremartin.fr"
+                  value={form.smtpUtilisateur ?? ''}
+                  onChange={(e) => maj({ smtpUtilisateur: e.target.value || null })}
+                  data-testid="input-smtp-utilisateur"
+                />
+                <Input
+                  type="password"
+                  placeholder={
+                    data?.smtpMotDePasseEnregistre
+                      ? 'Mot de passe enregistré — saisir pour le remplacer'
+                      : 'Mot de passe de votre messagerie'
+                  }
+                  value={motDePasse ?? ''}
+                  onChange={(e) => setMotDePasse(e.target.value || null)}
+                  data-testid="input-smtp-motdepasse"
+                />
+                <div className="text-xs text-muted-foreground">
+                  Votre mot de passe est chiffré avant d'être enregistré. Il ne
+                  s'affiche plus jamais, ici ou ailleurs.
+                </div>
+              </div>
 
               {/* On ne demande PLUS le sélecteur ni la valeur DKIM.
                   Un couvreur de cinq salariés n'a pas de console de service

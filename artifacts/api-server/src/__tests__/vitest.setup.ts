@@ -19,6 +19,8 @@
  *  requests to FAKE_LLM_BASE and return minimal valid responses.
  */
 
+import { randomBytes } from "node:crypto";
+
 const FAKE_LLM_BASE = "http://fake-llm.internal.test";
 
 // ── 1. Inject fake LLM env vars ───────────────────────────────────────────────
@@ -27,6 +29,18 @@ process.env["LLM_API_KEY"]       = "vitest-fake-key";
 process.env["LLM_MODEL_CHAT"]    = "test/fake-chat-model";
 process.env["LLM_MODEL_VISION"]  = "test/fake-vision-model";
 process.env["LLM_MODEL_STT"]     = "test/fake-stt-model";
+
+// ── 1 bis. Clé de chiffrement, ENGENDRÉE À CHAQUE EXÉCUTION ──────────────────
+//
+// Pas de constante : une clé écrite en dur dans le dépôt est une clé publiée,
+// et une clé qui RESSEMBLE à une vraie finit copiée en production par quelqu'un
+// de pressé. On en tire une au sort à chaque lancement — les tests n'ont besoin
+// d'aucune stabilité entre exécutions, puisqu'ils écrivent et relisent dans la
+// même vie de processus.
+//
+// `??=` et non `=` : une clé posée par l'appelant l'emporte, ce dont le test de
+// rotation a besoin pour piloter les deux générations.
+process.env["ENCRYPTION_KEY"] ??= randomBytes(32).toString("base64");
 
 // ── 2. Intercept fetch calls to the fake LLM endpoint ────────────────────────
 const _originalFetch = globalThis.fetch;

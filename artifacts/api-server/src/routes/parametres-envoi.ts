@@ -13,7 +13,8 @@ import { Router, type IRouter, type Request, type Response, type RequestHandler 
 import { z } from "zod";
 import { eq, desc } from "drizzle-orm";
 import { resolveTxt } from "node:dns/promises";
-import { withTenant, parametresEnvoiTable, envoisJournalTable } from "@workspace/db";
+import { withTenant, parametresEnvoiTable, envoisJournalTable, CLE_SMTP_PASSWORD } from "@workspace/db";
+import { enregistrerSecret, secretExiste, revoquerSecret } from "../lib/tenant-secrets.js";
 import {
   verifierDomaine,
   enregistrementsAttendus,
@@ -26,12 +27,24 @@ const router: IRouter = Router();
 const DOMAINE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i;
 
 const ParametresBody = z.object({
-  mode: z.enum(["domaine_authentifie", "repli_nodaq"]),
+  mode: z.enum(["domaine_authentifie", "smtp_artisan", "repli_nodaq"]),
   domaine: z.string().regex(DOMAINE, "Domaine invalide").nullable().optional(),
   emailExpediteur: z.string().email().nullable().optional(),
   nomExpediteur: z.string().min(1).max(120).nullable().optional(),
   dkimSelecteur: z.string().max(60).nullable().optional(),
   dkimValeur: z.string().max(2000).nullable().optional(),
+  // ── SMTP de l'artisan ──────────────────────────────────────────────────────
+  // Champs NON SECRETS : ils reviennent tels quels dans les lectures.
+  smtpHote: z.string().regex(DOMAINE, "Serveur SMTP invalide").nullable().optional(),
+  smtpPort: z.number().int().min(1).max(65535).nullable().optional(),
+  smtpUtilisateur: z.string().min(1).max(320).nullable().optional(),
+  // Le mot de passe, LUI, ne fait qu'entrer. Il part aussitôt dans
+  // `tenant_secrets`, chiffré, et n'est jamais rendu — pas même masqué : le
+  // masquer supposerait de le lire, donc de le sortir du magasin pour rien.
+  //
+  // `undefined` = ne pas y toucher (l'écran ne renvoie pas un mot de passe
+  // qu'il n'affiche pas). `null` = révoquer. Une chaîne = remplacer.
+  smtpMotDePasse: z.string().min(1).max(1024).nullable().optional(),
 });
 
 /**
@@ -83,6 +96,12 @@ router.get("/parametres-envoi", async (req, res): Promise<void> => {
 
   res.json({
     parametres: params ?? null,
+    /**
+     * Un mot de passe SMTP est-il enregistré ? Un booléen, jamais la valeur ni
+     * une version étoilée : rendre « ****** » obligerait à lire le secret pour
+     * en compter les caractères, sans rien apporter à l'écran.
+     */
+    smtpMotDePasseEnregistre: await secretExiste(tenantId, CLE_SMTP_PASSWORD),
     /** Absent de la configuration : la vérification ne peut pas être proposée. */
     spfIncludeConfigure: include !== null,
     /**
@@ -106,6 +125,13 @@ router.put("/parametres-envoi", async (req, res): Promise<void> => {
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const d = parsed.data;
   const tenantId = req.tenantId!;
+
+  if (d.mode === "smtp_artisan" && (!d.smtpHote || !d.smtpUtilisateur || !d.emailExpediteur)) {
+    res.status(400).json({
+      error: "Le mode SMTP exige un serveur, un identifiant et une adresse d'expédition.",
+    });
+    return;
+  }
 
   if (d.mode === "domaine_authentifie" && (!d.domaine || !d.emailExpediteur)) {
     res.status(400).json({
@@ -134,6 +160,9 @@ router.put("/parametres-envoi", async (req, res): Promise<void> => {
     nomExpediteur: d.nomExpediteur ?? null,
     dkimSelecteur: d.dkimSelecteur ?? null,
     dkimValeur: d.dkimValeur ?? null,
+    smtpHote: d.smtpHote ?? null,
+    smtpPort: d.smtpPort ?? null,
+    smtpUtilisateur: d.smtpUtilisateur ?? null,
     // Toute modification INVALIDE la vérification : changer de domaine ou de
     // sélecteur sans revérifier laisserait le produit expédier depuis une
     // configuration qui n'a jamais été contrôlée.
@@ -155,7 +184,18 @@ router.put("/parametres-envoi", async (req, res): Promise<void> => {
     return tx.insert(parametresEnvoiTable).values({ tenantId, ...valeurs }).returning();
   });
 
-  res.json(enregistre);
+  // Le secret est traité APRÈS le paramétrage, et séparément : il ne vit pas
+  // dans la même table et ne suit pas le même cycle de vie.
+  if (d.smtpMotDePasse === null) {
+    await revoquerSecret(tenantId, CLE_SMTP_PASSWORD);
+  } else if (typeof d.smtpMotDePasse === "string") {
+    await enregistrerSecret(tenantId, CLE_SMTP_PASSWORD, d.smtpMotDePasse);
+  }
+
+  // La réponse ne peut pas porter le mot de passe : il n'est pas dans
+  // `parametres_envoi`. On rend un BOOLÉEN, qui est tout ce dont l'écran a
+  // besoin — « un mot de passe est enregistré » — et qui ne se dé-masque pas.
+  res.json({ ...enregistre, smtpMotDePasseEnregistre: await secretExiste(tenantId, CLE_SMTP_PASSWORD) });
 });
 
 // ── Vérification DNS ──────────────────────────────────────────────────────────

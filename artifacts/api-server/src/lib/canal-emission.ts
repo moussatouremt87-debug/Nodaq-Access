@@ -6,20 +6,26 @@
  * le destinataire et finit en indésirables : le domaine expéditeur ne
  * correspond ni au nom affiché, ni à ce que le client attend.
  *
- * ── Deux modes ──────────────────────────────────────────────────────────────
+ * ── Trois modes ─────────────────────────────────────────────────────────────
  *  'domaine_authentifie' — PRINCIPAL. Le tenant a publié SPF et DKIM sur son
  *      domaine ; le courrier part de SON adresse. Aucun secret n'est stocké :
  *      la signature DKIM est faite par le service d'envoi, la clé privée ne
  *      transite jamais par ce produit.
+ *
+ *  'smtp_artisan'        — Le courrier part du serveur de messagerie de
+ *      l'artisan, avec ses propres identifiants. Le mot de passe vit chiffré
+ *      dans `tenant_secrets` sous « envoi.smtp_password » ; il est lu au
+ *      moment de construire le transporteur et ne quitte JAMAIS la fonction
+ *      qui le lit — ni variable de portée large, ni journal, ni réponse HTTP.
  *
  *  'repli_nodaq'         — REPLI. Expédition depuis nodaq.fr avec un
  *      « répondre à » pointant sur l'artisan. La délivrabilité est mauvaise et
  *      l'interface le dit — un repli silencieux ferait croire que tout va bien
  *      pendant que les devis tombent en indésirables.
  *
- * Le mode « SMTP de l'artisan » est VOLONTAIREMENT ABSENT : il exigerait de
- * stocker son mot de passe de messagerie et aucun chiffrement au repos n'existe
- * encore. Il fera l'objet d'un lot dédié.
+ * Le mode SMTP était volontairement absent tant qu'aucun chiffrement au repos
+ * n'existait : il exigeait de stocker un mot de passe de messagerie. C'est ce
+ * que le lot chiffrement a apporté, et ce mode est sa démonstration.
  *
  * ── Journalisation ──────────────────────────────────────────────────────────
  * Destinataire, date, statut, type de document. JAMAIS le corps, JAMAIS le
@@ -29,8 +35,9 @@
 
 import { createTransport, type Transporter } from "nodemailer";
 import { eq } from "drizzle-orm";
-import { withTenant, parametresEnvoiTable, envoisJournalTable } from "@workspace/db";
+import { withTenant, parametresEnvoiTable, envoisJournalTable, CLE_SMTP_PASSWORD } from "@workspace/db";
 import type { ModeEnvoi } from "@workspace/db";
+import { lireSecret } from "./tenant-secrets.js";
 
 export type CanalEmission = "EMAIL" | "PLATEFORME_AGREEE";
 
@@ -98,11 +105,44 @@ function getTransporter(): Transporter | null {
   return null;
 }
 
+/**
+ * Transporteur bâti sur le SMTP de l'artisan, ou `null`.
+ *
+ * LE MOT DE PASSE NE SORT PAS D'ICI. Il est lu, passé à `createTransport`, et
+ * la référence meurt avec la fonction : aucun appelant ne le reçoit, aucune
+ * structure de retour ne le porte. C'est délibérément plus étroit que
+ * nécessaire — un secret qui circule finit par être journalisé par quelqu'un
+ * qui ne savait pas.
+ *
+ * Refus en environnement de test, comme le transporteur global : aucun test ne
+ * doit pouvoir atteindre un serveur de messagerie réel.
+ */
+async function transporteurArtisan(
+  tenantId: string,
+  params: { smtpHote: string | null; smtpPort: number | null; smtpUtilisateur: string | null },
+): Promise<Transporter | null> {
+  if (process.env["NODE_ENV"] === "test") return null;
+  if (!params.smtpHote || !params.smtpUtilisateur) return null;
+
+  const motDePasse = await lireSecret(tenantId, CLE_SMTP_PASSWORD);
+  if (motDePasse === null) return null;
+
+  const port = params.smtpPort ?? 587;
+  return createTransport({
+    host: params.smtpHote,
+    port,
+    secure: port === 465,
+    auth: { user: params.smtpUtilisateur, pass: motDePasse },
+  });
+}
+
 interface ExpediteurResolu {
   mode: ModeEnvoi;
   from: string;
   replyTo: string | undefined;
   avertissement: boolean;
+  /** Bâti à partir du paramétrage du tenant. `null` = employer le global. */
+  transporteur: Transporter | null;
 }
 
 /**
@@ -133,7 +173,27 @@ async function resoudreExpediteur(
       from: `"${nom}" <${params.emailExpediteur}>`,
       replyTo: params.emailExpediteur ?? undefined,
       avertissement: false,
+      transporteur: null,
     };
+  }
+
+  // SMTP de l'artisan — le courrier part de chez lui, donc l'alignement est
+  // acquis et aucun avertissement de délivrabilité n'est justifié.
+  if (params?.mode === "smtp_artisan" && params.emailExpediteur) {
+    const transporteur = await transporteurArtisan(tenantId, params);
+    if (transporteur !== null) {
+      return {
+        mode: "smtp_artisan",
+        from: `"${nom}" <${params.emailExpediteur}>`,
+        replyTo: params.emailExpediteur,
+        avertissement: false,
+        transporteur,
+      };
+    }
+    // Configuré mais inutilisable — mot de passe absent ou serveur incomplet.
+    // On retombe en repli AVEC l'avertissement : le contraire ferait croire à
+    // l'artisan que ses devis partent de chez lui alors qu'ils partent de
+    // nodaq.fr, ce qui est exactement le mensonge que ce module refuse.
   }
 
   return {
@@ -143,6 +203,7 @@ async function resoudreExpediteur(
     // rend le repli utilisable malgré tout.
     replyTo: params?.emailExpediteur ?? undefined,
     avertissement: true,
+    transporteur: null,
   };
 }
 
@@ -199,7 +260,9 @@ export async function sendDocument(opts: SendOptions): Promise<SendResult> {
     })),
   };
 
-  const transporter = getTransporter();
+  // Le transporteur du tenant l'emporte sur le global : quand l'artisan a
+  // configuré son propre SMTP, c'est de chez lui que part le courrier.
+  const transporter = expediteur.transporteur ?? getTransporter();
 
   if (!transporter) {
     // Aucun SMTP configuré : on journalise sans envoyer. Le sujet n'apparaît
