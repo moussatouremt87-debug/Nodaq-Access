@@ -113,7 +113,7 @@ export async function createTestTeamMember(
 // Order matters — pointages has FKs to team_members and affaires, so it must be
 // deleted before them.
 const BUSINESS_TABLES = [
-  "pointages", "catalogue_lignes",
+  "pointages", "catalogue_lignes", "envois_journal", "parametres_envoi",
   "absences", "activity", "affaires", "analytics_tool_logs", "archived_pdfs", "chat_messages", "classeur_documents",
   "connectors", "contrats", "cr_entries", "devis", "echeances",
   "avoirs", "facture_sequences", "factures",
@@ -174,6 +174,10 @@ export function tableInsertSql(table: string, tenantId: string, memberAId?: stri
     // facture_sequences: composite PK (tenant_id, year) — NO id column.
     // One row per tenant per year, so both test tenants can hold year 2020.
     facture_sequences: [`INSERT INTO facture_sequences (tenant_id, year) VALUES ($1::uuid, 2020) ON CONFLICT DO NOTHING`, [tenantId]],
+    // parametres_envoi : un seul par tenant (contrainte d'unicité).
+    parametres_envoi: [`INSERT INTO parametres_envoi (id, tenant_id, mode, domaine) VALUES ($1, $2::uuid, 'repli_nodaq', 'rls-test.example') ON CONFLICT DO NOTHING`, [id, tenantId]],
+    // envois_journal : append-only, aucune donnée de contenu.
+    envois_journal: [`INSERT INTO envois_journal (id, tenant_id, destinataire, document_type, mode, statut) VALUES ($1, $2::uuid, 'rls-test@example.test', 'DEVIS', 'repli_nodaq', 'envoye') ON CONFLICT DO NOTHING`, [id, tenantId]],
     // catalogue_lignes: prix en centimes, mots_cles est un text[].
     catalogue_lignes: [`INSERT INTO catalogue_lignes (id, tenant_id, libelle, unite, prix_unitaire_ht_cents, mots_cles) VALUES ($1, $2::uuid, 'Cloison BA13 rls-test', 'm2', 4500, ARRAY['placo','ba13']) ON CONFLICT DO NOTHING`, [id, tenantId]],
     // pointages: needs BOTH a member and an affaire (real FKs). The affaire is

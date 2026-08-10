@@ -87,6 +87,27 @@ export const PROCESSING_TEMPLATES: readonly ProcessingTemplate[] = [
     },
   },
   {
+    id: "journal-envois",
+    name: "Journal des envois de documents commerciaux",
+    purpose:
+      "Tracer l'expédition des devis, factures et avoirs (destinataire, date, " +
+      "statut) pour prouver qu'un document est parti et quand — notamment en cas " +
+      "de contestation de délai. Ni le corps ni l'objet du message ne sont conservés.",
+    legalBasis: "interet_legitime",
+    dataCategories: ["contact"],
+    dataSubjects: ["clients"],
+    recipients: "Le seul tenant émetteur ; aucun destinataire externe",
+    retention:
+      "12 mois à compter de l'envoi (ENVOIS_JOURNAL_RETENTION_DAYS). Durée " +
+      "assumée par le produit et non imposée par un texte : au-delà, la trace " +
+      "n'a plus d'usage opérationnel et deviendrait une base de contacts conservée sans motif.",
+    sensitiveData: false,
+    source: {
+      label: "CNIL — les durées de conservation des données",
+      url: "https://www.cnil.fr/fr/passer-laction/les-durees-de-conservation-des-donnees",
+    },
+  },
+  {
     id: "prospection-b2b",
     name: "Prospection B2B (courrier, téléphone, e-mail professionnel)",
     purpose:

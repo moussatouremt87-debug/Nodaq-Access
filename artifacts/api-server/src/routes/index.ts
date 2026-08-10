@@ -28,6 +28,7 @@ import analyticsRouter from "./analytics";
 import pointagesRouter from "./pointages";
 import catalogueRouter from "./catalogue";
 import devisDicteeRouter from "./devis-dictee";
+import parametresEnvoiRouter from "./parametres-envoi";
 
 import { requireAuth } from "../middleware/requireAuth";
 import { resolveTenant } from "../middleware/resolveTenant";
@@ -68,6 +69,7 @@ router.use(biz, analyticsRouter);
 router.use(biz, pointagesRouter);
 router.use(biz, catalogueRouter);
 router.use(biz, devisDicteeRouter);
+router.use(biz, parametresEnvoiRouter);
 
 // ── OWNER-only routes ─────────────────────────────────────────────────────
 router.use(ownerOnly, equipeRouter);

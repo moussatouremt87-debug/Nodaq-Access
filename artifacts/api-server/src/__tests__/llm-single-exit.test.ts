@@ -30,7 +30,18 @@ import { join, resolve } from "path";
 const FORBIDDEN_URL_RE =
   /https?:\/\/(?:api\.mistral\.ai|api\.scaleway\.ai|api\.openai\.com|api\.anthropic\.com|generativelanguage\.googleapis\.com)/;
 
-/** Banned environment variable names that must not appear in source. */
+/**
+ * Banned environment variable names that must not appear in source.
+ *
+ * PORTÉE : cette garde vise les identifiants de FOURNISSEURS DE MODÈLES. Elle
+ * interdit `SCALEWAY_API_KEY` parce que Scaleway est ici un fournisseur
+ * d'inférence, et que toute sortie modèle doit passer par LLM_BASE_URL.
+ *
+ * Les AUTRES services Scaleway (envoi transactionnel, stockage…) ne sont pas
+ * concernés et portent des noms distincts — `TEM_API_KEY` pour l'envoi. Si vous
+ * arrivez ici parce que la CI a refusé votre variable, ne contournez pas la
+ * garde : renommez la variable pour qu'elle dise de quel service elle parle.
+ */
 const FORBIDDEN_ENV_VARS = [
   "MISTRAL_API_KEY",
   "SCALEWAY_API_KEY",
