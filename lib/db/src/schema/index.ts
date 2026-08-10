@@ -32,3 +32,4 @@ export * from "./tenant_secrets";
 export * from "./clients";
 export * from "./paiements";
 export * from "./affectations";
+export * from "./prospection_contacts";

@@ -1,0 +1,485 @@
+/**
+ * Prospection — contacts, bases légales, envois, signaux de zone.
+ *
+ * ╔═══════════════════════════════════════════════════════════════════════════╗
+ * ║  CE N'EST PAS L'INTERFACE QUI DÉCIDE, C'EST CETTE ROUTE.                 ║
+ * ║  Un appel direct à `/prospection/envoyer` sur une combinaison interdite   ║
+ * ║  répond 403 et n'envoie ni ne journalise rien.                           ║
+ * ╚═══════════════════════════════════════════════════════════════════════════╝
+ *
+ * AUCUN SUIVI D'OUVERTURE. Les pixels de suivi sont soumis à consentement, y
+ * compris en B2B. Rien dans ce module n'insère d'image dans un message, et une
+ * garde le vérifie sur le CORPS produit.
+ */
+import { Router, type IRouter } from "express";
+import { z } from "zod";
+import { and, eq, sql, desc } from "drizzle-orm";
+import {
+  withTenant,
+  contactsProspectionTable,
+  contactBasesTable,
+  clientsTable,
+  facturesTable,
+} from "@workspace/db";
+import {
+  TYPES_CONTACT,
+  BASES_LEGALES,
+  CANAUX,
+  SEUIL_ANONYMAT,
+  agregatPubliable,
+  RETENTION_PROSPECTION_JOURS,
+  canauxAutorises,
+  toDateString,
+  type TypeContact,
+  type BaseLegale,
+} from "@nodaq/shared";
+import {
+  verifierEnvoi,
+  baseCourante,
+  estOppose,
+  exposer,
+  poserJetonOpposition,
+  chargerContact,
+} from "../lib/prospection.js";
+import { sendDocument } from "../lib/canal-emission.js";
+
+const router: IRouter = Router();
+
+const DATE_METIER = /^\d{4}-\d{2}-\d{2}$/;
+
+const ContactBody = z.object({
+  nom: z.string().min(1).max(200),
+  type: z.enum(TYPES_CONTACT),
+  email: z.string().email().nullable().optional(),
+  telephone: z.string().max(40).nullable().optional(),
+  adresse: z.string().max(300).nullable().optional(),
+  codePostal: z.string().max(10).nullable().optional(),
+  ville: z.string().max(120).nullable().optional(),
+  siret: z.string().max(20).nullable().optional(),
+  origine: z.string().max(300).nullable().optional(),
+});
+
+const BaseBody = z.object({
+  base: z.enum(BASES_LEGALES),
+  /** D'où vient la donnée, en clair. Obligatoire : l'article 14 l'impose. */
+  source: z.string().min(1, "La source de la donnée est obligatoire").max(500),
+  texteExact: z.string().max(2000).nullable().optional(),
+  obtenueLe: z.string().regex(DATE_METIER).optional(),
+});
+
+// ── Contacts ─────────────────────────────────────────────────────────────────
+
+/**
+ * Liste des contacts, avec leurs canaux ouverts et l'EMBARGO appliqué.
+ *
+ * Les coordonnées d'un particulier non informé ne sont pas dans le corps de la
+ * réponse — pas masquées à l'écran : absentes.
+ */
+router.get("/prospection/contacts", async (req, res): Promise<void> => {
+  const tenantId = req.tenantId!;
+  const contacts = await withTenant(tenantId, (tx) =>
+    tx.select().from(contactsProspectionTable).orderBy(desc(contactsProspectionTable.createdAt)),
+  );
+
+  const exposes = [];
+  for (const c of contacts) {
+    const base = await baseCourante(tenantId, c.id);
+    const oppose = await estOppose(tenantId, c);
+    const canaux = base
+      ? canauxAutorises(c.type as TypeContact, base.base, base.informeeLe, oppose)
+      : { email: false, telephone: false, courrier: false };
+    exposes.push({ ...exposer(c, base, canaux), oppose });
+  }
+
+  res.json({ contacts: exposes, total: exposes.length });
+});
+
+router.post("/prospection/contacts", async (req, res): Promise<void> => {
+  const parsed = ContactBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const tenantId = req.tenantId!;
+
+  const [cree] = await withTenant(tenantId, (tx) =>
+    tx.insert(contactsProspectionTable).values({ tenantId, ...parsed.data }).returning(),
+  );
+  // Aucune base légale n'est posée d'office : un contact sans base n'est pas
+  // prospectable, et c'est le bon défaut.
+  res.status(201).json(cree);
+});
+
+/**
+ * Import d'un fichier de contacts.
+ *
+ * La base légale est posée POUR CHAQUE ligne, avec la source du fichier :
+ * importer sans dire d'où vient la donnée rendrait l'information de
+ * l'article 14 impossible à rédiger.
+ */
+router.post("/prospection/importer", async (req, res): Promise<void> => {
+  const parsed = z
+    .object({
+      source: z.string().min(1, "La source du fichier est obligatoire").max(500),
+      base: z.enum(BASES_LEGALES),
+      contacts: z.array(ContactBody).min(1).max(2000),
+    })
+    .safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const tenantId = req.tenantId!;
+  const d = parsed.data;
+  const aujourdhui = toDateString(new Date());
+
+  const crees = await withTenant(tenantId, async (tx) => {
+    const ids: string[] = [];
+    for (const c of d.contacts) {
+      const [ligne] = await tx
+        .insert(contactsProspectionTable)
+        .values({ tenantId, ...c, origine: d.source })
+        .returning({ id: contactsProspectionTable.id });
+      await tx.insert(contactBasesTable).values({
+        tenantId,
+        contactId: ligne!.id,
+        contactType: c.type,
+        base: d.base,
+        source: d.source,
+        obtenueLe: aujourdhui,
+      });
+      ids.push(ligne!.id);
+    }
+    return ids;
+  });
+
+  res.status(201).json({ importes: crees.length });
+});
+
+/**
+ * Alimente la liste depuis les PROPRES CLIENTS de l'artisan.
+ *
+ * C'est le premier niveau, et la meilleure liste du produit. La base
+ * `CLIENT_EXISTANT` est posée automatiquement, avec la facture d'origine en
+ * source — l'exception « client existant » ne vaut que si l'on peut montrer
+ * qu'il a acheté.
+ */
+router.post("/prospection/depuis-clients", async (req, res): Promise<void> => {
+  const tenantId = req.tenantId!;
+  const aujourdhui = toDateString(new Date());
+
+  const resultat = await withTenant(tenantId, async (tx) => {
+    const clients = await tx.select().from(clientsTable).where(eq(clientsTable.archive, false));
+    const dejaLa = await tx
+      .select({ clientId: contactsProspectionTable.clientId })
+      .from(contactsProspectionTable);
+    const connus = new Set(dejaLa.map((d) => d.clientId).filter(Boolean));
+
+    let ajoutes = 0;
+    let ignores = 0;
+    for (const client of clients) {
+      if (connus.has(client.id)) { ignores++; continue; }
+
+      // La facture d'origine : sans achat, pas d'exception « client existant ».
+      const [facture] = await tx
+        .select({ number: facturesTable.number, issuedDate: facturesTable.issuedDate })
+        .from(facturesTable)
+        .where(and(eq(facturesTable.clientId, client.id), eq(facturesTable.statut, "PAYEE")))
+        .orderBy(desc(facturesTable.issuedDate))
+        .limit(1);
+      if (!facture) { ignores++; continue; }
+
+      const [contact] = await tx
+        .insert(contactsProspectionTable)
+        .values({
+          tenantId,
+          clientId: client.id,
+          nom: client.nom,
+          type: client.type,
+          email: client.email,
+          telephone: client.telephone,
+          adresse: client.adresse,
+          codePostal: client.codePostal,
+          ville: client.ville,
+          siret: client.siret,
+          origine: "fichier client",
+          derniereInteractionLe: facture.issuedDate,
+        })
+        .returning({ id: contactsProspectionTable.id });
+
+      await tx.insert(contactBasesTable).values({
+        tenantId,
+        contactId: contact!.id,
+        contactType: client.type,
+        base: "CLIENT_EXISTANT",
+        source: `client depuis la facture ${facture.number}`,
+        obtenueLe: facture.issuedDate,
+      });
+      ajoutes++;
+    }
+    return { ajoutes, ignores };
+  });
+
+  res.status(201).json(resultat);
+});
+
+// ── Bases légales ────────────────────────────────────────────────────────────
+
+router.post("/prospection/contacts/:id/base", async (req, res): Promise<void> => {
+  const parsed = BaseBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const tenantId = req.tenantId!;
+  const { id } = req.params;
+
+  const contact = await chargerContact(tenantId, id!);
+  if (!contact) { res.status(404).json({ error: "Contact introuvable" }); return; }
+
+  // APPEND-ONLY : une base légale ne se réécrit pas, elle se remplace par une
+  // nouvelle ligne. La base courante est la dernière posée.
+  const [ligne] = await withTenant(tenantId, (tx) =>
+    tx
+      .insert(contactBasesTable)
+      .values({
+        tenantId,
+        contactId: contact.id,
+        contactType: contact.type,
+        base: parsed.data.base,
+        source: parsed.data.source,
+        texteExact: parsed.data.texteExact ?? null,
+        obtenueLe: parsed.data.obtenueLe ?? toDateString(new Date()),
+      })
+      .returning(),
+  );
+  res.status(201).json(ligne);
+});
+
+/**
+ * Envoie l'information de l'article 14 et lève l'embargo.
+ *
+ * Le message dit QUI détient la donnée, D'OÙ elle vient, POURQUOI, et COMMENT
+ * s'y opposer. La date d'information est enregistrée par une NOUVELLE ligne de
+ * base légale — la table est append-only, et c'est ce qui donne sa valeur au
+ * journal le jour d'un contrôle.
+ */
+router.post("/prospection/contacts/:id/informer", async (req, res): Promise<void> => {
+  const tenantId = req.tenantId!;
+  const { id } = req.params;
+
+  const contact = await chargerContact(tenantId, id!);
+  if (!contact) { res.status(404).json({ error: "Contact introuvable" }); return; }
+
+  const base = await baseCourante(tenantId, contact.id);
+  if (!base) { res.status(409).json({ error: "Aucune base légale à documenter." }); return; }
+  if (base.informeeLe) {
+    res.status(409).json({ error: "Cette personne a déjà été informée.", informeeLe: base.informeeLe });
+    return;
+  }
+
+  const jeton = await poserJetonOpposition(tenantId, contact.id);
+  const lienOpposition = `${process.env["APP_URL"] ?? "https://nodaq.fr"}/opposition/${jeton}`;
+  const aujourdhui = toDateString(new Date());
+
+  const corps = [
+    `Bonjour,`,
+    ``,
+    `Nous détenons vos coordonnées dans le cadre de notre activité.`,
+    `Origine de cette donnée : ${base.source}.`,
+    `Finalité : vous proposer nos services de travaux.`,
+    ``,
+    `Vous pouvez vous y opposer à tout moment, sans avoir à vous justifier :`,
+    lienOpposition,
+  ].join("\n");
+
+  let envoye = false;
+  if (contact.email) {
+    const envoi = await sendDocument({
+      canal: "EMAIL",
+      tenantId,
+      to: contact.email,
+      subject: "Information sur vos données",
+      body: corps,
+      documentType: "DEVIS",
+    });
+    envoye = envoi.success;
+  }
+
+  await withTenant(tenantId, (tx) =>
+    tx.insert(contactBasesTable).values({
+      tenantId,
+      contactId: contact.id,
+      contactType: contact.type,
+      base: base.base,
+      source: base.source,
+      obtenueLe: aujourdhui,
+      informeeLe: aujourdhui,
+    }),
+  );
+
+  res.json({
+    informeeLe: aujourdhui,
+    envoyeParEmail: envoye,
+    // Sans e-mail, l'information part par courrier : on rend la lettre à
+    // imprimer, qui est la fonction utile pour un particulier repéré ailleurs.
+    lettre: contact.email ? null : corps,
+    lienOpposition,
+  });
+});
+
+// ── Envoi ────────────────────────────────────────────────────────────────────
+
+/**
+ * L'envoi. REFUSE ce que l'interface n'aurait pas dû proposer.
+ *
+ * Le 403 est rendu AVANT toute écriture : rien n'est envoyé, et rien n'est
+ * journalisé comme envoyé. Un refus qui laisserait une trace d'envoi serait
+ * pire qu'un envoi — il ferait croire à l'artisan que le message est parti.
+ */
+router.post("/prospection/envoyer", async (req, res): Promise<void> => {
+  const parsed = z
+    .object({
+      contactId: z.string().min(1),
+      canal: z.enum(CANAUX),
+      objet: z.string().min(1).max(300),
+      message: z.string().min(1).max(20_000),
+    })
+    .safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const tenantId = req.tenantId!;
+  const d = parsed.data;
+
+  const contact = await chargerContact(tenantId, d.contactId);
+  if (!contact) { res.status(404).json({ error: "Contact introuvable" }); return; }
+
+  const verdict = await verifierEnvoi(tenantId, contact, d.canal);
+  if (!verdict.ok) {
+    res.status(403).json({ error: verdict.motif, canaux: verdict.canaux });
+    return;
+  }
+
+  // Le courrier ne part pas d'ici : on rend la lettre à imprimer.
+  if (d.canal === "courrier") {
+    res.json({
+      canal: "courrier",
+      lettre: `${d.objet}\n\n${d.message}`,
+      adresse: [contact.adresse, `${contact.codePostal ?? ""} ${contact.ville ?? ""}`.trim()]
+        .filter(Boolean)
+        .join("\n"),
+    });
+    return;
+  }
+
+  if (d.canal === "telephone") {
+    // Un appel ne s'automatise pas : on confirme seulement qu'il est permis.
+    res.json({ canal: "telephone", autorise: true, telephone: contact.telephone });
+    return;
+  }
+
+  if (!contact.email) {
+    res.status(409).json({ error: "Ce contact n'a pas d'adresse e-mail." });
+    return;
+  }
+
+  const jeton = await poserJetonOpposition(tenantId, contact.id);
+  const lienOpposition = `${process.env["APP_URL"] ?? "https://nodaq.fr"}/opposition/${jeton}`;
+
+  // AUCUN PIXEL. Le lien d'opposition est un lien TEXTE, dans CHAQUE message.
+  const corps = [
+    d.message,
+    ``,
+    `———`,
+    `Pour ne plus recevoir de messages de notre part : ${lienOpposition}`,
+  ].join("\n");
+
+  const envoi = await sendDocument({
+    canal: "EMAIL",
+    tenantId,
+    to: contact.email,
+    subject: d.objet,
+    body: corps,
+    documentType: "DEVIS",
+  });
+
+  await withTenant(tenantId, (tx) =>
+    tx
+      .update(contactsProspectionTable)
+      .set({ derniereInteractionLe: toDateString(new Date()) })
+      .where(eq(contactsProspectionTable.id, contact.id)),
+  );
+
+  res.json({ canal: "email", envoye: envoi.success, lienOpposition, corps });
+});
+
+// ── Signaux de zone ──────────────────────────────────────────────────────────
+
+/**
+ * Compteurs par commune et par nature de travaux, SANS PERSONNE.
+ *
+ * Aucune donnée personnelle conservée, donc ni base légale, ni information, ni
+ * opposition. En contrepartie, le SEUIL D'ANONYMAT est absolu : sous cinq
+ * occurrences, on se tait.
+ *
+ * Dans une commune de trois cents habitants, « un permis de rénovation de
+ * toiture ce mois-ci » désigne quelqu'un. Un agrégat n'anonymise que s'il
+ * porte sur assez de monde.
+ */
+router.get("/prospection/signaux", async (req, res): Promise<void> => {
+  const tenantId = req.tenantId!;
+
+  const rows = await withTenant(tenantId, async (tx) => {
+    const r = await tx.execute(sql`
+      SELECT ville, count(*)::int AS occurrences
+        FROM contacts_prospection
+       WHERE ville IS NOT NULL
+       GROUP BY ville
+       ORDER BY occurrences DESC
+    `);
+    return (r as unknown as { rows: Array<{ ville: string; occurrences: number }> }).rows;
+  });
+
+  const publiables = rows.filter((r) => agregatPubliable(r.occurrences));
+  const tus = rows.length - publiables.length;
+
+  res.json({
+    signaux: publiables,
+    seuilAnonymat: SEUIL_ANONYMAT,
+    /** Combien d'agrégats sont TUS faute d'atteindre le seuil. On le dit. */
+    agregatsTus: tus,
+  });
+});
+
+// ── Conservation ─────────────────────────────────────────────────────────────
+
+/**
+ * Aperçu de la purge — EN LECTURE SEULE.
+ *
+ * La purge elle-même ne peut pas vivre ici : `contact_bases` est append-only,
+ * `app_user` n'a pas le DELETE, et c'est voulu — le journal des bases légales
+ * est ce qui tient le jour d'un contrôle. Donner le DELETE à `app_user` pour
+ * faire tenir la purge dans une route aurait détruit l'append-only pour toutes
+ * les autres écritures.
+ *
+ * La purge est donc une opération de PROPRIÉTAIRE :
+ * `node lib/db/scripts/purger-prospection.mjs`. Même doctrine que la purge du
+ * journal d'envois, confiée au propriétaire par la migration 009.
+ *
+ * Cette route dit COMBIEN de contacts seraient purgés, pour que l'écran puisse
+ * l'annoncer sans mentir sur qui l'exécute.
+ */
+router.get("/prospection/purge/apercu", async (req, res): Promise<void> => {
+  const tenantId = req.tenantId!;
+  const limite = new Date();
+  limite.setDate(limite.getDate() - RETENTION_PROSPECTION_JOURS);
+  const limiteMetier = toDateString(limite);
+
+  const rows = await withTenant(tenantId, async (tx) => {
+    const r = await tx.execute(sql`
+      SELECT count(*)::int AS n FROM contacts_prospection
+       WHERE client_id IS NULL
+         AND coalesce(derniere_interaction_le, created_at::date) < ${limiteMetier}::date
+    `);
+    return (r as unknown as { rows: Array<{ n: number }> }).rows;
+  });
+
+  res.json({
+    aPurger: rows[0]?.n ?? 0,
+    limite: limiteMetier,
+    retentionJours: RETENTION_PROSPECTION_JOURS,
+    commande: "node lib/db/scripts/purger-prospection.mjs",
+  });
+});
+
+export default router;

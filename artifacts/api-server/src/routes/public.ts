@@ -24,12 +24,13 @@
  * POST /public/devis/:token/accept       — enregistre le « bon pour accord »
  */
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
-import { db, devisTable, withTenant, settingsTable } from "@workspace/db";
+import { db, devisTable, withTenant, settingsTable, contactsProspectionTable } from "@workspace/db";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { toDateString } from "@nodaq/shared";
 import { genererPdfDevis, chargerEmetteur, nomFichierDevis } from "../lib/pdf-devis.js";
+import { enregistrerOpposition } from "../lib/prospection.js";
 
 const router: IRouter = Router();
 
@@ -359,6 +360,44 @@ router.get("/public/devis/:token/pdf", limiterDebit, async (req, res): Promise<v
     `attachment; filename="${nomFichierDevis(devis.reference)}"`,
   );
   res.send(pdf);
+});
+
+/**
+ * POST /public/opposition/:token — la personne se retire, SANS COMPTE.
+ *
+ * Un lien d'opposition figure dans CHAQUE message sortant. Il doit fonctionner
+ * pour quelqu'un qui n'a aucune session — c'est tout l'intérêt.
+ *
+ * L'opposition est enregistrée sur une EMPREINTE des coordonnées, pas sur
+ * l'identifiant du contact : un fichier réimporté crée de nouvelles lignes, et
+ * une opposition rattachée à l'identifiant ressusciterait la personne au
+ * premier réimport. C'est la personne qu'on exclut, pas la ligne.
+ */
+router.post("/public/opposition/:token", limiterDebit, async (req, res): Promise<void> => {
+  const { token } = req.params;
+  if (typeof token !== "string" || token.length === 0) {
+    res.status(404).json(INTROUVABLE);
+    return;
+  }
+
+  const sha = condensat(token);
+  const contact = await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT set_config('app.opposition_token_sha256', ${sha}, true)`);
+    const [row] = await tx
+      .select()
+      .from(contactsProspectionTable)
+      .where(eq(contactsProspectionTable.oppositionTokenSha256, sha));
+    return row ?? null;
+  });
+
+  if (!contact) { res.status(404).json(INTROUVABLE); return; }
+
+  await enregistrerOpposition(contact.tenantId, contact, "lien");
+
+  // Réponse identique qu'on vienne d'enregistrer l'opposition ou qu'elle
+  // existât déjà : le résultat pour la personne est le même, et distinguer les
+  // deux révélerait qu'elle s'était déjà opposée.
+  res.json({ enregistree: true });
 });
 
 export default router;

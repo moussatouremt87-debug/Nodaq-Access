@@ -43,7 +43,18 @@ function extractBusinessTables(filePath: string): string[] {
         `restructured, update business-tables-parity.test.ts to match.`,
     );
   }
-  const names = [...match[1]!.matchAll(/["']([^"']+)["']/g)].map((m) => m[1]!);
+  // Les COMMENTAIRES sont retirés avant extraction.
+  //
+  // Sans cela, une apostrophe dans un commentaire — « les enfants d'abord » —
+  // ouvre une chaîne fictive, et la garde signalait des doublons imaginaires
+  // (`',\n  '`). Elle interdisait donc de fait d'expliquer l'ordre de la liste,
+  // alors que cet ordre est subtil : les enfants avant les parents, à cause des
+  // clés étrangères.
+  //
+  // Troisième garde de ce dépôt à buter sur la même chose : une garde qui
+  // refuse les commentaires décourage les commentaires.
+  const sansCommentaires = match[1]!.replace(/\/\/[^\n]*/g, "");
+  const names = [...sansCommentaires.matchAll(/["']([^"']+)["']/g)].map((m) => m[1]!);
   if (names.length === 0) {
     throw new Error(`BUSINESS_TABLES in ${filePath} parsed as empty.`);
   }

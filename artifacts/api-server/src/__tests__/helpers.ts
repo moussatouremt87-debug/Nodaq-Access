@@ -117,6 +117,8 @@ const BUSINESS_TABLES = [
   "tenant_secrets",
   // Ordre : les enfants avant les parents (client_id référence clients).
   "paiements", "affectations",
+  // contact_bases référence contacts_prospection : les enfants d'abord.
+  "contact_bases", "oppositions", "contacts_prospection",
   "absences", "activity", "affaires", "analytics_tool_logs", "archived_pdfs", "chat_messages", "classeur_documents",
   "connectors", "contrats", "cr_entries", "devis", "echeances",
   "avoirs", "facture_sequences", "factures",
@@ -176,6 +178,10 @@ export function tableInsertSql(table: string, tenantId: string, memberAId?: stri
     // facture_ref_id carries no FK, so an arbitrary id is fine here.
     // tenant_secrets : PK composite (tenant_id, cle), pas d'id. La valeur est
     // un chiffré factice — cette insertion éprouve la RLS, pas le chiffrement.
+    contacts_prospection: [`INSERT INTO contacts_prospection (id, tenant_id, nom, type) VALUES ($1, $2::uuid, 'RLS Contact', 'PRO') ON CONFLICT DO NOTHING`, [id, tenantId]],
+    // contact_bases : append-only, exige un contact existant.
+    contact_bases:    [`INSERT INTO contact_bases (id, tenant_id, contact_id, contact_type, base, source, obtenue_le) SELECT $1, $2::uuid, c.id, 'PRO', 'INTERET_LEGITIME_PRO', 'rls-test', CURRENT_DATE FROM contacts_prospection c WHERE c.tenant_id = $2::uuid LIMIT 1 ON CONFLICT DO NOTHING`, [id, tenantId]],
+    oppositions:      [`INSERT INTO oppositions (id, tenant_id, empreinte, nature) VALUES ($1, $2::uuid, 'rls-empreinte-' || $1, 'email') ON CONFLICT DO NOTHING`, [id, tenantId]],
     clients:          [`INSERT INTO clients (id, tenant_id, nom) VALUES ($1, $2::uuid, 'RLS Client') ON CONFLICT DO NOTHING`, [id, tenantId]],
     // paiements : append-only, montant > 0, date métier.
     paiements:        [`INSERT INTO paiements (id, tenant_id, date, montant_cents) VALUES ($1, $2::uuid, CURRENT_DATE, 1000) ON CONFLICT DO NOTHING`, [id, tenantId]],
