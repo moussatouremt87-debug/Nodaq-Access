@@ -239,3 +239,45 @@ describe("le PDF servi par le JETON, sans session", () => {
     expect(body.pdfUrl).toBeTruthy();
   });
 });
+
+// ── Mise en forme du document ───────────────────────────────────────────────
+
+describe("les dates sont affichées à la française", () => {
+  test("le PDF montre JJ/MM/AAAA, jamais AAAA-MM-JJ", async () => {
+    // « 2026-08-10 » est le format d'ÉCHANGE, pas celui qu'on montre à un
+    // client. Le XML Factur-X, lui, reste en ISO — il n'est pas touché.
+    const { body: cree } = await request(app).post("/api/devis").set("Cookie", a.cookie)
+      .send({
+        clientName: "Madame Bernard",
+        validUntil: "2027-12-31",
+        lines: [{ description: "Cloison BA13", quantity: 1, unitPriceCents: 10_000, vatRate: 10 }],
+      })
+      .expect(201);
+
+    const r = await request(app).get(`/api/devis/${cree.id}/pdf`).set("Cookie", a.cookie).expect(200);
+    const texte = texteBrut(r.body as Buffer);
+
+    expect(texte).toContain("31/12/2027");
+    expect(texte).not.toContain("2027-12-31");
+    // La date du document suit la même règle.
+    expect(texte).toMatch(/Date : \d{2}\/\d{2}\/\d{4}/);
+    expect(texte).not.toMatch(/Date : \d{4}-\d{2}-\d{2}/);
+  });
+
+  test("une valeur qui n'est pas une date métier ressort telle quelle", async () => {
+    // Mieux vaut afficher une valeur inattendue que la déformer en silence.
+    const { genererPdfDevis } = await import("../lib/pdf-devis.js");
+    const devis = {
+      id: "x", tenantId: "t", reference: "DEV-TEST", clientName: "C",
+      status: "ENVOYE", lines: [], totalHTCents: 0, totalTTCCents: 0,
+      tvaRate: 20, remise: 0, autoliquidation: false, retenueGarantiePct: 0,
+      validUntil: "date inconnue", notes: null, clientAddress: null, chantierAddress: null,
+      affaireId: null, clientId: null, acceptTokenSha256: null, acceptedAt: null,
+      acceptedBy: null, acceptedIp: null, dateEnvoi: null,
+      createdAt: new Date("2026-08-10T12:00:00Z"), updatedAt: new Date(),
+    } as unknown as Parameters<typeof genererPdfDevis>[0];
+
+    const pdf = await genererPdfDevis(devis, { nom: "Test", siret: "" });
+    expect(texteBrut(pdf)).toContain("date inconnue");
+  });
+});
