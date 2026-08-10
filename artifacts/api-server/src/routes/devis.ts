@@ -4,6 +4,7 @@ import { eq, desc } from "drizzle-orm";
 import { z } from "zod";
 import { createHash } from "node:crypto";
 import { enregistrerSecret, lireSecret, revoquerSecret } from "../lib/tenant-secrets.js";
+import { pdfDevisParId, nomFichierDevis, genererPdfDevis, chargerEmetteur } from "../lib/pdf-devis.js";
 import type { DevisLine, DevisAddress } from "@workspace/db";
 import { sendDocument } from "../lib/canal-emission.js";
 import { toDateString } from "@nodaq/shared";
@@ -313,6 +314,17 @@ router.post("/devis/:id/envoyer", async (req, res): Promise<void> => {
   if (!updated) { res.status(404).json({ error: "Devis introuvable" }); return; }
 
   const acceptUrl = urlAcceptation(acceptToken);
+
+  // LE DEVIS PART EN PIÈCE JOINTE.
+  //
+  // `canal-emission.ts` accepte des pièces jointes depuis toujours ; personne
+  // ne lui en passait. Le client recevait un lien, arrivait sur une page, et
+  // n'avait RIEN à garder, à imprimer, à montrer chez lui ou à faire chiffrer
+  // ailleurs. Un artisan qui envoie un devis sans PDF passe pour un amateur,
+  // quelle que soit la qualité de la page.
+  const emetteurDevis = await chargerEmetteur(tenantId);
+  const pdfDevis = await genererPdfDevis(updated, emetteurDevis);
+
   const envoi = await sendDocument({
     canal: "EMAIL",
     tenantId,
@@ -327,6 +339,13 @@ router.post("/devis/:id/envoyer", async (req, res): Promise<void> => {
       `\nMontant TTC : ${(updated.totalTTCCents / 100).toFixed(2)} €`,
       `\nValable jusqu'au : ${updated.validUntil ?? "—"}`,
     ].filter(Boolean).join("\n"),
+    attachments: [
+      {
+        filename: nomFichierDevis(updated.reference),
+        content: pdfDevis,
+        contentType: "application/pdf",
+      },
+    ],
   });
 
   res.json({
@@ -379,6 +398,33 @@ router.post("/devis/:id/nouveau-lien", async (req, res): Promise<void> => {
     ancienLienInvalide: true,
     reference: devis.reference,
   });
+});
+
+/**
+ * GET /api/devis/:id/pdf — le PDF du devis, pour le tenant propriétaire.
+ *
+ * Engendré à la volée : un devis reste modifiable tant qu'il n'est pas
+ * accepté, donc le figer serait servir une version périmée.
+ */
+router.get("/devis/:id/pdf", async (req, res): Promise<void> => {
+  const tenantId = req.tenantId!;
+  const { id } = req.params;
+  if (typeof id !== "string" || id.length === 0) {
+    res.status(404).json({ error: "Devis introuvable" });
+    return;
+  }
+
+  const [devis] = await withTenant(tenantId, (tx) =>
+    tx.select().from(devisTable).where(eq(devisTable.id, id)),
+  );
+  if (!devis) { res.status(404).json({ error: "Devis introuvable" }); return; }
+
+  const pdf = await pdfDevisParId(tenantId, id);
+  if (!pdf) { res.status(404).json({ error: "Devis introuvable" }); return; }
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `inline; filename="${nomFichierDevis(devis.reference)}"`);
+  res.send(pdf);
 });
 
 router.post("/devis/:id/convert", async (req, res): Promise<void> => {

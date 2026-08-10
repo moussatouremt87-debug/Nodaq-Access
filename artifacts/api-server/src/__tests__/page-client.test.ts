@@ -166,9 +166,20 @@ describe("la route publique n'expose QUE ce devis", () => {
     const corps = JSON.stringify(body);
     expect(corps).not.toContain("CLIENT-SECRET-XYZ");
     expect(corps).not.toContain(autre.reference);
-    // Ni identifiant interne, ni jeton, ni condensat.
+    // Aucun identifiant INTERNE ne sort : le client n'a rien à en faire, et
+    // les exposer donnerait une prise pour deviner d'autres documents.
     expect(corps).not.toContain(cible.id);
-    expect(corps).not.toContain(cible.token);
+
+    // Le JETON, lui, figure dans `pdfUrl` — et c'est nécessaire : le client
+    // n'a pas de session, c'est son jeton qui l'autorise à télécharger son
+    // propre devis. Il l'a déjà dans sa barre d'adresse ; le répéter dans une
+    // URL que la même page doit appeler n'est pas une fuite.
+    //
+    // L'assertion est donc PLUS PRÉCISE qu'un simple « absent » : le jeton
+    // n'apparaît QU'À CET ENDROIT.
+    expect(body.pdfUrl).toBe(`/api/public/devis/${cible.token}/pdf`);
+    const sansPdfUrl = { ...body, pdfUrl: undefined };
+    expect(JSON.stringify(sansPdfUrl)).not.toContain(cible.token);
   });
 
   test("un jeton du tenant A n'ouvre rien chez B, et réciproquement", async () => {
