@@ -1,0 +1,43 @@
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Migration 024 — unicité du numéro de facture, tenue par le moteur
+--
+-- ╔═══════════════════════════════════════════════════════════════════════════╗
+-- ║  LE NUMÉRO D'UNE FACTURE EST UNE OBLIGATION LÉGALE. IL NE PEUT PAS       ║
+-- ║  DÉPENDRE DE LA SEULE BONNE TENUE D'UNE INSTRUCTION APPLICATIVE.         ║
+-- ╚═══════════════════════════════════════════════════════════════════════════╝
+--
+-- Jusqu'ici, l'unicité reposait entièrement sur `assignNextNumero` : un
+-- `SELECT … FOR UPDATE` sur `facture_sequences` dans la transaction. Cette
+-- logique a l'air correcte, et elle l'est probablement. Mais « probablement »
+-- n'est pas la garantie qu'on doit à une numérotation continue et
+-- chronologique, opposable à un contrôle fiscal.
+--
+-- Le moteur peut la tenir. C'est donc au moteur de la tenir — la même raison
+-- qui met `archived_pdfs` en `SELECT`/`INSERT` seulement plutôt que de compter
+-- sur le code pour ne jamais faire d'UPDATE.
+--
+-- ── POURQUOI PARTIEL ────────────────────────────────────────────────────────
+-- Un brouillon porte `number = ''` : la colonne est `NOT NULL` et le numéro
+-- n'est attribué qu'à l'émission. Un index unique total refuserait donc le
+-- deuxième brouillon d'un tenant. La clause `WHERE number <> ''` ne contraint
+-- que les factures RÉELLEMENT émises, celles qui portent un numéro légal.
+--
+-- ── PORTÉE : PAR TENANT ─────────────────────────────────────────────────────
+-- `(tenant_id, number)` et non `(number)`. Deux artisans distincts ont chacun
+-- leur propre séquence et émettent tous les deux une FACT-2026-0001 : c'est
+-- normal, et l'imposer globalement casserait le multi-tenant.
+--
+-- ── SI CETTE MIGRATION ÉCHOUE ───────────────────────────────────────────────
+-- Elle échouera sur une base qui contient DÉJÀ deux factures émises de même
+-- numéro pour un même tenant. Ce n'est pas un défaut de la migration : c'est
+-- la découverte d'un doublon légal qu'il faut traiter à la main, en connaissant
+-- son existence. Un échec bruyant vaut mieux qu'un doublon qui ne se révèle
+-- qu'au contrôle. La requête pour les trouver :
+--
+--   SELECT tenant_id, number, count(*) FROM factures
+--    WHERE number <> '' GROUP BY 1, 2 HAVING count(*) > 1;
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE UNIQUE INDEX IF NOT EXISTS factures_tenant_number_unique
+  ON factures (tenant_id, number)
+  WHERE number <> '';

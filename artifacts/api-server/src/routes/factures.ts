@@ -26,6 +26,8 @@ import {
   type FactureAddress,
 } from "../lib/pdf-generation.js";
 import { sendDocument } from "../lib/canal-emission.js";
+import { logger } from "../lib/logger.js";
+import { champsErreur } from "../lib/erreur-pg.js";
 
 const router: IRouter = Router();
 
@@ -163,6 +165,30 @@ async function assignNextNumero(
   );
 
   return `${prefix}-${year}-${String(newSeq).padStart(4, "0")}`;
+}
+
+/**
+ * Un numéro attribué qui ne deviendra jamais une facture.
+ *
+ * ── POURQUOI CE JOURNAL EXISTE ──────────────────────────────────────────────
+ * Le numéro est attribué et validé en base AVANT la génération du PDF, pour
+ * que le PDF porte le vrai numéro légal. C'est un arbitrage assumé : si le PDF
+ * échoue ensuite, le numéro est perdu et la séquence a un trou. Un trou vaut
+ * mieux qu'une facture légalement émise sans son PDF archivé.
+ *
+ * Mais un trou dans une numérotation doit pouvoir S'EXPLIQUER. Une séquence
+ * qui saute de FACT-2026-0007 à FACT-2026-0009 est, pour un contrôleur, une
+ * facture manquante jusqu'à preuve du contraire. Ces lignes sont cette preuve :
+ * la date, le numéro, et la raison pour laquelle il n'a jamais servi.
+ *
+ * `warn` et non `info` : ce n'est pas la marche normale, et un trou fréquent
+ * signalerait un défaut en amont plutôt qu'un incident isolé.
+ */
+function journaliserNumeroBrule(tenantId: string, numero: string, raison: string): void {
+  logger.warn(
+    { tenantId, numero, raison, etape: "numero_brule" },
+    "[factures/emettre] numéro brûlé — trou assumé dans la séquence",
+  );
 }
 
 // ── Guard: facture must be BROUILLON ─────────────────────────────────────────
@@ -427,7 +453,14 @@ router.post("/factures/:id/emettre", async (req, res): Promise<void> => {
       assignNextNumero(tx, tenantId, year, "FACT"),
     );
   } catch (err) {
-    console.error("[factures/emettre] sequence assignment error:", err);
+    // Le code SQLSTATE est ici la seule information qui compte : il distingue
+    // un doublon de numéro (23505, donc la contrainte d'unicité a parlé) d'un
+    // verrou ou d'une sérialisation (40001, 40P01, 55P03). `console.error`
+    // aplatissait l'objet et perdait exactement cela.
+    logger.error(
+      { ...champsErreur(err), tenantId, annee: year, etape: "attribution_numero" },
+      "[factures/emettre] attribution du numéro impossible",
+    );
     res.status(500).json({ error: "Impossible d'assigner un numéro. Réessayez." });
     return;
   }
@@ -444,7 +477,11 @@ router.post("/factures/:id/emettre", async (req, res): Promise<void> => {
     pdfBytes = pdf.bytes;
     pdfSha256 = pdf.sha256;
   } catch (err) {
-    console.error("[factures/emettre] PDF generation error (invoice not emitted, still BROUILLON):", err);
+    journaliserNumeroBrule(tenantId, numero, "echec_generation_pdf");
+    logger.error(
+      { ...champsErreur(err), tenantId, etape: "generation_pdf" },
+      "[factures/emettre] génération du PDF impossible — facture toujours BROUILLON",
+    );
     res.status(500).json({
       error: "Impossible de générer le PDF. La facture n'a pas été émise — réessayez.",
     });
@@ -498,17 +535,31 @@ router.post("/factures/:id/emettre", async (req, res): Promise<void> => {
     });
 
     if (result.kind === "not_found") {
+      journaliserNumeroBrule(tenantId, numero, "facture_introuvable");
       res.status(404).json({ error: "Facture introuvable" });
       return;
     }
     if (result.kind === "conflict") {
+      // Deux émissions simultanées de la MÊME facture : l'une gagne l'UPDATE
+      // gardé par `statut = BROUILLON`, l'autre repart avec son numéro sur les
+      // bras. C'est le trou le plus banal, et le plus facile à expliquer.
+      journaliserNumeroBrule(tenantId, numero, "facture_deja_emise");
       res.status(409).json({ error: `Facture déjà ${result.statut} — impossible de réémettre.` });
       return;
     }
     emitted = result.facture as typeof facturesTable.$inferSelect;
   } catch (err) {
     // TX failed — facture stays BROUILLON, no PDF on disk, nothing to clean up.
-    console.error("[factures/emettre] DB commit error:", err);
+    //
+    // C'est ICI que la contrainte `factures_tenant_number_unique` se ferait
+    // entendre si deux émissions obtenaient le même numéro : SQLSTATE 23505,
+    // avec le nom de la contrainte. Avant elle, le doublon passait en silence
+    // et ne se serait vu qu'au contrôle fiscal.
+    journaliserNumeroBrule(tenantId, numero, "echec_ecriture_base");
+    logger.error(
+      { ...champsErreur(err), tenantId, etape: "commit_emission" },
+      "[factures/emettre] écriture de l'émission impossible — facture toujours BROUILLON",
+    );
     res.status(500).json({ error: "Erreur lors de la sauvegarde. Réessayez." });
     return;
   }
