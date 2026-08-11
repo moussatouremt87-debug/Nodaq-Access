@@ -421,4 +421,17 @@ describe("f — le serveur refuse de démarrer sans clé", () => {
     expect(sortie).not.toContain(fautive);
     expect(sortie).not.toContain("Server listening");
   }, 90_000);
+
+  test("en production, sans APP_URL : code de sortie non nul — sinon les liens clients repartent vers nodaq.fr en silence", () => {
+    const r = demarrer({
+      PORT: "45993",
+      PUBLIC_URL: "http://localhost",
+      NODE_ENV: "production",
+      APP_URL: undefined,
+    });
+    expect(r.status).not.toBe(0);
+    const sortie = `${r.stdout}${r.stderr}`;
+    expect(sortie).toContain("APP_URL");
+    expect(sortie).not.toContain("Server listening");
+  }, 90_000);
 });

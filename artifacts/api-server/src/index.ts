@@ -1,4 +1,3 @@
-import app from "./app";
 import { logger } from "./lib/logger";
 import { verifierConfigurationChiffrement } from "@nodaq/crypto";
 
@@ -37,6 +36,19 @@ if (!process.env["PUBLIC_URL"]) {
   }
 }
 
+// ── APP_URL guard ─────────────────────────────────────────────────────────────
+// APP_URL is the base used to build client-facing links (devis acceptance,
+// opposition emails, …). Without it, those routes fall back silently to
+// https://nodaq.fr — the showcase site — sending real clients to a page that
+// doesn't exist, with no error, no log line, no failing test. Required in
+// production; optional in development, where the fallback is harmless.
+if (!process.env["APP_URL"] && process.env["NODE_ENV"] === "production") {
+  throw new Error(
+    "APP_URL environment variable is required in production. " +
+      "Set it to the canonical origin of this deployment (e.g. https://app.nodaq.fr).",
+  );
+}
+
 // ── LLM configuration guard ──────────────────────────────────────────────────
 // Fail fast at startup so a misconfigured deployment is immediately visible.
 // All three routing variables are required — no defaults, no fallbacks.
@@ -60,6 +72,11 @@ if (!process.env["LLM_MODEL_CHAT"]) {
 // Le message d'erreur ne porte que le NOM de la variable. La valeur, même
 // tronquée, n'apparaît nulle part : les journaux de démarrage sont archivés.
 verifierConfigurationChiffrement();
+
+// Imported only once every guard above has passed: ./app has import-time side
+// effects (DB pool creation, SESSION_SECRET check, static file serving) that
+// must not run against a deployment we're about to refuse to start anyway.
+const { default: app } = await import("./app");
 
 app.listen(port, (err) => {
   if (err) {
