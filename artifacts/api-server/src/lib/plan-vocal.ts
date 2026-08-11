@@ -10,6 +10,39 @@
  * produit vocal ce n'est pas une question de conformité : si la transcription
  * entend « Dupont » au lieu de « Dubois », l'erreur est écrite avant que
  * l'artisan l'ait vue.
+ *
+ * ── AJOUTER UN TYPE D'INTENTION N+1 ─────────────────────────────────────────
+ * (équipe/planning couvre `declarer_absence`/`affecter_membre` ; factures,
+ * devis, catalogue, clients… restent à faire, un lot à la fois.)
+ *
+ *  1. `lib/shared/src/intentionVocale.ts` — nouveau schéma `.strict()`
+ *     (mentions texte uniquement, jamais d'id ni de nombre), ajouté à
+ *     l'union `Intention` et à `TYPES_INTENTION`.
+ *  2. `libelleOperation` ci-dessous — un `case` (protégé par le compilateur :
+ *     fonction qui retourne `string`, `noImplicitReturns` voit un oubli).
+ *  3. `chargerContexte`/`ContexteResolution` — si le type doit résoudre un
+ *     nom existant, ajouter la liste de candidats correspondante.
+ *  4. `construirePlan` — un bloc `if` explicite AVANT le repli générique du
+ *     bas. Ne pas le laisser y retomber : le repli suppose un champ
+ *     `libelle` que le nouveau type n'a probablement pas.
+ *  5. `executerOperation` — un `case`, écriture réelle. Si la table cible
+ *     n'a pas de FK sur l'id référencé (vérifier au cas par cas — c'était le
+ *     cas d'`affectations`, pas d'`absences`), ajouter une vérification
+ *     d'existence explicite avant d'écrire. Le `default: never` en bas de ce
+ *     switch attrapera désormais un `case` oublié À LA COMPILATION — avant
+ *     ce lot, cette fonction retournait `void` et un `case` manquant
+ *     no-opait EN SILENCE, sans erreur, sans ligne écrite.
+ *  6. Optionnel, pour la parité agent de chat : `mistralAgent.ts` — un outil
+ *     dans `TOOLS` (+ un outil de lecture `list_*` si le modèle n'a pas déjà
+ *     l'id), le nom ajouté à `OUTILS_ECRITURE`, un `case` dans
+ *     `proposerEcriture`. Étendre le test qui vérifie que chaque outil
+ *     produit son propre type d'opération (`voix.test.ts`, bloc « g »).
+ *  7. `routes/voix.ts` → `consigne()` — une ligne SEULEMENT si le type a sa
+ *     propre liste blanche dictable (comme les statuts ou les types
+ *     d'absence) ; `TYPES_INTENTION.join(", ")` couvre déjà le nom du type.
+ *  8. Tests : aller-retour, une ambiguïté, une isolation tenant, et — si
+ *     exposé côté agent — l'aller-retour outil de chat. Une branche
+ *     `voix-test-<nouveau-type>` dans `vitest.setup.ts`.
  */
 import { and, eq, isNull, sql } from "drizzle-orm";
 import {
