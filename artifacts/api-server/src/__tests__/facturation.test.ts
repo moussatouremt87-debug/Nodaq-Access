@@ -15,6 +15,7 @@
 import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import crypto from "node:crypto";
+import http from "node:http";
 import app from "../app";
 import { extractFacturXXml } from "@nodaq/facturx";
 import {
@@ -35,9 +36,47 @@ let tenantBId: string;
 const cleanupTenantIds: string[] = [];
 const cleanupEmails: string[] = [];
 
+/**
+ * UN SEUL serveur pour les rafales concurrentes.
+ *
+ * ╔═══════════════════════════════════════════════════════════════════════════╗
+ * ║  LE TEST DES 20 ÉMISSIONS EST LE PLUS GOURMAND EN PORTS DE LA SUITE.     ║
+ * ╚═══════════════════════════════════════════════════════════════════════════╝
+ *
+ * `request(app)` monte un serveur éphémère PAR REQUÊTE. Vingt brouillons puis
+ * vingt émissions en parallèle, c'est quarante serveurs et quarante connexions
+ * ouverts en rafale — sur une réserve de ports qui appartient à la MACHINE.
+ * D'où des `read ECONNRESET` intermittents sur ce test précis, y compris quand
+ * il tourne seul : reproduit 1 fois sur 12.
+ *
+ * Passer un serveur DÉJÀ à l'écoute fait que supertest le réutilise au lieu
+ * d'en créer un (`test.js` : `if (!addr) this._server = app.listen(0)`), et ne
+ * le referme pas. Quarante ports de serveur deviennent un seul.
+ *
+ * Cela ne relâche rien : les vingt émissions restent bel et bien simultanées,
+ * ce que ce test doit éprouver. On retire une contrainte du BANC D'ESSAI, pas
+ * une contrainte du produit.
+ */
+let serveurRafale: http.Server;
+
+beforeAll(async () => {
+  serveurRafale = await new Promise<http.Server>((resolve) => {
+    const s = app.listen(0, () => resolve(s));
+  });
+});
+
+afterAll(async () => {
+  await new Promise<void>((resolve) => serveurRafale.close(() => resolve()));
+});
+
 /** Creates a brouillon facture with 3 lines at 3 different TVA rates. */
-async function createBrouillon(cookie: string, overrides: Record<string, unknown> = {}) {
-  const res = await request(app)
+async function createBrouillon(
+  cookie: string,
+  overrides: Record<string, unknown> = {},
+  /** Cible supertest. Les rafales concurrentes passent par le serveur partagé. */
+  cible: Parameters<typeof request>[0] = app,
+) {
+  const res = await request(cible)
     .post("/api/factures")
     .set("Cookie", cookie)
     .send({
@@ -57,8 +96,13 @@ async function createBrouillon(cookie: string, overrides: Record<string, unknown
 }
 
 /** Returns a supertest Test for emitting a facture. Call `.expect(status)` or await directly. */
-function emettre(cookie: string, id: string, opts: Record<string, unknown> = {}) {
-  return request(app)
+function emettre(
+  cookie: string,
+  id: string,
+  opts: Record<string, unknown> = {},
+  cible: Parameters<typeof request>[0] = app,
+) {
+  return request(cible)
     .post(`/api/factures/${id}/emettre`)
     .set("Cookie", cookie)
     .send({ issuedDate: "2026-08-01", dueDate: "2026-09-01", ...opts });
@@ -166,13 +210,17 @@ describe("a — IMMUTABILITÉ", () => {
 
 describe("b — NUMÉROTATION SÉQUENTIELLE", () => {
   test("20 émissions parallèles → 20 numéros distincts et continus", async () => {
-    // Create 20 brouillons
+    // Create 20 brouillons — sur le serveur partagé, pas 20 serveurs éphémères
     const ids = await Promise.all(
-      Array.from({ length: 20 }, () => createBrouillon(cookieA).then(f => f.id)),
+      Array.from({ length: 20 }, () =>
+        createBrouillon(cookieA, {}, serveurRafale).then(f => f.id),
+      ),
     );
 
-    // Emit all in parallel
-    const reponses = await Promise.all(ids.map(id => emettre(cookieA, id)));
+    // Emit all in parallel — les 20 émissions restent bien SIMULTANÉES
+    const reponses = await Promise.all(
+      ids.map(id => emettre(cookieA, id, {}, serveurRafale)),
+    );
 
     // ── NE PAS FILTRER LES RÉPONSES SANS NUMÉRO ──────────────────────────────
     //

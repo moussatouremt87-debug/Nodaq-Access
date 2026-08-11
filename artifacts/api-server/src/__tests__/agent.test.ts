@@ -207,7 +207,17 @@ describe("GET /api/chat/messages", () => {
     const res = await request(app)
       .get("/api/chat/messages?conversationId=00000000-0000-0000-0000-000000000001")
       .set("Cookie", sessionCookieA);
-    expect(res.status).toBe(200);
+    // ── LE STATUT SEUL NE DIT PAS POURQUOI ──────────────────────────────────
+    //
+    // Ce test a rendu un jour « expected 404 to be 200 », une seule fois, sans
+    // jamais se reproduire. Un 404 sur ce chemin peut être une route absente,
+    // une session perdue, ou un identifiant fabriqué à l'itération précédente —
+    // et le corps de la réponse tranche entre les trois en une seconde.
+    //
+    // `toMatchObject` sur le statut : l'assertion ne devient pas plus permissive
+    // (le statut reste exigé à 200), mais le rapport d'échec porte désormais le
+    // corps reçu.
+    expect({ status: res.status, corps: res.body }).toMatchObject({ status: 200 });
     expect(res.body.messages).toHaveLength(0);
     expect(res.body.conversationId).toBe("00000000-0000-0000-0000-000000000001");
   });
