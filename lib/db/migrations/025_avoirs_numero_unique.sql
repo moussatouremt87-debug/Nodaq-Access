@@ -1,0 +1,42 @@
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Migration 025 — unicité du numéro d'avoir, tenue par le moteur
+--
+-- ╔═══════════════════════════════════════════════════════════════════════════╗
+-- ║  UN AVOIR EST UN DOCUMENT NUMÉROTÉ LÉGALEMENT, AU MÊME TITRE QU'UNE      ║
+-- ║  FACTURE. MÊME EXIGENCE, MÊME GARANTIE.                                  ║
+-- ╚═══════════════════════════════════════════════════════════════════════════╝
+--
+-- Suite de la migration 024, qui a fait passer l'unicité du numéro de FACTURE
+-- du code au moteur. `avoirs.numero` portait exactement la même exposition :
+-- aucune contrainte, aucun index unique. L'unicité ne tenait qu'à un
+-- `SELECT … FOR UPDATE` sur `facture_sequences` — que les avoirs partagent
+-- avec les factures via une clé d'année négative.
+--
+-- ── POURQUOI TOTAL, ALORS QUE 024 ÉTAIT PARTIEL ─────────────────────────────
+-- La différence n'est pas un oubli, c'est une différence de cycle de vie.
+--
+-- Une facture existe d'abord en BROUILLON, avec `number = ''` : son numéro
+-- légal ne lui est attribué qu'à l'émission. D'où la clause `WHERE number <> ''`
+-- en 024, sans laquelle un tenant ne pourrait pas avoir deux brouillons.
+--
+-- Un avoir n'a pas de brouillon. Il n'existe qu'une seule insertion dans la
+-- table, et elle porte toujours un numéro déjà attribué : la colonne n'est
+-- jamais vide. Un index TOTAL est donc à la fois correct et plus strict — il
+-- refuserait même deux avoirs à numéro vide, situation qui ne doit jamais se
+-- produire et qu'il vaut mieux voir échouer que s'installer.
+--
+-- ── PORTÉE : PAR TENANT ─────────────────────────────────────────────────────
+-- `(tenant_id, numero)` et non `(numero)`. Chaque artisan a sa propre séquence :
+-- deux AVOIR-2026-0001 chez deux tenants distincts est la situation normale.
+--
+-- ── SI CETTE MIGRATION ÉCHOUE ───────────────────────────────────────────────
+-- Elle échouera sur une base contenant déjà deux avoirs de même numéro pour un
+-- même tenant. C'est la découverte d'un doublon légal, à traiter à la main. La
+-- requête pour les trouver :
+--
+--   SELECT tenant_id, numero, count(*) FROM avoirs
+--    GROUP BY 1, 2 HAVING count(*) > 1;
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE UNIQUE INDEX IF NOT EXISTS avoirs_tenant_numero_unique
+  ON avoirs (tenant_id, numero);

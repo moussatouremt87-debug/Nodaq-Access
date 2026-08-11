@@ -30,6 +30,7 @@ const COLONNES = "(id, tenant_id, customer_name, number, issued_date, due_date, 
 async function dansUneTransactionAnnulee<T>(
   scenario: (
     inserer: (id: string, numero: string) => Promise<unknown>,
+    insererAvoir: (id: string, numero: string) => Promise<unknown>,
   ) => Promise<T>,
 ): Promise<T> {
   const client = await adminPool.connect();
@@ -45,7 +46,21 @@ async function dansUneTransactionAnnulee<T>(
          VALUES ($1, $2, 'Client', $3, '2026-08-01', '2026-09-01', 1000)`,
         [id, tenantId, numero],
       );
-    return await scenario(inserer);
+    // Un avoir corrige TOUJOURS une facture : on lui en donne une vraie plutôt
+    // qu'un identifiant inventé, pour que la clé étrangère soit satisfaite.
+    let factureCreee = false;
+    const insererAvoir = async (id: string, numero: string) => {
+      if (!factureCreee) {
+        await inserer("facture-de-ref", "FACT-2026-9999");
+        factureCreee = true;
+      }
+      return client.query(
+        `INSERT INTO avoirs (id, tenant_id, numero, facture_ref_id, montant_ht_cents, motif, issued_date)
+         VALUES ($1, $2, $3, 'facture-de-ref', 1000, 'Motif de test', '2026-08-01')`,
+        [id, tenantId, numero],
+      );
+    };
+    return await scenario(inserer, insererAvoir);
   } finally {
     await client.query("ROLLBACK");
     client.release();
@@ -92,6 +107,62 @@ describe("numérotation — l'unicité vient du moteur", () => {
         await inserer("br-1", "");
         await inserer("br-2", "");
         await inserer("br-3", "");
+        return null;
+      } catch (e) {
+        return e as Error;
+      }
+    });
+
+    expect(echec).toBeNull();
+  });
+
+  test("l'index unique des avoirs est TOTAL, pas partiel", async () => {
+    const { rows } = await adminPool.query(
+      "SELECT indexdef FROM pg_indexes WHERE indexname = 'avoirs_tenant_numero_unique'",
+    );
+    const definition = rows[0]?.indexdef as string | undefined;
+
+    expect(definition).toBeDefined();
+    expect(definition).toMatch(/CREATE UNIQUE INDEX/);
+    expect(definition).toMatch(/\(tenant_id, numero\)/);
+
+    // ── LA DIFFÉRENCE AVEC LES FACTURES EST DÉLIBÉRÉE ───────────────────────
+    //
+    // Une facture existe d'abord en BROUILLON, `number = ''`, et n'obtient son
+    // numéro légal qu'à l'émission : d'où la clause partielle en 024.
+    //
+    // Un avoir n'a pas de brouillon — une seule insertion, toujours numérotée.
+    // Un index total est donc correct ET plus strict. Si quelqu'un ajoutait un
+    // jour un brouillon d'avoir, ce test tomberait, et c'est exactement ce
+    // qu'on veut : la question se reposerait au lieu d'être tranchée en
+    // silence par une clause recopiée.
+    expect(definition).not.toMatch(/WHERE/);
+  });
+
+  test("deux avoirs de même numéro sont refusés par le moteur", async () => {
+    const erreur = await dansUneTransactionAnnulee(async (_inserer, insererAvoir) => {
+      await insererAvoir("av-1", "AVOIR-2026-0001");
+      try {
+        await insererAvoir("av-2", "AVOIR-2026-0001");
+        return null;
+      } catch (e) {
+        return e as { code?: string; constraint?: string };
+      }
+    });
+
+    expect(erreur).not.toBeNull();
+    expect(erreur?.code).toBe("23505");
+    expect(erreur?.constraint).toBe("avoirs_tenant_numero_unique");
+  });
+
+  test("deux avoirs de numéros distincts coexistent", async () => {
+    // La garde ne doit pas interdire la marche normale : un artisan émet
+    // plusieurs avoirs, et ils se suivent.
+    const echec = await dansUneTransactionAnnulee(async (_inserer, insererAvoir) => {
+      try {
+        await insererAvoir("av-a", "AVOIR-2026-0001");
+        await insererAvoir("av-b", "AVOIR-2026-0002");
+        await insererAvoir("av-c", "AVOIR-2026-0003");
         return null;
       } catch (e) {
         return e as Error;
