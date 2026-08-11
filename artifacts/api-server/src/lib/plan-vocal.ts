@@ -20,6 +20,9 @@ import {
   echeancesTable,
   classeurTable,
   activityTable,
+  absencesTable,
+  affectationsTable,
+  teamMembersTable,
 } from "@workspace/db";
 import {
   type Intention,
@@ -67,13 +70,15 @@ export interface Plan {
 /** Ce que le serveur connaît du tenant au moment de résoudre. */
 export interface ContexteResolution {
   readonly affaires: readonly Candidat[];
+  readonly membres: readonly Candidat[];
 }
 
 export async function chargerContexte(tenantId: string): Promise<ContexteResolution> {
-  const affaires = await withTenant(tenantId, (tx) =>
-    tx.select({ id: affairesTable.id, libelle: affairesTable.label }).from(affairesTable),
-  );
-  return { affaires };
+  return withTenant(tenantId, async (tx) => {
+    const affaires = await tx.select({ id: affairesTable.id, libelle: affairesTable.label }).from(affairesTable);
+    const membres = await tx.select({ id: teamMembersTable.id, libelle: teamMembersTable.name }).from(teamMembersTable);
+    return { affaires, membres };
+  });
 }
 
 function libelleOperation(intention: Intention): string {
@@ -90,8 +95,15 @@ function libelleOperation(intention: Intention): string {
       return `Classer « ${intention.titre} »`;
     case "consigner_activite":
       return `Consigner « ${intention.libelle} »`;
+    case "declarer_absence":
+      return `Déclarer ${intention.typeAbsence} pour « ${intention.membreMentionne} »`;
+    case "affecter_membre":
+      return `Affecter « ${intention.membreMentionne} » sur « ${intention.affaireMentionnee} »`;
   }
 }
+
+/** Journée standard appliquée aux affectations dictées — jamais un nombre dicté (règle 3 du dépôt). */
+const HEURES_PAR_JOUR_DEFAUT = 7;
 
 /**
  * Transforme des intentions en plan.
@@ -204,6 +216,115 @@ export function construirePlan(
         libelle: libelleOperation(intention),
         champs: { titre: intention.titre, categorie: intention.categorieMentionnee ?? null },
         certitude: "aucune_resolution",
+      });
+      continue;
+    }
+
+    if (intention.type === "declarer_absence") {
+      const rMembre = resoudreMention(intention.membreMentionne, contexte.membres);
+      if (rMembre.etat === "ambigu") {
+        questions.push({
+          question: `Quel membre « ${intention.membreMentionne} » ?`,
+          candidats: rMembre.candidats,
+          mention: intention.membreMentionne,
+        });
+        continue;
+      }
+      if (rMembre.etat === "introuvable") {
+        incompris.push(`membre « ${intention.membreMentionne} » introuvable`);
+        continue;
+      }
+      const dateDebut = interpreterDate(intention.dateDebutMentionnee, aujourdhui);
+      if (dateDebut === null) {
+        incompris.push(
+          `absence de « ${rMembre.candidat.libelle} » : date « ${intention.dateDebutMentionnee} » non comprise`,
+        );
+        continue;
+      }
+      const dateFin = intention.dateFinMentionnee
+        ? interpreterDate(intention.dateFinMentionnee, aujourdhui)
+        : dateDebut;
+      if (dateFin === null) {
+        incompris.push(
+          `absence de « ${rMembre.candidat.libelle} » : date de fin « ${intention.dateFinMentionnee} » non comprise`,
+        );
+        continue;
+      }
+      if (dateFin < dateDebut) {
+        incompris.push(`absence de « ${rMembre.candidat.libelle} » : la date de fin précède la date de début`);
+        continue;
+      }
+      const periode = dateDebut === dateFin ? `le ${dateDebut}` : `du ${dateDebut} au ${dateFin}`;
+      operations.push({
+        type: intention.type,
+        libelle: `Déclarer ${intention.typeAbsence} pour « ${rMembre.candidat.libelle} » ${periode}`,
+        champs: { membreId: rMembre.candidat.id, typeAbsence: intention.typeAbsence, dateDebut, dateFin },
+        certitude: rMembre.certitude,
+      });
+      continue;
+    }
+
+    if (intention.type === "affecter_membre") {
+      const rMembre = resoudreMention(intention.membreMentionne, contexte.membres);
+      if (rMembre.etat === "ambigu") {
+        questions.push({
+          question: `Quel membre « ${intention.membreMentionne} » ?`,
+          candidats: rMembre.candidats,
+          mention: intention.membreMentionne,
+        });
+        continue;
+      }
+      if (rMembre.etat === "introuvable") {
+        incompris.push(`membre « ${intention.membreMentionne} » introuvable`);
+        continue;
+      }
+      const rAffaire = resoudreMention(intention.affaireMentionnee, contexte.affaires);
+      if (rAffaire.etat === "ambigu") {
+        questions.push({
+          question: `Quelle affaire « ${intention.affaireMentionnee} » ?`,
+          candidats: rAffaire.candidats,
+          mention: intention.affaireMentionnee,
+        });
+        continue;
+      }
+      if (rAffaire.etat === "introuvable") {
+        incompris.push(`affaire « ${intention.affaireMentionnee} » introuvable`);
+        continue;
+      }
+      const dateDebut = interpreterDate(intention.dateDebutMentionnee, aujourdhui);
+      if (dateDebut === null) {
+        incompris.push(
+          `affectation de « ${rMembre.candidat.libelle} » : date « ${intention.dateDebutMentionnee} » non comprise`,
+        );
+        continue;
+      }
+      const dateFin = intention.dateFinMentionnee
+        ? interpreterDate(intention.dateFinMentionnee, aujourdhui)
+        : dateDebut;
+      if (dateFin === null) {
+        incompris.push(
+          `affectation de « ${rMembre.candidat.libelle} » : date de fin « ${intention.dateFinMentionnee} » non comprise`,
+        );
+        continue;
+      }
+      if (dateFin < dateDebut) {
+        incompris.push(`affectation de « ${rMembre.candidat.libelle} » : la date de fin précède la date de début`);
+        continue;
+      }
+      const periode = dateDebut === dateFin ? `le ${dateDebut}` : `du ${dateDebut} au ${dateFin}`;
+      operations.push({
+        type: intention.type,
+        libelle:
+          `Affecter « ${rMembre.candidat.libelle} » sur « ${rAffaire.candidat.libelle} » ${periode} ` +
+          `(${HEURES_PAR_JOUR_DEFAUT} h/jour)`,
+        champs: {
+          membreId: rMembre.candidat.id,
+          affaireId: rAffaire.candidat.id,
+          dateDebut,
+          dateFin,
+          heuresParJour: String(HEURES_PAR_JOUR_DEFAUT),
+        },
+        certitude: rMembre.certitude === "exacte" && rAffaire.certitude === "exacte" ? "exacte" : "partielle",
       });
       continue;
     }
@@ -321,6 +442,49 @@ async function executerOperation(
         label: op.champs["libelle"]!,
       });
       return;
+    }
+    case "declarer_absence": {
+      await tx.insert(absencesTable).values({
+        tenantId,
+        membreId: op.champs["membreId"]!,
+        type: op.champs["typeAbsence"]!,
+        dateDebut: op.champs["dateDebut"]!,
+        dateFin: op.champs["dateFin"]!,
+      });
+      return;
+    }
+    case "affecter_membre": {
+      const affaireId = op.champs["affaireId"]!;
+      const membreId = op.champs["membreId"]!;
+      // affectations n'a AUCUNE contrainte FK sur affaire_id / membre_id
+      // (contrairement à absences.membre_id) : une cible disparue entre la
+      // construction du plan et son exécution (jusqu'à une heure plus tard,
+      // DUREE_VALIDITE_PLAN_MS) s'insérerait sans erreur si on ne vérifie pas
+      // ici. Même garantie que maj_statut_affaire ci-dessus.
+      const [affaire] = await tx.select({ id: affairesTable.id }).from(affairesTable).where(eq(affairesTable.id, affaireId));
+      if (!affaire) throw new Error(`Affaire ${affaireId} introuvable`);
+      const [membre] = await tx.select({ id: teamMembersTable.id }).from(teamMembersTable).where(eq(teamMembersTable.id, membreId));
+      if (!membre) throw new Error(`Membre ${membreId} introuvable`);
+
+      await tx.insert(affectationsTable).values({
+        tenantId,
+        affaireId,
+        membreId,
+        dateDebut: op.champs["dateDebut"]!,
+        dateFin: op.champs["dateFin"]!,
+        heuresParJour: op.champs["heuresParJour"]!,
+        joursOuvresSeulement: true,
+      });
+      return;
+    }
+    default: {
+      // Garde de compilation : un type d'intention ajouté à l'union sans son
+      // `case` ici ne doit PAS silencieusement no-oper — c'était, jusqu'à ce
+      // lot, le seul switch de ce fichier sans protection : cette fonction
+      // retourne `void`, donc `noImplicitReturns` ne voit rien à reprocher à
+      // un `case` manquant. `never` force l'échec de build à la place.
+      const _exhaustif: never = op.type;
+      throw new Error(`Type d'opération non géré : ${String(_exhaustif)}`);
     }
   }
 }

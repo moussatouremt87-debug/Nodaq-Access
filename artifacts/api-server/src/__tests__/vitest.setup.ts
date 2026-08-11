@@ -153,7 +153,68 @@ globalThis.fetch = async function patchedFetch(
                   }
                 : userText.includes("voix-test-date")
                   ? { intentions: [{ type: "creer_echeance", libelle: "Acompte", dateMentionnee: "le 27 août" }], nonCompris: [] }
-                  : { intentions: [{ type: "creer_affaire", label: "Carrelage Dupont", clientMentionne: "M. Dupont" }], nonCompris: [] };
+                  // ── Équipe / planning ──────────────────────────────────────
+                  : userText.includes("voix-test-absence-ambigu")
+                    ? {
+                        intentions: [{
+                          type: "declarer_absence",
+                          membreMentionne: "Marchand",
+                          typeAbsence: "Congés",
+                          dateDebutMentionnee: "lundi",
+                          dateFinMentionnee: "vendredi",
+                        }],
+                        nonCompris: [],
+                      }
+                    : userText.includes("voix-test-absence-dates-inversees")
+                      ? {
+                          intentions: [{
+                            type: "declarer_absence",
+                            membreMentionne: "Sophie",
+                            typeAbsence: "Maladie",
+                            dateDebutMentionnee: "le 27 août",
+                            dateFinMentionnee: "le 20 août",
+                          }],
+                          nonCompris: [],
+                        }
+                      : userText.includes("voix-test-absence")
+                        ? {
+                            intentions: [{
+                              type: "declarer_absence",
+                              membreMentionne: "Sophie",
+                              typeAbsence: "Maladie",
+                              dateDebutMentionnee: "demain",
+                            }],
+                            nonCompris: [],
+                          }
+                        : userText.includes("voix-test-affecter-introuvable")
+                          ? {
+                              intentions: [{
+                                type: "affecter_membre",
+                                membreMentionne: "Fantome Introuvable Xyz",
+                                affaireMentionnee: "Dupont",
+                                dateDebutMentionnee: "lundi",
+                              }],
+                              nonCompris: [],
+                            }
+                          : userText.includes("voix-test-affecter")
+                            ? {
+                                // Dates EXPLICITES, pas des jours de semaine : le
+                                // prochain « vendredi » peut tomber avant le
+                                // prochain « lundi » selon le jour d'exécution du
+                                // test (chaque mention est interprétée
+                                // indépendamment par `interpreterDate`), ce qui
+                                // rendrait ce cas nominal faussement incohérent un
+                                // jour sur sept.
+                                intentions: [{
+                                  type: "affecter_membre",
+                                  membreMentionne: "Sophie",
+                                  affaireMentionnee: "Dupont",
+                                  dateDebutMentionnee: "le 24 août",
+                                  dateFinMentionnee: "le 28 août",
+                                }],
+                                nonCompris: [],
+                              }
+                            : { intentions: [{ type: "creer_affaire", label: "Carrelage Dupont", clientMentionne: "M. Dupont" }], nonCompris: [] };
 
       return new Response(
         JSON.stringify({
@@ -202,6 +263,86 @@ globalThis.fetch = async function patchedFetch(
         status: 200,
         headers: { "Content-Type": "application/json" },
       });
+    }
+
+    // declare_absence via chat: two real rounds, like a real agentic loop —
+    // round 1 asks for list_team_members (executed for real, server-side,
+    // against the real DB), round 2 reads the REAL result out of the tool
+    // message the server appended, and calls declare_absence with the first
+    // member's real id. Proves the whole chain, not just a hardcoded id.
+    //
+    // `dejaPropose` stops this branch from firing a THIRD time: `runAgent`
+    // always calls the model again after executing a tool, including after
+    // a write proposal (it isn't a terminal state, just another tool
+    // result). Without this guard, round 3 would see `hasPendingToolResult`
+    // still true, but the LAST tool message would be the "PROPOSÉE" text
+    // instead of the member list — `JSON.parse` would fail, `membreId`
+    // would silently become `""`, and a SECOND declare_absence operation
+    // (this one broken) would land in the same plan.
+    const dejaPropose = msgs.some(
+      (m) => m.role === "tool" && typeof m.content === "string" && m.content.includes("PROPOSÉE"),
+    );
+    if (userText.includes("agent-declare-absence") && !dejaPropose) {
+      if (!hasPendingToolResult) {
+        return new Response(
+          JSON.stringify({
+            id: "chatcmpl-vitest-agent-absence-1",
+            object: "chat.completion",
+            model: "test/fake-chat-model",
+            choices: [{
+              index: 0,
+              message: {
+                role: "assistant",
+                content: null,
+                tool_calls: [{
+                  id: "call_vitest_list_membres",
+                  type: "function",
+                  function: { name: "list_team_members", arguments: "{}" },
+                }],
+              },
+              finish_reason: "tool_calls",
+            }],
+            usage: { prompt_tokens: 12, completion_tokens: 8, total_tokens: 20 },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      const dernierOutil = [...msgs].reverse().find((m) => m.role === "tool");
+      const membres = (() => {
+        try {
+          return JSON.parse(String(dernierOutil?.content ?? "[]")) as Array<{ id: string }>;
+        } catch {
+          return [];
+        }
+      })();
+      const membreId = membres[0]?.id ?? "";
+
+      return new Response(
+        JSON.stringify({
+          id: "chatcmpl-vitest-agent-absence-2",
+          object: "chat.completion",
+          model: "test/fake-chat-model",
+          choices: [{
+            index: 0,
+            message: {
+              role: "assistant",
+              content: null,
+              tool_calls: [{
+                id: "call_vitest_declare_absence",
+                type: "function",
+                function: {
+                  name: "declare_absence",
+                  arguments: JSON.stringify({ membreId, type: "Maladie", dateDebut: "2026-08-20" }),
+                },
+              }],
+            },
+            finish_reason: "tool_calls",
+          }],
+          usage: { prompt_tokens: 12, completion_tokens: 8, total_tokens: 20 },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
     }
 
     // Default: plain text response — no tool calls, agent exits cleanly.

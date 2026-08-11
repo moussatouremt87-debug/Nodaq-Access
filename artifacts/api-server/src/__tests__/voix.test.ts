@@ -276,8 +276,30 @@ describe("g — l'agent PROPOSE, il n'exécute pas", () => {
     const { OUTILS_ECRITURE } = await import("../lib/mistralAgent.js");
     for (const outil of ["create_affaire", "create_prospect", "create_echeance",
                          "create_classeur_entry", "log_activity",
-                         "update_affaire_status", "update_prospect"]) {
+                         "update_affaire_status", "update_prospect",
+                         "declare_absence", "affect_member"]) {
       expect(OUTILS_ECRITURE as readonly string[]).toContain(outil);
+    }
+  });
+
+  test("chaque outil d'écriture produit une opération de SON PROPRE type — pas un consigner_activite fourre-tout", async () => {
+    // La garde ci-dessus ne vérifie que la présence dans la liste blanche :
+    // elle serait verte même si `proposerEcriture` n'avait pas de `case` pour
+    // un outil (il retomberait alors, silencieusement, sur le type générique
+    // `consigner_activite`, avec un libellé qui ne dit rien de ce qui a été
+    // demandé). Ce test attrape précisément ça.
+    const { proposerEcriture } = await import("../lib/mistralAgent.js");
+    const attendus: Record<string, string> = {
+      create_affaire: "creer_affaire",
+      update_affaire_status: "maj_statut_affaire",
+      create_prospect: "creer_prospect",
+      create_echeance: "creer_echeance",
+      create_classeur_entry: "creer_entree_classeur",
+      declare_absence: "declarer_absence",
+      affect_member: "affecter_membre",
+    };
+    for (const [outil, typeAttendu] of Object.entries(attendus)) {
+      expect(proposerEcriture(outil, {}).type, `outil ${outil}`).toBe(typeAttendu);
     }
   });
 });

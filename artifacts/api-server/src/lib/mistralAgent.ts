@@ -272,6 +272,52 @@ const TOOLS: LlmTool[] = [
   {
     type: "function",
     function: {
+      name: "list_team_members",
+      description: "Liste les membres de l'équipe (nom, rôle, disponibilité).",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "declare_absence",
+      description:
+        "Déclare l'absence d'un membre de l'équipe (congés, maladie, RTT, autre). " +
+        "Obtenir membreId via list_team_members d'abord.",
+      parameters: {
+        type: "object",
+        properties: {
+          membreId: { type: "string", description: "UUID du membre (via list_team_members)." },
+          type: { type: "string", enum: ["Congés", "Maladie", "RTT", "Autre"] },
+          dateDebut: { type: "string", description: "Date de début, format YYYY-MM-DD." },
+          dateFin: { type: "string", description: "Date de fin, YYYY-MM-DD (optionnel, défaut = dateDebut)." },
+        },
+        required: ["membreId", "type", "dateDebut"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "affect_member",
+      description:
+        "Affecte un membre de l'équipe à une affaire pour une période PRÉVUE (jamais un pointage réel). " +
+        "Obtenir membreId via list_team_members et affaireId via list_affaires.",
+      parameters: {
+        type: "object",
+        properties: {
+          membreId: { type: "string", description: "UUID du membre (via list_team_members)." },
+          affaireId: { type: "string", description: "UUID de l'affaire (via list_affaires)." },
+          dateDebut: { type: "string", description: "Date de début, format YYYY-MM-DD." },
+          dateFin: { type: "string", description: "Date de fin, YYYY-MM-DD (optionnel, défaut = dateDebut)." },
+        },
+        required: ["membreId", "affaireId", "dateDebut"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "get_indicateur",
       description: [
         "Calcule un indicateur économique de l'entreprise sur une période donnée.",
@@ -492,6 +538,8 @@ export const OUTILS_ECRITURE = [
   "create_echeance",
   "create_classeur_entry",
   "log_activity",
+  "declare_absence",
+  "affect_member",
 ] as const;
 
 /**
@@ -503,7 +551,7 @@ export const OUTILS_ECRITURE = [
  * chiffre affiché à l'utilisateur vient d'un calcul déterministe, jamais du
  * modèle (règle 3 du dépôt).
  */
-function proposerEcriture(
+export function proposerEcriture(
   name: string,
   args: Record<string, unknown>,
 ): OperationPlanifiee {
@@ -553,6 +601,37 @@ function proposerEcriture(
         type: "creer_entree_classeur",
         libelle: `Classer « ${texte("name") ?? "sans nom"} »`,
         champs: { titre: texte("name") ?? "Sans nom", categorie: texte("category") },
+        certitude: "aucune_resolution",
+      };
+    case "declare_absence":
+      // L'id vient du modèle (obtenu via list_team_members dans ce même tour
+      // agentique — c'est de l'usage d'outil légitime, pas une invention),
+      // pas d'une mention rapprochée : `executerOperation` reste le filet de
+      // sécurité (contrainte FK sur absences.membre_id).
+      return {
+        type: "declarer_absence",
+        libelle: `Déclarer une absence (${texte("type") ?? "?"})`,
+        champs: {
+          membreId: texte("membreId") ?? "",
+          typeAbsence: texte("type") ?? "",
+          dateDebut: texte("dateDebut"),
+          dateFin: texte("dateFin") ?? texte("dateDebut"),
+        },
+        certitude: "aucune_resolution",
+      };
+    case "affect_member":
+      // Même remarque : ids fournis par le modèle. `affectations` n'a pas de
+      // FK — c'est `executerOperation` qui vérifie l'existence avant d'écrire.
+      return {
+        type: "affecter_membre",
+        libelle: "Affecter un membre à une affaire",
+        champs: {
+          membreId: texte("membreId") ?? "",
+          affaireId: texte("affaireId") ?? "",
+          dateDebut: texte("dateDebut"),
+          dateFin: texte("dateFin") ?? texte("dateDebut"),
+          heuresParJour: "7",
+        },
         certitude: "aucune_resolution",
       };
     default:
@@ -620,6 +699,13 @@ async function executeTool(
         if (args.stage) q = q.where(eq(prospectsTable.stage, args.stage as string));
         return q.orderBy(desc(prospectsTable.createdAt)).limit(limit);
       });
+      return { result: JSON.stringify(rows) };
+    }
+
+    case "list_team_members": {
+      const rows = await withTenant(tenantId, (tx) =>
+        tx.select().from(teamMembersTable).orderBy(asc(teamMembersTable.name)),
+      );
       return { result: JSON.stringify(rows) };
     }
 
