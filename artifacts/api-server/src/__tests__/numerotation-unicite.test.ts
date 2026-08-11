@@ -116,27 +116,39 @@ describe("numérotation — l'unicité vient du moteur", () => {
     expect(echec).toBeNull();
   });
 
-  test("l'index unique des avoirs est TOTAL, pas partiel", async () => {
-    const { rows } = await adminPool.query(
-      "SELECT indexdef FROM pg_indexes WHERE indexname = 'avoirs_tenant_numero_unique'",
-    );
-    const definition = rows[0]?.indexdef as string | undefined;
+  // ── LA DIFFÉRENCE AVEC LES FACTURES EST DÉLIBÉRÉE ─────────────────────────
+  //
+  // Une facture existe d'abord en BROUILLON, `number = ''`, et n'obtient son
+  // numéro légal qu'à l'émission : d'où la clause partielle en 024.
+  //
+  // Un avoir n'a pas de brouillon — une seule insertion, toujours numérotée.
+  // Un index total est donc correct ET plus strict. Si quelqu'un ajoutait un
+  // jour un brouillon d'avoir, ce test suivant tomberait, et c'est exactement
+  // ce qu'on veut : la question se reposerait au lieu d'être tranchée en
+  // silence par une clause recopiée.
+  //
+  // Le test qui suit porte sur la CONSÉQUENCE (deux avoirs à numéro vide sont
+  // refusés) et non sur la syntaxe de l'index : il survit à un renommage de
+  // l'index, à un passage à une contrainte UNIQUE, ou à toute autre façon
+  // d'écrire la même règle — et il ne dirait rien de faux si l'index existait
+  // sans être opérant.
+  test("deux avoirs à numéro vide sont refusés — l'index des avoirs est TOTAL, pas partiel", async () => {
+    const erreur = await dansUneTransactionAnnulee(async (_inserer, insererAvoir) => {
+      await insererAvoir("av-vide-1", "");
+      try {
+        await insererAvoir("av-vide-2", "");
+        return null;
+      } catch (e) {
+        return e as { code?: string; constraint?: string };
+      }
+    });
 
-    expect(definition).toBeDefined();
-    expect(definition).toMatch(/CREATE UNIQUE INDEX/);
-    expect(definition).toMatch(/\(tenant_id, numero\)/);
-
-    // ── LA DIFFÉRENCE AVEC LES FACTURES EST DÉLIBÉRÉE ───────────────────────
-    //
-    // Une facture existe d'abord en BROUILLON, `number = ''`, et n'obtient son
-    // numéro légal qu'à l'émission : d'où la clause partielle en 024.
-    //
-    // Un avoir n'a pas de brouillon — une seule insertion, toujours numérotée.
-    // Un index total est donc correct ET plus strict. Si quelqu'un ajoutait un
-    // jour un brouillon d'avoir, ce test tomberait, et c'est exactement ce
-    // qu'on veut : la question se reposerait au lieu d'être tranchée en
-    // silence par une clause recopiée.
-    expect(definition).not.toMatch(/WHERE/);
+    // `null` voudrait dire que le doublon à numéro vide est passé : la
+    // situation que l'index total refuse délibérément, à la différence des
+    // factures, ne serait plus refusée.
+    expect(erreur).not.toBeNull();
+    expect(erreur?.code).toBe("23505");
+    expect(erreur?.constraint).toBe("avoirs_tenant_numero_unique");
   });
 
   test("deux avoirs de même numéro sont refusés par le moteur", async () => {

@@ -34,3 +34,4 @@ export * from "./paiements";
 export * from "./affectations";
 export * from "./prospection_contacts";
 export * from "./catalogue_alias";
+export * from "./incidents_facturation";

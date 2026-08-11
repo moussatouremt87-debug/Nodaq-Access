@@ -121,7 +121,9 @@ const BUSINESS_TABLES = [
   "contact_bases", "oppositions", "contacts_prospection",
   "absences", "activity", "affaires", "analytics_tool_logs", "archived_pdfs", "chat_messages", "classeur_documents",
   "connectors", "contrats", "cr_entries", "devis", "echeances",
-  "avoirs", "facture_sequences", "factures",
+  "avoirs", "facture_sequences",
+  // incidents_facturation référence factures (facture_id) : avant elle.
+  "incidents_facturation", "factures",
   "pending_actions", "prospects", "settings", "team_members",
   "clients",
 ];
@@ -200,6 +202,18 @@ export function tableInsertSql(table: string, tenantId: string, memberAId?: stri
     affectations:     [`INSERT INTO affectations (id, tenant_id, affaire_id, membre_id, date_debut, date_fin, heures_par_jour) VALUES ($1, $2::uuid, $3, $3, CURRENT_DATE, CURRENT_DATE, 7) ON CONFLICT DO NOTHING`, [id, tenantId, crypto.randomUUID()]],
     tenant_secrets:   [`INSERT INTO tenant_secrets (tenant_id, cle, valeur_chiffree) VALUES ($2::uuid, 'rls.test.' || $1, 'v1:1:aaaa:bbbb:cccc') ON CONFLICT DO NOTHING`, [id, tenantId]],
     avoirs:           [`INSERT INTO avoirs (id, tenant_id, numero, facture_ref_id, issued_date, montant_ht_cents, motif) VALUES ($1, $2::uuid, 'RLS-AV-001', $3, CURRENT_DATE, 1000, 'rls-test') ON CONFLICT DO NOTHING`, [id, tenantId, crypto.randomUUID()]],
+    // incidents_facturation : facture_id référence factures(id) — une vraie
+    // facture est créée par le même CTE, plutôt que d'inventer un id qui
+    // violerait la FK. Numéro distinct de celui de l'entrée `factures`
+    // ci-dessus pour ne pas se heurter à l'index unique partiel de 024.
+    incidents_facturation: [`WITH f AS (
+        INSERT INTO factures (id, tenant_id, number, customer_name, amount_cents, due_date, issued_date)
+        VALUES ($3, $2::uuid, 'RLS-INC-' || $1, 'RLS Client', 1000, CURRENT_DATE, CURRENT_DATE)
+        ON CONFLICT DO NOTHING RETURNING id
+      )
+      INSERT INTO incidents_facturation (id, tenant_id, type, facture_id, charge_utile)
+      SELECT $1, $2::uuid, 'AVOIR_COMPENSATION_ECHOUEE', f.id, '{}'::jsonb FROM f
+      ON CONFLICT DO NOTHING`, [id, tenantId, crypto.randomUUID()]],
     // facture_sequences: composite PK (tenant_id, year) — NO id column.
     // One row per tenant per year, so both test tenants can hold year 2020.
     facture_sequences: [`INSERT INTO facture_sequences (tenant_id, year) VALUES ($1::uuid, 2020) ON CONFLICT DO NOTHING`, [tenantId]],
