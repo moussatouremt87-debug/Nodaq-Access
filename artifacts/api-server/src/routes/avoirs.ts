@@ -28,8 +28,20 @@ import {
   type FactureLine,
   type SellerInfo,
 } from "../lib/pdf-generation.js";
+import { enregistrerIncidentAvoirCompensationEchouee } from "../lib/incidents-facturation.js";
 
 const router: IRouter = Router();
+
+/** SQLSTATE d'une violation Postgres à travers l'enveloppe Drizzle, ou `null`. */
+function sqlstateDe(err: unknown): string | null {
+  let courant: unknown = err;
+  for (let i = 0; courant !== null && courant !== undefined && i < 5; i++) {
+    const code = (courant as { code?: string }).code;
+    if (typeof code === "string") return code;
+    courant = (courant as { cause?: unknown }).cause;
+  }
+  return null;
+}
 
 const CreateAvoirBody = z.object({
   factureRefId: z.string().min(1, "ID de la facture obligatoire"),
@@ -232,16 +244,32 @@ router.post("/avoirs", async (req, res): Promise<void> => {
     factureRefNumero: facture.number,
   };
 
-  /** Compensate TX1 by restoring the invoice to its previous state. */
-  async function compensateTx1(): Promise<void> {
+  /**
+   * Compense TX1 en restaurant la facture. Si la compensation ÉCHOUE À SON
+   * TOUR, la facture reste ANNULEE_PAR_AVOIR (ou son résiduel diminué) sans
+   * qu'aucun avoir n'existe — une trace DURABLE est posée, parce qu'une ligne
+   * de journal dans un conteneur que personne ne lit ne protège de rien (voir
+   * lib/incidents-facturation.ts).
+   */
+  async function compensateTx1(erreurDeclenchante: unknown): Promise<void> {
     try {
       await withTenant(tenantId, tx =>
         tx.update(facturesTable)
           .set({ residualCents: oldResidual, avoirId: null, statut: "EMISE" })
           .where(eq(facturesTable.id, d.factureRefId)),
       );
-    } catch (e) {
-      console.error("[avoirs] compensation failed — manual review required for invoice", d.factureRefId, e);
+    } catch (erreurCompensation) {
+      console.error("[avoirs] compensation failed — manual review required for invoice", d.factureRefId);
+      await enregistrerIncidentAvoirCompensationEchouee(tenantId, {
+        factureId: d.factureRefId,
+        factureNumero: facture.number,
+        residuelARestaurerCents: oldResidual,
+        statutPrecedent: facture.statut,
+        numeroAvoirBrule: numero,
+        motif: d.motif,
+        sqlstateDeclenchant: sqlstateDe(erreurDeclenchante),
+        sqlstateCompensation: sqlstateDe(erreurCompensation),
+      });
     }
   }
 
@@ -254,7 +282,7 @@ router.post("/avoirs", async (req, res): Promise<void> => {
     pdfSha256 = pdf.sha256;
   } catch (err) {
     console.error("[avoirs] PDF generation error — compensating TX1:", err);
-    await compensateTx1();
+    await compensateTx1(err);
     res.status(500).json({ error: "Génération du PDF impossible. L'avoir n'a pas été créé." });
     return;
   }
@@ -304,7 +332,7 @@ router.post("/avoirs", async (req, res): Promise<void> => {
   } catch (err) {
     console.error("[avoirs] TX2 insert error — compensating:", err);
     // No file on disk to delete — bytes were only in memory.
-    await compensateTx1();
+    await compensateTx1(err);
     res.status(500).json({ error: "Erreur lors de l'enregistrement de l'avoir. Réessayez." });
   }
 });

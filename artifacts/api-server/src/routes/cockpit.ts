@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { withTenant, affairesTable, contratsTable, facturesTable, prospectsTable, pendingActionsTable, activityTable } from "@workspace/db";
-import { sql, eq } from "drizzle-orm";
+import { withTenant, affairesTable, contratsTable, facturesTable, prospectsTable, pendingActionsTable, activityTable, incidentsFacturationTable } from "@workspace/db";
+import { sql, eq, isNull } from "drizzle-orm";
 import {
   toDateString,
   debutExercice,
@@ -17,6 +17,11 @@ function execRows<T>(result: unknown): T[] {
 
 router.get("/cockpit/kpis", async (req, res): Promise<void> => {
   const tenantId = req.tenantId!;
+  // Un incident de facturation révèle une incohérence de FACTURATION —
+  // exactement le genre de sujet réservé au propriétaire ailleurs dans ce
+  // fichier (cf. /cockpit/objectifs). Un MEMBER ne le voit pas : `null`, pas
+  // `0`, pour ne jamais laisser croire qu'il n'y a rien à vérifier.
+  const estOwner = req.session?.role === "OWNER";
 
   const data = await withTenant(tenantId, async (tx) => {
     const [affairesEnCours] = await tx
@@ -62,6 +67,17 @@ router.get("/cockpit/kpis", async (req, res): Promise<void> => {
       .select({ count: sql<number>`count(*)::int` })
       .from(pendingActionsTable)
       .where(eq(pendingActionsTable.status, "EN_ATTENTE"));
+
+    // Distinct du compteur ci-dessus : un incident de facturation n'est PAS
+    // une action à valider (CLAUDE.md §4) — le mélanger fausserait ce que le
+    // cockpit annonce pouvoir résoudre d'un clic. Requête posée seulement
+    // pour l'OWNER : inutile de l'exécuter pour un rôle qui ne la verra pas.
+    const incidentsFacturationCount = estOwner
+      ? (await tx
+          .select({ count: sql<number>`count(*)::int` })
+          .from(incidentsFacturationTable)
+          .where(isNull(incidentsFacturationTable.resoluLe)))[0]
+      : undefined;
 
     // Série mensuelle sur six mois — même définition du CA que partout
     // ailleurs. Les avoirs entrent comme des lignes négatives dans le mois où
@@ -130,6 +146,7 @@ router.get("/cockpit/kpis", async (req, res): Promise<void> => {
       prospectsPipeline,
       contratsActifs,
       pendingCount,
+      incidentsFacturationCount,
       monthlySeries: monthlySeries.rows ?? [],
       caYtdRow,
       caPrevYearRow,
@@ -156,6 +173,9 @@ router.get("/cockpit/kpis", async (req, res): Promise<void> => {
     prospectsPipeline: data.prospectsPipeline?.count ?? 0,
     contratsActifs: data.contratsActifs?.count ?? 0,
     pendingActionsCount: data.pendingCount?.count ?? 0,
+    // `null` pour un non-OWNER — jamais `0` : voir le commentaire au-dessus
+    // de `estOwner`.
+    incidentsFacturationCount: data.incidentsFacturationCount?.count ?? null,
     treasuryBalanceCents: null,
     monthlySeries: data.monthlySeries,
     ytd: {
