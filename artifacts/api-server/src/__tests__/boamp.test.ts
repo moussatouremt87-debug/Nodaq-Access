@@ -157,8 +157,9 @@ describe("avec source, zone et métier mappé", () => {
     };
     await request(appAvec(t, a.tenantId)).get("/appels-offres").expect(200);
 
-    expect(urlAppelee).toContain("q=");
-    expect(decodeURIComponent(urlAppelee)).toMatch(/bâtiment|travaux|construction/i);
+    // search(objet, "terme") DANS where= — pas un paramètre q= séparé,
+    // confirmé ignoré par cette API lors d'un accès réel.
+    expect(decodeURIComponent(urlAppelee)).toContain('search(objet,"bâtiment")');
   });
 
   test("une réponse de forme inconnue est REFUSÉE, jamais devinée", async () => {

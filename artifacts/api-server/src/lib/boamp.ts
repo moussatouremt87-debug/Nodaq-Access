@@ -137,8 +137,11 @@ function formeRecue(brut: unknown): string {
  * Le jeu de données BOAMP n'expose AUCUN champ CPV interrogeable — confirmé
  * en lisant son schéma réel (`descripteur_code`/`descripteur_libelle` sont un
  * thésaurus français, pas la nomenclature CPV). `motsCles` construit donc une
- * recherche plein texte (`q=`), le seul mécanisme de pertinence que cette
- * source permette honnêtement.
+ * recherche plein texte, le seul mécanisme de pertinence que cette source
+ * permette honnêtement — via `search(objet, "terme")` DANS `where=`, pas via
+ * un paramètre `q=` séparé : celui-ci s'est révélé purement ignoré par cette
+ * API en le confrontant à un vrai accès (`total_count` identique avec et
+ * sans lui).
  *
  * Ne lève JAMAIS pour dire « rien trouvé ». Lève quand la configuration
  * manque, quand le service répond mal, ou quand la forme est inconnue.
@@ -150,13 +153,18 @@ export async function chercherMarches(
 ): Promise<MarchePublic[]> {
   const config = configBoamp();
   const dep = requete.departement ?? requete.codePostal?.slice(0, 2) ?? "";
-  let url = `${config.baseUrl}/records?where=code_departement%3D%22${encodeURIComponent(dep)}%22`;
+  // Le paramètre `q=` séparé est IGNORÉ par cette API — confronté en direct :
+  // avec ou sans lui, `total_count` ne bouge pas d'un seul enregistrement. La
+  // recherche plein texte réelle passe par `search(champ, "terme")` À
+  // L'INTÉRIEUR de `where=`, combiné au filtre de département par un AND.
+  let where = `code_departement%3D%22${encodeURIComponent(dep)}%22`;
   if (motsCles && motsCles.length > 0) {
-    // ODSQL : plusieurs termes joints par OR, chacun entre guillemets pour
-    // une recherche d'expression plutôt que mot à mot.
-    const q = motsCles.map((m) => `"${m}"`).join(" OR ");
-    url += `&q=${encodeURIComponent(q)}`;
+    const clause = motsCles
+      .map((m) => `search(objet%2C%22${encodeURIComponent(m)}%22)`)
+      .join("%20OR%20");
+    where += `%20AND%20(${clause})`;
   }
+  const url = `${config.baseUrl}/records?where=${where}`;
 
   let reponse: { status: number; texte: string };
   try {
