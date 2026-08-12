@@ -84,16 +84,19 @@ export function configDecp(): ConfigDecp {
 
 // ── La réponse DECP ──────────────────────────────────────────────────────────
 
+// `.nullish()`, pas `.optional()` — même correction que dans boamp.ts, même
+// famille d'API (OpenDataSoft) : un champ absent y vaut `null`, pas une clé
+// omise, et `.optional()` seul rejetterait l'enregistrement entier.
 const Attribution = z.object({
-  siretetablissement: z.string().min(1).optional(),
-  denominationunitelegale: z.string().min(1).optional(),
-  denominationsocialeetablissement: z.string().min(1).optional(),
-  codecpv: z.string().optional(),
-  lieuexecutionnom: z.string().optional(),
-  codedepartementexecution: z.string().optional(),
-  montant: z.number().optional(),
-  datenotification: z.string().optional(),
-  objetmarche: z.string().optional(),
+  siretetablissement: z.string().min(1).nullish(),
+  denominationunitelegale: z.string().min(1).nullish(),
+  denominationsocialeetablissement: z.string().min(1).nullish(),
+  codecpv: z.string().nullish(),
+  lieuexecutionnom: z.string().nullish(),
+  codedepartementexecution: z.string().nullish(),
+  montant: z.number().nullish(),
+  datenotification: z.string().nullish(),
+  objetmarche: z.string().nullish(),
 });
 
 const ReponseDecp = z.union([

@@ -74,16 +74,21 @@ export function configRnic(): ConfigRnic {
 
 // ── La réponse RNIC ──────────────────────────────────────────────────────────
 
+// `.nullish()`, pas `.optional()` — même correction que boamp.ts/decp.ts,
+// appliquée par précaution avant même un premier accès réel : les deux
+// autres sources OpenDataSoft de ce lot rendaient `null` pour un champ
+// absent, jamais une clé omise, et `.optional()` seul rejetait la ligne
+// entière.
 const Coproprietaire = z.object({
-  commune: z.string().optional(),
-  code_postal: z.string().optional(),
-  nom_syndic: z.string().min(1).optional(),
-  syndic_nom: z.string().min(1).optional(),
-  denomination_syndic: z.string().min(1).optional(),
+  commune: z.string().nullish(),
+  code_postal: z.string().nullish(),
+  nom_syndic: z.string().min(1).nullish(),
+  syndic_nom: z.string().min(1).nullish(),
+  denomination_syndic: z.string().min(1).nullish(),
   /** Marqueurs candidats — noms non confirmés. */
-  type_syndic: z.string().optional(),
-  syndic_type: z.string().optional(),
-  nature_syndic: z.string().optional(),
+  type_syndic: z.string().nullish(),
+  syndic_type: z.string().nullish(),
+  nature_syndic: z.string().nullish(),
 });
 
 const ReponseRnic = z.union([

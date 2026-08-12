@@ -97,20 +97,24 @@ export function configPermis(): ConfigPermis {
  * ni clé ni compte au moment de l'écriture. Ce qui ne correspond à aucune est
  * REFUSÉ, jamais deviné.
  */
+// `.nullish()`, pas `.optional()` : les trois autres sources de ce lot
+// (BOAMP, DECP, RNIC — même famille OpenDataSoft) rendent `null` pour un
+// champ absent, jamais une clé omise, et un accès réel à celle-ci n'a pas pu
+// être confronté ce soir. Même précaution ici par cohérence.
 const Permis = z.object({
-  numero: z.string().min(1).optional(),
-  nature: z.string().optional(),
-  demandeur_nom: z.string().min(1).optional(),
-  nom_demandeur: z.string().min(1).optional(),
-  raison_sociale: z.string().min(1).optional(),
+  numero: z.string().min(1).nullish(),
+  nature: z.string().nullish(),
+  demandeur_nom: z.string().min(1).nullish(),
+  nom_demandeur: z.string().min(1).nullish(),
+  raison_sociale: z.string().min(1).nullish(),
   /** Marqueurs candidats pour la nature du demandeur — noms non confirmés. */
-  type_demandeur: z.string().optional(),
-  nature_demandeur: z.string().optional(),
-  demandeur_type: z.string().optional(),
-  adresse: z.string().optional(),
-  code_postal: z.string().optional(),
-  commune: z.string().optional(),
-  date_octroi: z.string().optional(),
+  type_demandeur: z.string().nullish(),
+  nature_demandeur: z.string().nullish(),
+  demandeur_type: z.string().nullish(),
+  adresse: z.string().nullish(),
+  code_postal: z.string().nullish(),
+  commune: z.string().nullish(),
+  date_octroi: z.string().nullish(),
 });
 
 const ReponsePermis = z.union([

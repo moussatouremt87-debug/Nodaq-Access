@@ -81,17 +81,23 @@ export function configBoamp(): ConfigBoamp {
 
 // ── La réponse du BOAMP ──────────────────────────────────────────────────────
 
+// `.nullish()`, pas `.optional()` : confronté à un vrai accès (boamp-datadila.
+// opendatasoft.com), un champ absent y vaut explicitement `null`, pas une clé
+// omise. `.optional()` n'accepte que `undefined` — chaque enregistrement où
+// `datelimitereponse` valait `null` (avis sans date limite) faisait échouer
+// TOUT le tableau, un exemple concret de la garde « on refuse plutôt que
+// deviner » qui s'est déclenchée en conditions réelles.
 const AvisMarche = z.object({
-  objet: z.string().min(1).optional(),
-  titre_marche: z.string().min(1).optional(),
-  nomacheteur: z.string().min(1).optional(),
-  denomination: z.string().min(1).optional(),
-  cpv: z.array(z.string()).optional(),
-  code_departement: z.array(z.string()).optional(),
-  adresse: z.string().optional(),
-  datelimitereponse: z.string().optional(),
-  procedure_libelle: z.string().optional(),
-  nature_libelle: z.string().optional(),
+  objet: z.string().min(1).nullish(),
+  titre_marche: z.string().min(1).nullish(),
+  nomacheteur: z.string().min(1).nullish(),
+  denomination: z.string().min(1).nullish(),
+  cpv: z.array(z.string()).nullish(),
+  code_departement: z.array(z.string()).nullish(),
+  adresse: z.string().nullish(),
+  datelimitereponse: z.string().nullish(),
+  procedure_libelle: z.string().nullish(),
+  nature_libelle: z.string().nullish(),
 });
 
 const ReponseBoamp = z.union([
