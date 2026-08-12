@@ -22,6 +22,7 @@ import {
   Building2,
   DatabaseZap,
   BarChart2,
+  Radar,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -55,6 +56,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: '/devis',     label: 'Devis',     icon: FileText,  testId: 'nav-devis' },
       { href: '/contrats',  label: 'Contrats',  icon: Repeat,    testId: 'nav-contrats' },
       { href: '/prospects', label: 'Prospects', icon: Users,     testId: 'nav-prospects' },
+      { href: '/prospection', label: 'Prospection', icon: Radar, testId: 'nav-prospection' },
     ],
   },
   {
