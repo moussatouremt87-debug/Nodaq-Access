@@ -5,6 +5,8 @@ import {
   ApprovePendingActionParams,
   RejectPendingActionParams,
 } from "@workspace/api-zod";
+import { executerPlan, TYPE_PLAN } from "../lib/plan-vocal.js";
+import { logger } from "../lib/logger.js";
 
 const router: IRouter = Router();
 
@@ -21,6 +23,58 @@ router.post("/pending-actions/:id/approve", async (req, res): Promise<void> => {
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const tenantId = req.tenantId!;
 
+  const [avant] = await withTenant(tenantId, (tx) =>
+    tx.select({ type: pendingActionsTable.type })
+      .from(pendingActionsTable)
+      .where(eq(pendingActionsTable.id, params.data.id)),
+  );
+  if (!avant) { res.status(404).json({ error: "Action not found" }); return; }
+
+  // Un plan vocal ne se flippe pas : il s'EXÉCUTE. C'est executerPlan, seul,
+  // qui écrit — /voix/executer et ce bouton doivent converger sur le même
+  // chemin, pas en dupliquer un second qui ne fait que changer un statut
+  // sans jamais écrire (c'était le bug : approuver depuis le cockpit ne
+  // produisait aucune des opérations proposées par l'agent de chat).
+  if (avant.type === TYPE_PLAN) {
+    let resultat;
+    try {
+      resultat = await executerPlan(tenantId, params.data.id);
+    } catch (err) {
+      logger.error(
+        { err: err instanceof Error ? err.message : "erreur" },
+        "[pending-actions] exécution impossible",
+      );
+      res.status(409).json({
+        error: "Une des opérations n'a pas pu être appliquée. Rien n'a été enregistré.",
+      });
+      return;
+    }
+
+    switch (resultat.kind) {
+      case "introuvable":
+        res.status(404).json({ error: "Action not found" });
+        return;
+      case "expire":
+        res.status(410).json({
+          error: "Ce plan a expiré. Redictez votre phrase — vos données ont pu changer entre-temps.",
+        });
+        return;
+      case "deja_applique":
+      case "ok": {
+        const [action] = await withTenant(tenantId, (tx) =>
+          tx.select().from(pendingActionsTable).where(eq(pendingActionsTable.id, params.data.id)),
+        );
+        res.json(action);
+        return;
+      }
+    }
+    return;
+  }
+
+  // Chemin conservé pour tout type de pending_action qui ne s'exécute pas via
+  // executerPlan — aucun n'existe aujourd'hui (TYPE_PLAN est le seul type
+  // jamais inséré dans pending_actions), gardé pour ne pas casser un futur
+  // type qui n'aurait besoin que d'un changement de statut.
   const action = await withTenant(tenantId, async (tx) => {
     const [action] = await tx
       .update(pendingActionsTable)

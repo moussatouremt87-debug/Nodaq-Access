@@ -94,6 +94,37 @@ export const IntentionConsignerActivite = z
   })
   .strict();
 
+/**
+ * Types d'absence que la voix peut demander. Même liste blanche que
+ * `AbsenceBody` dans `routes/equipe.ts` — un type ajouté d'un côté doit
+ * l'être des deux, sinon la voix pourrait proposer une absence que l'écran
+ * équipe refuserait d'enregistrer.
+ */
+export const TYPES_ABSENCE_DICTABLES = ["Congés", "Maladie", "RTT", "Autre"] as const;
+
+export const IntentionDeclarerAbsence = z
+  .object({
+    type: z.literal("declarer_absence"),
+    membreMentionne: Mention,
+    typeAbsence: z.enum(TYPES_ABSENCE_DICTABLES),
+    dateDebutMentionnee: Mention,
+    /** Absente ou nulle → absence d'un seul jour, date de fin = date de début. */
+    dateFinMentionnee: Mention.nullable().optional(),
+  })
+  .strict();
+
+export const IntentionAffecterMembre = z
+  .object({
+    type: z.literal("affecter_membre"),
+    membreMentionne: Mention,
+    affaireMentionnee: Mention,
+    dateDebutMentionnee: Mention,
+    dateFinMentionnee: Mention.nullable().optional(),
+    // Pas d'heures/jour ici : le modèle ne fixe aucun nombre (règle 3 du
+    // dépôt) — le serveur applique un défaut fixe à l'exécution.
+  })
+  .strict();
+
 export const Intention = z.discriminatedUnion("type", [
   IntentionCreerAffaire,
   IntentionCreerProspect,
@@ -101,6 +132,8 @@ export const Intention = z.discriminatedUnion("type", [
   IntentionCreerEcheance,
   IntentionCreerEntreeClasseur,
   IntentionConsignerActivite,
+  IntentionDeclarerAbsence,
+  IntentionAffecterMembre,
 ]);
 export type Intention = z.infer<typeof Intention>;
 
@@ -127,6 +160,8 @@ export const TYPES_INTENTION = [
   "creer_echeance",
   "creer_entree_classeur",
   "consigner_activite",
+  "declarer_absence",
+  "affecter_membre",
 ] as const;
 export type TypeIntention = (typeof TYPES_INTENTION)[number];
 

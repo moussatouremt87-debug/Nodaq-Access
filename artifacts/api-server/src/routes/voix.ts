@@ -15,7 +15,7 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { getConfig, chatCompletion, LlmConfigError } from "@nodaq/llm";
-import { SortieModele, TYPES_INTENTION, STATUTS_AFFAIRE_DICTABLES } from "@nodaq/shared";
+import { SortieModele, TYPES_INTENTION, STATUTS_AFFAIRE_DICTABLES, TYPES_ABSENCE_DICTABLES } from "@nodaq/shared";
 import {
   chargerContexte,
   construirePlan,
@@ -61,6 +61,7 @@ function consigne(): string {
     "",
     `Types d'intention disponibles : ${TYPES_INTENTION.join(", ")}.`,
     `Statuts d'affaire : ${STATUTS_AFFAIRE_DICTABLES.join(", ")}.`,
+    `Types d'absence : ${TYPES_ABSENCE_DICTABLES.join(", ")}.`,
     "",
     "Les noms de personnes, de chantiers et de villes sont rendus TELS QUELS.",
     "Ne cherche pas à deviner à qui ils correspondent : ce n'est pas ton travail.",
