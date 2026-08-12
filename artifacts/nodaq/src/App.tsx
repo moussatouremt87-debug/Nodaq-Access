@@ -35,7 +35,8 @@ import Reprise from '@/pages/reprise';
 import Login from '@/pages/login';
 import Register from '@/pages/register';
 import DevisAccepter from '@/pages/devis-accepter';
-import { useAuth } from '@/hooks/use-auth';
+import MembreAccepter from '@/pages/membre-accepter';
+import { useAuth, FINANCIAL_ROLES, type MembershipRole } from '@/hooks/use-auth';
 
 /** HOC: redirects to /login if not authenticated */
 function PlatformRoute(Page: React.ComponentType) {
@@ -60,9 +61,9 @@ function PlatformRoute(Page: React.ComponentType) {
   };
 }
 
-/** HOC: requires authenticated + OWNER role; MEMBER → 403 page */
-function OwnerRoute(Page: React.ComponentType) {
-  return function OwnerProtected() {
+/** HOC: requires authenticated + one of `allowedRoles`; other roles → 403 page */
+function RoleRoute(Page: React.ComponentType, allowedRoles: readonly MembershipRole[]) {
+  return function RoleProtected() {
     const { data, isLoading } = useAuth();
     const [, setLocation] = useLocation();
 
@@ -78,7 +79,7 @@ function OwnerRoute(Page: React.ComponentType) {
       setLocation(`/login?from=${from}`);
       return null;
     }
-    if (data.role !== 'OWNER') {
+    if (!allowedRoles.includes(data.role)) {
       return (
         <div className="flex flex-col items-center justify-center h-full p-12 gap-3 text-center">
           <div className="text-2xl font-semibold text-foreground">Accès restreint</div>
@@ -124,13 +125,19 @@ const queryClient = new QueryClient({
  * La garde `app-routes.test.ts` échoue si l'une d'elles retourne dans la
  * coquille.
  */
-export const ROUTES_PUBLIQUES = ['/devis/accepter/:token', '/login', '/register'] as const;
+export const ROUTES_PUBLIQUES = [
+  '/devis/accepter/:token',
+  '/membres/accepter/:token',
+  '/login',
+  '/register',
+] as const;
 
 function AppRouter() {
   return (
     <Switch>
       {/* ── Routes PUBLIQUES : aucune navigation, aucun thème, rien de l'app ── */}
       <Route path="/devis/accepter/:token" component={DevisAccepter} />
+      <Route path="/membres/accepter/:token" component={MembreAccepter} />
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
 
@@ -168,8 +175,8 @@ function ApplicationInterne() {
               <Route path="/affaires/:id" component={PlatformRoute(AffaireDetail)} />
               <Route path="/affaires" component={PlatformRoute(Affaires)} />
               <Route path="/contrats" component={PlatformRoute(Contrats)} />
-              <Route path="/factures" component={PlatformRoute(Factures)} />
-              <Route path="/avoirs" component={PlatformRoute(Avoirs)} />
+              <Route path="/factures" component={RoleRoute(Factures, FINANCIAL_ROLES)} />
+              <Route path="/avoirs" component={RoleRoute(Avoirs, FINANCIAL_ROLES)} />
               <Route path="/prospects" component={PlatformRoute(Prospects)} />
               <Route path="/prospection" component={PlatformRoute(Prospection)} />
               <Route path="/brief" component={PlatformRoute(Brief)} />
@@ -177,19 +184,19 @@ function ApplicationInterne() {
               <Route path="/devis" component={PlatformRoute(Devis)} />
               <Route path="/classeur" component={PlatformRoute(Classeur)} />
               <Route path="/analytique" component={PlatformRoute(Analytique)} />
-              <Route path="/marge" component={PlatformRoute(Marge)} />
+              <Route path="/marge" component={RoleRoute(Marge, FINANCIAL_ROLES)} />
               <Route path="/pointages" component={PlatformRoute(Pointages)} />
               <Route path="/devis/dictee" component={PlatformRoute(DevisDictee)} />
               <Route path="/parametres/envoi" component={PlatformRoute(ParametresEnvoi)} />
-              <Route path="/rapports" component={PlatformRoute(Rapports)} />
-              <Route path="/compte-resultat" component={PlatformRoute(CompteResultat)} />
-              <Route path="/echeancier" component={PlatformRoute(Echeancier)} />
-              <Route path="/equipe" component={PlatformRoute(Equipe)} />
+              <Route path="/rapports" component={RoleRoute(Rapports, FINANCIAL_ROLES)} />
+              <Route path="/compte-resultat" component={RoleRoute(CompteResultat, FINANCIAL_ROLES)} />
+              <Route path="/echeancier" component={RoleRoute(Echeancier, FINANCIAL_ROLES)} />
+              <Route path="/equipe" component={RoleRoute(Equipe, ['OWNER'])} />
               <Route path="/votre-metier" component={PlatformRoute(VotreMetier)} />
-              <Route path="/connecteurs" component={PlatformRoute(Connecteurs)} />
-              <Route path="/parametres" component={PlatformRoute(Parametres)} />
-              <Route path="/onboarding" component={OwnerRoute(Onboarding)} />
-              <Route path="/reprise" component={OwnerRoute(Reprise)} />
+              <Route path="/connecteurs" component={RoleRoute(Connecteurs, ['OWNER'])} />
+              <Route path="/parametres" component={RoleRoute(Parametres, ['OWNER'])} />
+              <Route path="/onboarding" component={RoleRoute(Onboarding, ['OWNER'])} />
+              <Route path="/reprise" component={RoleRoute(Reprise, ['OWNER'])} />
               <Route component={NotFound} />
             </Switch>
           </motion.div>

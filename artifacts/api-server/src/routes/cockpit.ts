@@ -6,8 +6,10 @@ import {
   debutExercice,
   debutExercicePrecedent,
   memeJourExercicePrecedent,
+  hasFinancialAccess,
 } from "@nodaq/shared";
 import { caNetCentsSql, nbFacturesCaSql, conditionFactureCa } from "../lib/chiffreAffaires.js";
+import { maskFinancialFields } from "../lib/maskFinancialFields.js";
 
 const router: IRouter = Router();
 
@@ -18,10 +20,11 @@ function execRows<T>(result: unknown): T[] {
 router.get("/cockpit/kpis", async (req, res): Promise<void> => {
   const tenantId = req.tenantId!;
   // Un incident de facturation révèle une incohérence de FACTURATION —
-  // exactement le genre de sujet réservé au propriétaire ailleurs dans ce
-  // fichier (cf. /cockpit/objectifs). Un MEMBER ne le voit pas : `null`, pas
-  // `0`, pour ne jamais laisser croire qu'il n'y a rien à vérifier.
-  const estOwner = req.session?.role === "OWNER";
+  // exactement le genre de sujet réservé au propriétaire/comptable ailleurs
+  // dans ce fichier (cf. /cockpit/objectifs). Un MEMBER ne le voit pas :
+  // `null`, pas `0`, pour ne jamais laisser croire qu'il n'y a rien à
+  // vérifier. Même garde pour tout le chiffre d'affaires ci-dessous.
+  const financier = hasFinancialAccess(req.session?.role);
 
   const data = await withTenant(tenantId, async (tx) => {
     const [affairesEnCours] = await tx
@@ -71,8 +74,9 @@ router.get("/cockpit/kpis", async (req, res): Promise<void> => {
     // Distinct du compteur ci-dessus : un incident de facturation n'est PAS
     // une action à valider (CLAUDE.md §4) — le mélanger fausserait ce que le
     // cockpit annonce pouvoir résoudre d'un clic. Requête posée seulement
-    // pour l'OWNER : inutile de l'exécuter pour un rôle qui ne la verra pas.
-    const incidentsFacturationCount = estOwner
+    // pour OWNER/ACCOUNTANT : inutile de l'exécuter pour un rôle qui ne la
+    // verra pas.
+    const incidentsFacturationCount = financier
       ? (await tx
           .select({ count: sql<number>`count(*)::int` })
           .from(incidentsFacturationTable)
@@ -165,27 +169,31 @@ router.get("/cockpit/kpis", async (req, res): Promise<void> => {
   const recTotal = Number(data.recRow.rows[0]?.total ?? 0);
   const tauxRecouvrement = recTotal > 0 ? Math.round((recPaid / recTotal) * 100) : 0;
 
-  res.json({
-    affairesEnCours: data.affairesEnCours?.count ?? 0,
-    chiffreAffairesMois: data.caMonth?.total ?? 0,
-    facturesEnAttente: data.facturesEnAttente?.count ?? 0,
-    totalImpayeCents: data.totalImpaye?.total ?? 0,
-    prospectsPipeline: data.prospectsPipeline?.count ?? 0,
-    contratsActifs: data.contratsActifs?.count ?? 0,
-    pendingActionsCount: data.pendingCount?.count ?? 0,
-    // `null` pour un non-OWNER — jamais `0` : voir le commentaire au-dessus
-    // de `estOwner`.
-    incidentsFacturationCount: data.incidentsFacturationCount?.count ?? null,
-    treasuryBalanceCents: null,
-    monthlySeries: data.monthlySeries,
-    ytd: {
-      caYtdCents,
-      caPrevYearSamePeriodCents,
-      caGrowthPct,
-      facturesEmisesYtd: data.facturesYtdRow?.count ?? 0,
-      tauxRecouvrement,
+  res.json(maskFinancialFields(
+    {
+      affairesEnCours: data.affairesEnCours?.count ?? 0,
+      chiffreAffairesMois: data.caMonth?.total ?? 0,
+      facturesEnAttente: data.facturesEnAttente?.count ?? 0,
+      totalImpayeCents: data.totalImpaye?.total ?? 0,
+      prospectsPipeline: data.prospectsPipeline?.count ?? 0,
+      contratsActifs: data.contratsActifs?.count ?? 0,
+      pendingActionsCount: data.pendingCount?.count ?? 0,
+      // `null` pour un rôle sans accès financier — jamais `0` : voir le
+      // commentaire au-dessus de `financier`.
+      incidentsFacturationCount: data.incidentsFacturationCount?.count ?? null,
+      treasuryBalanceCents: null,
+      monthlySeries: data.monthlySeries,
+      ytd: {
+        caYtdCents,
+        caPrevYearSamePeriodCents,
+        caGrowthPct,
+        facturesEmisesYtd: data.facturesYtdRow?.count ?? 0,
+        tauxRecouvrement,
+      },
     },
-  });
+    ["chiffreAffairesMois", "totalImpayeCents", "monthlySeries", "ytd"],
+    financier,
+  ));
 });
 
 router.get("/cockpit/activity", async (req, res): Promise<void> => {

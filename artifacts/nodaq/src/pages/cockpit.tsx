@@ -17,6 +17,7 @@ import {
   CalendarDays,
   Building2,
   DatabaseZap,
+  Lock,
 } from 'lucide-react';
 import {
   Bar,
@@ -61,7 +62,7 @@ import {
 } from '@/hooks/use-cockpit';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/auth';
-import { useIsOwner } from '@/hooks/use-auth';
+import { useIsOwner, useHasFinancialAccess } from '@/hooks/use-auth';
 
 const API = '/api';
 
@@ -103,6 +104,7 @@ export default function Cockpit() {
   const { reject, isPending: rejecting } = useRejectAction();
   const { data: profilData } = useProfilIncomplet();
   const isOwner = useIsOwner();
+  const financier = useHasFinancialAccess();
 
   const chartData = useMemo(
     () =>
@@ -244,6 +246,7 @@ export default function Cockpit() {
                 format={fmtCentsCompact}
                 icon={TrendingUp}
                 tone="accent"
+                masked={!financier}
               />
               <AnimatedKpi
                 testId="kpi-factures-attente"
@@ -251,12 +254,12 @@ export default function Cockpit() {
                 target={kpis?.facturesEnAttente ?? 0}
                 format={fmtCount}
                 hint={
-                  kpis?.totalImpayeCents
+                  financier && kpis?.totalImpayeCents
                     ? `${fmtEUR(kpis.totalImpayeCents)} en retard`
                     : undefined
                 }
                 icon={FileWarning}
-                tone={kpis?.totalImpayeCents ? 'warning' : 'default'}
+                tone={financier && kpis?.totalImpayeCents ? 'warning' : 'default'}
               />
               <AnimatedKpi
                 testId="kpi-prospects-pipeline"
@@ -318,6 +321,7 @@ export default function Cockpit() {
                   format={fmtCentsCompact}
                   icon={TrendingUp}
                   tone="accent"
+                  masked={!financier}
                   hint={
                     ytd.caGrowthPct != null
                       ? `${ytd.caGrowthPct >= 0 ? '↑' : '↓'} ${Math.abs(ytd.caGrowthPct)} % vs N−1`
@@ -329,12 +333,14 @@ export default function Cockpit() {
                   target={ytd.facturesEmisesYtd}
                   format={fmtCount}
                   icon={Euro}
+                  masked={!financier}
                 />
                 <AnimatedKpi
                   label="Taux de recouvrement"
                   target={ytd.tauxRecouvrement}
                   format={(n) => `${Math.round(n)} %`}
                   icon={ShieldCheck}
+                  masked={!financier}
                   tone={
                     ytd.tauxRecouvrement >= 80
                       ? 'accent'
@@ -416,6 +422,11 @@ export default function Cockpit() {
               </div>
               {kpisLoading ? (
                 <Skeleton className="h-56 w-full" />
+              ) : !financier ? (
+                <div className="h-56 flex flex-col items-center justify-center gap-1.5 text-muted-foreground">
+                  <Lock className="h-4 w-4" strokeWidth={2} />
+                  <span className="text-sm">Réservé aux gestionnaires financiers</span>
+                </div>
               ) : chartData.length === 0 ? (
                 <div className="h-56 flex items-center justify-center text-sm text-muted-foreground">
                   Pas encore de données de facturation.

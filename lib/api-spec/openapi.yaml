@@ -25,6 +25,8 @@ tags:
   - name: equipe
   - name: connecteurs
   - name: parametres
+  - name: membres
+  - name: membres-public
 
 paths:
   /healthz:
@@ -1018,6 +1020,142 @@ paths:
                 additionalProperties:
                   type: string
 
+  # ── Membres & accès (OWNER seulement, sauf les deux routes publiques) ──────
+  /membres:
+    get:
+      operationId: listMembres
+      tags: [membres]
+      summary: List tenant members and pending invites (OWNER only)
+      responses:
+        "200":
+          description: Members and pending invites
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MembresListResponse"
+
+  /membres/inviter:
+    post:
+      operationId: inviterMembre
+      tags: [membres]
+      summary: Invite a collaborator (OWNER only) — role restricted to MEMBER/ACCOUNTANT
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InviteMembreBody"
+      responses:
+        "201":
+          description: Invitation created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvitationEnAttente"
+        "409":
+          description: Already a member of this tenant
+
+  /membres/{id}/role:
+    patch:
+      operationId: changerRoleMembre
+      tags: [membres]
+      summary: Change a member's role (OWNER only) — cannot target or grant OWNER
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoleMembreBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Membre"
+        "403":
+          description: Target membership is OWNER, or new role is OWNER
+        "404":
+          description: Not found
+
+  /membres/{id}:
+    delete:
+      operationId: revoquerMembre
+      tags: [membres]
+      summary: Revoke a member's access (OWNER only) — cannot target OWNER
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Revoked
+        "403":
+          description: Target membership is OWNER
+        "404":
+          description: Not found
+
+  # ── Acceptation d'invitation (PUBLIC, non authentifiée) ─────────────────────
+  /membres/inviter/{token}:
+    get:
+      operationId: apercuInvitation
+      tags: [membres-public]
+      summary: Look up an invitation by token (public, unauthenticated)
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Invitation found (may be expired or already accepted — see fields)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvitationApercu"
+        "404":
+          description: No invitation matches this token
+
+  /membres/inviter/{token}/accepter:
+    post:
+      operationId: accepterInvitation
+      tags: [membres-public]
+      summary: Accept an invitation (public, unauthenticated) — logs the user in
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvitationAcceptationBody"
+      responses:
+        "200":
+          description: Accepted — session cookie set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvitationAcceptationResponse"
+        "404":
+          description: No invitation matches this token
+        "409":
+          description: Already accepted
+        "410":
+          description: Expired
+
 components:
   schemas:
     HealthStatus:
@@ -1154,7 +1292,7 @@ components:
         total:
           type: number
         totalQuotedCents:
-          type: number
+          type: ["number", "null"]
 
     AffaireInput:
       type: object
@@ -1209,7 +1347,7 @@ components:
           items:
             $ref: "#/components/schemas/StatusCount"
         totalPipelineValueCents:
-          type: number
+          type: ["number", "null"]
 
     StatusCount:
       type: object
@@ -2096,3 +2234,110 @@ components:
       type: object
       additionalProperties:
         type: string
+
+    Membre:
+      type: object
+      required: [id, email, nom, role, createdAt]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        nom:
+          type: string
+        role:
+          type: string
+          enum: [OWNER, MEMBER, ACCOUNTANT]
+        createdAt:
+          type: string
+          format: date-time
+
+    InvitationEnAttente:
+      type: object
+      required: [id, email, role, expiresAt, createdAt]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [MEMBER, ACCOUNTANT]
+        expiresAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    MembresListResponse:
+      type: object
+      required: [membres, invitationsEnAttente]
+      properties:
+        membres:
+          type: array
+          items:
+            $ref: "#/components/schemas/Membre"
+        invitationsEnAttente:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvitationEnAttente"
+
+    InviteMembreBody:
+      type: object
+      required: [email, role]
+      properties:
+        email:
+          type: string
+        role:
+          type: string
+          enum: [MEMBER, ACCOUNTANT]
+
+    RoleMembreBody:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+          enum: [MEMBER, ACCOUNTANT]
+
+    InvitationApercu:
+      type: object
+      required: [tenantNom, roleOffert, email, compteExistant, expire, dejaAcceptee]
+      properties:
+        tenantNom:
+          type: string
+        roleOffert:
+          type: string
+          enum: [MEMBER, ACCOUNTANT]
+        email:
+          type: string
+        compteExistant:
+          type: boolean
+        expire:
+          type: boolean
+        dejaAcceptee:
+          type: boolean
+
+    InvitationAcceptationBody:
+      type: object
+      required: [password]
+      properties:
+        nom:
+          type: string
+          description: Required only when compteExistant is false
+        password:
+          type: string
+          minLength: 8
+
+    InvitationAcceptationResponse:
+      type: object
+      required: [userId, tenantId, role]
+      properties:
+        userId:
+          type: string
+        tenantId:
+          type: string
+        role:
+          type: string
+          enum: [MEMBER, ACCOUNTANT]

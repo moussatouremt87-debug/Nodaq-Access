@@ -35,3 +35,4 @@ export * from "./affectations";
 export * from "./prospection_contacts";
 export * from "./catalogue_alias";
 export * from "./incidents_facturation";
+export * from "./tenant_invites";

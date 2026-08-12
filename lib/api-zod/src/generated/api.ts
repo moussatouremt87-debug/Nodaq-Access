@@ -1209,3 +1209,111 @@ export const UpdateParametresBody = zod.record(zod.string(), zod.string())
 export const UpdateParametresResponse = zod.record(zod.string(), zod.string())
 
 
+/**
+ * @summary List tenant members and pending invites (OWNER only)
+ */
+export const ListMembresResponse = zod.object({
+  "membres": zod.array(zod.object({
+  "id": zod.string(),
+  "email": zod.string(),
+  "nom": zod.string(),
+  "role": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT']),
+  "createdAt": zod.coerce.date()
+})),
+  "invitationsEnAttente": zod.array(zod.object({
+  "id": zod.string(),
+  "email": zod.string(),
+  "role": zod.enum(['MEMBER', 'ACCOUNTANT']),
+  "expiresAt": zod.coerce.date(),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Invite a collaborator (OWNER only) — role restricted to MEMBER/ACCOUNTANT
+ */
+export const InviterMembreBody = zod.object({
+  "email": zod.string(),
+  "role": zod.enum(['MEMBER', 'ACCOUNTANT'])
+})
+
+export const InviterMembreResponse = zod.object({
+  "id": zod.string(),
+  "email": zod.string(),
+  "role": zod.enum(['MEMBER', 'ACCOUNTANT']),
+  "expiresAt": zod.coerce.date(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Change a member's role (OWNER only) — cannot target or grant OWNER
+ */
+export const ChangerRoleMembreParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ChangerRoleMembreBody = zod.object({
+  "role": zod.enum(['MEMBER', 'ACCOUNTANT'])
+})
+
+export const ChangerRoleMembreResponse = zod.object({
+  "id": zod.string(),
+  "email": zod.string(),
+  "nom": zod.string(),
+  "role": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT']),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Revoke a member's access (OWNER only) — cannot target OWNER
+ */
+export const RevoquerMembreParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const RevoquerMembreResponse = zod.void()
+
+
+/**
+ * @summary Look up an invitation by token (public, unauthenticated)
+ */
+export const ApercuInvitationParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const ApercuInvitationResponse = zod.object({
+  "tenantNom": zod.string(),
+  "roleOffert": zod.enum(['MEMBER', 'ACCOUNTANT']),
+  "email": zod.string(),
+  "compteExistant": zod.boolean(),
+  "expire": zod.boolean(),
+  "dejaAcceptee": zod.boolean()
+})
+
+
+/**
+ * @summary Accept an invitation (public, unauthenticated) — logs the user in
+ */
+export const AccepterInvitationParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const accepterInvitationBodyPasswordMin = 8;
+
+
+
+export const AccepterInvitationBody = zod.object({
+  "nom": zod.string().optional().describe('Required only when compteExistant is false'),
+  "password": zod.string().min(accepterInvitationBodyPasswordMin)
+})
+
+export const AccepterInvitationResponse = zod.object({
+  "userId": zod.string(),
+  "tenantId": zod.string(),
+  "role": zod.enum(['MEMBER', 'ACCOUNTANT'])
+})
+
+

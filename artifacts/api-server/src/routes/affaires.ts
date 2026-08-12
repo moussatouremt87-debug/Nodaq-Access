@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { withTenant, affairesTable, activityTable } from "@workspace/db";
 import { eq, sql, desc } from "drizzle-orm";
-import { toDateString } from "@nodaq/shared";
+import { toDateString, hasFinancialAccess } from "@nodaq/shared";
 import {
   CreateAffaireBody,
   UpdateAffaireBody,
@@ -10,11 +10,18 @@ import {
   DeleteAffaireParams,
   ListAffairesQueryParams,
 } from "@workspace/api-zod";
+import { maskFinancialFields } from "../lib/maskFinancialFields.js";
 
 const router: IRouter = Router();
 
+// Les affaires mêlent des données de travail qu'un MEMBER doit voir
+// (libellé, client, statut, dates) à des montants réservés à OWNER/
+// ACCOUNTANT — masqués champ par champ, PAS bloqués en entier : voir
+// routes/index.ts pour le raisonnement complet.
+
 router.get("/affaires/stats", async (req, res): Promise<void> => {
   const tenantId = req.tenantId!;
+  const financier = hasFinancialAccess(req.session?.role);
   const { byStatus } = await withTenant(tenantId, async (tx) => {
     const rows = await tx.execute(sql`
       SELECT
@@ -32,7 +39,12 @@ router.get("/affaires/stats", async (req, res): Promise<void> => {
     .filter(r => !["PERDUE", "ARCHIVEE"].includes(r.status))
     .reduce((acc, r) => acc + (r.totalCents ?? 0), 0);
 
-  res.json({ byStatus, totalPipelineValueCents });
+  const byStatusMasque = byStatus.map((r) => maskFinancialFields(r, ["totalCents"], financier));
+  res.json(maskFinancialFields(
+    { byStatus: byStatusMasque, totalPipelineValueCents },
+    ["totalPipelineValueCents"],
+    financier,
+  ));
 });
 
 router.get("/affaires", async (req, res): Promise<void> => {
@@ -41,6 +53,7 @@ router.get("/affaires", async (req, res): Promise<void> => {
   const { statut, inclureArchivees } = parsed.data;
 
   const tenantId = req.tenantId!;
+  const financier = hasFinancialAccess(req.session?.role);
   const { affaires } = await withTenant(tenantId, async (tx) => {
     let query = tx.select().from(affairesTable).$dynamic();
     if (statut) {
@@ -53,7 +66,14 @@ router.get("/affaires", async (req, res): Promise<void> => {
   });
 
   const totalQuotedCents = affaires.reduce((acc, a) => acc + (a.quotedAmountCents ?? 0), 0);
-  res.json({ affaires, total: affaires.length, totalQuotedCents });
+  const affairesMasquees = affaires.map((a) =>
+    maskFinancialFields(a, ["quotedAmountCents", "invoicedAmountCents", "marginCents"], financier),
+  );
+  res.json(maskFinancialFields(
+    { affaires: affairesMasquees, total: affaires.length, totalQuotedCents },
+    ["totalQuotedCents"],
+    financier,
+  ));
 });
 
 router.post("/affaires", async (req, res): Promise<void> => {
@@ -96,7 +116,11 @@ router.get("/affaires/:id", async (req, res): Promise<void> => {
     tx.select().from(affairesTable).where(eq(affairesTable.id, params.data.id))
   );
   if (!affaire) { res.status(404).json({ error: "Affaire not found" }); return; }
-  res.json(affaire);
+  res.json(maskFinancialFields(
+    affaire,
+    ["quotedAmountCents", "invoicedAmountCents", "marginCents"],
+    hasFinancialAccess(req.session?.role),
+  ));
 });
 
 router.patch("/affaires/:id", async (req, res): Promise<void> => {

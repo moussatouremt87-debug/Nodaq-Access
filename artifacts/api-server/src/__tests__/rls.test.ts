@@ -62,6 +62,7 @@ const BUSINESS_TABLES = [
   "tenant_secrets",
   "clients", "paiements", "affectations",
   "contacts_prospection", "contact_bases", "oppositions",
+  "tenant_invites",
 ] as const;
 
 // ────────────────────────────────────────────────────────────────────────────

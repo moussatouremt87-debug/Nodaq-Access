@@ -59,6 +59,11 @@ import type {
   GetParametres200,
   GetRapportMensuelParams,
   HealthStatus,
+  InvitationAcceptationBody,
+  InvitationAcceptationResponse,
+  InvitationApercu,
+  InvitationEnAttente,
+  InviteMembreBody,
   ListAffairesParams,
   ListClasseurParams,
   ListDevisParams,
@@ -66,12 +71,15 @@ import type {
   ListFacturesParams,
   ListProspectsParams,
   MargeStats,
+  Membre,
+  MembresListResponse,
   ParametresInput,
   PendingAction,
   Prospect,
   ProspectInput,
   ProspectUpdate,
   RapportMensuel,
+  RoleMembreBody,
   TeamMember,
   TeamMemberInput,
   TeamMemberUpdate,
@@ -4003,5 +4011,445 @@ export const useUpdateParametres = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getUpdateParametresMutationOptions(options));
+    }
+
+export const getListMembresUrl = () => {
+
+
+
+
+  return `/api/membres`
+}
+
+/**
+ * @summary List tenant members and pending invites (OWNER only)
+ */
+export const listMembres = async ( options?: Parameters<typeof customFetch>[1]): Promise<MembresListResponse> => {
+
+  return customFetch<MembresListResponse>(getListMembresUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListMembresQueryKey = () => {
+    return [
+    `/api/membres`
+    ] as const;
+    }
+
+
+export const getListMembresQueryOptions = <TData = Awaited<ReturnType<typeof listMembres>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMembres>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListMembresQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listMembres>>> = ({ signal }) => listMembres({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listMembres>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListMembresQueryResult = NonNullable<Awaited<ReturnType<typeof listMembres>>>
+export type ListMembresQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List tenant members and pending invites (OWNER only)
+ */
+
+export function useListMembres<TData = Awaited<ReturnType<typeof listMembres>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMembres>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListMembresQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getInviterMembreUrl = () => {
+
+
+
+
+  return `/api/membres/inviter`
+}
+
+/**
+ * @summary Invite a collaborator (OWNER only) — role restricted to MEMBER/ACCOUNTANT
+ */
+export const inviterMembre = async (inviteMembreBody: InviteMembreBody, options?: Parameters<typeof customFetch>[1]): Promise<InvitationEnAttente> => {
+
+  return customFetch<InvitationEnAttente>(getInviterMembreUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(inviteMembreBody)
+  }
+);}
+
+
+
+
+
+export const getInviterMembreMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof inviterMembre>>, TError,{data: BodyType<InviteMembreBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof inviterMembre>>, TError,{data: BodyType<InviteMembreBody>}, TContext> => {
+
+const mutationKey = ['inviterMembre'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof inviterMembre>>, {data: BodyType<InviteMembreBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  inviterMembre(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type InviterMembreMutationResult = NonNullable<Awaited<ReturnType<typeof inviterMembre>>>
+    export type InviterMembreMutationBody = BodyType<InviteMembreBody>
+    export type InviterMembreMutationError = ErrorType<void>
+
+    /**
+ * @summary Invite a collaborator (OWNER only) — role restricted to MEMBER/ACCOUNTANT
+ */
+export const useInviterMembre = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof inviterMembre>>, TError,{data: BodyType<InviteMembreBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof inviterMembre>>,
+        TError,
+        {data: BodyType<InviteMembreBody>},
+        TContext
+      > => {
+      return useMutation(getInviterMembreMutationOptions(options));
+    }
+
+export const getChangerRoleMembreUrl = (id: string,) => {
+
+
+
+
+  return `/api/membres/${id}/role`
+}
+
+/**
+ * @summary Change a member's role (OWNER only) — cannot target or grant OWNER
+ */
+export const changerRoleMembre = async (id: string,
+    roleMembreBody: RoleMembreBody, options?: Parameters<typeof customFetch>[1]): Promise<Membre> => {
+
+  return customFetch<Membre>(getChangerRoleMembreUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(roleMembreBody)
+  }
+);}
+
+
+
+
+
+export const getChangerRoleMembreMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof changerRoleMembre>>, TError,{id: string;data: BodyType<RoleMembreBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof changerRoleMembre>>, TError,{id: string;data: BodyType<RoleMembreBody>}, TContext> => {
+
+const mutationKey = ['changerRoleMembre'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof changerRoleMembre>>, {id: string;data: BodyType<RoleMembreBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  changerRoleMembre(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ChangerRoleMembreMutationResult = NonNullable<Awaited<ReturnType<typeof changerRoleMembre>>>
+    export type ChangerRoleMembreMutationBody = BodyType<RoleMembreBody>
+    export type ChangerRoleMembreMutationError = ErrorType<void>
+
+    /**
+ * @summary Change a member's role (OWNER only) — cannot target or grant OWNER
+ */
+export const useChangerRoleMembre = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof changerRoleMembre>>, TError,{id: string;data: BodyType<RoleMembreBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof changerRoleMembre>>,
+        TError,
+        {id: string;data: BodyType<RoleMembreBody>},
+        TContext
+      > => {
+      return useMutation(getChangerRoleMembreMutationOptions(options));
+    }
+
+export const getRevoquerMembreUrl = (id: string,) => {
+
+
+
+
+  return `/api/membres/${id}`
+}
+
+/**
+ * @summary Revoke a member's access (OWNER only) — cannot target OWNER
+ */
+export const revoquerMembre = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getRevoquerMembreUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getRevoquerMembreMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revoquerMembre>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof revoquerMembre>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['revoquerMembre'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof revoquerMembre>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  revoquerMembre(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RevoquerMembreMutationResult = NonNullable<Awaited<ReturnType<typeof revoquerMembre>>>
+
+    export type RevoquerMembreMutationError = ErrorType<void>
+
+    /**
+ * @summary Revoke a member's access (OWNER only) — cannot target OWNER
+ */
+export const useRevoquerMembre = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revoquerMembre>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof revoquerMembre>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getRevoquerMembreMutationOptions(options));
+    }
+
+export const getApercuInvitationUrl = (token: string,) => {
+
+
+
+
+  return `/api/membres/inviter/${token}`
+}
+
+/**
+ * @summary Look up an invitation by token (public, unauthenticated)
+ */
+export const apercuInvitation = async (token: string, options?: Parameters<typeof customFetch>[1]): Promise<InvitationApercu> => {
+
+  return customFetch<InvitationApercu>(getApercuInvitationUrl(token),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getApercuInvitationQueryKey = (token: string,) => {
+    return [
+    `/api/membres/inviter/${token}`
+    ] as const;
+    }
+
+
+export const getApercuInvitationQueryOptions = <TData = Awaited<ReturnType<typeof apercuInvitation>>, TError = ErrorType<void>>(token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof apercuInvitation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getApercuInvitationQueryKey(token);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof apercuInvitation>>> = ({ signal }) => apercuInvitation(token, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof apercuInvitation>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ApercuInvitationQueryResult = NonNullable<Awaited<ReturnType<typeof apercuInvitation>>>
+export type ApercuInvitationQueryError = ErrorType<void>
+
+
+/**
+ * @summary Look up an invitation by token (public, unauthenticated)
+ */
+
+export function useApercuInvitation<TData = Awaited<ReturnType<typeof apercuInvitation>>, TError = ErrorType<void>>(
+ token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof apercuInvitation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getApercuInvitationQueryOptions(token,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getAccepterInvitationUrl = (token: string,) => {
+
+
+
+
+  return `/api/membres/inviter/${token}/accepter`
+}
+
+/**
+ * @summary Accept an invitation (public, unauthenticated) — logs the user in
+ */
+export const accepterInvitation = async (token: string,
+    invitationAcceptationBody: InvitationAcceptationBody, options?: Parameters<typeof customFetch>[1]): Promise<InvitationAcceptationResponse> => {
+
+  return customFetch<InvitationAcceptationResponse>(getAccepterInvitationUrl(token),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(invitationAcceptationBody)
+  }
+);}
+
+
+
+
+
+export const getAccepterInvitationMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof accepterInvitation>>, TError,{token: string;data: BodyType<InvitationAcceptationBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof accepterInvitation>>, TError,{token: string;data: BodyType<InvitationAcceptationBody>}, TContext> => {
+
+const mutationKey = ['accepterInvitation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof accepterInvitation>>, {token: string;data: BodyType<InvitationAcceptationBody>}> = (props) => {
+          const {token,data} = props ?? {};
+
+          return  accepterInvitation(token,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AccepterInvitationMutationResult = NonNullable<Awaited<ReturnType<typeof accepterInvitation>>>
+    export type AccepterInvitationMutationBody = BodyType<InvitationAcceptationBody>
+    export type AccepterInvitationMutationError = ErrorType<void>
+
+    /**
+ * @summary Accept an invitation (public, unauthenticated) — logs the user in
+ */
+export const useAccepterInvitation = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof accepterInvitation>>, TError,{token: string;data: BodyType<InvitationAcceptationBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof accepterInvitation>>,
+        TError,
+        {token: string;data: BodyType<InvitationAcceptationBody>},
+        TContext
+      > => {
+      return useMutation(getAccepterInvitationMutationOptions(options));
     }
 

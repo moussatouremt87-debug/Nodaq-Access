@@ -1,13 +1,14 @@
 import { Router, type IRouter } from "express";
 import { withTenant, contratsTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
-import { toDateString } from "@nodaq/shared";
+import { toDateString, hasFinancialAccess } from "@nodaq/shared";
 import {
   CreateContratBody,
   UpdateContratBody,
   UpdateContratParams,
   DeleteContratParams,
 } from "@workspace/api-zod";
+import { maskFinancialFields } from "../lib/maskFinancialFields.js";
 
 function nextOccurrence(startDate: string | null, cadence: string): string | null {
   if (!startDate) return null;
@@ -25,10 +26,15 @@ const router: IRouter = Router();
 
 router.get("/contrats", async (req, res): Promise<void> => {
   const tenantId = req.tenantId!;
+  const financier = hasFinancialAccess(req.session?.role);
   const contrats = await withTenant(tenantId, async (tx) =>
     tx.select().from(contratsTable).orderBy(desc(contratsTable.createdAt))
   );
-  res.json(contrats.map(c => ({ ...c, nextOccurrenceDate: nextOccurrence(c.startDate, c.cadence) })));
+  res.json(contrats.map(c => maskFinancialFields(
+    { ...c, nextOccurrenceDate: nextOccurrence(c.startDate, c.cadence) },
+    ["amountCents"],
+    financier,
+  )));
 });
 
 router.post("/contrats", async (req, res): Promise<void> => {

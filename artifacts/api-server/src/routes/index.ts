@@ -40,6 +40,8 @@ import { requireAuth } from "../middleware/requireAuth";
 import { resolveTenant } from "../middleware/resolveTenant";
 import { requireMembership } from "../middleware/requireMembership";
 import { requireRole } from "../middleware/requireRole";
+import { FINANCIAL_ROLES } from "@nodaq/shared";
+import membresRouter, { membresPublicRouter } from "./membres";
 
 const router: IRouter = Router();
 
@@ -47,12 +49,21 @@ const router: IRouter = Router();
 router.use(healthRouter);
 router.use(authRouter);
 router.use(publicRouter);   // /public/devis/:token/accept-page, /public/devis/:token/accept
+router.use(membresPublicRouter); // /membres/inviter/:token (lecture + acceptation)
 
 // ── Auth middleware chain applied to all business routes ──────────────────
 const biz: RequestHandler[] = [requireAuth, resolveTenant, requireMembership];
 const ownerOnly: RequestHandler[] = [...biz, requireRole(["OWNER"])];
+// Routeurs EXCLUSIVEMENT financiers — bloqués en entier pour un MEMBER, pas
+// seulement masqués : contrairement à affaires/contrats (voir plus bas), ils
+// n'ont aucun contenu qu'un MEMBER aurait légitimement besoin de voir.
+const financierOnly: RequestHandler[] = [...biz, requireRole(FINANCIAL_ROLES)];
 
 // ── Business routes (MEMBER+) ─────────────────────────────────────────────
+// affairesRouter et contratsRouter restent MEMBER+ : ils mêlent des données
+// de travail qu'un MEMBER doit voir (libellé, client, statut, dates) à des
+// champs monétaires. Le masquage se fait CHAMP PAR CHAMP dans ces routeurs
+// eux-mêmes (voir maskFinancialFields), pas en bloquant l'accès au routeur.
 router.use(biz, cockpitRouter);
 router.use(biz, affairesRouter);
 router.use(biz, contratsRouter);
@@ -62,16 +73,9 @@ router.use(biz, chatRouter);
 router.use(biz, chatMediaRouter);
 router.use(biz, devisRouter);
 router.use(biz, classeurRouter);
-router.use(biz, echeancesRouter);
-router.use(biz, margeRouter);
-router.use(biz, rapportsRouter);
-router.use(biz, compteResultatRouter);
-router.use(biz, facturesRouter);
-router.use(biz, avoirsRouter);
 router.use(biz, prospectsRouter);
 router.use(biz, votreMetierRouter);
 router.use(biz, onboardingReadRouter);
-router.use(biz, analyticsRouter);
 router.use(biz, pointagesRouter);
 router.use(biz, catalogueRouter);
 router.use(biz, devisDicteeRouter);
@@ -80,8 +84,17 @@ router.use(biz, objectifsRouter);
 router.use(biz, voixRouter);
 router.use(biz, prospectionRouter);
 router.use(biz, clientsRouter);
-router.use(biz, paiementsRouter);
 router.use(biz, affectationsRouter);
+
+// ── Business routes (OWNER ou ACCOUNTANT seulement) ───────────────────────
+router.use(financierOnly, echeancesRouter);
+router.use(financierOnly, margeRouter);
+router.use(financierOnly, rapportsRouter);
+router.use(financierOnly, compteResultatRouter);
+router.use(financierOnly, facturesRouter);
+router.use(financierOnly, avoirsRouter);
+router.use(financierOnly, analyticsRouter);
+router.use(financierOnly, paiementsRouter);
 
 // ── OWNER-only routes ─────────────────────────────────────────────────────
 router.use(ownerOnly, equipeRouter);
@@ -89,5 +102,6 @@ router.use(ownerOnly, connecteursRouter);
 router.use(ownerOnly, parametresRouter);
 router.use(ownerOnly, entreprisesRouter);
 router.use(ownerOnly, onboardingWriteRouter);
+router.use(ownerOnly, membresRouter);
 
 export default router;

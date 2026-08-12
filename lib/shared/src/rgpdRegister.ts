@@ -72,6 +72,27 @@ export const PROCESSING_TEMPLATES: readonly ProcessingTemplate[] = [
     },
   },
   {
+    id: "comptes-collaborateurs",
+    name: "Comptes collaborateurs de la plateforme NODAQ",
+    purpose:
+      "Inviter des collaborateurs à se connecter à l'espace de l'entreprise et gérer " +
+      "leurs droits d'accès (membre ou comptable) — le propriétaire du compte décide qui " +
+      "voit quelles données",
+    legalBasis: "interet_legitime",
+    dataCategories: ["identite", "contact", "connexion"],
+    dataSubjects: ["salaries"],
+    recipients: "Propriétaire (OWNER) du compte, hébergeur (Scaleway, France)",
+    retention:
+      "Compte actif : jusqu'à révocation par le propriétaire. Invitation non acceptée : " +
+      "expire fonctionnellement après 7 jours (l'enregistrement est conservé, non " +
+      "réactivable, pour l'historique des accès accordés)",
+    sensitiveData: false,
+    source: {
+      label: "CNIL — modèle de registre simplifié",
+      url: "https://www.cnil.fr/fr/RGPD-le-registre-des-activites-de-traitement",
+    },
+  },
+  {
     id: "facturation-clients",
     name: "Facturation et comptabilité clients",
     purpose: "Émettre devis et factures, tenir la comptabilité, recouvrer les impayés",

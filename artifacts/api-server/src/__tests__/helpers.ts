@@ -125,7 +125,7 @@ const BUSINESS_TABLES = [
   // incidents_facturation référence factures (facture_id) : avant elle.
   "incidents_facturation", "factures",
   "pending_actions", "prospects", "settings", "team_members",
-  "clients",
+  "clients", "tenant_invites",
 ];
 
 export async function cleanupTenants(...tenantIds: string[]): Promise<void> {
@@ -223,6 +223,20 @@ export function tableInsertSql(table: string, tenantId: string, memberAId?: stri
     parametres_envoi: [`INSERT INTO parametres_envoi (id, tenant_id, mode, domaine) VALUES ($1, $2::uuid, 'repli_nodaq', 'rls-test.example') ON CONFLICT DO NOTHING`, [id, tenantId]],
     // envois_journal : append-only, aucune donnée de contenu.
     envois_journal: [`INSERT INTO envois_journal (id, tenant_id, destinataire, document_type, mode, statut) VALUES ($1, $2::uuid, 'rls-test@example.test', 'DEVIS', 'repli_nodaq', 'envoye') ON CONFLICT DO NOTHING`, [id, tenantId]],
+    // tenant_invites : invited_by référence users(id), pas team_members(id)
+    // (memberAId porte le mauvais id). Les tenants de ce fixture RLS n'ont
+    // pas forcément de membership existant (tenantA/tenantB, notamment) : la
+    // ligne crée SON PROPRE user jetable plutôt que d'en chercher un — même
+    // patron que catalogue_alias plus haut, qui crée sa propre ligne
+    // catalogue_lignes.
+    tenant_invites: [`WITH u AS (
+        INSERT INTO users (id, email, password_hash, nom)
+        VALUES (gen_random_uuid(), 'rls-invite-' || $1 || '@test.nodaq', 'x', 'RLS Inviter')
+        RETURNING id
+      )
+      INSERT INTO tenant_invites (id, tenant_id, email, role, token_sha256, invited_by, expires_at)
+      SELECT $1, $2::uuid, 'rls-test@example.test', 'MEMBER', 'rls-test-hash-' || $1, u.id, now() + interval '7 days' FROM u
+      ON CONFLICT DO NOTHING`, [id, tenantId]],
     // catalogue_lignes: prix en centimes, mots_cles est un text[].
     catalogue_lignes: [`INSERT INTO catalogue_lignes (id, tenant_id, libelle, unite, prix_unitaire_ht_cents, mots_cles) VALUES ($1, $2::uuid, 'Cloison BA13 rls-test', 'm2', 4500, ARRAY['placo','ba13']) ON CONFLICT DO NOTHING`, [id, tenantId]],
     // pointages: needs BOTH a member and an affaire (real FKs). The affaire is
