@@ -58,6 +58,7 @@ export * from "./rgpdRegister.js";
 export * from "./prospection.js";
 export * from "./canauxProspection.js";
 export * from "./axesProspection.js";
+export * from "./cpvBatiment.js";
 export * from "./costCategories.js";
 export * from "./receivableAccounts.js";
 export * from "./moduleCatalog.js";

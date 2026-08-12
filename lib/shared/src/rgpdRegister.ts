@@ -8,7 +8,7 @@
  */
 
 /** Catalog snapshot date — bump on every template/rule change. */
-export const RGPD_REGISTER_VERSION = "2026-08-10";
+export const RGPD_REGISTER_VERSION = "2026-08-12";
 
 /** Article 6 legal bases. */
 export const LEGAL_BASES = [
@@ -144,6 +144,73 @@ export const PROCESSING_TEMPLATES: readonly ProcessingTemplate[] = [
     source: {
       label: "CNIL — réutilisation des données publiquement accessibles",
       url: "https://www.cnil.fr/fr/la-reutilisation-des-donnees-publiquement-accessibles-en-ligne-des-fins-de-demarchage-commercial",
+    },
+  },
+  {
+    id: "prospection-sous-traitance-decp",
+    name: "Signal de sous-traitance depuis les attributions de marchés publics (DECP)",
+    purpose:
+      "Repérer, par secteur CPV et par zone, les entreprises venant de remporter un " +
+      "marché public — piste de sous-traitance. Par défaut, seuls des AGRÉGATS " +
+      "anonymisés (sous le seuil, aucune ligne publiée) sont rendus : le jeu de " +
+      "données DECP ne porte aucun marqueur fiable personne physique/personne " +
+      "morale, et un titulaire peut être un entrepreneur individuel — donc une " +
+      "personne physique. Un titulaire nommé n'est exposé que si le déploiement " +
+      "active explicitement DECP_AFFICHER_TITULAIRES_PRO",
+    legalBasis: "interet_legitime",
+    dataCategories: ["identite", "vie_professionnelle", "localisation"],
+    dataSubjects: ["prospects"],
+    recipients: "Service commercial",
+    retention: "Aucune donnée conservée : calcul à la demande, à chaque appel",
+    sensitiveData: false,
+    source: {
+      label: "data.gouv.fr — Données essentielles de la commande publique (DECP)",
+      url: "https://www.data.gouv.fr/datasets/donnees-essentielles-de-la-commande-publique-5",
+    },
+  },
+  {
+    id: "prospection-syndics-rnic",
+    name: "Repérage de syndics de copropriété (RNIC)",
+    purpose:
+      "Identifier les syndics PROFESSIONNELS d'un secteur à partir du registre " +
+      "national d'immatriculation des copropriétés, comme cible de démarchage pour " +
+      "l'entretien des parties communes. Les syndics BÉNÉVOLES — des résidents, donc " +
+      "des personnes physiques — ne sont jamais nommés : ils ne sortent qu'agrégés " +
+      "par commune, sous le même seuil d'anonymat que les autres signaux publics. Un " +
+      "syndic professionnel nommé n'est exposé que si le déploiement active " +
+      "explicitement RNIC_AFFICHER_SYNDICS_PRO",
+    legalBasis: "interet_legitime",
+    dataCategories: ["identite", "vie_professionnelle", "localisation"],
+    dataSubjects: ["prospects"],
+    recipients: "Service commercial",
+    retention: "Aucune donnée conservée : calcul à la demande, à chaque appel",
+    sensitiveData: false,
+    source: {
+      label: "data.gouv.fr — Registre national d'immatriculation des copropriétés (RNIC)",
+      url: "https://www.data.gouv.fr/datasets/registre-national-dimmatriculation-des-coproprietes",
+    },
+  },
+  {
+    id: "prospection-permis-construire",
+    name: "Signal de permis de construire (Sitadel)",
+    purpose:
+      "Proposer des pistes de prospection à partir des permis de construire, " +
+      "déclarations préalables et permis d'aménager déposés dans la zone du tenant. " +
+      "Une piste PROFESSIONNELLE (personne morale, raison sociale) n'est exposée que " +
+      "si le déploiement active explicitement PERMIS_AFFICHER_PISTES_PRO. Un permis " +
+      "porté par un PARTICULIER n'est jamais présenté comme une piste à contacter : " +
+      "seuls son nom et son adresse — déjà publics sur le permis lui-même — sont " +
+      "affichés à titre d'information, sans numéro de téléphone ni adresse e-mail, " +
+      "et sans aucune action de contact automatisée dans l'application",
+    legalBasis: "interet_legitime",
+    dataCategories: ["identite", "localisation"],
+    dataSubjects: ["prospects"],
+    recipients: "Service commercial",
+    retention: "Aucune donnée conservée : calcul à la demande, à chaque appel",
+    sensitiveData: false,
+    source: {
+      label: "data.gouv.fr — Sitadel, permis de construire (SDES)",
+      url: "https://www.data.gouv.fr/",
     },
   },
   {

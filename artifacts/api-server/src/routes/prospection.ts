@@ -53,6 +53,36 @@ import {
   AnnuaireError,
   type TransportAnnuaire,
 } from "../lib/annuaire-entreprises.js";
+import {
+  chercherMarches,
+  configBoamp,
+  BoampConfigError,
+  BoampError,
+  type TransportBoamp,
+} from "../lib/boamp.js";
+import {
+  chercherAttributions,
+  agregerParSecteurEtZone,
+  configDecp,
+  DecpConfigError,
+  DecpError,
+  type TransportDecp,
+} from "../lib/decp.js";
+import {
+  chercherSyndics,
+  agregerSyndicsBenevoles,
+  configRnic,
+  RnicConfigError,
+  RnicError,
+  type TransportRnic,
+} from "../lib/rnic-syndics.js";
+import {
+  chercherPermis,
+  configPermis,
+  PermisConfigError,
+  PermisError,
+  type TransportPermis,
+} from "../lib/permis-construire.js";
 
 const router: IRouter = Router();
 
@@ -618,6 +648,299 @@ router.get("/prospection/signaux", async (req, res): Promise<void> => {
     agregatsTus: tus,
   });
 });
+
+// ── Signaux de zone, sources publiques institutionnelles ────────────────────
+
+/**
+ * Les deux raisons de silence communes aux quatre sources ci-dessous : aucune
+ * n'a besoin d'un secteur déclaré comme `/axes`, seulement d'une source
+ * configurée et d'une zone. Un seul type local, pas une réutilisation forcée
+ * du `RaisonSilence` d'`axesProspection.ts`, dont les variantes ne
+ * correspondent pas à ce que ces routes vérifient.
+ */
+type RaisonSilenceZone = "aucune_source" | "zone_absente" | null;
+
+const MESSAGES_SILENCE_ZONE: Record<NonNullable<RaisonSilenceZone>, string> = {
+  aucune_source:
+    "Aucune source publique n'est configurée sur ce déploiement. Nous ne proposons " +
+    "pas de piste que vous ne pourriez pas vérifier.",
+  zone_absente: "Renseignez votre ville ou votre code postal pour délimiter la recherche.",
+};
+
+/**
+ * GET /prospection/appels-offres — avis de marchés publics du BTP, dans la zone.
+ *
+ * La source la plus simple des quatre : le côté acheteur d'un avis BOAMP est
+ * TOUJOURS un organisme public, jamais une personne. Aucune garde
+ * d'anonymisation n'est nécessaire ici.
+ *
+ * Exportée comme fabrique de route — comme `creerRouteEnrichissement` — pour
+ * que les tests injectent un transport simulé sans jamais atteindre le réseau.
+ */
+export function creerRouteAppelsOffres(transport?: TransportBoamp): RequestHandler {
+  return async (req: Request, res: Response): Promise<void> => {
+    const tenantId = req.tenantId!;
+    const ville = await reglage(tenantId, "company.adresse_ville");
+    const codePostal = await reglage(tenantId, "company.adresse_cp");
+
+    let raison: RaisonSilenceZone = null;
+    try {
+      configBoamp();
+    } catch (err) {
+      if (!(err instanceof BoampConfigError)) throw err;
+      raison = "aucune_source";
+    }
+    if (!raison && !ville && !codePostal) raison = "zone_absente";
+
+    let marches: Awaited<ReturnType<typeof chercherMarches>> = [];
+    if (!raison) {
+      try {
+        marches = await chercherMarches({ departement: null, codePostal }, transport);
+      } catch (err) {
+        if (err instanceof BoampConfigError) {
+          res.status(503).json({ error: err.message, variableManquante: err.variableManquante });
+          return;
+        }
+        if (err instanceof BoampError) {
+          res.status(502).json({ error: err.message });
+          return;
+        }
+        throw err;
+      }
+    }
+
+    res.json({
+      marches,
+      avertissement:
+        "Ces marchés sont publiés par des organismes publics — aucune personne n'est jamais identifiée ici.",
+      raisonSilence: raison,
+      messageSilence: raison ? MESSAGES_SILENCE_ZONE[raison] : null,
+    });
+  };
+}
+
+router.get("/prospection/appels-offres", creerRouteAppelsOffres());
+
+/**
+ * GET /prospection/sous-traitance — attributaires de marchés publics, comme
+ * piste de sous-traitance.
+ *
+ * ── UN TITULAIRE NOMMÉ N'EST JAMAIS RENDU PAR DÉFAUT ────────────────────────
+ * Les DECP ne portent aucun marqueur fiable personne physique/morale — un
+ * titulaire peut être un entrepreneur individuel. Par défaut, seuls des
+ * AGRÉGATS anonymisés (secteur × zone, sous le seuil on se tait) sont rendus.
+ * `titulairesProfessionnels` reste vide tant que le déploiement n'active pas
+ * explicitement `DECP_AFFICHER_TITULAIRES_PRO` — c'est LA garde que le test
+ * doit éprouver.
+ */
+export function creerRouteSousTraitance(transport?: TransportDecp): RequestHandler {
+  return async (req: Request, res: Response): Promise<void> => {
+    const tenantId = req.tenantId!;
+    const ville = await reglage(tenantId, "company.adresse_ville");
+    const codePostal = await reglage(tenantId, "company.adresse_cp");
+
+    let raison: RaisonSilenceZone = null;
+    try {
+      configDecp();
+    } catch (err) {
+      if (!(err instanceof DecpConfigError)) throw err;
+      raison = "aucune_source";
+    }
+    if (!raison && !ville && !codePostal) raison = "zone_absente";
+
+    let agregats: ReturnType<typeof agregerParSecteurEtZone> = [];
+    let agregatsTus = 0;
+    let titulairesProfessionnels: Awaited<ReturnType<typeof chercherAttributions>> = [];
+    if (!raison) {
+      let attributions: Awaited<ReturnType<typeof chercherAttributions>>;
+      try {
+        attributions = await chercherAttributions({ departement: null, codePostal }, transport);
+      } catch (err) {
+        if (err instanceof DecpConfigError) {
+          res.status(503).json({ error: err.message, variableManquante: err.variableManquante });
+          return;
+        }
+        if (err instanceof DecpError) {
+          res.status(502).json({ error: err.message });
+          return;
+        }
+        throw err;
+      }
+      const brutes = agregerParSecteurEtZone(attributions);
+      agregats = brutes.filter((a) => agregatPubliable(a.occurrences));
+      agregatsTus = brutes.length - agregats.length;
+      if (process.env["DECP_AFFICHER_TITULAIRES_PRO"] === "true") {
+        titulairesProfessionnels = attributions;
+      }
+    }
+
+    res.json({
+      agregats,
+      titulairesProfessionnels,
+      seuilAnonymat: SEUIL_ANONYMAT,
+      agregatsTus,
+      avertissement:
+        "Un titulaire de marché public peut être un entrepreneur individuel, donc une " +
+        "personne physique : aucun nom n'est affiché sans activation explicite de ce déploiement.",
+      raisonSilence: raison,
+      messageSilence: raison ? MESSAGES_SILENCE_ZONE[raison] : null,
+    });
+  };
+}
+
+router.get("/prospection/sous-traitance", creerRouteSousTraitance());
+
+/**
+ * GET /prospection/syndics — syndics de copropriété, dans la commune.
+ *
+ * Un syndic PROFESSIONNEL (société) est une cible légitime ; un syndic
+ * BÉNÉVOLE est un résident, donc un particulier — jamais nommé, seulement
+ * compté dans `agregats`. `syndicsProfessionnels` reste vide tant que le
+ * déploiement n'active pas `RNIC_AFFICHER_SYNDICS_PRO`.
+ */
+export function creerRouteSyndics(transport?: TransportRnic): RequestHandler {
+  return async (req: Request, res: Response): Promise<void> => {
+    const tenantId = req.tenantId!;
+    const ville = await reglage(tenantId, "company.adresse_ville");
+    const codePostal = await reglage(tenantId, "company.adresse_cp");
+
+    let raison: RaisonSilenceZone = null;
+    try {
+      configRnic();
+    } catch (err) {
+      if (!(err instanceof RnicConfigError)) throw err;
+      raison = "aucune_source";
+    }
+    if (!raison && !ville && !codePostal) raison = "zone_absente";
+
+    let agregats: ReturnType<typeof agregerSyndicsBenevoles> = [];
+    let agregatsTus = 0;
+    let syndicsProfessionnels: Awaited<ReturnType<typeof chercherSyndics>> = [];
+    if (!raison) {
+      let syndics: Awaited<ReturnType<typeof chercherSyndics>>;
+      try {
+        syndics = await chercherSyndics({ commune: ville, codePostal }, transport);
+      } catch (err) {
+        if (err instanceof RnicConfigError) {
+          res.status(503).json({ error: err.message, variableManquante: err.variableManquante });
+          return;
+        }
+        if (err instanceof RnicError) {
+          res.status(502).json({ error: err.message });
+          return;
+        }
+        throw err;
+      }
+      const brutes = agregerSyndicsBenevoles(syndics);
+      agregats = brutes.filter((a) => agregatPubliable(a.occurrences));
+      agregatsTus = brutes.length - agregats.length;
+      if (process.env["RNIC_AFFICHER_SYNDICS_PRO"] === "true") {
+        syndicsProfessionnels = syndics.filter((s) => s.syndicProfessionnel);
+      }
+    }
+
+    res.json({
+      agregats,
+      syndicsProfessionnels,
+      seuilAnonymat: SEUIL_ANONYMAT,
+      agregatsTus,
+      avertissement:
+        "Un syndic bénévole est un résident, donc un particulier : jamais nommé, " +
+        "seulement compté par commune.",
+      raisonSilence: raison,
+      messageSilence: raison ? MESSAGES_SILENCE_ZONE[raison] : null,
+    });
+  };
+}
+
+router.get("/prospection/syndics", creerRouteSyndics());
+
+/**
+ * GET /prospection/permis — permis de construire, déclarations préalables et
+ * permis d'aménager, dans la zone.
+ *
+ * ── LA LIGNE NÉGOCIÉE, TENUE ICI ─────────────────────────────────────────────
+ * `pistesProfessionnelles` : un demandeur personne MORALE, gaté par
+ * `PERMIS_AFFICHER_PISTES_PRO` — traité comme n'importe quelle autre source
+ * professionnelle du lot.
+ *
+ * `informationsParticuliers` : un demandeur personne PHYSIQUE. Nom et adresse
+ * SEULEMENT — déjà publics sur le permis lui-même — affichés comme
+ * INFORMATION, jamais comme piste à contacter : ni téléphone, ni e-mail, ni
+ * action d'envoi dans cette réponse. Le démarchage électronique à froid d'un
+ * particulier sans consentement préalable est interdit (art. L34-5 CPCE) ;
+ * cette liste n'est pas soumise au seuil d'anonymat des autres sources
+ * (DECP/RNIC) parce qu'elle ne fait qu'afficher une donnée qui est DÉJÀ
+ * nominative sur le document public — l'agréger ne la rendrait pas moins
+ * identifiable, contrairement à un agrégat de compteurs.
+ */
+export function creerRoutePermis(transport?: TransportPermis): RequestHandler {
+  return async (req: Request, res: Response): Promise<void> => {
+  const tenantId = req.tenantId!;
+  const ville = await reglage(tenantId, "company.adresse_ville");
+  const codePostal = await reglage(tenantId, "company.adresse_cp");
+
+  let raison: RaisonSilenceZone = null;
+  try {
+    configPermis();
+  } catch (err) {
+    if (!(err instanceof PermisConfigError)) throw err;
+    raison = "aucune_source";
+  }
+  if (!raison && !ville && !codePostal) raison = "zone_absente";
+
+  let pistesProfessionnelles: Awaited<ReturnType<typeof chercherPermis>> = [];
+  let informationsParticuliers: Array<{
+    nomDemandeur: string | null;
+    adresse: string | null;
+    codePostal: string | null;
+    commune: string | null;
+    dateOctroi: string | null;
+    nature: string | null;
+  }> = [];
+  if (!raison) {
+    let permis: Awaited<ReturnType<typeof chercherPermis>>;
+    try {
+      permis = await chercherPermis({ commune: ville, codePostal }, transport);
+    } catch (err) {
+      if (err instanceof PermisConfigError) {
+        res.status(503).json({ error: err.message, variableManquante: err.variableManquante });
+        return;
+      }
+      if (err instanceof PermisError) {
+        res.status(502).json({ error: err.message });
+        return;
+      }
+      throw err;
+    }
+    if (process.env["PERMIS_AFFICHER_PISTES_PRO"] === "true") {
+      pistesProfessionnelles = permis.filter((p) => p.demandeurPersonneMorale);
+    }
+    informationsParticuliers = permis
+      .filter((p) => !p.demandeurPersonneMorale)
+      .map((p) => ({
+        nomDemandeur: p.nomDemandeur,
+        adresse: p.adresse,
+        codePostal: p.codePostal,
+        commune: p.commune,
+        dateOctroi: p.dateOctroi,
+        nature: p.nature,
+      }));
+  }
+
+  res.json({
+    pistesProfessionnelles,
+    informationsParticuliers,
+    avertissement:
+      "Les particuliers listés ici sont une INFORMATION, jamais une piste à contacter : " +
+      "aucun téléphone, aucun e-mail, aucune action d'envoi n'est proposée pour eux.",
+    raisonSilence: raison,
+    messageSilence: raison ? MESSAGES_SILENCE_ZONE[raison] : null,
+  });
+  };
+}
+
+router.get("/prospection/permis", creerRoutePermis());
 
 // ── Conservation ─────────────────────────────────────────────────────────────
 
