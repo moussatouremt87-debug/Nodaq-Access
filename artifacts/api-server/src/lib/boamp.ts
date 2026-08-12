@@ -130,8 +130,15 @@ function formeRecue(brut: unknown): string {
 }
 
 /**
- * Cherche des marchés publics dans un département. Rend une liste,
- * éventuellement vide.
+ * Cherche des marchés publics dans un département, filtrés par pertinence
+ * métier si `motsCles` est fourni.
+ *
+ * ── POURQUOI UNE RECHERCHE PLEIN TEXTE, PAS UN FILTRE CPV ───────────────────
+ * Le jeu de données BOAMP n'expose AUCUN champ CPV interrogeable — confirmé
+ * en lisant son schéma réel (`descripteur_code`/`descripteur_libelle` sont un
+ * thésaurus français, pas la nomenclature CPV). `motsCles` construit donc une
+ * recherche plein texte (`q=`), le seul mécanisme de pertinence que cette
+ * source permette honnêtement.
  *
  * Ne lève JAMAIS pour dire « rien trouvé ». Lève quand la configuration
  * manque, quand le service répond mal, ou quand la forme est inconnue.
@@ -139,10 +146,17 @@ function formeRecue(brut: unknown): string {
 export async function chercherMarches(
   requete: { readonly departement: string | null; readonly codePostal: string | null },
   transport: TransportBoamp = transportParDefaut,
+  motsCles?: readonly string[],
 ): Promise<MarchePublic[]> {
   const config = configBoamp();
   const dep = requete.departement ?? requete.codePostal?.slice(0, 2) ?? "";
-  const url = `${config.baseUrl}/records?where=code_departement%3D%22${encodeURIComponent(dep)}%22`;
+  let url = `${config.baseUrl}/records?where=code_departement%3D%22${encodeURIComponent(dep)}%22`;
+  if (motsCles && motsCles.length > 0) {
+    // ODSQL : plusieurs termes joints par OR, chacun entre guillemets pour
+    // une recherche d'expression plutôt que mot à mot.
+    const q = motsCles.map((m) => `"${m}"`).join(" OR ");
+    url += `&q=${encodeURIComponent(q)}`;
+  }
 
   let reponse: { status: number; texte: string };
   try {

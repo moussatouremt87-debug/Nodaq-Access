@@ -33,6 +33,7 @@ import {
   axesPourMetier,
   raisonSilence,
   MESSAGES_SILENCE,
+  secteurMarchesPublicsPour,
   toDateString,
   type TypeContact,
   type BaseLegale,
@@ -668,6 +669,22 @@ const MESSAGES_SILENCE_ZONE: Record<NonNullable<RaisonSilenceZone>, string> = {
 };
 
 /**
+ * BOAMP et DECP filtrent en plus par PERTINENCE MÉTIER — voir
+ * `secteurMarchesPublicsPour` dans `@nodaq/shared`. `secteur_non_couvert` :
+ * ni deviné ni approximé, un menuisier ne doit jamais voir des fournitures de
+ * peluches pour l'armée sous prétexte que le mapping manque.
+ */
+type RaisonSilenceMarche = RaisonSilenceZone | "secteur_non_couvert";
+
+const MESSAGES_SILENCE_MARCHE: Record<Exclude<RaisonSilenceMarche, null>, string> = {
+  ...MESSAGES_SILENCE_ZONE,
+  secteur_non_couvert:
+    "Votre métier n'a pas encore de correspondance établie avec les codes des " +
+    "marchés publics. Plutôt que d'afficher des résultats non pertinents, nous " +
+    "préférons ne rien proposer.",
+};
+
+/**
  * GET /prospection/appels-offres — avis de marchés publics du BTP, dans la zone.
  *
  * La source la plus simple des quatre : le côté acheteur d'un avis BOAMP est
@@ -682,8 +699,14 @@ export function creerRouteAppelsOffres(transport?: TransportBoamp): RequestHandl
     const tenantId = req.tenantId!;
     const ville = await reglage(tenantId, "company.adresse_ville");
     const codePostal = await reglage(tenantId, "company.adresse_cp");
+    // `votre-metier.metier` — pas `metier.secteur` : c'est la clé que l'écran
+    // « Votre métier » pose réellement. `metier.secteur` n'est écrite par
+    // aucun écran de ce dépôt (vérifié) ; s'y fier rendrait ce filtre
+    // silencieux pour tout le monde.
+    const metier = await reglage(tenantId, "votre-metier.metier");
+    const secteur = secteurMarchesPublicsPour(metier);
 
-    let raison: RaisonSilenceZone = null;
+    let raison: RaisonSilenceMarche = null;
     try {
       configBoamp();
     } catch (err) {
@@ -691,11 +714,12 @@ export function creerRouteAppelsOffres(transport?: TransportBoamp): RequestHandl
       raison = "aucune_source";
     }
     if (!raison && !ville && !codePostal) raison = "zone_absente";
+    if (!raison && !secteur) raison = "secteur_non_couvert";
 
     let marches: Awaited<ReturnType<typeof chercherMarches>> = [];
     if (!raison) {
       try {
-        marches = await chercherMarches({ departement: null, codePostal }, transport);
+        marches = await chercherMarches({ departement: null, codePostal }, transport, secteur!.motsCles);
       } catch (err) {
         if (err instanceof BoampConfigError) {
           res.status(503).json({ error: err.message, variableManquante: err.variableManquante });
@@ -714,7 +738,7 @@ export function creerRouteAppelsOffres(transport?: TransportBoamp): RequestHandl
       avertissement:
         "Ces marchés sont publiés par des organismes publics — aucune personne n'est jamais identifiée ici.",
       raisonSilence: raison,
-      messageSilence: raison ? MESSAGES_SILENCE_ZONE[raison] : null,
+      messageSilence: raison ? MESSAGES_SILENCE_MARCHE[raison] : null,
     });
   };
 }
@@ -738,8 +762,10 @@ export function creerRouteSousTraitance(transport?: TransportDecp): RequestHandl
     const tenantId = req.tenantId!;
     const ville = await reglage(tenantId, "company.adresse_ville");
     const codePostal = await reglage(tenantId, "company.adresse_cp");
+    const metier = await reglage(tenantId, "votre-metier.metier");
+    const secteur = secteurMarchesPublicsPour(metier);
 
-    let raison: RaisonSilenceZone = null;
+    let raison: RaisonSilenceMarche = null;
     try {
       configDecp();
     } catch (err) {
@@ -747,6 +773,7 @@ export function creerRouteSousTraitance(transport?: TransportDecp): RequestHandl
       raison = "aucune_source";
     }
     if (!raison && !ville && !codePostal) raison = "zone_absente";
+    if (!raison && !secteur) raison = "secteur_non_couvert";
 
     let agregats: ReturnType<typeof agregerParSecteurEtZone> = [];
     let agregatsTus = 0;
@@ -754,7 +781,11 @@ export function creerRouteSousTraitance(transport?: TransportDecp): RequestHandl
     if (!raison) {
       let attributions: Awaited<ReturnType<typeof chercherAttributions>>;
       try {
-        attributions = await chercherAttributions({ departement: null, codePostal }, transport);
+        attributions = await chercherAttributions(
+          { departement: null, codePostal },
+          transport,
+          secteur!.divisionsCpv,
+        );
       } catch (err) {
         if (err instanceof DecpConfigError) {
           res.status(503).json({ error: err.message, variableManquante: err.variableManquante });
@@ -783,7 +814,7 @@ export function creerRouteSousTraitance(transport?: TransportDecp): RequestHandl
         "Un titulaire de marché public peut être un entrepreneur individuel, donc une " +
         "personne physique : aucun nom n'est affiché sans activation explicite de ce déploiement.",
       raisonSilence: raison,
-      messageSilence: raison ? MESSAGES_SILENCE_ZONE[raison] : null,
+      messageSilence: raison ? MESSAGES_SILENCE_MARCHE[raison] : null,
     });
   };
 }

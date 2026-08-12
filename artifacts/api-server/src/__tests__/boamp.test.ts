@@ -4,6 +4,10 @@
  * Ce que ces tests protègent :
  *   — AUCUN marché sans source configurée, et le silence est expliqué ;
  *   — AUCUN marché sans zone renseignée, et le silence est expliqué ;
+ *   — AUCUN marché sans métier mappé à des codes de marché public, et le
+ *     silence est expliqué — un menuisier ne doit jamais voir des résultats
+ *     non filtrés sous prétexte que son métier n'a pas de correspondance ;
+ *   — le filtre de pertinence (mots-clés) part réellement dans la requête ;
  *   — la source est CITÉE dans la réponse, pas seulement stockée ;
  *   — isolation entre tenants.
  *
@@ -81,6 +85,10 @@ beforeAll(async () => {
   b = await inscrire("b");
   await reglage(a.tenantId, "company.adresse_ville", "Marly-Gomont");
   await reglage(a.tenantId, "company.adresse_cp", "02120");
+  // `votre-metier.metier`, pas `metier.secteur` : c'est la clé que l'écran
+  // « Votre métier » pose réellement — voir le commentaire dans
+  // creerRouteAppelsOffres.
+  await reglage(a.tenantId, "votre-metier.metier", "batiment");
 }, 90_000);
 
 afterAll(async () => {
@@ -112,7 +120,22 @@ describe("aucun marché sans zone renseignée", () => {
   });
 });
 
-describe("avec source et zone", () => {
+describe("aucun marché sans métier mappé", () => {
+  test("un métier sans correspondance CPV établie n'obtient rien, et sait pourquoi", async () => {
+    configurerSource();
+    await reglage(b.tenantId, "company.adresse_ville", "Laon");
+    await reglage(b.tenantId, "company.adresse_cp", "02000");
+    await reglage(b.tenantId, "votre-metier.metier", "retail");
+    const t: TransportBoamp = async () => ({ status: 200, texte: JSON.stringify({ results: [marcheBrut()] }) });
+    const { body } = await request(appAvec(t, b.tenantId)).get("/appels-offres").expect(200);
+
+    expect(body.marches).toHaveLength(0);
+    expect(body.raisonSilence).toBe("secteur_non_couvert");
+    expect(body.messageSilence).toMatch(/métier/i);
+  });
+});
+
+describe("avec source, zone et métier mappé", () => {
   beforeAll(configurerSource);
 
   test("les marchés sont rendus, et la source est CITÉE", async () => {
@@ -126,6 +149,18 @@ describe("avec source et zone", () => {
     expect(body.avertissement).toMatch(/organismes publics/i);
   });
 
+  test("la requête part avec les mots-clés du métier, en recherche plein texte", async () => {
+    let urlAppelee = "";
+    const t: TransportBoamp = async (url) => {
+      urlAppelee = url;
+      return { status: 200, texte: JSON.stringify({ results: [] }) };
+    };
+    await request(appAvec(t, a.tenantId)).get("/appels-offres").expect(200);
+
+    expect(urlAppelee).toContain("q=");
+    expect(decodeURIComponent(urlAppelee)).toMatch(/bâtiment|travaux|construction/i);
+  });
+
   test("une réponse de forme inconnue est REFUSÉE, jamais devinée", async () => {
     const t: TransportBoamp = async () => ({ status: 200, texte: JSON.stringify({ items: [marcheBrut()] }) });
     const { body } = await request(appAvec(t, a.tenantId)).get("/appels-offres").expect(502);
@@ -137,6 +172,8 @@ describe("isolation", () => {
   test("les marchés d'un tenant dépendent de SES réglages", async () => {
     configurerSource();
     await reglage(b.tenantId, "company.adresse_ville", "Laon");
+    await reglage(b.tenantId, "company.adresse_cp", "02000");
+    await reglage(b.tenantId, "votre-metier.metier", "maintenance");
     const t: TransportBoamp = async () => ({ status: 200, texte: JSON.stringify({ results: [marcheBrut()] }) });
 
     const rA = await request(appAvec(t, a.tenantId)).get("/appels-offres").expect(200);

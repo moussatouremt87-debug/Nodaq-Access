@@ -125,17 +125,29 @@ function formeRecue(brut: unknown): string {
 }
 
 /**
- * Cherche des attributions dans un département. Rend une liste,
- * éventuellement vide. Chaque ligne porte un titulaire nommé — c'est
- * `agregerParSecteurEtZone` qu'il faut appeler pour un résultat anonymisé.
+ * Cherche des attributions dans un département, filtrées par pertinence
+ * métier si `divisionsCpv` est fourni. Rend une liste, éventuellement vide.
+ * Chaque ligne porte un titulaire nommé — c'est `agregerParSecteurEtZone`
+ * qu'il faut appeler pour un résultat anonymisé.
+ *
+ * `codecpv_division` est un champ structuré à deux chiffres du jeu de
+ * données réel (confirmé en lisant son schéma) — un filtre `where=`
+ * fonctionne directement dessus, contrairement à BOAMP.
  */
 export async function chercherAttributions(
   requete: { readonly departement: string | null; readonly codePostal: string | null },
   transport: TransportDecp = transportParDefaut,
+  divisionsCpv?: readonly string[],
 ): Promise<AttributionPublique[]> {
   const config = configDecp();
   const dep = requete.departement ?? requete.codePostal?.slice(0, 2) ?? "";
-  const url = `${config.baseUrl}/records?where=codedepartementexecution%3D%22${encodeURIComponent(dep)}%22`;
+  let url = `${config.baseUrl}/records?where=codedepartementexecution%3D%22${encodeURIComponent(dep)}%22`;
+  if (divisionsCpv && divisionsCpv.length > 0) {
+    const clause = divisionsCpv
+      .map((d) => `codecpv_division%3D%22${encodeURIComponent(d)}%22`)
+      .join("%20OR%20");
+    url += `&where=(${clause})`;
+  }
 
   let reponse: { status: number; texte: string };
   try {

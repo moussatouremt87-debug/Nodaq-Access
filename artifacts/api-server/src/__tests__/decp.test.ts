@@ -4,6 +4,9 @@
  * Ce que ces tests protègent :
  *   — AUCUNE attribution sans source configurée, et le silence est expliqué ;
  *   — AUCUNE attribution sans zone renseignée, et le silence est expliqué ;
+ *   — AUCUNE attribution sans métier mappé à des divisions CPV, et le
+ *     silence est expliqué ;
+ *   — le filtre de pertinence (divisions CPV) part réellement dans la requête ;
  *   — un agrégat sous le seuil d'anonymat est supprimé, et compté ;
  *   — AUCUN titulaire n'est jamais nommé tant que DECP_AFFICHER_TITULAIRES_PRO
  *     n'est pas activé — MÊME si le transport simulé renvoie des titulaires
@@ -89,6 +92,7 @@ beforeAll(async () => {
   b = await inscrire("b");
   await reglage(a.tenantId, "company.adresse_ville", "Marly-Gomont");
   await reglage(a.tenantId, "company.adresse_cp", "02120");
+  await reglage(a.tenantId, "votre-metier.metier", "batiment");
 }, 90_000);
 
 afterAll(async () => {
@@ -117,6 +121,36 @@ describe("aucune attribution sans zone renseignée", () => {
 
     expect(body.agregats).toHaveLength(0);
     expect(body.raisonSilence).toBe("zone_absente");
+  });
+});
+
+describe("aucune attribution sans métier mappé", () => {
+  test("un métier sans correspondance CPV établie n'obtient rien, et sait pourquoi", async () => {
+    configurerSource();
+    await reglage(b.tenantId, "company.adresse_ville", "Laon");
+    await reglage(b.tenantId, "company.adresse_cp", "02000");
+    await reglage(b.tenantId, "votre-metier.metier", "negoce");
+    const t: TransportDecp = async () => ({ status: 200, texte: JSON.stringify({ results: attributionsBrutes(6) }) });
+    const { body } = await request(appAvec(t, b.tenantId)).get("/sous-traitance").expect(200);
+
+    expect(body.agregats).toHaveLength(0);
+    expect(body.raisonSilence).toBe("secteur_non_couvert");
+    expect(body.messageSilence).toMatch(/métier/i);
+  });
+});
+
+describe("la requête part avec les divisions CPV du métier", () => {
+  beforeAll(configurerSource);
+
+  test("le filtre codecpv_division est dans l'URL appelée", async () => {
+    let urlAppelee = "";
+    const t: TransportDecp = async (url) => {
+      urlAppelee = url;
+      return { status: 200, texte: JSON.stringify({ results: [] }) };
+    };
+    await request(appAvec(t, a.tenantId)).get("/sous-traitance").expect(200);
+
+    expect(decodeURIComponent(urlAppelee)).toMatch(/codecpv_division="45"/);
   });
 });
 
@@ -171,6 +205,7 @@ describe("isolation", () => {
     configurerSource();
     await reglage(b.tenantId, "company.adresse_ville", "Laon");
     await reglage(b.tenantId, "company.adresse_cp", "02000");
+    await reglage(b.tenantId, "votre-metier.metier", "maintenance");
     const t: TransportDecp = async () => ({ status: 200, texte: JSON.stringify({ results: attributionsBrutes(6) }) });
 
     const rA = await request(appAvec(t, a.tenantId)).get("/sous-traitance").expect(200);
