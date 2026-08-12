@@ -13,7 +13,6 @@ import {
   Check,
   X,
   Activity,
-  ArrowUpRight,
   RefreshCw,
   CalendarDays,
   Building2,
@@ -605,7 +604,6 @@ export default function Cockpit() {
         >
           <div className="flex items-center justify-between px-5 py-4 border-b border-border">
             <span className="text-sm font-medium">Activité récente</span>
-            <ArrowUpRight className="h-4 w-4 text-muted-foreground" />
           </div>
           {activityLoading ? (
             <div className="p-4 space-y-3">

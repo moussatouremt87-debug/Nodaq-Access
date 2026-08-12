@@ -33,11 +33,20 @@ if (trustProxy) {
 //   1. localhost / 127.0.0.1 (any port) — dev convenience
 //   2. PUBLIC_URL — the canonical production origin (e.g. https://app.nodaq.fr)
 //   3. REPLIT_DEV_DOMAIN — dev fallback when no PUBLIC_URL; not set on Scaleway
+//   4. IP privée de réseau local, EN DÉVELOPPEMENT SEULEMENT — pour tester
+//      depuis un téléphone sur le même Wi-Fi que le Mac qui sert l'appli.
 //
 // NOTE: REPLIT_DEV_DOMAIN is intentionally a fallback — it must never be the
 // sole allowed origin in production. Set PUBLIC_URL on any non-Replit host.
 const publicUrl   = process.env.PUBLIC_URL;         // e.g. "https://app.nodaq.fr"
 const devDomain   = process.env.REPLIT_DEV_DOMAIN;  // e.g. "abc123.id.repl.co"
+
+// RFC 1918 — 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16. HTTP seulement (jamais
+// de certificat valide sur une IP locale) et jamais en production : un artisan
+// qui teste depuis son téléphone sur son propre Wi-Fi n'a rien à voir avec un
+// déploiement public, où seule PUBLIC_URL doit compter.
+const ORIGINE_RESEAU_LOCAL =
+  /^http:\/\/(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(:\d+)?$/;
 
 function isAllowedOrigin(origin: string): boolean {
   // Exact localhost / 127.0.0.1 match (any port)
@@ -60,6 +69,30 @@ function isAllowedOrigin(origin: string): boolean {
         origin.startsWith(`${bare}:`) || origin.startsWith(`${bare2}:`)) {
       return true;
     }
+  }
+
+  // PAS un test sur NODE_ENV : cette variable vaut "production" même en
+  // local, dès qu'on sert le SPA construit (app.ts plus bas) — ce test-là
+  // serait donc systématiquement vrai, y compris en local. PUBLIC_URL
+  // pointant sur localhost, en revanche, ne peut JAMAIS être vrai pour un
+  // déploiement public réel : c'est le signal fiable que cette instance sert
+  // un test local, pas un déploiement.
+  const estInstanceLocale = Boolean(
+    publicUrl && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(publicUrl),
+  );
+
+  // IP de réseau local — test depuis un téléphone sur le même Wi-Fi que le
+  // Mac qui sert l'appli.
+  if (estInstanceLocale && ORIGINE_RESEAU_LOCAL.test(origin)) {
+    return true;
+  }
+
+  // Tunnel loca.lt — test depuis un lieu qui n'est PAS sur le même réseau que
+  // la machine qui sert l'appli (ex. bureau, Mac resté à la maison). Sous-
+  // domaine engendré à chaque tunnel, jamais fixé en dur : n'importe lequel
+  // est accepté tant que cette instance reste une instance locale.
+  if (estInstanceLocale && /^https:\/\/[a-z0-9-]+\.loca\.lt$/.test(origin)) {
+    return true;
   }
 
   return false;
