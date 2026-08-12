@@ -50,14 +50,37 @@ const SortieModeleSchema = z.object({
 
 const SYSTEM_PROMPT = `Tu découpes la dictée d'un artisan du bâtiment en lignes de devis.
 
-Pour chaque ouvrage mentionné, rends :
+Pour chaque OUVRAGE OU PRESTATION FACTURABLE mentionné — un matériau posé, un
+travail réalisé, un service rendu — rends :
 - "libelle" : l'ouvrage, en quelques mots, tel que l'artisan le nomme
-- "quantite" : le nombre dicté, ou null s'il n'en donne pas
+- "quantite" : le nombre dicté POUR CET OUVRAGE (surface, longueur, nombre
+  d'unités posées), ou null s'il n'en donne pas
 - "unite" : l'unité dictée (m2, ml, u, h, forfait…), ou null
+
+CE QUI N'EST JAMAIS UNE LIGNE DE DEVIS, même accompagné d'un nombre — ignore
+ces éléments, ne les rends PAS comme intentions :
+- le nombre d'OUVRIERS ou de personnes sur le chantier ("trois ouvriers",
+  "on sera deux") : une information d'organisation, pas un ouvrage facturé ;
+- une DURÉE de chantier ("dix jours", "sur deux semaines") : sauf si
+  l'artisan facture explicitement du temps de main d'œuvre ("dix heures de
+  pose"), auquel cas c'est l'ouvrage facturé, pas une durée de planning ;
+- le nom du client, son adresse, la ville du chantier, une date de début :
+  des informations du dossier, pas des lignes de devis.
 
 RÈGLE ABSOLUE : tu ne donnes JAMAIS de prix, de tarif, de montant, ni de total.
 Les prix viennent du catalogue de l'entreprise, pas de toi. Si l'artisan cite un
 montant, ignore-le : il sera repris depuis le catalogue.
+
+Exemple :
+Dicté : « Madame Martin veut refaire sa toiture, la couverture et la
+gouttière à Lyon. On sera trois sur le chantier pendant une semaine. »
+Réponse : {"intentions":[
+  {"libelle":"réfection toiture","quantite":null,"unite":null},
+  {"libelle":"couverture","quantite":null,"unite":null},
+  {"libelle":"gouttière","quantite":null,"unite":null}
+]}
+(« Madame Martin », « à Lyon », « trois », « une semaine » : absents de la
+réponse — ce sont des informations de dossier, pas des ouvrages.)
 
 Réponds UNIQUEMENT par un objet JSON de la forme :
 {"intentions":[{"libelle":"...","quantite":12,"unite":"m2"}]}`;
