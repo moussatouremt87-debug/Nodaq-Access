@@ -24,7 +24,18 @@ export const COOKIE_NAME = "nodaq_sid";
 export const COOKIE_OPTS = {
   httpOnly: true,
   sameSite: "lax" as const,
-  secure: process.env.NODE_ENV === "production",
+  // PAS un test sur NODE_ENV : cette variable vaut "production" même en
+  // local, dès qu'on sert le SPA construit (app.ts) — un cookie "secure"
+  // serait alors posé sur une connexion HTTP simple (test depuis un
+  // téléphone sur le même Wi-Fi que le Mac, par exemple), et le navigateur
+  // refuse purement et simplement de le garder : la connexion semble
+  // réussir puis "s'oublie" aussitôt.
+  //
+  // Le bon signal est PUBLIC_URL — l'origine canonique RÉELLE de ce
+  // déploiement. Si elle est en HTTPS, on est dans un vrai déploiement
+  // public et le cookie DOIT être secure. Si elle est en HTTP (localhost en
+  // dev, ou une IP de réseau local pour un test), il ne peut pas l'être.
+  secure: (process.env.PUBLIC_URL ?? "").startsWith("https://"),
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days (sliding — middleware extends DB record)
   signed: true,
 };

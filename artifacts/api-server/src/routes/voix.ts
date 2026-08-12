@@ -118,19 +118,26 @@ router.post("/voix/interpreter", async (req, res): Promise<void> => {
     // Sortie non conforme — un identifiant, un montant, un type inconnu. On
     // NE NETTOIE PAS : on rend un plan vide qui dit qu'on n'a pas compris.
     // Nettoyer laisserait croire qu'on a compris ce qui a été proposé.
-    const planVide = {
-      operations: [],
-      questions: [],
-      nonCompris: [parsed.data.texte],
-    };
-    const planId = await enregistrerPlan(tenantId, planVide);
-    res.json({ planId, ...planVide });
+    //
+    // `planId: null`, PAS de ligne enregistrée : un plan sans la moindre
+    // opération n'a rien à faire dans la file « à valider » du cockpit — il
+    // n'y a rien à valider. Le bouton « Valider » du micro flottant est déjà
+    // désactivé dans ce cas (`!plan?.operations.length`) : `planId` n'y est
+    // donc jamais lu.
+    res.json({ planId: null, operations: [], questions: [], nonCompris: [parsed.data.texte] });
     return;
   }
 
   const contexte = await chargerContexte(tenantId);
   const plan = construirePlan(sortie.intentions, sortie.nonCompris, contexte);
-  const planId = await enregistrerPlan(tenantId, plan);
+
+  // Rien à appliquer ET rien à trancher : ne pas enregistrer. Un plan qui ne
+  // propose aucune opération n'a pas sa place dans la file de validation du
+  // cockpit — voir le commentaire ci-dessus.
+  const planId =
+    plan.operations.length > 0 || plan.questions.length > 0
+      ? await enregistrerPlan(tenantId, plan)
+      : null;
 
   res.json({ planId, ...plan });
 });

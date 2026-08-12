@@ -34,7 +34,9 @@ interface Question {
 }
 
 interface Plan {
-  planId: string;
+  // `null` quand rien n'a produit d'opération : rien n'est enregistré côté
+  // serveur dans ce cas, donc rien à valider — voir routes/voix.ts.
+  planId: string | null;
   operations: Operation[];
   questions: Question[];
   nonCompris: string[];

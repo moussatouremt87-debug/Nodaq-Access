@@ -13,6 +13,7 @@ import Contrats from '@/pages/contrats';
 import Factures from '@/pages/factures';
 import Avoirs from '@/pages/avoirs';
 import Prospects from '@/pages/prospects';
+import Prospection from '@/pages/prospection';
 import Brief from '@/pages/brief';
 import Chat from '@/pages/chat';
 import Devis from '@/pages/devis';
@@ -170,6 +171,7 @@ function ApplicationInterne() {
               <Route path="/factures" component={PlatformRoute(Factures)} />
               <Route path="/avoirs" component={PlatformRoute(Avoirs)} />
               <Route path="/prospects" component={PlatformRoute(Prospects)} />
+              <Route path="/prospection" component={PlatformRoute(Prospection)} />
               <Route path="/brief" component={PlatformRoute(Brief)} />
               <Route path="/chat" component={PlatformRoute(Chat)} />
               <Route path="/devis" component={PlatformRoute(Devis)} />

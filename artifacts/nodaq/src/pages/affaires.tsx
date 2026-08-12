@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useLocation } from 'wouter';
 import { motion, useReducedMotion } from 'framer-motion';
 import {
   Plus,
@@ -51,6 +52,7 @@ import { AffaireDialog } from '@/components/affaire-dialog';
 import type { Affaire } from '@workspace/api-client-react';
 
 export default function Affaires() {
+  const [, navigate] = useLocation();
   const reducedMotion = useReducedMotion();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -219,8 +221,9 @@ export default function Affaires() {
                   <motion.tr
                     key={affaire.id}
                     variants={reducedMotion ? undefined : itemVariants}
-                    className="border-b border-border last:border-0 hover-elevate"
+                    className="border-b border-border last:border-0 hover-elevate cursor-pointer"
                     data-testid={`row-affaire-${affaire.id}`}
+                    onClick={() => navigate(`/affaires/${affaire.id}`)}
                   >
                     <td className="px-5 py-3">
                       <div className="font-medium text-foreground">{affaire.label}</div>
@@ -258,7 +261,10 @@ export default function Affaires() {
                     <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
                       {fmtDate(affaire.startDate)}
                     </td>
-                    <td className="px-3 py-3 text-right">
+                    {/* La ligne entière navigue vers le détail : ce menu est
+                        dans son propre îlot de clic, sinon l'ouvrir
+                        naviguerait aussi. */}
+                    <td className="px-3 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                       <AffaireRowMenu
                         affaire={affaire}
                         onEdit={() => openEdit(affaire)}
