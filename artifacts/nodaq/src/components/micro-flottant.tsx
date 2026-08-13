@@ -114,7 +114,13 @@ export function MicroFlottant() {
         aria-label="Dicter une commande"
         data-testid="bouton-micro-flottant"
         size="icon"
-        className="fixed bottom-20 right-4 z-40 h-14 w-14 rounded-full shadow-lg md:bottom-6"
+        // `no-default-hover-elevate`/`no-default-active-elevate` : le survol
+        // de `Button` pose `position: relative` (index.css) pour ancrer son
+        // effet ::after — plus spécifique que la classe `fixed`, il gagnait
+        // la cascade et renvoyait ce bouton dans le flux normal du DOM, hors
+        // écran. Sans ces deux classes, AUCUN bouton `fixed` de ce composant
+        // ne flotte réellement, peu importe sa position déclarée.
+        className="fixed bottom-20 left-1/2 -translate-x-1/2 z-40 h-20 w-20 rounded-full shadow-lg md:bottom-6 no-default-hover-elevate no-default-active-elevate"
         // Appui LONG : `onPointerDown` / `onPointerUp` couvrent souris, doigt
         // et stylet d'un seul jeu d'événements.
         onPointerDown={() => void demarrer()}
@@ -123,9 +129,9 @@ export function MicroFlottant() {
         disabled={occupe}
       >
         {occupe ? (
-          <Loader2 className="h-6 w-6 animate-spin" />
+          <Loader2 className="h-9 w-9 animate-spin" />
         ) : (
-          <Mic className={enregistre ? 'h-6 w-6 animate-pulse' : 'h-6 w-6'} />
+          <Mic className={enregistre ? 'h-9 w-9 animate-pulse' : 'h-9 w-9'} />
         )}
       </Button>
 
