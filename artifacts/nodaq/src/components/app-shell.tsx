@@ -111,14 +111,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {/* Desktop top ribbon (desktop only, sticky top-0, h-11) */}
         <TopRibbon />
 
-        <main className="flex-1 min-w-0">{children}</main>
+        <main className="flex-1 min-w-0">
+          {children}
+          {/* Monté ICI, en fin de page — donc présent sur TOUTES les pages,
+              après leur contenu. Le poser page par page garantirait qu'on en
+              oublie une. Volontairement PAS en `position: fixed` : un bouton
+              flottant de cette taille n'a pas de zone du bas systématiquement
+              vide à recouvrir sans cacher du texte. */}
+          <MicroFlottant />
+        </main>
       </div>
-
-      {/* Monté ICI, donc présent sur TOUTES les pages de l'application.
-          Le poser page par page garantirait qu'on en oublie une — et la
-          promesse « vous ne tapez plus jamais rien » ne souffre pas d'écran
-          où le micro manque. */}
-      <MicroFlottant />
     </div>
   );
 }
