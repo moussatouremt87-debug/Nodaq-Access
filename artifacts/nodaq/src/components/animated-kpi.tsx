@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion, useMotionValue, useSpring, useMotionValueEvent } from 'framer-motion';
 import { Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -54,21 +54,38 @@ export function AnimatedKpi({
   testId,
   masked = false,
 }: AnimatedKpiProps) {
-  const raw = useMotionValue(0);
-  const spring = useSpring(raw, { stiffness: 70, damping: 16, restDelta: 0.5 });
-  const [display, setDisplay] = useState(() => format(0));
+  // La toute PREMIÈRE valeur affichée n'est jamais animée depuis zéro : le
+  // composant n'est monté qu'une fois les données chargées (voir le Skeleton
+  // dans cockpit.tsx), donc `target` au premier rendu est déjà la vraie
+  // valeur. Faire courir un ressort de 0 vers elle affiche, pendant toute la
+  // durée de l'animation, un nombre intermédiaire plausible mais FAUX — issue
+  // #42 : « CA du mois » différent à chaque rechargement alors qu'aucune
+  // donnée n'avait changé. Le ressort ne sert plus qu'aux CHANGEMENTS de
+  // valeur après le premier affichage (rafraîchissement manuel, refetch).
+  const raw = useMotionValue(target);
+  // `restDelta` est un SEUIL ABSOLU : la durée pour l'atteindre dépend de
+  // l'AMPLITUDE du target, pas de sa valeur affichée. Une valeur fixe (0.5)
+  // convient à un compteur (« 2 »), mais un montant en centimes (« 374202 »)
+  // mettrait alors plusieurs secondes à se stabiliser lors d'un
+  // rafraîchissement. Calculé une fois, à partir du PREMIER target reçu.
+  const [restDelta] = useState(() => Math.max(0.5, Math.abs(target) * 0.002));
+  const spring = useSpring(raw, { stiffness: 70, damping: 16, restDelta });
+  const [display, setDisplay] = useState(() => format(target));
+  const dejaAffiche = useRef(false);
 
   // Mirror spring value into display string on every frame
   useMotionValueEvent(spring, 'change', (v) => {
     setDisplay(format(Math.round(Math.max(0, v))));
   });
 
-  // Animate to the (possibly new) target on mount and whenever target changes
+  // Anime UNIQUEMENT les changements de target après le tout premier rendu.
   useEffect(() => {
     if (masked) return;
-    raw.set(0);
-    const id = setTimeout(() => raw.set(target), 50);
-    return () => clearTimeout(id);
+    if (!dejaAffiche.current) {
+      dejaAffiche.current = true;
+      return;
+    }
+    raw.set(target);
   }, [target, raw, masked]);
 
   return (
