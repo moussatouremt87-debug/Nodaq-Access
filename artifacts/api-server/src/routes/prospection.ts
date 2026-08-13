@@ -481,8 +481,15 @@ router.get("/prospection/axes", async (req, res): Promise<void> => {
     if (!(err instanceof AnnuaireConfigError)) throw err;
   }
 
+  // `votre-metier.metier` — pas `metier.secteur` : c'est la clé que l'écran
+  // « Votre métier » pose réellement (voir creerRouteAppelsOffres plus bas,
+  // même correctif). `CIBLES_PAR_SECTEUR` (axesProspection.ts) est keyé
+  // directement par les valeurs de `Vertical` qui ont un équivalent —
+  // batiment/paysage/maintenance — donc aucune traduction n'est nécessaire
+  // ici, contrairement à `secteurMarchesPublicsPour` plus bas qui vise un
+  // référentiel différent (CPV, marchés publics).
   const contexte = {
-    secteur: await reglage(tenantId, "metier.secteur"),
+    secteur: await reglage(tenantId, "votre-metier.metier"),
     zone: (await reglage(tenantId, "company.adresse_ville")) ?? (await reglage(tenantId, "company.adresse_cp")),
     sources,
   };
