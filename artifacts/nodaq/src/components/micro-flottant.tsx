@@ -1,5 +1,5 @@
 /**
- * Micro flottant — présent sur TOUTES les pages.
+ * Micro — présent sur TOUTES les pages, en fin de contenu.
  *
  * « Vous ne tapez plus jamais rien. » La voix pour dire et pour commander ;
  * l'ÉCRAN pour confirmer. Appui long pour parler, relâché pour envoyer.
@@ -10,6 +10,13 @@
  *
  * Pas de synthèse vocale : la confirmation est visuelle, c'est la promesse
  * qu'on tient.
+ *
+ * ── PAS EN `position: fixed` ─────────────────────────────────────────────
+ * Un bouton flottant, agrandi et centré, recouvrait le contenu de chaque
+ * page — il n'existe pas de zone du bas systématiquement vide à cette
+ * taille. Rendu ici dans le flux normal (dernier élément de `<main>`, voir
+ * app-shell.tsx) : il apparaît après le dernier contenu de la page, défile
+ * avec elle, ne recouvre jamais rien.
  */
 import { useCallback, useState } from 'react';
 import { Mic, Loader2, Check, X, HelpCircle, AlertTriangle } from 'lucide-react';
@@ -110,30 +117,28 @@ export function MicroFlottant() {
 
   return (
     <>
-      <Button
-        aria-label="Dicter une commande"
-        data-testid="bouton-micro-flottant"
-        size="icon"
-        // `no-default-hover-elevate`/`no-default-active-elevate` : le survol
-        // de `Button` pose `position: relative` (index.css) pour ancrer son
-        // effet ::after — plus spécifique que la classe `fixed`, il gagnait
-        // la cascade et renvoyait ce bouton dans le flux normal du DOM, hors
-        // écran. Sans ces deux classes, AUCUN bouton `fixed` de ce composant
-        // ne flotte réellement, peu importe sa position déclarée.
-        className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 h-20 w-20 rounded-full shadow-lg no-default-hover-elevate no-default-active-elevate"
-        // Appui LONG : `onPointerDown` / `onPointerUp` couvrent souris, doigt
-        // et stylet d'un seul jeu d'événements.
-        onPointerDown={() => void demarrer()}
-        onPointerUp={arreter}
-        onPointerLeave={arreter}
-        disabled={occupe}
-      >
-        {occupe ? (
-          <Loader2 className="h-9 w-9 animate-spin" />
-        ) : (
-          <Mic className={enregistre ? 'h-9 w-9 animate-pulse' : 'h-9 w-9'} />
-        )}
-      </Button>
+      {/* `flex justify-center` : centre le bouton horizontalement — `Button`
+          est `inline-flex`, une marge `auto` seule ne le centrerait pas. */}
+      <div className="flex justify-center py-8">
+        <Button
+          aria-label="Dicter une commande"
+          data-testid="bouton-micro-flottant"
+          size="icon"
+          className="h-20 w-20 rounded-full shadow-lg"
+          // Appui LONG : `onPointerDown` / `onPointerUp` couvrent souris, doigt
+          // et stylet d'un seul jeu d'événements.
+          onPointerDown={() => void demarrer()}
+          onPointerUp={arreter}
+          onPointerLeave={arreter}
+          disabled={occupe}
+        >
+          {occupe ? (
+            <Loader2 className="h-9 w-9 animate-spin" />
+          ) : (
+            <Mic className={enregistre ? 'h-9 w-9 animate-pulse' : 'h-9 w-9'} />
+          )}
+        </Button>
+      </div>
 
       <Sheet open={plan !== null} onOpenChange={(o) => { if (!o) setPlan(null); }}>
         <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto">
