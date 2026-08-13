@@ -120,7 +120,7 @@ export function MicroFlottant() {
         // la cascade et renvoyait ce bouton dans le flux normal du DOM, hors
         // écran. Sans ces deux classes, AUCUN bouton `fixed` de ce composant
         // ne flotte réellement, peu importe sa position déclarée.
-        className="fixed bottom-20 left-1/2 -translate-x-1/2 z-40 h-20 w-20 rounded-full shadow-lg md:bottom-6 no-default-hover-elevate no-default-active-elevate"
+        className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 h-20 w-20 rounded-full shadow-lg no-default-hover-elevate no-default-active-elevate"
         // Appui LONG : `onPointerDown` / `onPointerUp` couvrent souris, doigt
         // et stylet d'un seul jeu d'événements.
         onPointerDown={() => void demarrer()}

@@ -111,7 +111,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {/* Desktop top ribbon (desktop only, sticky top-0, h-11) */}
         <TopRibbon />
 
-        <main className="flex-1 min-w-0">{children}</main>
+        {/* pb-28 : dégage la zone que couvre le micro flottant (fixed
+            bottom-4, h-20, centré) — sans cette réserve, le bas de chaque
+            page défile sous le bouton au lieu de s'arrêter avant lui. */}
+        <main className="flex-1 min-w-0 pb-28">{children}</main>
       </div>
 
       {/* Monté ICI, donc présent sur TOUTES les pages de l'application.
