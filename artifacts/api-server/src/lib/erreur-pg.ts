@@ -19,6 +19,16 @@
  * en cause — « Key (tenant_id, number)=(…, …) already exists ». C'est
  * précisément le genre de contenu que ce dépôt refuse de laisser filer dans un
  * journal. Le nom de la contrainte suffit à savoir laquelle a parlé.
+ *
+ * ── L'ENVELOPPE DRIZZLE ──────────────────────────────────────────────────────
+ * Une requête construite via `tx.execute(sql\`…\`)` ou le query builder lève une
+ * `DrizzleQueryError` dont le `.message` est la requête SQL complète et ses
+ * paramètres — jamais ce texte-là dans un journal ni, pire, dans une réponse
+ * HTTP. Le vrai code SQLSTATE vit dans `.cause`, l'erreur `pg` d'origine.
+ * `champsErreur` descend la chaîne des `.cause` (bornée) jusqu'à trouver un
+ * `code` ; ce même détour est déjà fait à la main, dupliqué, dans avoirs.ts /
+ * catalogue.ts / pointages.ts sous le nom `sqlstateDe` — non touchés ici, ce
+ * correctif ne portait que sur analytics.ts.
  */
 
 /** Ce qu'on retient d'une erreur, qu'elle vienne du moteur ou d'ailleurs. */
@@ -38,17 +48,30 @@ function chaine(source: Record<string, unknown>, cle: string): string | undefine
   return typeof valeur === "string" && valeur.length > 0 ? valeur : undefined;
 }
 
+const PROFONDEUR_MAX_CAUSE = 5;
+
 /** Extrait les champs utiles d'une erreur inconnue, sans jamais lever. */
 export function champsErreur(err: unknown): ChampsErreur {
-  if (typeof err !== "object" || err === null) {
-    return { message: typeof err === "string" ? err : undefined };
+  let courant: unknown = err;
+  let premierMessage: string | undefined;
+
+  for (let i = 0; i < PROFONDEUR_MAX_CAUSE; i++) {
+    if (typeof courant !== "object" || courant === null) break;
+    const source = courant as Record<string, unknown>;
+    premierMessage ??= chaine(source, "message");
+
+    const code = chaine(source, "code");
+    if (code) {
+      return {
+        code,
+        contrainte: chaine(source, "constraint"),
+        table: chaine(source, "table"),
+        routine: chaine(source, "routine"),
+        message: premierMessage,
+      };
+    }
+    courant = source["cause"];
   }
-  const source = err as Record<string, unknown>;
-  return {
-    code: chaine(source, "code"),
-    contrainte: chaine(source, "constraint"),
-    table: chaine(source, "table"),
-    routine: chaine(source, "routine"),
-    message: chaine(source, "message"),
-  };
+
+  return { message: premierMessage ?? (typeof err === "string" ? err : undefined) };
 }

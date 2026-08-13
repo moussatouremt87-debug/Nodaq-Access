@@ -527,3 +527,72 @@ describe("h — PAS DE MÉTRIQUES INDIVIDUELLES", () => {
     expect(result).not.toHaveProperty("userId");
   });
 });
+
+// ─── RÉGRESSION #41 — delai_paiement_client ne référence plus updated_at ────
+// `factures` n'a pas de colonne `updated_at` : la requête levait toujours une
+// erreur SQL (42883, "Failed query"), qui abandonnait la transaction pour
+// TOUS les autres indicateurs calculés dans le même lot. La date de
+// règlement vient maintenant de `paiements` (donnée réelle, pas un proxy).
+
+describe("régression #41 — delai_paiement_client via paiements", () => {
+  test("sous le seuil de 5 factures réglées : donneesInsuffisantes", async () => {
+    const tenant = await createTestTenant("Analytics-DelaiPaiement-Vide");
+    tenantIds.push(tenant.id);
+
+    const result = await withTenant(tenant.id, (tx) =>
+      CALCULATORS["delai_paiement_client"](tx, parsePeriode("12_mois")),
+    );
+    expect(result.donneesInsuffisantes).toBe(true);
+    expect(result.valeur).toBeNull();
+  });
+
+  test("une facture réglée sans paiement rattaché ne compte pas (pas de date_reglement)", async () => {
+    const tenant = await createTestTenant("Analytics-DelaiPaiement-SansPaiement");
+    tenantIds.push(tenant.id);
+
+    await adminPool.query(
+      `INSERT INTO factures (id, tenant_id, statut, total_ht_cents, issued_date, settled, lines,
+                             customer_name, number, due_date, amount_cents, created_at)
+       VALUES (gen_random_uuid()::text, $1::uuid, 'EMISE', 100000, (current_date - 20)::text, true, '[]',
+               'Client Sans Paiement', 'F-DP-000', (current_date + 10)::text, 100000, now())`,
+      [tenant.id],
+    );
+
+    const result = await withTenant(tenant.id, (tx) =>
+      CALCULATORS["delai_paiement_client"](tx, parsePeriode("12_mois")),
+    );
+    expect(result.nbSources).toBe(0);
+    expect(result.donneesInsuffisantes).toBe(true);
+  });
+
+  test("5 factures réglées avec un paiement rattaché : délai pondéré calculé sans erreur", async () => {
+    const tenant = await createTestTenant("Analytics-DelaiPaiement-Peuple");
+    tenantIds.push(tenant.id);
+
+    for (let i = 0; i < 5; i++) {
+      const facRes = await adminPool.query<{ id: string }>(
+        `INSERT INTO factures (id, tenant_id, statut, total_ht_cents, issued_date, settled, lines,
+                               customer_name, number, due_date, amount_cents, created_at)
+         VALUES (gen_random_uuid()::text, $1::uuid, 'EMISE', 100000, (current_date - 40)::text, true, '[]',
+                 $2, $3, (current_date - 10)::text, 100000, now())
+         RETURNING id`,
+        [tenant.id, `Client ${i}`, `F-DP-${String(i).padStart(3, "0")}`],
+      );
+      const factureId = facRes.rows[0]!.id;
+
+      // Réglée 15 jours après émission — délai attendu : 15 jours.
+      await adminPool.query(
+        `INSERT INTO paiements (id, tenant_id, facture_id, date, montant_cents, sens, moyen, nature)
+         VALUES (gen_random_uuid()::text, $1::uuid, $2, current_date - 25, 100000, 'ENCAISSEMENT', 'VIREMENT', 'SOLDE')`,
+        [tenant.id, factureId],
+      );
+    }
+
+    const result = await withTenant(tenant.id, (tx) =>
+      CALCULATORS["delai_paiement_client"](tx, parsePeriode("12_mois")),
+    );
+    expect(result.donneesInsuffisantes).toBe(false);
+    expect(result.nbSources).toBe(5);
+    expect(result.valeur).toBe(15);
+  });
+});

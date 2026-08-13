@@ -42,6 +42,8 @@ import {
   type ComparaisonMode,
   COMPARAISON_MODES,
 } from "../lib/analytics-periods.js";
+import { logger } from "../lib/logger.js";
+import { champsErreur } from "../lib/erreur-pg.js";
 
 const router: IRouter = Router();
 
@@ -470,7 +472,14 @@ async function calcMargePour100(
 /**
  * 4. delai_paiement_client
  * Weighted average days from issuedDate to settlement.
- * Approximation: uses updatedAt as settlement proxy (no paidAt column).
+ *
+ * `factures` n'a pas de colonne `updated_at`/`paid_at` — la première version
+ * de ce calcul en supposait une qui n'a jamais existé, et sa requête levait
+ * systématiquement une erreur SQL (issue #41, cause racine derrière la
+ * cascade de transaction avortée). La date de règlement réelle vit dans
+ * `paiements` (`facture_id`, `date`, `sens = 'ENCAISSEMENT'`) : le dernier
+ * encaissement rattaché à la facture sert de date de règlement — une donnée
+ * réelle, pas une approximation.
  * Seuil: 5 factures réglées.
  */
 async function calcDelaiPaiement(
@@ -481,15 +490,21 @@ async function calcDelaiPaiement(
     SELECT
       count(*)::int                                                      AS nb_factures,
       coalesce(
-        sum(total_ht_cents * extract(days from updated_at - issued_date::timestamp))
-        / nullif(sum(total_ht_cents), 0),
+        sum(f.total_ht_cents * (p.date_reglement - f.issued_date::date))
+        / nullif(sum(f.total_ht_cents), 0),
       0)::float AS delai_moyen_pondere
-    FROM factures
-    WHERE settled = true
-      AND issued_date::date BETWEEN ${toDateString(periode.debut)}::date
-                                 AND ${toDateString(periode.fin)}::date
-      AND total_ht_cents > 0
-      AND updated_at > issued_date::timestamp
+    FROM factures f
+    JOIN LATERAL (
+      SELECT max(date) AS date_reglement
+        FROM paiements
+       WHERE facture_id = f.id
+         AND sens = 'ENCAISSEMENT'
+    ) p ON p.date_reglement IS NOT NULL
+    WHERE f.settled = true
+      AND f.issued_date::date BETWEEN ${toDateString(periode.debut)}::date
+                                   AND ${toDateString(periode.fin)}::date
+      AND f.total_ht_cents > 0
+      AND p.date_reglement > f.issued_date::date
   `));
 
   const nb = res.nb_factures ?? 0;
@@ -1032,9 +1047,13 @@ export async function computeComparaison(
 
   if (mode === "moyenne_12_mois") {
     const months = getLast12Months(today);
-    const monthResults = await Promise.all(
-      months.map((m) => CALCULATORS[id](tx, m)),
-    );
+    // Séquentiel, jamais Promise.all : `tx` est UNE connexion Postgres, qui ne
+    // traite qu'une requête à la fois. Des requêtes concurrentes dessus
+    // interfèrent au niveau du protocole (voir l'en-tête de fichier).
+    const monthResults: PartialResult[] = [];
+    for (const m of months) {
+      monthResults.push(await CALCULATORS[id](tx, m));
+    }
     const valid = monthResults.filter(
       (r) => !r.donneesInsuffisantes && r.valeur !== null,
     );
@@ -1109,42 +1128,55 @@ router.get("/analytics/indicateurs", async (req, res): Promise<void> => {
 
   try {
     const results = await withTenant(tenantId, async (tx) => {
-      return Promise.all(
-        resolvedIds.map(async (id) => {
-          try {
-            const partial = await CALCULATORS[id](tx, periode);
-            const comp =
-              compMode !== "aucune"
-                ? await computeComparaison(tx, id, periode, compMode).catch((err) => ({
+      // Séquentiel, jamais Promise.all : `tx` est UNE connexion Postgres, qui
+      // ne traite qu'une requête à la fois. Des requêtes concurrentes dessus
+      // interfèrent au niveau du protocole, et dès que l'une échoue Postgres
+      // abandonne toute la transaction — chaque autre requête « en vol » sur
+      // ce même client échoue alors en cascade. Voir l'issue #41.
+      const out: IndicateurResult[] = [];
+      for (const id of resolvedIds) {
+        try {
+          const partial = await CALCULATORS[id](tx, periode);
+          const comp =
+            compMode !== "aucune"
+              ? await computeComparaison(tx, id, periode, compMode).catch((err) => {
+                  logger.error(
+                    { ...champsErreur(err), tenantId, indicateur: id, etape: "comparaison" },
+                    "[analytics/indicateurs] comparaison indisponible",
+                  );
+                  return {
                     mode: compMode as Exclude<ComparaisonMode, "aucune">,
                     valeur: null as number | null,
                     nbSources: 0,
                     donneesInsuffisantes: true,
-                    messageImpossible:
-                      err instanceof Error ? err.message : "Comparaison non disponible.",
-                  }))
-                : undefined;
-            return { id, periode: periodeJson, ...partial, comparaison: comp } satisfies IndicateurResult;
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            return {
-              id,
-              valeur: null,
-              unite: "",
-              periode: periodeJson,
-              nbSources: 0,
-              donneesInsuffisantes: true,
-              detail: { erreur: msg },
-            } satisfies IndicateurResult;
-          }
-        }),
-      );
+                    messageImpossible: "Comparaison indisponible.",
+                  };
+                })
+              : undefined;
+          out.push({ id, periode: periodeJson, ...partial, comparaison: comp } satisfies IndicateurResult);
+        } catch (err) {
+          logger.error(
+            { ...champsErreur(err), tenantId, indicateur: id, etape: "calcul" },
+            "[analytics/indicateurs] calcul indisponible",
+          );
+          out.push({
+            id,
+            valeur: null,
+            unite: "",
+            periode: periodeJson,
+            nbSources: 0,
+            donneesInsuffisantes: true,
+            detail: { erreur: "Calcul indisponible." },
+          } satisfies IndicateurResult);
+        }
+      }
+      return out;
     });
 
     res.json(results);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    res.status(500).json({ error: msg });
+    logger.error({ ...champsErreur(err), tenantId, etape: "indicateurs" }, "[analytics/indicateurs] échec");
+    res.status(500).json({ error: "Calcul des indicateurs indisponible. Réessayez." });
   }
 });
 
@@ -1187,14 +1219,19 @@ router.get("/analytics/indicateurs/:id", async (req, res): Promise<void> => {
       const partial = await CALCULATORS[id](tx, periode);
       const comp =
         compMode !== "aucune"
-          ? await computeComparaison(tx, id, periode, compMode).catch((err) => ({
-              mode: compMode as Exclude<ComparaisonMode, "aucune">,
-              valeur: null as number | null,
-              nbSources: 0,
-              donneesInsuffisantes: true,
-              messageImpossible:
-                err instanceof Error ? err.message : "Comparaison non disponible.",
-            }))
+          ? await computeComparaison(tx, id, periode, compMode).catch((err) => {
+              logger.error(
+                { ...champsErreur(err), tenantId, indicateur: id, etape: "comparaison" },
+                "[analytics/indicateurs/:id] comparaison indisponible",
+              );
+              return {
+                mode: compMode as Exclude<ComparaisonMode, "aucune">,
+                valeur: null as number | null,
+                nbSources: 0,
+                donneesInsuffisantes: true,
+                messageImpossible: "Comparaison indisponible.",
+              };
+            })
           : undefined;
       return { id, periode: periodeJson, ...partial, comparaison: comp } satisfies IndicateurResult;
     });
@@ -1211,8 +1248,8 @@ router.get("/analytics/indicateurs/:id", async (req, res): Promise<void> => {
 
     res.json(validated.data);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    res.status(500).json({ error: msg });
+    logger.error({ ...champsErreur(err), tenantId, indicateur: id, etape: "calcul" }, "[analytics/indicateurs/:id] échec");
+    res.status(500).json({ error: "Calcul indisponible. Réessayez." });
   }
 });
 
@@ -1239,31 +1276,39 @@ router.get("/analytics/indicateurs/:id/serie", async (req, res): Promise<void> =
 
   try {
     const points = await withTenant(tenantId, async (tx) => {
-      return Promise.all(
-        months.map(async (m) => {
-          const partial = await CALCULATORS[id](tx, m).catch(() => ({
+      // Séquentiel, jamais Promise.all : voir la note sur `tx` dans
+      // GET /analytics/indicateurs, même connexion Postgres partagée.
+      const out = [];
+      for (const m of months) {
+        const partial = await CALCULATORS[id](tx, m).catch((err) => {
+          logger.error(
+            { ...champsErreur(err), tenantId, indicateur: id, etape: "serie" },
+            "[analytics/indicateurs/:id/serie] point indisponible",
+          );
+          return {
             valeur: null as number | null,
             unite: "",
             nbSources: 0,
             donneesInsuffisantes: true,
-          }));
-          return {
-            periode: {
-              debut: toDateString(m.debut),
-              fin: toDateString(m.fin),
-              label: m.label,
-            },
-            valeur: partial.valeur,
-            nbSources: partial.nbSources,
-            donneesInsuffisantes: partial.donneesInsuffisantes,
           };
-        }),
-      );
+        });
+        out.push({
+          periode: {
+            debut: toDateString(m.debut),
+            fin: toDateString(m.fin),
+            label: m.label,
+          },
+          valeur: partial.valeur,
+          nbSources: partial.nbSources,
+          donneesInsuffisantes: partial.donneesInsuffisantes,
+        });
+      }
+      return out;
     });
     res.json(points);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    res.status(500).json({ error: msg });
+    logger.error({ ...champsErreur(err), tenantId, indicateur: id, etape: "serie" }, "[analytics/indicateurs/:id/serie] échec");
+    res.status(500).json({ error: "Série indisponible. Réessayez." });
   }
 });
 
