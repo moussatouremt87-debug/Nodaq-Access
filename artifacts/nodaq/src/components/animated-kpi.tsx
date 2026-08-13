@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion, useMotionValue, useSpring, useMotionValueEvent } from 'framer-motion';
+import { Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { LucideIcon } from 'lucide-react';
 
@@ -35,6 +36,12 @@ interface AnimatedKpiProps {
   hint?: string;
   tone?: 'default' | 'accent' | 'warning' | 'negative';
   testId?: string;
+  /**
+   * Le backend a masqué ce champ pour le rôle courant (null, jamais 0).
+   * Affiche un texte explicite plutôt que d'animer vers zéro — un 0 nu
+   * laisserait croire à une absence de chiffre d'affaires.
+   */
+  masked?: boolean;
 }
 
 export function AnimatedKpi({
@@ -45,6 +52,7 @@ export function AnimatedKpi({
   hint,
   tone = 'default',
   testId,
+  masked = false,
 }: AnimatedKpiProps) {
   const raw = useMotionValue(0);
   const spring = useSpring(raw, { stiffness: 70, damping: 16, restDelta: 0.5 });
@@ -57,10 +65,11 @@ export function AnimatedKpi({
 
   // Animate to the (possibly new) target on mount and whenever target changes
   useEffect(() => {
+    if (masked) return;
     raw.set(0);
     const id = setTimeout(() => raw.set(target), 50);
     return () => clearTimeout(id);
-  }, [target, raw]);
+  }, [target, raw, masked]);
 
   return (
     <motion.div
@@ -75,16 +84,30 @@ export function AnimatedKpi({
         </div>
         <Icon className="h-4 w-4 text-muted-foreground/60 shrink-0" strokeWidth={2} />
       </div>
-      <div
-        className={cn(
-          'mt-3 font-mono-nums text-2xl md:text-[28px] font-semibold tabular-nums leading-none',
-          toneClasses[tone],
-        )}
-      >
-        {display}
-      </div>
-      {hint && (
-        <div className="mt-2 text-xs text-muted-foreground truncate">{hint}</div>
+      {masked ? (
+        <>
+          <div className="mt-3 flex items-center gap-1.5 text-muted-foreground/70">
+            <Lock className="h-4 w-4" strokeWidth={2} />
+            <span className="font-mono-nums text-2xl md:text-[28px] font-semibold leading-none">—</span>
+          </div>
+          <div className="mt-2 text-xs text-muted-foreground truncate">
+            Réservé aux gestionnaires financiers
+          </div>
+        </>
+      ) : (
+        <>
+          <div
+            className={cn(
+              'mt-3 font-mono-nums text-2xl md:text-[28px] font-semibold tabular-nums leading-none',
+              toneClasses[tone],
+            )}
+          >
+            {display}
+          </div>
+          {hint && (
+            <div className="mt-2 text-xs text-muted-foreground truncate">{hint}</div>
+          )}
+        </>
       )}
     </motion.div>
   );

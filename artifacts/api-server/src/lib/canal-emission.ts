@@ -41,7 +41,7 @@ import { lireSecret } from "./tenant-secrets.js";
 
 export type CanalEmission = "EMAIL" | "PLATEFORME_AGREEE";
 
-export type TypeDocument = "DEVIS" | "FACTURE" | "AVOIR";
+export type TypeDocument = "DEVIS" | "FACTURE" | "AVOIR" | "INVITATION";
 
 export interface SendOptions {
   canal: CanalEmission;

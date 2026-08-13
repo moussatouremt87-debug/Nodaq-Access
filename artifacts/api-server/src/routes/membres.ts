@@ -1,0 +1,347 @@
+/**
+ * Membres & accès — qui peut se connecter à ce tenant, et avec quel rôle.
+ *
+ * ╔═══════════════════════════════════════════════════════════════════════════╗
+ * ║  AUCUNE INVITATION NE PEUT DONNER LE RÔLE OWNER.                          ║
+ * ╚═══════════════════════════════════════════════════════════════════════════╝
+ *
+ * Distinct de `equipe.ts`/`teamMembersTable` : ceci concerne des COMPTES DE
+ * CONNEXION (memberships), pas la planification/pointages du personnel de
+ * chantier. Les deux tables ne se recouvrent pas.
+ *
+ * Deux routes de ce fichier (`GET /membres/inviter/:token` et sa suite
+ * `/accepter`) sont PUBLIQUES, montées séparément dans `routes/index.ts` —
+ * la personne invitée n'a par définition aucune session au moment où elle
+ * clique le lien. Elles suivent le même patron que `public.ts` : jeton
+ * condensé (SHA-256), policy RLS étroite pour la recherche, réponse
+ * indifférenciée pour un jeton introuvable, limitation de débit.
+ */
+import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
+import { createHash, randomBytes } from "node:crypto";
+import { and, eq, isNull, sql } from "drizzle-orm";
+import {
+  db,
+  withTenant,
+  tenantInvitesTable,
+  membershipsTable,
+  usersTable,
+  tenantsTable,
+} from "@workspace/db";
+import { hashPassword, verifyPassword } from "../lib/password.js";
+import { findUserByEmail, createSession, touchLastLogin } from "../lib/authService.js";
+import { sendDocument } from "../lib/canal-emission.js";
+import { COOKIE_NAME, COOKIE_OPTS } from "./auth.js";
+import {
+  InviterMembreBody,
+  ChangerRoleMembreParams,
+  ChangerRoleMembreBody,
+  RevoquerMembreParams,
+  ApercuInvitationParams,
+  AccepterInvitationParams,
+  AccepterInvitationBody,
+} from "@workspace/api-zod";
+
+const router: IRouter = Router();
+export const membresPublicRouter: IRouter = Router();
+
+// ── Membres (OWNER seulement) ───────────────────────────────────────────────
+
+router.get("/membres", async (req, res): Promise<void> => {
+  const tenantId = req.tenantId!;
+
+  // memberships/users sont des tables INFRA sans RLS (un user peut porter
+  // plusieurs memberships, dans plusieurs tenants) — interrogées directement,
+  // filtrées à la main, jamais via withTenant. Même doctrine que
+  // authService.ts.
+  const membres = await db
+    .select({
+      id: membershipsTable.id,
+      email: usersTable.email,
+      nom: usersTable.nom,
+      role: membershipsTable.role,
+      createdAt: membershipsTable.createdAt,
+    })
+    .from(membershipsTable)
+    .innerJoin(usersTable, eq(usersTable.id, membershipsTable.userId))
+    .where(eq(membershipsTable.tenantId, tenantId));
+
+  // tenant_invites, elle, EST une table métier — RLS oblige withTenant.
+  const invitationsEnAttente = await withTenant(tenantId, (tx) =>
+    tx
+      .select({
+        id: tenantInvitesTable.id,
+        email: tenantInvitesTable.email,
+        role: tenantInvitesTable.role,
+        expiresAt: tenantInvitesTable.expiresAt,
+        createdAt: tenantInvitesTable.createdAt,
+      })
+      .from(tenantInvitesTable)
+      .where(and(eq(tenantInvitesTable.tenantId, tenantId), isNull(tenantInvitesTable.acceptedAt))),
+  );
+
+  res.json({ membres, invitationsEnAttente });
+});
+
+router.post("/membres/inviter", async (req, res): Promise<void> => {
+  const parsed = InviterMembreBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const tenantId = req.tenantId!;
+  const email = parsed.data.email.toLowerCase().trim();
+  const role = parsed.data.role; // "MEMBER" | "ACCOUNTANT" — le schéma généré l'interdit déjà à "OWNER"
+
+  const existingUser = await findUserByEmail(email);
+  if (existingUser) {
+    const [dejaMembre] = await db
+      .select({ id: membershipsTable.id })
+      .from(membershipsTable)
+      .where(and(eq(membershipsTable.userId, existingUser.id), eq(membershipsTable.tenantId, tenantId)));
+    if (dejaMembre) {
+      res.status(409).json({ error: "Cette personne est déjà membre de cet espace." });
+      return;
+    }
+  }
+
+  const token = randomBytes(32).toString("hex");
+  const tokenSha256 = createHash("sha256").update(token).digest("hex");
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+  const [invite] = await withTenant(tenantId, (tx) =>
+    tx
+      .insert(tenantInvitesTable)
+      .values({ tenantId, email, role, tokenSha256, invitedBy: req.session!.userId, expiresAt })
+      .returning(),
+  );
+
+  const [tenant] = await db.select({ nom: tenantsTable.nom }).from(tenantsTable).where(eq(tenantsTable.id, tenantId));
+  const tenantNom = tenant?.nom ?? "votre entreprise";
+  const lien = `${process.env["PUBLIC_URL"] ?? "https://nodaq.fr"}/membres/accepter/${token}`;
+  const roleLabel = role === "ACCOUNTANT" ? "comptable" : "membre";
+
+  const corps = [
+    `Bonjour,`,
+    ``,
+    `${req.session?.nom ?? "Un collègue"} vous invite à rejoindre l'espace « ${tenantNom} » sur NODAQ, avec un accès ${roleLabel}.`,
+    ``,
+    `Pour accepter l'invitation : ${lien}`,
+    ``,
+    `Ce lien expire dans 7 jours.`,
+  ].join("\n");
+
+  const envoi = await sendDocument({
+    canal: "EMAIL",
+    tenantId,
+    to: email,
+    subject: `Invitation à rejoindre ${tenantNom} sur NODAQ`,
+    body: corps,
+    documentType: "INVITATION",
+    documentId: invite!.id,
+  });
+
+  res.status(201).json({
+    id: invite!.id,
+    email: invite!.email,
+    role: invite!.role,
+    expiresAt: invite!.expiresAt,
+    createdAt: invite!.createdAt,
+    envoye: envoi.success,
+  });
+});
+
+router.patch("/membres/:id/role", async (req, res): Promise<void> => {
+  const params = ChangerRoleMembreParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const parsed = ChangerRoleMembreBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const tenantId = req.tenantId!;
+
+  const [cible] = await db
+    .select()
+    .from(membershipsTable)
+    .where(and(eq(membershipsTable.id, params.data.id), eq(membershipsTable.tenantId, tenantId)));
+  if (!cible) { res.status(404).json({ error: "Membre introuvable" }); return; }
+  // Restreindre le NOUVEAU rôle à MEMBER/ACCOUNTANT (schéma généré) ne suffit
+  // pas : rien n'empêcherait sinon un owner de se démettre lui-même par
+  // erreur via cette route. Le rôle ACTUEL d'un OWNER ne se change jamais ici.
+  if (cible.role === "OWNER") { res.status(403).json({ error: "Le rôle du propriétaire ne se change pas depuis cet écran." }); return; }
+
+  const [updated] = await db
+    .update(membershipsTable)
+    .set({ role: parsed.data.role })
+    .where(eq(membershipsTable.id, params.data.id))
+    .returning();
+  const [user] = await db
+    .select({ email: usersTable.email, nom: usersTable.nom })
+    .from(usersTable)
+    .where(eq(usersTable.id, updated!.userId));
+
+  res.json({
+    id: updated!.id,
+    email: user?.email ?? "",
+    nom: user?.nom ?? "",
+    role: updated!.role,
+    createdAt: updated!.createdAt,
+  });
+});
+
+router.delete("/membres/:id", async (req, res): Promise<void> => {
+  const params = RevoquerMembreParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const tenantId = req.tenantId!;
+
+  const [cible] = await db
+    .select()
+    .from(membershipsTable)
+    .where(and(eq(membershipsTable.id, params.data.id), eq(membershipsTable.tenantId, tenantId)));
+  if (!cible) { res.status(404).json({ error: "Membre introuvable" }); return; }
+  if (cible.role === "OWNER") { res.status(403).json({ error: "Le propriétaire ne peut pas être révoqué." }); return; }
+
+  await db.delete(membershipsTable).where(eq(membershipsTable.id, params.data.id));
+  // Aucune invalidation de session à part : requireMembership revérifie
+  // l'adhésion en base à CHAQUE requête (voir middleware/requireMembership.ts)
+  // — la révocation prend effet à la prochaine requête de la personne visée.
+  res.sendStatus(204);
+});
+
+export default router;
+
+// ── Acceptation d'invitation (PUBLIC, sans authentification) ───────────────
+
+/** LA réponse d'échec. Une seule, pour ne rien révéler par la différence. */
+const INTROUVABLE = { error: "Lien invalide ou expiré." } as const;
+
+const FENETRE_MS = 60_000;
+const MAX_PAR_FENETRE = 20;
+const compteurs = new Map<string, { debut: number; n: number }>();
+
+function adresse(req: Request): string {
+  return req.ip ?? req.socket.remoteAddress ?? "unknown";
+}
+
+/** Même patron que public.ts — limitation de débit en mémoire, par IP. */
+function limiterDebit(req: Request, res: Response, next: NextFunction): void {
+  const ip = adresse(req);
+  const maintenant = Date.now();
+  const courant = compteurs.get(ip);
+
+  if (!courant || maintenant - courant.debut > FENETRE_MS) {
+    compteurs.set(ip, { debut: maintenant, n: 1 });
+    if (compteurs.size > 10_000) {
+      for (const [k, v] of compteurs) {
+        if (maintenant - v.debut > FENETRE_MS) compteurs.delete(k);
+      }
+    }
+    next();
+    return;
+  }
+
+  if (courant.n >= MAX_PAR_FENETRE) {
+    res.status(429).json({ error: "Trop de tentatives. Réessayez dans une minute." });
+    return;
+  }
+  courant.n++;
+  next();
+}
+
+function condensat(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+/**
+ * Retrouve une invitation par son jeton, via la policy étroite
+ * `tenant_invites_public_token_lookup` — même patron que `lookupByToken`
+ * dans public.ts pour les devis. `set_config(..., true)` DANS la
+ * transaction, jamais hors d'elle (le pooling ferait fuir le réglage d'une
+ * requête à l'autre).
+ */
+async function lookupInviteByToken(token: string) {
+  const sha = condensat(token);
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT set_config('app.invite_token_sha256', ${sha}, true)`);
+    const [row] = await tx.select().from(tenantInvitesTable).where(eq(tenantInvitesTable.tokenSha256, sha));
+    return row ?? null;
+  });
+}
+
+membresPublicRouter.get("/membres/inviter/:token", limiterDebit, async (req, res): Promise<void> => {
+  const { token } = req.params;
+  if (typeof token !== "string" || token.length === 0) { res.status(404).json(INTROUVABLE); return; }
+
+  const params = ApercuInvitationParams.safeParse({ token });
+  if (!params.success) { res.status(404).json(INTROUVABLE); return; }
+
+  const invite = await lookupInviteByToken(token);
+  if (!invite) { res.status(404).json(INTROUVABLE); return; }
+
+  const [tenant] = await db.select({ nom: tenantsTable.nom }).from(tenantsTable).where(eq(tenantsTable.id, invite.tenantId));
+  const compteExistant = Boolean(await findUserByEmail(invite.email));
+
+  res.json({
+    tenantNom: tenant?.nom ?? "",
+    roleOffert: invite.role,
+    email: invite.email,
+    compteExistant,
+    expire: invite.expiresAt < new Date(),
+    dejaAcceptee: invite.acceptedAt !== null,
+  });
+});
+
+membresPublicRouter.post("/membres/inviter/:token/accepter", limiterDebit, async (req, res): Promise<void> => {
+  const { token } = req.params;
+  if (typeof token !== "string" || token.length === 0) { res.status(404).json(INTROUVABLE); return; }
+
+  const params = AccepterInvitationParams.safeParse({ token });
+  if (!params.success) { res.status(404).json(INTROUVABLE); return; }
+  const parsed = AccepterInvitationBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+  const invite = await lookupInviteByToken(token);
+  if (!invite) { res.status(404).json(INTROUVABLE); return; }
+  if (invite.acceptedAt) { res.status(409).json({ error: "Cette invitation a déjà été acceptée." }); return; }
+  if (invite.expiresAt < new Date()) { res.status(410).json({ error: "Cette invitation a expiré." }); return; }
+
+  const existingUser = await findUserByEmail(invite.email);
+  let userId: string;
+  if (existingUser) {
+    const valid = await verifyPassword(parsed.data.password, existingUser.passwordHash);
+    if (!valid) { res.status(401).json({ error: "Mot de passe incorrect." }); return; }
+    userId = existingUser.id;
+  } else {
+    if (!parsed.data.nom) { res.status(400).json({ error: "Le nom est obligatoire pour créer un compte." }); return; }
+    const passwordHash = await hashPassword(parsed.data.password);
+    const [newUser] = await db
+      .insert(usersTable)
+      .values({ email: invite.email, passwordHash, nom: parsed.data.nom })
+      .returning();
+    userId = newUser!.id;
+  }
+
+  // Une seule transaction pour les deux écritures : marquer l'invitation
+  // acceptée ET créer l'adhésion. tenant_invites est une table métier (RLS,
+  // via withTenant) ; memberships est une table infra sans RLS — les deux
+  // peuvent partager la même transaction, withTenant n'ouvre qu'un
+  // db.transaction() classique dont `tx` reste utilisable pour n'importe
+  // quelle table.
+  const accepte = await withTenant(invite.tenantId, async (tx) => {
+    const [updatedInvite] = await tx
+      .update(tenantInvitesTable)
+      .set({ acceptedAt: new Date() })
+      .where(and(eq(tenantInvitesTable.id, invite.id), isNull(tenantInvitesTable.acceptedAt)))
+      .returning();
+    if (!updatedInvite) return null;
+    await tx
+      .insert(membershipsTable)
+      .values({ userId, tenantId: invite.tenantId, role: invite.role })
+      .onConflictDoNothing();
+    return updatedInvite;
+  });
+
+  if (!accepte) {
+    res.status(409).json({ error: "Cette invitation vient d'être acceptée par une autre session." });
+    return;
+  }
+
+  const session = await createSession(userId, invite.tenantId, req.headers["user-agent"]);
+  await touchLastLogin(userId);
+  res.cookie(COOKIE_NAME, session.id, COOKIE_OPTS);
+  res.json({ userId, tenantId: invite.tenantId, role: invite.role });
+});

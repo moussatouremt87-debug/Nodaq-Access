@@ -791,6 +791,107 @@ export interface ConnectorUpdate {
 
 export interface ParametresInput {[key: string]: string}
 
+export type MembreRole = typeof MembreRole[keyof typeof MembreRole];
+
+
+export const MembreRole = {
+  OWNER: 'OWNER',
+  MEMBER: 'MEMBER',
+  ACCOUNTANT: 'ACCOUNTANT',
+} as const;
+
+export interface Membre {
+  id: string;
+  email: string;
+  nom: string;
+  role: MembreRole;
+  createdAt: string;
+}
+
+export type InvitationEnAttenteRole = typeof InvitationEnAttenteRole[keyof typeof InvitationEnAttenteRole];
+
+
+export const InvitationEnAttenteRole = {
+  MEMBER: 'MEMBER',
+  ACCOUNTANT: 'ACCOUNTANT',
+} as const;
+
+export interface InvitationEnAttente {
+  id: string;
+  email: string;
+  role: InvitationEnAttenteRole;
+  expiresAt: string;
+  createdAt: string;
+}
+
+export interface MembresListResponse {
+  membres: Membre[];
+  invitationsEnAttente: InvitationEnAttente[];
+}
+
+export type InviteMembreBodyRole = typeof InviteMembreBodyRole[keyof typeof InviteMembreBodyRole];
+
+
+export const InviteMembreBodyRole = {
+  MEMBER: 'MEMBER',
+  ACCOUNTANT: 'ACCOUNTANT',
+} as const;
+
+export interface InviteMembreBody {
+  email: string;
+  role: InviteMembreBodyRole;
+}
+
+export type RoleMembreBodyRole = typeof RoleMembreBodyRole[keyof typeof RoleMembreBodyRole];
+
+
+export const RoleMembreBodyRole = {
+  MEMBER: 'MEMBER',
+  ACCOUNTANT: 'ACCOUNTANT',
+} as const;
+
+export interface RoleMembreBody {
+  role: RoleMembreBodyRole;
+}
+
+export type InvitationApercuRoleOffert = typeof InvitationApercuRoleOffert[keyof typeof InvitationApercuRoleOffert];
+
+
+export const InvitationApercuRoleOffert = {
+  MEMBER: 'MEMBER',
+  ACCOUNTANT: 'ACCOUNTANT',
+} as const;
+
+export interface InvitationApercu {
+  tenantNom: string;
+  roleOffert: InvitationApercuRoleOffert;
+  email: string;
+  compteExistant: boolean;
+  expire: boolean;
+  dejaAcceptee: boolean;
+}
+
+export interface InvitationAcceptationBody {
+  /** Required only when compteExistant is false */
+  nom?: string;
+  /** @minLength 8 */
+  password: string;
+}
+
+export type InvitationAcceptationResponseRole = typeof InvitationAcceptationResponseRole[keyof typeof InvitationAcceptationResponseRole];
+
+
+export const InvitationAcceptationResponseRole = {
+  MEMBER: 'MEMBER',
+  ACCOUNTANT: 'ACCOUNTANT',
+} as const;
+
+export interface InvitationAcceptationResponse {
+  userId: string;
+  tenantId: string;
+  role: InvitationAcceptationResponseRole;
+}
+
 export type ListAffairesParams = {
 statut?: string;
 inclureArchivees?: boolean;

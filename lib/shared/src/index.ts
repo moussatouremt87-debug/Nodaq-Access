@@ -12,11 +12,30 @@ export const TenantId = Uuid;
 export type TenantId = z.infer<typeof TenantId>;
 
 /**
- * Roles within a tenant (better-auth organization plugin, stored as strings).
- * `accountant` = delegated multi-tenant access (expert-comptable).
+ * Roles within a tenant, stored as plain text in `memberships.role` (custom
+ * session-based auth, not a third-party organization plugin — no such
+ * dependency exists in this repo). `ACCOUNTANT` = delegated financial access
+ * (expert-comptable) — see `FINANCIAL_ROLES` below.
+ *
+ * UPPERCASE, matching the actual DB default (`memberships.ts`) and every
+ * consumer (`requireRole.ts`, `authService.ts`, the frontend `useAuth`
+ * hook) — this file previously declared a lowercase variant that nothing
+ * imported. One casing, read from here, not two hand-maintained lists.
  */
-export const MembershipRole = z.enum(["owner", "member", "accountant"]);
+export const MembershipRole = z.enum(["OWNER", "MEMBER", "ACCOUNTANT"]);
 export type MembershipRole = z.infer<typeof MembershipRole>;
+
+/**
+ * Qui voit les données financières. `OWNER` et `ACCOUNTANT` — pas `MEMBER`.
+ * Source unique : le backend (composition des routeurs) et le frontend (HOC
+ * de route, filtre de nav) lisent tous les deux CETTE liste, jamais une
+ * copie maintenue à la main de chaque côté.
+ */
+export const FINANCIAL_ROLES = ["OWNER", "ACCOUNTANT"] as const satisfies readonly MembershipRole[];
+
+export function hasFinancialAccess(role: string | null | undefined): boolean {
+  return (FINANCIAL_ROLES as readonly string[]).includes(role ?? "");
+}
 
 /** Payload de création d'une note (démo du pattern « table métier scellée par RLS »). */
 export const CreateNoteInput = z.object({

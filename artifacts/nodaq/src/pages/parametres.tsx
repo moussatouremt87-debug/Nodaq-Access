@@ -1,11 +1,29 @@
 import { useState, useEffect } from 'react';
 import { ObjectifsParametres } from '@/components/objectifs-parametres';
-import { motion } from 'framer-motion';
-import { Building2, Bell, Puzzle, Save } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Building2, Bell, Puzzle, Save, UserCog, Mail, Trash2, Clock } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  useListMembres,
+  useInviterMembre,
+  useChangerRoleMembre,
+  useRevoquerMembre,
+  getListMembresQueryKey,
+} from '@workspace/api-client-react';
+import type { Membre } from '@workspace/api-client-react';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
+} from '@/components/ui/select';
+import {
+  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
+} from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
@@ -17,6 +35,7 @@ type Settings = Record<string, string>;
 const TABS = [
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'modules',       label: 'Modules',       icon: Puzzle },
+  { id: 'membres',       label: 'Membres & accès', icon: UserCog },
 ];
 
 function useSettings() {
@@ -86,6 +105,218 @@ function ModuleCard({ icon: Icon, label, description, enabled, onChange }: {
           enabled ? 'translate-x-6' : 'translate-x-1',
         )} />
       </button>
+    </div>
+  );
+}
+
+const ROLE_LABELS: Record<string, string> = {
+  OWNER: 'Propriétaire',
+  MEMBER: 'Membre',
+  ACCOUNTANT: 'Comptable',
+};
+
+function RoleBadge({ role }: { role: string }) {
+  return (
+    <Badge variant={role === 'OWNER' ? 'default' : 'secondary'}>
+      {ROLE_LABELS[role] ?? role}
+    </Badge>
+  );
+}
+
+function InviteForm() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [email, setEmail] = useState('');
+  const [role, setRole] = useState<'MEMBER' | 'ACCOUNTANT'>('MEMBER');
+  const inviter = useInviterMembre({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getListMembresQueryKey() });
+        setEmail('');
+        toast({ title: 'Invitation envoyée', description: `Un e-mail a été envoyé à ${email.trim()}.` });
+      },
+      onError: (err: Error) => toast({ title: 'Erreur', description: err.message, variant: 'destructive' }),
+    },
+  });
+
+  const handleInvite = () => {
+    const trimmed = email.trim();
+    if (!trimmed) return;
+    inviter.mutate({ data: { email: trimmed, role } });
+  };
+
+  return (
+    <div className="rounded-xl border border-card-border bg-card p-5">
+      <h3 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-4">
+        <Mail className="h-4 w-4 text-muted-foreground" /> Inviter un collaborateur
+      </h3>
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex-1 space-y-1.5">
+          <Label htmlFor="invite-email">Adresse e-mail</Label>
+          <Input
+            id="invite-email"
+            type="email"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            placeholder="collegue@exemple.fr"
+            autoComplete="email"
+          />
+        </div>
+        <div className="space-y-1.5 sm:w-48">
+          <Label>Rôle</Label>
+          <Select value={role} onValueChange={v => setRole(v as 'MEMBER' | 'ACCOUNTANT')}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="MEMBER">Membre</SelectItem>
+              <SelectItem value="ACCOUNTANT">Comptable — accès financier</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="sm:self-end">
+          <Button
+            onClick={handleInvite}
+            disabled={!email.trim() || inviter.isPending}
+            className="w-full sm:w-auto gap-1.5"
+          >
+            <Mail className="h-3.5 w-3.5" />
+            {inviter.isPending ? 'Envoi...' : 'Inviter'}
+          </Button>
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground mt-3">
+        Un membre voit les affaires, devis et contrats sans les montants. Un comptable voit également les données financières (factures, marge, échéancier fiscal).
+      </p>
+    </div>
+  );
+}
+
+function MembresTab() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const { data, isLoading } = useListMembres();
+  const [toRevoke, setToRevoke] = useState<Membre | null>(null);
+
+  const changerRole = useChangerRoleMembre({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getListMembresQueryKey() });
+        toast({ title: 'Rôle mis à jour' });
+      },
+      onError: (err: Error) => toast({ title: 'Erreur', description: err.message, variant: 'destructive' }),
+    },
+  });
+
+  const revoquer = useRevoquerMembre({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getListMembresQueryKey() });
+        toast({ title: 'Accès révoqué' });
+      },
+      onError: (err: Error) => toast({ title: 'Erreur', description: err.message, variant: 'destructive' }),
+      onSettled: () => setToRevoke(null),
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <div className="max-w-2xl space-y-3">
+        {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}
+      </div>
+    );
+  }
+
+  const membres = data?.membres ?? [];
+  const invitations = data?.invitationsEnAttente ?? [];
+
+  return (
+    <div className="max-w-2xl space-y-5">
+      <InviteForm />
+
+      <div className="rounded-xl border border-card-border bg-card overflow-hidden">
+        <h3 className="text-sm font-semibold text-foreground flex items-center gap-2 px-5 pt-5 pb-3">
+          <UserCog className="h-4 w-4 text-muted-foreground" /> Membres ({membres.length})
+        </h3>
+        <AnimatePresence>
+          {membres.map(m => (
+            <motion.div
+              key={m.id}
+              layout
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex items-center gap-3 px-5 py-3 border-t border-border"
+            >
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium text-foreground truncate">{m.nom}</div>
+                <div className="text-xs text-muted-foreground truncate">{m.email}</div>
+              </div>
+              {m.role === 'OWNER' ? (
+                <RoleBadge role={m.role} />
+              ) : (
+                <>
+                  <Select
+                    value={m.role}
+                    onValueChange={v => changerRole.mutate({ id: m.id, data: { role: v as 'MEMBER' | 'ACCOUNTANT' } })}
+                  >
+                    <SelectTrigger className="h-8 w-40 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="MEMBER">Membre</SelectItem>
+                      <SelectItem value="ACCOUNTANT">Comptable</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 shrink-0 text-destructive"
+                    onClick={() => setToRevoke(m)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </>
+              )}
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+
+      {invitations.length > 0 && (
+        <div className="rounded-xl border border-card-border bg-card overflow-hidden">
+          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2 px-5 pt-5 pb-3">
+            <Clock className="h-4 w-4 text-muted-foreground" /> Invitations en attente ({invitations.length})
+          </h3>
+          {invitations.map(inv => (
+            <div key={inv.id} className="flex items-center gap-3 px-5 py-3 border-t border-border">
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium text-foreground truncate">{inv.email}</div>
+                <div className="text-xs text-muted-foreground">
+                  Expire le {new Date(inv.expiresAt).toLocaleDateString('fr-FR', { dateStyle: 'medium' })}
+                </div>
+              </div>
+              <RoleBadge role={inv.role} />
+            </div>
+          ))}
+        </div>
+      )}
+
+      <AlertDialog open={!!toRevoke} onOpenChange={v => !v && setToRevoke(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Révoquer l'accès de {toRevoke?.nom} ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Cette personne ne pourra plus se connecter à cet espace. Cette action est irréversible.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => toRevoke && revoquer.mutate({ id: toRevoke.id })}
+              className="bg-destructive text-destructive-foreground"
+            >
+              Révoquer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -261,6 +492,8 @@ export default function ParametresPage() {
                 />
               </div>
             )}
+
+            {activeTab === 'membres' && <MembresTab />}
           </motion.div>
         )}
       </div>

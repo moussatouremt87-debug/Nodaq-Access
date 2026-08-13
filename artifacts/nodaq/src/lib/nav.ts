@@ -25,14 +25,15 @@ import {
   Radar,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { FINANCIAL_ROLES, type MembershipRole } from '@/hooks/use-auth';
 
 export type NavItem = {
   href: string;
   label: string;
   icon: LucideIcon;
   testId: string;
-  /** Si true, l'entrée est masquée pour les rôles non-OWNER. */
-  ownerOnly?: boolean;
+  /** Si présent, l'entrée est masquée pour les rôles hors de cette liste. */
+  requiredRoles?: readonly MembershipRole[];
 };
 
 export type NavSection = {
@@ -62,15 +63,15 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: 'Finance',
     items: [
-      { href: '/factures',   label: 'Factures',         icon: Receipt,       testId: 'nav-factures' },
-      { href: '/avoirs',     label: 'Avoirs',           icon: FileText,      testId: 'nav-avoirs' },
+      { href: '/factures',   label: 'Factures',         icon: Receipt,       testId: 'nav-factures',   requiredRoles: FINANCIAL_ROLES },
+      { href: '/avoirs',     label: 'Avoirs',           icon: FileText,      testId: 'nav-avoirs',     requiredRoles: FINANCIAL_ROLES },
       { href: '/analytique', label: 'Activité',          icon: BarChart2,     testId: 'nav-analytique' },
       { href: '/pointages',  label: 'Heures',           icon: CalendarCheck, testId: 'nav-pointages' },
       { href: '/devis/dictee', label: 'Devis dicté',    icon: Mic,           testId: 'nav-devis-dictee' },
-      { href: '/marge',      label: 'Marge',            icon: TrendingUp,    testId: 'nav-marge' },
-      { href: '/rapports',   label: 'Rapports',         icon: FileBarChart,  testId: 'nav-rapports' },
-      { href: '/echeancier',      label: 'Échéancier fiscal',   icon: CalendarClock,   testId: 'nav-echeancier' },
-      { href: '/compte-resultat', label: 'Compte de résultat', icon: FileSpreadsheet, testId: 'nav-compte-resultat' },
+      { href: '/marge',      label: 'Marge',            icon: TrendingUp,    testId: 'nav-marge',      requiredRoles: FINANCIAL_ROLES },
+      { href: '/rapports',   label: 'Rapports',         icon: FileBarChart,  testId: 'nav-rapports',   requiredRoles: FINANCIAL_ROLES },
+      { href: '/echeancier',      label: 'Échéancier fiscal',   icon: CalendarClock,   testId: 'nav-echeancier',      requiredRoles: FINANCIAL_ROLES },
+      { href: '/compte-resultat', label: 'Compte de résultat', icon: FileSpreadsheet, testId: 'nav-compte-resultat', requiredRoles: FINANCIAL_ROLES },
     ],
   },
   {
@@ -82,19 +83,24 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: 'Plateforme',
     items: [
-      { href: '/equipe',       label: 'Équipe & plannings', icon: UserCog,  testId: 'nav-equipe' },
+      { href: '/equipe',       label: 'Équipe & plannings', icon: UserCog,  testId: 'nav-equipe',       requiredRoles: ['OWNER'] },
       { href: '/votre-metier', label: 'Votre métier',       icon: Hammer,   testId: 'nav-votre-metier' },
-      { href: '/connecteurs',  label: 'Connecteurs',        icon: Plug2,    testId: 'nav-connecteurs' },
-      { href: '/parametres',   label: 'Paramètres',         icon: Settings2, testId: 'nav-parametres' },
+      { href: '/connecteurs',  label: 'Connecteurs',        icon: Plug2,    testId: 'nav-connecteurs',  requiredRoles: ['OWNER'] },
+      { href: '/parametres',   label: 'Paramètres',         icon: Settings2, testId: 'nav-parametres',  requiredRoles: ['OWNER'] },
       // Sous-entrée de Paramètres : l'envoi se règle une fois, on n'y revient pas.
       { href: '/parametres/envoi', label: 'Envoi des documents', icon: Send, testId: 'nav-parametres-envoi' },
-      { href: '/onboarding',   label: 'Profil entreprise',   icon: Building2,   testId: 'nav-onboarding',  ownerOnly: true },
-      { href: '/reprise',      label: 'Reprise des données', icon: DatabaseZap, testId: 'nav-reprise',     ownerOnly: true },
+      { href: '/onboarding',   label: 'Profil entreprise',   icon: Building2,   testId: 'nav-onboarding',  requiredRoles: ['OWNER'] },
+      { href: '/reprise',      label: 'Reprise des données', icon: DatabaseZap, testId: 'nav-reprise',     requiredRoles: ['OWNER'] },
     ],
   },
 ];
 
-export const MOBILE_NAV = [
+export const MOBILE_NAV: Array<{
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  requiredRoles?: readonly MembershipRole[];
+}> = [
   { href: '/',             label: 'Cockpit',    icon: LayoutDashboard },
   // Deuxième position, délibérément : le devis dicté est la fonction sur
   // laquelle repose le produit, et l'artisan qui la veut est justement celui
@@ -102,17 +108,17 @@ export const MOBILE_NAV = [
   { href: '/devis/dictee', label: 'Devis dicté', icon: Mic },
   { href: '/affaires',     label: 'Affaires',   icon: Briefcase },
   { href: '/devis',        label: 'Devis',      icon: FileText },
-  { href: '/factures',     label: 'Factures',   icon: Receipt },
+  { href: '/factures',     label: 'Factures',   icon: Receipt,      requiredRoles: FINANCIAL_ROLES },
   { href: '/pointages',    label: 'Heures',     icon: CalendarCheck },
-  { href: '/marge',        label: 'Marge',      icon: TrendingUp },
-  { href: '/echeancier',   label: 'Fiscal',     icon: CalendarClock },
+  { href: '/marge',        label: 'Marge',      icon: TrendingUp,   requiredRoles: FINANCIAL_ROLES },
+  { href: '/echeancier',   label: 'Fiscal',     icon: CalendarClock, requiredRoles: FINANCIAL_ROLES },
   { href: '/classeur',     label: 'Classeur',   icon: FolderOpen },
   { href: '/chat',         label: 'Agent IA',   icon: MessageSquare },
   // Plateforme screens (auth-gated at route level)
-  { href: '/equipe',       label: 'Équipe',     icon: UserCog },
+  { href: '/equipe',       label: 'Équipe',     icon: UserCog,      requiredRoles: ['OWNER'] },
   { href: '/votre-metier', label: 'Métier',     icon: Hammer },
-  { href: '/connecteurs',  label: 'Connecteurs', icon: Plug2 },
-  { href: '/parametres',   label: 'Paramètres', icon: Settings2 },
+  { href: '/connecteurs',  label: 'Connecteurs', icon: Plug2,       requiredRoles: ['OWNER'] },
+  { href: '/parametres',   label: 'Paramètres', icon: Settings2,    requiredRoles: ['OWNER'] },
 ];
 
 /** Returns true when the given nav href matches the current location. */
