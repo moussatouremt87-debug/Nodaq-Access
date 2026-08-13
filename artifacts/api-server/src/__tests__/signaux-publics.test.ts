@@ -108,7 +108,7 @@ async function contactPro(l: Locataire, avecBase = true): Promise<string> {
 beforeAll(async () => {
   a = await inscrire("a");
   b = await inscrire("b");
-  await reglage(a.tenantId, "metier.secteur", "batiment");
+  await reglage(a.tenantId, "votre-metier.metier", "batiment");
   await reglage(a.tenantId, "company.adresse_ville", "Marly-Gomont");
 }, 90_000);
 
@@ -151,6 +151,35 @@ describe("aucune suggestion sans source", () => {
       .set("Cookie", b.cookie).expect(200);
     expect(body.axes).toHaveLength(0);
     expect(body.raisonSilence).toBe("secteur_absent");
+  });
+});
+
+// ── Régression #43 — /axes lisait metier.secteur, une clé jamais posée ──────
+
+describe("régression #43 — /axes lit votre-metier.metier, pas metier.secteur", () => {
+  test("metier.secteur seul (l'ancienne clé morte) ne suffit pas : secteur_absent", async () => {
+    configurerSource();
+    const t = await inscrire("regression-43");
+    await reglage(t.tenantId, "company.adresse_ville", "Marly-Gomont");
+    // Seule la clé que plus aucun écran ne pose jamais — voir l'issue.
+    await reglage(t.tenantId, "metier.secteur", "batiment");
+
+    const { body } = await request(app).get("/api/prospection/axes")
+      .set("Cookie", t.cookie).expect(200);
+    expect(body.axes).toHaveLength(0);
+    expect(body.raisonSilence).toBe("secteur_absent");
+  });
+
+  test("votre-metier.metier (la clé réellement posée par l'écran) suffit : des axes sont proposés", async () => {
+    configurerSource();
+    const t = await inscrire("regression-43-ok");
+    await reglage(t.tenantId, "company.adresse_ville", "Marly-Gomont");
+    await reglage(t.tenantId, "votre-metier.metier", "batiment");
+
+    const { body } = await request(app).get("/api/prospection/axes")
+      .set("Cookie", t.cookie).expect(200);
+    expect(body.raisonSilence).toBeNull();
+    expect(body.axes.length).toBeGreaterThan(0);
   });
 });
 
@@ -315,7 +344,7 @@ describe("isolation", () => {
   });
 
   test("les axes d'un tenant dépendent de SES réglages", async () => {
-    await reglage(b.tenantId, "metier.secteur", "paysage");
+    await reglage(b.tenantId, "votre-metier.metier", "paysage");
     await reglage(b.tenantId, "company.adresse_ville", "Laon");
 
     const rA = await request(app).get("/api/prospection/axes").set("Cookie", a.cookie).expect(200);
