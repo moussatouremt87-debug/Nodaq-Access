@@ -240,7 +240,11 @@ export default function Affaires() {
                       <AffaireStatusBadge status={affaire.status} />
                     </td>
                     <td className="px-4 py-3 text-right font-mono-nums tabular-nums">
-                      {affaire.quotedAmountCents != null ? fmtEUR(affaire.quotedAmountCents) : '—'}
+                      {affaire.quotedAmountCents != null
+                        ? fmtEUR(affaire.quotedAmountCents)
+                        : affaire.montantVenduHt != null
+                          ? fmtEUR(affaire.montantVenduHt)
+                          : '—'}
                     </td>
                     <td className="px-4 py-3 text-right font-mono-nums tabular-nums">
                       {affaire.invoicedAmountCents != null ? fmtEUR(affaire.invoicedAmountCents) : '—'}

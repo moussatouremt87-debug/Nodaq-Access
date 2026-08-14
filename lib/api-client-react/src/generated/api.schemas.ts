@@ -91,6 +91,18 @@ export interface Affaire {
   startDate?: string | null;
   /** @nullable */
   completedAt?: string | null;
+  /**
+     * Montant vendu HT en centimes, issu du devis signé ou d'une reprise de l'existant.
+     * @nullable
+     */
+  montantVenduHt?: number | null;
+  /**
+     * Avancement en %, 0 à 100.
+     * @nullable
+     */
+  avancementPct?: number | null;
+  /** @nullable */
+  dateFinPrevue?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -98,7 +110,8 @@ export interface Affaire {
 export interface AffaireList {
   affaires: Affaire[];
   total: number;
-  totalQuotedCents?: number;
+  /** @nullable */
+  totalQuotedCents?: number | null;
 }
 
 export interface AffaireInput {
@@ -122,6 +135,14 @@ export interface AffaireUpdate {
   notes?: string;
   startDate?: string;
   completedAt?: string;
+  /** Montant vendu HT en centimes. */
+  montantVenduHt?: number;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  avancementPct?: number;
+  dateFinPrevue?: string;
 }
 
 export interface StatusCount {
@@ -133,7 +154,8 @@ export interface StatusCount {
 
 export interface AffaireStats {
   byStatus: StatusCount[];
-  totalPipelineValueCents?: number;
+  /** @nullable */
+  totalPipelineValueCents?: number | null;
 }
 
 export type ContratCadence = typeof ContratCadence[keyof typeof ContratCadence];

@@ -17,4 +17,12 @@ export interface AffaireUpdate {
   notes?: string;
   startDate?: Date;
   completedAt?: Date;
+  /** Montant vendu HT en centimes. */
+  montantVenduHt?: number;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  avancementPct?: number;
+  dateFinPrevue?: Date;
 }

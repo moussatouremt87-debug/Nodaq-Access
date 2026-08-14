@@ -27,7 +27,7 @@ router.get("/affaires/stats", async (req, res): Promise<void> => {
       SELECT
         status,
         count(*)::int as count,
-        coalesce(sum(quoted_amount_cents), 0)::int as "totalCents"
+        coalesce(sum(coalesce(quoted_amount_cents, montant_vendu_ht)), 0)::int as "totalCents"
       FROM affaires
       GROUP BY status
       ORDER BY status
@@ -65,9 +65,9 @@ router.get("/affaires", async (req, res): Promise<void> => {
     return { affaires: await query };
   });
 
-  const totalQuotedCents = affaires.reduce((acc, a) => acc + (a.quotedAmountCents ?? 0), 0);
+  const totalQuotedCents = affaires.reduce((acc, a) => acc + (a.quotedAmountCents ?? a.montantVenduHt ?? 0), 0);
   const affairesMasquees = affaires.map((a) =>
-    maskFinancialFields(a, ["quotedAmountCents", "invoicedAmountCents", "marginCents"], financier),
+    maskFinancialFields(a, ["quotedAmountCents", "invoicedAmountCents", "marginCents", "montantVenduHt"], financier),
   );
   res.json(maskFinancialFields(
     { affaires: affairesMasquees, total: affaires.length, totalQuotedCents },
@@ -118,7 +118,7 @@ router.get("/affaires/:id", async (req, res): Promise<void> => {
   if (!affaire) { res.status(404).json({ error: "Affaire not found" }); return; }
   res.json(maskFinancialFields(
     affaire,
-    ["quotedAmountCents", "invoicedAmountCents", "marginCents"],
+    ["quotedAmountCents", "invoicedAmountCents", "marginCents", "montantVenduHt"],
     hasFinancialAccess(req.session?.role),
   ));
 });
@@ -139,6 +139,12 @@ router.patch("/affaires/:id", async (req, res): Promise<void> => {
   if (data.notes !== undefined) updateData.notes = data.notes;
   if (data.startDate !== undefined) updateData.startDate = data.startDate;
   if (data.completedAt !== undefined) updateData.completedAt = data.completedAt;
+  if (data.montantVenduHt !== undefined) updateData.montantVenduHt = data.montantVenduHt;
+  if (data.avancementPct !== undefined) updateData.avancementPct = data.avancementPct;
+  if (data.dateFinPrevue !== undefined) {
+    const rawFin = data.dateFinPrevue as unknown as Date | string | null;
+    updateData.dateFinPrevue = rawFin instanceof Date ? toDateString(rawFin) : rawFin;
+  }
 
   const tenantId = req.tenantId!;
   const [affaire] = await withTenant(tenantId, async (tx) =>

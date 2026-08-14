@@ -10,5 +10,6 @@ import type { Affaire } from './affaire';
 export interface AffaireList {
   affaires: Affaire[];
   total: number;
-  totalQuotedCents?: number;
+  /** @nullable */
+  totalQuotedCents?: number | null;
 }

@@ -27,6 +27,18 @@ export interface Affaire {
   startDate?: Date | null;
   /** @nullable */
   completedAt?: Date | null;
+  /**
+     * Montant vendu HT en centimes, issu du devis signé ou d'une reprise de l'existant.
+     * @nullable
+     */
+  montantVenduHt?: number | null;
+  /**
+     * Avancement en %, 0 à 100.
+     * @nullable
+     */
+  avancementPct?: number | null;
+  /** @nullable */
+  dateFinPrevue?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }

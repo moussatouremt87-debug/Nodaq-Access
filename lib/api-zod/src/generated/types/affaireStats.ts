@@ -9,5 +9,6 @@ import type { StatusCount } from './statusCount';
 
 export interface AffaireStats {
   byStatus: StatusCount[];
-  totalPipelineValueCents?: number;
+  /** @nullable */
+  totalPipelineValueCents?: number | null;
 }
