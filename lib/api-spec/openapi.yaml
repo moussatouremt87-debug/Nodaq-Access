@@ -1583,6 +1583,7 @@ components:
           type: string
         estimatedValueCents:
           type: number
+          minimum: 0
         notes:
           type: string
 
@@ -1603,6 +1604,7 @@ components:
           type: string
         estimatedValueCents:
           type: number
+          minimum: 0
         notes:
           type: string
 
