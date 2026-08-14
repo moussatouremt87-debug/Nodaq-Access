@@ -66,6 +66,16 @@ export const COMPANY_KEYS = [
   "company.adresse",
   "company.code_postal",
   "company.commune",
+  // Clés CANONIQUES : ce sont celles-ci — pas raison_sociale/adresse/
+  // code_postal/commune ci-dessus — que lisent factures.ts, avoirs.ts,
+  // pdf-devis.ts et public.ts (loadSellerInfo) pour composer un document
+  // légal. Avant leur ajout ici et dans `pairs` ci-dessous, rien ne les
+  // écrivait : chaque devis/facture/avoir affichait le repli "Entreprise"
+  // sans adresse, quel que soit ce que l'onboarding avait enregistré.
+  "company.nom",
+  "company.adresse_rue",
+  "company.adresse_cp",
+  "company.adresse_ville",
   "company.code_naf",
   "company.libelle_naf",
   "company.tranche_effectif",
@@ -294,6 +304,15 @@ onboardingWriteRouter.post("/onboarding/profil/confirmer", async (req, res): Pro
     ...(d.adresse ? [["company.adresse", d.adresse] as [string, string]] : []),
     ...(d.code_postal ? [["company.code_postal", d.code_postal] as [string, string]] : []),
     ...(d.commune ? [["company.commune", d.commune] as [string, string]] : []),
+    // Miroir vers les clés canoniques lues par loadSellerInfo() — voir le
+    // commentaire sur COMPANY_KEYS ci-dessus. On GARDE aussi les clés
+    // d'origine ci-dessus : rien d'autre ne dépend de leur suppression, et le
+    // fait de dupliquer plutôt que renommer évite de casser un lecteur non
+    // repéré.
+    ["company.nom", d.raison_sociale],
+    ...(d.adresse ? [["company.adresse_rue", d.adresse] as [string, string]] : []),
+    ...(d.code_postal ? [["company.adresse_cp", d.code_postal] as [string, string]] : []),
+    ...(d.commune ? [["company.adresse_ville", d.commune] as [string, string]] : []),
     ...(d.code_naf ? [["company.code_naf", d.code_naf] as [string, string]] : []),
     ...(d.libelle_naf ? [["company.libelle_naf", d.libelle_naf] as [string, string]] : []),
     ...(d.tranche_effectif ? [["company.tranche_effectif", d.tranche_effectif] as [string, string]] : []),
