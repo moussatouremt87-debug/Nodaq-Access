@@ -19,6 +19,7 @@ import {
   adminPool,
   cleanupTenants,
   cleanupUsers,
+  completeMfaForRegisteredOwner,
 } from "./helpers";
 
 // ── Shared fixtures ───────────────────────────────────────────────────────────
@@ -59,6 +60,7 @@ beforeAll(async () => {
     .post("/api/auth/register")
     .send({ email: emailA, password: "test-pass-1234", nom: "Owner PDF", tenantNom: "Corp PDF" })
     .expect(201);
+  await completeMfaForRegisteredOwner(regA.body.userId);
   cookieA = regA.headers["set-cookie"]?.[0] ?? "";
 
   const { body: me } = await request(app).get("/api/auth/me").set("Cookie", cookieA).expect(200);

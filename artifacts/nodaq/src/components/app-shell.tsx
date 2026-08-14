@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'wouter';
-import { Radio } from 'lucide-react';
+import { Radio, ShieldCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { NAV_SECTIONS, MOBILE_NAV, navIsActive } from '@/lib/nav';
 import { TopRibbon } from './top-ribbon';
@@ -10,7 +10,7 @@ import { MicroFlottant } from '@/components/micro-flottant';
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { data } = useAuth();
-  const role = data?.authenticated === true ? data.role : undefined;
+  const role = data?.authenticated === true && 'role' in data ? data.role : undefined;
   const peutVoir = (item: { requiredRoles?: readonly string[] }) =>
     !item.requiredRoles || (role !== undefined && item.requiredRoles.includes(role));
 
@@ -100,6 +100,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
             <ThemeToggle />
           </div>
+          {/* MFA (ticket 4.15) — accessible à tous les rôles : OWNER/ACCOUNTANT
+              y sont déjà passés de force à la connexion, MEMBER peut l'activer
+              volontairement même si rien ne l'y oblige. */}
+          <Link
+            href="/mfa"
+            className="mt-2 flex items-center gap-2 rounded-lg px-3 py-2 text-[11px] text-sidebar-foreground/60 hover-elevate"
+          >
+            <ShieldCheck className="h-3.5 w-3.5" />
+            Sécurité du compte
+          </Link>
         </div>
       </aside>
 

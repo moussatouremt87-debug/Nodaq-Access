@@ -82,7 +82,7 @@ export async function createSession(
 
 export interface SessionWithContext {
   session: Session;
-  user: Pick<User, "id" | "email" | "nom">;
+  user: Pick<User, "id" | "email" | "nom" | "mfaEnabledAt">;
   /** null when the membership has been revoked — requireMembership handles the 403. */
   membership: Pick<Membership, "role"> | null;
 }
@@ -100,7 +100,12 @@ export async function findValidSession(
   if (!session) return null;
 
   const [user] = await db
-    .select({ id: usersTable.id, email: usersTable.email, nom: usersTable.nom })
+    .select({
+      id: usersTable.id,
+      email: usersTable.email,
+      nom: usersTable.nom,
+      mfaEnabledAt: usersTable.mfaEnabledAt,
+    })
     .from(usersTable)
     .where(eq(usersTable.id, session.userId));
   if (!user) return null;
@@ -125,6 +130,14 @@ export async function extendSession(sessionId: string): Promise<void> {
   await db
     .update(sessionsTable)
     .set({ expiresAt: newExpiry() })
+    .where(eq(sessionsTable.id, sessionId));
+}
+
+/** MFA (ticket 4.15) — marque CETTE session comme ayant prouvé le second facteur. */
+export async function marquerSessionMfaVerifiee(sessionId: string): Promise<void> {
+  await db
+    .update(sessionsTable)
+    .set({ mfaVerifiedAt: new Date() })
     .where(eq(sessionsTable.id, sessionId));
 }
 

@@ -8,6 +8,7 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { hashPassword, verifyPassword } from "../lib/password";
+import { hasFinancialAccess } from "@nodaq/shared";
 import {
   findUserByEmail,
   createUserTenantOwner,
@@ -106,6 +107,18 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   await touchLastLogin(user.id);
 
   res.cookie(COOKIE_NAME, session.id, COOKIE_OPTS);
+
+  // MFA (ticket 4.15) — une session neuve n'a jamais mfaVerifiedAt posé. Pour
+  // OWNER/ACCOUNTANT, ne rien renvoyer de plus que ce qu'il faut pour router
+  // vers l'écran MFA : ni tenantId ni role tant que le second facteur n'est
+  // pas prouvé. Ce branchement arrive APRÈS la vérification du mot de passe
+  // existante — le chemin mauvais-mot-de-passe garde exactement son coût et
+  // son timing actuels, aucun nouveau signal n'est introduit ici.
+  if (hasFinancialAccess(preferred.role)) {
+    res.json({ ok: true, mfaStatus: user.mfaEnabledAt ? "verify_required" : "enroll_required" });
+    return;
+  }
+
   res.json({ ok: true, tenantId: preferred.tenantId, role: preferred.role });
 });
 
@@ -137,8 +150,33 @@ router.get("/auth/me", async (req, res): Promise<void> => {
     return;
   }
 
+  // MFA (ticket 4.15) — trois états. Volontairement minimal tant que le
+  // second facteur n'est pas prouvé : ni tenantId ni role ni email avant que
+  // mfaStatus ne vaille "verified"/"not_required".
+  if (hasFinancialAccess(ctx.membership.role)) {
+    if (!ctx.user.mfaEnabledAt) {
+      res.json({ authenticated: true, mfaStatus: "enroll_required" });
+      return;
+    }
+    if (!ctx.session.mfaVerifiedAt) {
+      res.json({ authenticated: true, mfaStatus: "verify_required" });
+      return;
+    }
+    res.json({
+      authenticated: true,
+      mfaStatus: "verified",
+      userId: ctx.user.id,
+      email: ctx.user.email,
+      nom: ctx.user.nom,
+      tenantId: ctx.session.tenantId,
+      role: ctx.membership.role,
+    });
+    return;
+  }
+
   res.json({
     authenticated: true,
+    mfaStatus: "not_required",
     userId: ctx.user.id,
     email: ctx.user.email,
     nom: ctx.user.nom,

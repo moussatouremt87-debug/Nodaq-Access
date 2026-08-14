@@ -25,7 +25,7 @@ export async function enregistrerSecret(
   cle: string,
   clair: string,
 ): Promise<void> {
-  const identite: IdentiteSecret = { tenantId, cle };
+  const identite: IdentiteSecret = { scope: tenantId, cle };
   const { valeur, versionCle } = chiffrer(clair, identite);
 
   await withTenant(tenantId, async (tx) => {
@@ -56,7 +56,7 @@ export async function lireSecret(tenantId: string, cle: string): Promise<string 
       .where(and(eq(tenantSecretsTable.tenantId, tenantId), eq(tenantSecretsTable.cle, cle))),
   );
   if (!ligne) return null;
-  return dechiffrer(ligne.valeurChiffree, { tenantId, cle });
+  return dechiffrer(ligne.valeurChiffree, { scope: tenantId, cle });
 }
 
 /**

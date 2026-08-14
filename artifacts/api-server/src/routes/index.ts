@@ -40,8 +40,10 @@ import { requireAuth } from "../middleware/requireAuth";
 import { resolveTenant } from "../middleware/resolveTenant";
 import { requireMembership } from "../middleware/requireMembership";
 import { requireRole } from "../middleware/requireRole";
+import { requireMfaVerified } from "../middleware/requireMfaVerified";
 import { FINANCIAL_ROLES } from "@nodaq/shared";
 import membresRouter, { membresPublicRouter } from "./membres";
+import mfaRouter from "./mfa";
 
 const router: IRouter = Router();
 
@@ -51,8 +53,17 @@ router.use(authRouter);
 router.use(publicRouter);   // /public/devis/:token/accept-page, /public/devis/:token/accept
 router.use(membresPublicRouter); // /membres/inviter/:token (lecture + acceptation)
 
+// ── MFA (ticket 4.15) — requireAuth SEUL, pas la chaîne biz ────────────────
+// Une session bloquée par requireMfaVerified doit pouvoir atteindre ces
+// routes pour en sortir ; resolveTenant/requireMembership n'ont rien à voir
+// avec « cette personne possède-t-elle le bon secret TOTP ».
+router.use([requireAuth], mfaRouter);
+
 // ── Auth middleware chain applied to all business routes ──────────────────
-const biz: RequestHandler[] = [requireAuth, resolveTenant, requireMembership];
+// requireMfaVerified en dernier : bloque toute session OWNER/ACCOUNTANT sans
+// second facteur prouvé CETTE session, avant qu'elle n'atteigne quoi que ce
+// soit — ownerOnly et financierOnly en héritent en composant `biz`.
+const biz: RequestHandler[] = [requireAuth, resolveTenant, requireMembership, requireMfaVerified];
 const ownerOnly: RequestHandler[] = [...biz, requireRole(["OWNER"])];
 // Routeurs EXCLUSIVEMENT financiers — bloqués en entier pour un MEMBER, pas
 // seulement masqués : contrairement à affaires/contrats (voir plus bas), ils

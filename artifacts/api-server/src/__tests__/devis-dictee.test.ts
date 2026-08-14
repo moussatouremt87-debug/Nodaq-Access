@@ -16,7 +16,7 @@
 import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import app from "../app";
-import { adminPool, cleanupTenants, cleanupUsers } from "./helpers";
+import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner } from "./helpers";
 
 let cookie: string;
 let tenantId: string;
@@ -30,6 +30,7 @@ beforeAll(async () => {
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: "Artisan", tenantNom: "Placo Test" })
     .expect(201);
+  await completeMfaForRegisteredOwner(reg.body.userId);
   cookie = reg.headers["set-cookie"]?.[0] ?? "";
 
   const { body: me } = await request(app).get("/api/auth/me").set("Cookie", cookie).expect(200);
@@ -99,6 +100,7 @@ describe("a — AUCUN PRIX INVENTÉ hors catalogue", () => {
       .post("/api/auth/register")
       .send({ email, password: "test-pass-1234", nom: "Neuf", tenantNom: "Sans Catalogue" })
       .expect(201);
+    await completeMfaForRegisteredOwner(reg.body.userId);
     const cookieVide = reg.headers["set-cookie"]?.[0] ?? "";
     const { body: me } = await request(app).get("/api/auth/me").set("Cookie", cookieVide).expect(200);
     cleanupTenantIds.push(me.tenantId);

@@ -20,6 +20,7 @@ import {
   adminPool,
   cleanupTenants,
   cleanupUsers,
+  completeMfaForRegisteredOwner,
 } from "./helpers";
 import pg from "pg";
 
@@ -38,6 +39,8 @@ beforeAll(async () => {
     .post("/api/auth/register")
     .send({ email, password, nom: "E2E Test", tenantNom })
     .expect(201);
+
+  await completeMfaForRegisteredOwner(res.body.userId);
 
   // Récupérer le cookie de session de la réponse
   const setCookie = res.headers["set-cookie"] as string[] | string | undefined;

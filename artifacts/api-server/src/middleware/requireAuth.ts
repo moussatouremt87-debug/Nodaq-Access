@@ -33,12 +33,14 @@ export async function requireAuth(
   // Attach typed context.
   // role may be '' if membership was revoked — requireMembership will return 403.
   req.session = {
-    id:       ctx.session.id,
-    userId:   ctx.user.id,
-    tenantId: ctx.session.tenantId,
-    role:     ctx.membership?.role ?? "",
-    email:    ctx.user.email,
-    nom:      ctx.user.nom,
+    id:            ctx.session.id,
+    userId:        ctx.user.id,
+    tenantId:      ctx.session.tenantId,
+    role:          ctx.membership?.role ?? "",
+    email:         ctx.user.email,
+    nom:           ctx.user.nom,
+    mfaVerifiedAt: ctx.session.mfaVerifiedAt,
+    mfaEnabled:    ctx.user.mfaEnabledAt !== null,
   };
 
   // Sliding expiry — fire-and-forget (don't await, avoid adding latency)

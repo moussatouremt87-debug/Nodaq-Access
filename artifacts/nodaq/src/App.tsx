@@ -36,6 +36,7 @@ import Login from '@/pages/login';
 import Register from '@/pages/register';
 import DevisAccepter from '@/pages/devis-accepter';
 import MembreAccepter from '@/pages/membre-accepter';
+import Mfa from '@/pages/mfa';
 import { useAuth, FINANCIAL_ROLES, type MembershipRole } from '@/hooks/use-auth';
 
 /** HOC: redirects to /login if not authenticated */
@@ -55,6 +56,11 @@ function PlatformRoute(Page: React.ComponentType) {
       // Redirect to login, preserving the intended destination
       const from = encodeURIComponent(window.location.pathname);
       setLocation(`/login?from=${from}`);
+      return null;
+    }
+    if (!('role' in data)) {
+      const from = encodeURIComponent(window.location.pathname);
+      setLocation(`/mfa?from=${from}`);
       return null;
     }
     return <Page />;
@@ -77,6 +83,11 @@ function RoleRoute(Page: React.ComponentType, allowedRoles: readonly MembershipR
     if (!data?.authenticated) {
       const from = encodeURIComponent(window.location.pathname);
       setLocation(`/login?from=${from}`);
+      return null;
+    }
+    if (!('role' in data)) {
+      const from = encodeURIComponent(window.location.pathname);
+      setLocation(`/mfa?from=${from}`);
       return null;
     }
     if (!allowedRoles.includes(data.role)) {
@@ -130,6 +141,7 @@ export const ROUTES_PUBLIQUES = [
   '/membres/accepter/:token',
   '/login',
   '/register',
+  '/mfa',
 ] as const;
 
 function AppRouter() {
@@ -140,6 +152,9 @@ function AppRouter() {
       <Route path="/membres/accepter/:token" component={MembreAccepter} />
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
+      {/* MFA (ticket 4.15) — une identité en attente de second facteur n'a
+          pas de `role` : l'AppShell, qui appelle useIsOwner(), choquerait. */}
+      <Route path="/mfa" component={Mfa} />
 
       {/* Tout le reste vit dans l'application interne. */}
       <Route component={ApplicationInterne} />

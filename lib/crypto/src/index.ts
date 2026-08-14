@@ -18,11 +18,17 @@
  * ne voit jamais que du chiffré.
  *
  * ── Le point qui compte : l'AAD ─────────────────────────────────────────────
- * Les données authentifiées supplémentaires valent `${tenantId}|${cle}`. Un
- * chiffré recopié de la ligne d'un tenant vers celle d'un autre — ou d'une clé
+ * Les données authentifiées supplémentaires valent `${scope}|${cle}`. Un
+ * chiffré recopié de la ligne d'un scope vers celle d'un autre — ou d'une clé
  * logique vers une autre — ne se déchiffre PAS : l'authentification GCM échoue.
  * Le chiffrement devient une seconde barrière d'isolation, derrière la RLS,
  * alignée sur la doctrine du dépôt.
+ *
+ * `scope` est le plus souvent un tenantId (secrets de connecteurs, voir
+ * tenant-secrets.ts), mais rien dans ce module ne l'exige — un secret propre à
+ * un UTILISATEUR (ex. secret TOTP du MFA) passe son userId à la même place.
+ * Le nom générique est délibéré : un champ appelé `tenantId` qui porterait en
+ * réalité un userId tromperait le prochain lecteur.
  *
  * ── Aucun repli, jamais ─────────────────────────────────────────────────────
  * Clé absente, mal encodée ou de mauvaise longueur : on lève. On n'écrit
@@ -71,7 +77,8 @@ export class DechiffrementError extends Error {
 
 /** Identité d'un secret. C'est elle, et elle seule, qui forme l'AAD. */
 export interface IdentiteSecret {
-  readonly tenantId: string;
+  /** À quoi ce secret appartient — le plus souvent un tenantId, parfois un userId. */
+  readonly scope: string;
   /** Clé logique, par exemple « envoi.smtp_password ». */
   readonly cle: string;
 }
@@ -152,7 +159,7 @@ export function verifierConfigurationChiffrement(): void {
 
 /** L'AAD lie le chiffré à SA ligne. Déplacé, il ne s'ouvre plus. */
 function aad(identite: IdentiteSecret): Buffer {
-  return Buffer.from(`${identite.tenantId}|${identite.cle}`, "utf8");
+  return Buffer.from(`${identite.scope}|${identite.cle}`, "utf8");
 }
 
 export interface Chiffre {
@@ -258,7 +265,7 @@ function dechiffrerAvec(stocke: string, identite: IdentiteSecret, cle: Buffer): 
     // `update()` a déjà produit — un clair silencieusement faux est pire qu'une
     // erreur.
     throw new DechiffrementError(
-      `Déchiffrement impossible pour « ${identite.cle} » : clé, tenant ou contenu ne correspondent pas.`,
+      `Déchiffrement impossible pour « ${identite.cle} » : clé, scope ou contenu ne correspondent pas.`,
     );
   }
 }

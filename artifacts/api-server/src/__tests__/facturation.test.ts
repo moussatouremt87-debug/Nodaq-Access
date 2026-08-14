@@ -25,6 +25,7 @@ import {
   createTestMembership,
   cleanupTenants,
   cleanupUsers,
+  completeMfaForRegisteredOwner,
 } from "./helpers";
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -118,6 +119,7 @@ beforeAll(async () => {
     .post("/api/auth/register")
     .send({ email: emailA, password: "test-pass-1234", nom: "Owner A", tenantNom: "Corp A" })
     .expect(201);
+  await completeMfaForRegisteredOwner(regA.body.userId);
   cookieA = regA.headers["set-cookie"]?.[0] ?? "";
 
   const { body: meA } = await request(app).get("/api/auth/me").set("Cookie", cookieA).expect(200);
@@ -131,6 +133,7 @@ beforeAll(async () => {
     .post("/api/auth/register")
     .send({ email: emailB, password: "test-pass-1234", nom: "Owner B", tenantNom: "Corp B" })
     .expect(201);
+  await completeMfaForRegisteredOwner(regB.body.userId);
   cookieB = regB.headers["set-cookie"]?.[0] ?? "";
 
   const { body: meB } = await request(app).get("/api/auth/me").set("Cookie", cookieB).expect(200);

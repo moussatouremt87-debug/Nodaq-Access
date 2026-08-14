@@ -16,7 +16,7 @@ import request from "supertest";
 import crypto from "node:crypto";
 import app from "../app";
 import { toDateString } from "@nodaq/shared";
-import { adminPool, cleanupTenants, cleanupUsers, createTestTeamMember } from "./helpers";
+import { adminPool, cleanupTenants, cleanupUsers, createTestTeamMember, completeMfaForRegisteredOwner } from "./helpers";
 
 interface Locataire { cookie: string; tenantId: string }
 
@@ -33,6 +33,7 @@ async function inscrire(nom: string): Promise<Locataire> {
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: `Patron ${nom}`, tenantNom: `Tenant ${nom}` })
     .expect(201);
+  await completeMfaForRegisteredOwner(reg.body.userId);
   const cookie = reg.headers["set-cookie"]?.[0] ?? "";
   const { body: me } = await request(app).get("/api/auth/me").set("Cookie", cookie).expect(200);
   cleanupTenantIds.push(me.tenantId);
