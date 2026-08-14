@@ -63,7 +63,12 @@ export default function AvoirsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['avoirs'] });
       qc.invalidateQueries({ queryKey: ['factures'] });
-      toast({ title: 'Avoir créé', description: 'La facture a été marquée comme annulée.' });
+      // Un avoir peut être partiel : la facture reste EMISE avec un solde
+      // réduit, elle n'est « annulée » que si l'avoir couvre tout le
+      // résiduel. Le message ne doit rien affirmer que la réponse ne
+      // garantit pas — voir UAT : « La facture a été marquée comme annulée »
+      // affiché après un avoir partiel de 22 % était une fausse alerte.
+      toast({ title: 'Avoir créé', description: 'Le solde de la facture a été mis à jour en conséquence.' });
       setDialogOpen(false);
     },
     onError: (err: Error) => {
@@ -113,7 +118,7 @@ export default function AvoirsPage() {
               <thead>
                 <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                   <th className="px-5 py-3 font-medium">Numéro</th>
-                  <th className="px-4 py-3 font-medium">Facture annulée</th>
+                  <th className="px-4 py-3 font-medium">Facture corrigée</th>
                   <th className="px-4 py-3 font-medium">Motif</th>
                   <th className="px-4 py-3 font-medium text-right">Montant HT</th>
                   <th className="px-4 py-3 font-medium text-right">TVA</th>
