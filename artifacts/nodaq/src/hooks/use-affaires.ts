@@ -6,6 +6,7 @@ import {
   useUpdateAffaire,
   useDeleteAffaire,
   getListAffairesQueryKey,
+  getGetAffaireQueryKey,
   getGetAffaireStatsQueryKey,
   getGetCockpitKpisQueryKey,
   getGetCockpitActivityQueryKey,
@@ -30,13 +31,19 @@ export function useAffaireStats() {
 
 function useInvalidateAffaires() {
   const queryClient = useQueryClient();
-  return () => {
+  // `id` invalide la fiche détail de CETTE affaire — sa clé de requête
+  // (`/api/affaires/{id}`) est indépendante de celle de la liste, l'une ne
+  // recouvre pas l'autre. Sans elle, `/affaires/:id` continuait d'afficher
+  // les anciennes valeurs après "Modifier" tant qu'on ne rechargeait pas la
+  // page à la main, alors que l'écriture avait bien réussi côté serveur.
+  return (id?: string) => {
     queryClient.invalidateQueries({ queryKey: getListAffairesQueryKey() });
     queryClient.invalidateQueries({ queryKey: getGetAffaireStatsQueryKey() });
     queryClient.invalidateQueries({ queryKey: getGetCockpitKpisQueryKey() });
     queryClient.invalidateQueries({
       queryKey: getGetCockpitActivityQueryKey(),
     });
+    if (id) queryClient.invalidateQueries({ queryKey: getGetAffaireQueryKey(id) });
   };
 }
 
@@ -80,7 +87,7 @@ export function useUpdateAffaireMutation() {
         { id, data },
         {
           onSuccess: () => {
-            invalidate();
+            invalidate(id);
             toast({ title: 'Affaire mise à jour' });
             onSuccess?.();
           },
@@ -105,7 +112,7 @@ export function useDeleteAffaireMutation() {
         { id },
         {
           onSuccess: () => {
-            invalidate();
+            invalidate(id);
             toast({ title: 'Affaire supprimée' });
             onSuccess?.();
           },
