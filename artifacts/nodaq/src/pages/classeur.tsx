@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   FolderOpen, Search, Upload, Trash2, FileText, FileCheck,
-  FileSpreadsheet, FolderKanban, Plus,
+  FileSpreadsheet, FolderKanban, Plus, Download,
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PageHeader } from '@/components/page-header';
@@ -32,6 +32,7 @@ const API = '/api';
 type ClasseurDocument = {
   id: string; name: string; category: string; size?: number | null;
   mimeType?: string | null; notes?: string | null; affaireId?: string | null; createdAt: string;
+  hasContent: boolean;
 };
 
 const CATEGORIES = [
@@ -241,7 +242,17 @@ function DocumentList({ docs, onDelete }: { docs: ClasseurDocument[]; onDelete: 
                 <td className="px-5 py-3">
                   <div className="flex items-center gap-2.5">
                     <Icon className={`h-4 w-4 shrink-0 ${cat?.color ?? 'text-muted-foreground'}`} />
-                    <span className="font-medium text-foreground truncate max-w-xs">{doc.name}</span>
+                    {doc.hasContent ? (
+                      <a href={`${API}/classeur/${doc.id}/telechargement`} target="_blank" rel="noreferrer"
+                        className="font-medium text-foreground truncate max-w-xs hover:text-primary hover:underline"
+                        title="Télécharger">
+                        {doc.name}
+                      </a>
+                    ) : (
+                      <span className="font-medium text-foreground truncate max-w-xs" title="Document sans contenu archivé">
+                        {doc.name}
+                      </span>
+                    )}
                   </div>
                 </td>
                 <td className="px-4 py-3 text-muted-foreground text-xs">{cat?.label ?? doc.category}</td>
@@ -249,6 +260,13 @@ function DocumentList({ docs, onDelete }: { docs: ClasseurDocument[]; onDelete: 
                 <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{fmtDate(doc.createdAt)}</td>
                 <td className="px-3 py-3 text-right">
                   <div className="flex items-center justify-end gap-1">
+                    {doc.hasContent && (
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" asChild>
+                        <a href={`${API}/classeur/${doc.id}/telechargement`} target="_blank" rel="noreferrer" title="Télécharger">
+                          <Download className="h-3.5 w-3.5" />
+                        </a>
+                      </Button>
+                    )}
                     <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive"
                       onClick={() => onDelete(doc)} title="Supprimer">
                       <Trash2 className="h-3.5 w-3.5" />
@@ -280,21 +298,23 @@ function UploadDialog({ open, onOpenChange, onSaved }: {
   };
 
   const handleSave = async () => {
-    if (!name.trim()) return;
+    if (!file) return;
     setSaving(true);
     try {
-      const payload: Record<string, unknown> = { name, category };
-      if (notes) payload.notes = notes;
-      if (file?.size) payload.size = file.size;
-      if (file?.type) payload.mimeType = file.type;
+      const formData = new FormData();
+      formData.append('file', file);
+      if (name.trim()) formData.append('name', name.trim());
+      formData.append('category', category);
+      if (notes) formData.append('notes', notes);
+
       const res = await fetch(`${API}/classeur`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        credentials: 'include',
+        body: formData,
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        toast({ title: 'Erreur', description: (err as any).error ?? 'Impossible d\'ajouter le document', variant: 'destructive' });
+        toast({ title: 'Erreur', description: (err as { error?: string }).error ?? "Impossible d'ajouter le document", variant: 'destructive' });
         return;
       }
       onSaved();
@@ -319,11 +339,11 @@ function UploadDialog({ open, onOpenChange, onSaved }: {
             <span className="text-sm text-muted-foreground">
               {file ? file.name : 'Cliquez ou glissez un fichier ici'}
             </span>
-            <input type="file" className="hidden" onChange={handleFile} />
+            <input type="file" accept="application/pdf,image/*" className="hidden" onChange={handleFile} />
           </label>
           <div className="space-y-1.5">
-            <Label>Nom du document *</Label>
-            <Input value={name} onChange={e => setName(e.target.value)} placeholder="Ex : Contrat-Client-2026.pdf" />
+            <Label>Nom du document</Label>
+            <Input value={name} onChange={e => setName(e.target.value)} placeholder={file?.name ?? 'Ex : Contrat-Client-2026.pdf'} />
           </div>
           <div className="space-y-1.5">
             <Label>Catégorie</Label>
@@ -341,7 +361,7 @@ function UploadDialog({ open, onOpenChange, onSaved }: {
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>
-          <Button onClick={handleSave} disabled={saving || !name.trim()}>
+          <Button onClick={handleSave} disabled={saving || !file}>
             {saving ? 'Ajout...' : 'Ajouter'}
           </Button>
         </DialogFooter>

@@ -19,5 +19,7 @@ export interface ClasseurDocument {
   notes?: string | null;
   /** @nullable */
   affaireId?: string | null;
+  /** true si les octets du fichier sont archivés et téléchargeables via GET /classeur/{id}/telechargement. false pour un document importé avant la mise en place du stockage (métadonnées seules). */
+  hasContent: boolean;
   createdAt: Date;
 }

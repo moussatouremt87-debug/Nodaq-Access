@@ -456,8 +456,6 @@ export interface ChatUploadReply {
   conversationId: string;
   message: ChatMessage;
   actions_proposees?: AgentAction[];
-  /** Always true in this version — the image binary is not stored. Binary storage (object storage + classeur thumbnail) is tracked in a follow-up task. */
-  binaryDiscarded: boolean;
   document: ChatUploadReplyDocument;
 }
 
@@ -556,32 +554,14 @@ export interface ClasseurDocument {
   notes?: string | null;
   /** @nullable */
   affaireId?: string | null;
+  /** true si les octets du fichier sont archivés et téléchargeables via GET /classeur/{id}/telechargement. false pour un document importé avant la mise en place du stockage (métadonnées seules). */
+  hasContent: boolean;
   createdAt: string;
 }
 
 export interface ClasseurList {
   documents: ClasseurDocument[];
   total: number;
-}
-
-export type ClasseurDocumentInputCategory = typeof ClasseurDocumentInputCategory[keyof typeof ClasseurDocumentInputCategory];
-
-
-export const ClasseurDocumentInputCategory = {
-  FACTURES: 'FACTURES',
-  CONTRATS: 'CONTRATS',
-  DEVIS: 'DEVIS',
-  DIVERS: 'DIVERS',
-} as const;
-
-export interface ClasseurDocumentInput {
-  /** @minLength 1 */
-  name: string;
-  category: ClasseurDocumentInputCategory;
-  size?: number;
-  mimeType?: string;
-  notes?: string;
-  affaireId?: string;
 }
 
 export type EcheanceType = typeof EcheanceType[keyof typeof EcheanceType];

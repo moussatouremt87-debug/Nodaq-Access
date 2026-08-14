@@ -7,7 +7,8 @@
 
 import { Router, type IRouter } from "express";
 import multer from "multer";
-import { withTenant, chatMessagesTable, classeurTable } from "@workspace/db";
+import crypto from "node:crypto";
+import { withTenant, chatMessagesTable, classeurTable, classeurDocumentBytesTable } from "@workspace/db";
 import { asc, eq } from "drizzle-orm";
 import { runAgent } from "../lib/mistralAgent";
 import {
@@ -102,16 +103,24 @@ router.post(
       return;
     }
 
-    // 2. Archive in classeur (metadata only, not the binary) ─────────────────
+    // 2. Archive in classeur, bytes included ──────────────────────────────────
     const docName = generateDocumentName(docInfo, req.file.originalname ?? "photo.jpg");
+    const sha256 = crypto.createHash("sha256").update(req.file.buffer).digest("hex");
     await withTenant(tenantId, async (tx) => {
-      await tx.insert(classeurTable).values({
+      const [doc] = await tx.insert(classeurTable).values({
         tenantId,
         name: docName,
         category: docTypeToCategory(docInfo.documentType),
         size: req.file!.size,
         mimeType: req.file!.mimetype,
         notes: `Archivé automatiquement via capture photo.\n${docInfo.summary}\nTexte extrait : ${docInfo.extractedText.slice(0, 500)}`,
+      }).returning();
+      await tx.insert(classeurDocumentBytesTable).values({
+        tenantId,
+        documentId: doc!.id,
+        bytes: req.file!.buffer,
+        sha256,
+        byteSize: req.file!.size,
       });
     });
 
@@ -135,9 +144,6 @@ router.post(
     //      The authorization gate in runAgent() additionally rejects any tool
     //      call not in the allow-list, even if forged by the model.
     //      Only the assistant's response is persisted.
-    //
-    // The image binary is not stored (metadata-only archival in this version).
-    // Binary storage will be implemented in the follow-up classeur task.
 
     let assistantContent: string;
     let agentActions: import("../lib/mistralAgent").AgentAction[] = [];
@@ -258,10 +264,6 @@ router.post(
       // validé. Ce chemin n'expose que des outils de LECTURE, donc la liste
       // est vide en pratique — le nom reste juste quand même.
       actions_proposees: agentActions,
-      // Image binary is NOT stored in this version (metadata-only archival).
-      // Full binary storage with object-storage is tracked in the follow-up
-      // classeur task.
-      binaryDiscarded: true,
       document: {
         name: docName,
         documentType: docInfo.documentType,

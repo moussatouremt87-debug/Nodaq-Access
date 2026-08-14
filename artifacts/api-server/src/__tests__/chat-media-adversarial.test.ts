@@ -157,7 +157,6 @@ describe("Upload path — adversarial injection via Pixtral output", () => {
 
     // Response contains a static description (no suggestedAction executed)
     expect(res.body.conversationId).toBeDefined();
-    expect(res.body.binaryDiscarded).toBe(true);
     // actions_proposees must be empty (no tools called)
     expect(res.body.actions_proposees ?? []).toHaveLength(0);
   });

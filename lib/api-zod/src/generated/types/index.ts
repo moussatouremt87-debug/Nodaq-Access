@@ -29,8 +29,6 @@ export * from './chatUploadReply';
 export * from './chatUploadReplyDocument';
 export * from './classeurDocument';
 export * from './classeurDocumentCategory';
-export * from './classeurDocumentInput';
-export * from './classeurDocumentInputCategory';
 export * from './classeurList';
 export * from './cockpitKpis';
 export * from './cockpitYtd';
