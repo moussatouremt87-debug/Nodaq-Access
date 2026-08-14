@@ -312,6 +312,18 @@ export async function generateHumanPdf(data: FactureForPdf): Promise<Buffer> {
       doc.text("Autoliquidation — article 283-2 nonies du CGI : TVA non facturée, acquittée par le preneur.", 50, y, { width: W }); y += 24;
     }
 
+    // Réforme 2025 : l'ancienne attestation Cerfa 1301-SD séparée est
+    // remplacée par une mention obligatoire directement sur le document
+    // (voir le mémo de conformité). LIBELLÉ NON VÉRIFIÉ auprès d'une source
+    // officielle (BOFiP) à ce jour — à valider avec un expert-comptable
+    // avant une mise en production réelle ; la présence conditionnelle et le
+    // taux affiché, eux, sont corrects et testés.
+    const hasReducedRate = !data.autoliquidation
+      && data.lines.some(l => (l.vatRate ?? 20) === 10 || (l.vatRate ?? 20) === 5.5);
+    if (hasReducedRate) {
+      doc.text("Taux de TVA réduit applicable — article 279-0 bis du CGI.", 50, y, { width: W }); y += 14;
+    }
+
     if (data.type !== "DEVIS") {
       doc.text("Conditions de règlement : paiement à 30 jours net. Pas d'escompte pour paiement anticipé.", 50, y, { width: W }); y += 14;
       doc.text("En cas de retard de paiement, des pénalités de retard seront appliquées au taux de 3 fois le taux d'intérêt légal en vigueur, conformément aux articles L.441-10 et D.441-5 du Code de commerce.", 50, y, { width: W }); y += 22;
