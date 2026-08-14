@@ -170,7 +170,7 @@ export default function AffaireDetail() {
           {marginPct !== null && (
             <div className="rounded-xl bg-muted/30 px-4 py-3 flex items-center justify-between">
               <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Marge brute
+                Marge brute (sur devisé)
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-sm font-semibold text-foreground tabular-nums">{fmtEUR(margin)}</span>
