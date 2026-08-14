@@ -584,3 +584,26 @@ describe("j — DATE D'ÉMISSION (round-trip fuseau horaire)", () => {
     console.log(`[j] issuedDate ${issuedDate} → relue identique via GET (TZ=${process.env["TZ"]}) ✓`);
   });
 });
+
+// ── k — ÉCHÉANCE DU JOUR MÊME ────────────────────────────────────────────────
+//
+// Bug confirmé en UAT : une facture à échéance du jour même (cas comptant,
+// US-A3.4) était comptée "en retard" dès la première seconde après minuit
+// UTC, car `totalOverdueCents` comparait `new Date(dueDate)` (minuit UTC) à
+// `new Date()` (l'instant précis) au lieu de comparer deux dates métier.
+
+describe("k — une échéance du jour même n'est pas encore en retard", () => {
+  test("dueDate === aujourd'hui ne contribue pas à totalOverdueCents", async () => {
+    const { toDateString } = await import("@nodaq/shared");
+    const aujourdhui = toDateString(new Date());
+
+    const avant = await request(app).get("/api/factures").set("Cookie", cookieA).expect(200);
+
+    const { id } = await createBrouillon(cookieA, { dueDate: aujourdhui });
+    const emitted = await emettre(cookieA, id, { dueDate: aujourdhui }).expect(200);
+    expect(emitted.body.dueDate).toBe(aujourdhui);
+
+    const apres = await request(app).get("/api/factures").set("Cookie", cookieA).expect(200);
+    expect(apres.body.totalOverdueCents).toBe(avant.body.totalOverdueCents);
+  });
+});
