@@ -39,8 +39,11 @@ const schema = z.object({
   quotedAmountCents: z.coerce.number().optional(),
   invoicedAmountCents: z.coerce.number().optional(),
   marginCents: z.coerce.number().optional(),
+  montantVenduHt: z.coerce.number().optional(),
+  avancementPct: z.coerce.number().min(0).max(100).optional(),
   notes: z.string().optional(),
   startDate: z.string().optional(),
+  dateFinPrevue: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -67,8 +70,11 @@ export function AffaireDialog({
       quotedAmountCents: undefined,
       invoicedAmountCents: undefined,
       marginCents: undefined,
+      montantVenduHt: undefined,
+      avancementPct: undefined,
       notes: '',
       startDate: '',
+      dateFinPrevue: '',
     },
   });
 
@@ -81,8 +87,11 @@ export function AffaireDialog({
         quotedAmountCents: affaire?.quotedAmountCents != null ? affaire.quotedAmountCents / 100 : undefined,
         invoicedAmountCents: affaire?.invoicedAmountCents != null ? affaire.invoicedAmountCents / 100 : undefined,
         marginCents: affaire?.marginCents != null ? affaire.marginCents / 100 : undefined,
+        montantVenduHt: affaire?.montantVenduHt != null ? affaire.montantVenduHt / 100 : undefined,
+        avancementPct: affaire?.avancementPct ?? undefined,
         notes: affaire?.notes ?? '',
         startDate: affaire?.startDate ? affaire.startDate.slice(0, 10) : '',
+        dateFinPrevue: affaire?.dateFinPrevue ? affaire.dateFinPrevue.slice(0, 10) : '',
       });
     }
   }, [open, affaire, form]);
@@ -113,6 +122,15 @@ export function AffaireDialog({
             values.marginCents != null && !Number.isNaN(values.marginCents)
               ? Math.round(values.marginCents * 100)
               : undefined,
+          montantVenduHt:
+            values.montantVenduHt != null && !Number.isNaN(values.montantVenduHt)
+              ? Math.round(values.montantVenduHt * 100)
+              : undefined,
+          avancementPct:
+            values.avancementPct != null && !Number.isNaN(values.avancementPct)
+              ? values.avancementPct
+              : undefined,
+          dateFinPrevue: values.dateFinPrevue || undefined,
         },
         () => onOpenChange(false),
       );
@@ -258,6 +276,62 @@ export function AffaireDialog({
                           {...field}
                           value={field.value ?? ''}
                         />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
+            {isEdit && (
+              <div className="grid grid-cols-3 gap-4">
+                <FormField
+                  control={form.control}
+                  name="montantVenduHt"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Montant vendu (€)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          data-testid="input-affaire-vendu"
+                          {...field}
+                          value={field.value ?? ''}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="avancementPct"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Avancement (%)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={100}
+                          data-testid="input-affaire-avancement"
+                          {...field}
+                          value={field.value ?? ''}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="dateFinPrevue"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Fin prévue</FormLabel>
+                      <FormControl>
+                        <Input type="date" data-testid="input-affaire-fin-prevue" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

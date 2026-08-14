@@ -1274,6 +1274,15 @@ components:
         completedAt:
           type: ["string", "null"]
           format: date
+        montantVenduHt:
+          type: ["number", "null"]
+          description: Montant vendu HT en centimes, issu du devis signé ou d'une reprise de l'existant.
+        avancementPct:
+          type: ["number", "null"]
+          description: Avancement en %, 0 à 100.
+        dateFinPrevue:
+          type: ["string", "null"]
+          format: date
         createdAt:
           type: string
           format: date-time
@@ -1335,6 +1344,16 @@ components:
           type: string
           format: date
         completedAt:
+          type: string
+          format: date
+        montantVenduHt:
+          type: number
+          description: Montant vendu HT en centimes.
+        avancementPct:
+          type: number
+          minimum: 0
+          maximum: 100
+        dateFinPrevue:
           type: string
           format: date
 

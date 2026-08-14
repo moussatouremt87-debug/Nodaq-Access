@@ -77,11 +77,14 @@ export const ListAffairesResponse = zod.object({
   "notes": zod.string().nullish(),
   "startDate": zod.coerce.date().nullish(),
   "completedAt": zod.coerce.date().nullish(),
+  "montantVenduHt": zod.number().nullish().describe('Montant vendu HT en centimes, issu du devis signé ou d\'une reprise de l\'existant.'),
+  "avancementPct": zod.number().nullish().describe('Avancement en %, 0 à 100.'),
+  "dateFinPrevue": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })),
   "total": zod.number(),
-  "totalQuotedCents": zod.number().optional()
+  "totalQuotedCents": zod.number().nullish()
 })
 
 
@@ -112,6 +115,9 @@ export const CreateAffaireResponse = zod.object({
   "notes": zod.string().nullish(),
   "startDate": zod.coerce.date().nullish(),
   "completedAt": zod.coerce.date().nullish(),
+  "montantVenduHt": zod.number().nullish().describe('Montant vendu HT en centimes, issu du devis signé ou d\'une reprise de l\'existant.'),
+  "avancementPct": zod.number().nullish().describe('Avancement en %, 0 à 100.'),
+  "dateFinPrevue": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -136,6 +142,9 @@ export const GetAffaireResponse = zod.object({
   "notes": zod.string().nullish(),
   "startDate": zod.coerce.date().nullish(),
   "completedAt": zod.coerce.date().nullish(),
+  "montantVenduHt": zod.number().nullish().describe('Montant vendu HT en centimes, issu du devis signé ou d\'une reprise de l\'existant.'),
+  "avancementPct": zod.number().nullish().describe('Avancement en %, 0 à 100.'),
+  "dateFinPrevue": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -149,6 +158,9 @@ export const UpdateAffaireParams = zod.object({
 })
 
 
+export const updateAffaireBodyAvancementPctMin = 0;
+export const updateAffaireBodyAvancementPctMax = 100;
+
 
 
 export const UpdateAffaireBody = zod.object({
@@ -160,7 +172,10 @@ export const UpdateAffaireBody = zod.object({
   "marginCents": zod.number().optional(),
   "notes": zod.string().optional(),
   "startDate": zod.coerce.date().optional(),
-  "completedAt": zod.coerce.date().optional()
+  "completedAt": zod.coerce.date().optional(),
+  "montantVenduHt": zod.number().optional().describe('Montant vendu HT en centimes.'),
+  "avancementPct": zod.number().min(updateAffaireBodyAvancementPctMin).max(updateAffaireBodyAvancementPctMax).optional(),
+  "dateFinPrevue": zod.coerce.date().optional()
 })
 
 export const UpdateAffaireResponse = zod.object({
@@ -175,6 +190,9 @@ export const UpdateAffaireResponse = zod.object({
   "notes": zod.string().nullish(),
   "startDate": zod.coerce.date().nullish(),
   "completedAt": zod.coerce.date().nullish(),
+  "montantVenduHt": zod.number().nullish().describe('Montant vendu HT en centimes, issu du devis signé ou d\'une reprise de l\'existant.'),
+  "avancementPct": zod.number().nullish().describe('Avancement en %, 0 à 100.'),
+  "dateFinPrevue": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -199,7 +217,7 @@ export const GetAffaireStatsResponse = zod.object({
   "count": zod.number(),
   "totalCents": zod.number().nullish()
 })),
-  "totalPipelineValueCents": zod.number().optional()
+  "totalPipelineValueCents": zod.number().nullish()
 })
 
 
@@ -749,6 +767,9 @@ export const ConvertDevisToAffaireResponse = zod.object({
   "notes": zod.string().nullish(),
   "startDate": zod.coerce.date().nullish(),
   "completedAt": zod.coerce.date().nullish(),
+  "montantVenduHt": zod.number().nullish().describe('Montant vendu HT en centimes, issu du devis signé ou d\'une reprise de l\'existant.'),
+  "avancementPct": zod.number().nullish().describe('Avancement en %, 0 à 100.'),
+  "dateFinPrevue": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })

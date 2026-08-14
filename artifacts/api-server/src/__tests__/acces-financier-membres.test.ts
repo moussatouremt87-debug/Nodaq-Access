@@ -139,6 +139,48 @@ describe("Masquage des champs financiers", () => {
     expect(affaireOwner.quotedAmountCents).toBe(123456);
   });
 
+  test("GET /api/affaires — montantVenduHt (reprise) masqué comme les autres montants ; avancementPct/dateFinPrevue restent visibles pour un MEMBER", async () => {
+    const created = await as(cookieOwner).post("/api/affaires", { label: "Affaire reprise" });
+    expect(created.status).toBe(201);
+    const id = created.body.id as string;
+
+    const updated = await as(cookieOwner).patch(`/api/affaires/${id}`, {
+      montantVenduHt: 850000,
+      avancementPct: 40,
+      dateFinPrevue: "2026-10-15",
+    });
+    expect(updated.status).toBe(200);
+
+    const resMember = await as(cookieMember).get(`/api/affaires/${id}`);
+    expect(resMember.status).toBe(200);
+    expect(resMember.body.montantVenduHt).toBeNull();
+    expect(resMember.body.avancementPct).toBe(40);
+    expect(resMember.body.dateFinPrevue).toBe("2026-10-15");
+
+    const resOwner = await as(cookieOwner).get(`/api/affaires/${id}`);
+    expect(resOwner.body.montantVenduHt).toBe(850000);
+    expect(resOwner.body.avancementPct).toBe(40);
+
+    const listMember = await as(cookieMember).get("/api/affaires");
+    const rowMember = listMember.body.affaires.find((a: { id: string }) => a.id === id);
+    expect(rowMember.montantVenduHt).toBeNull();
+  });
+
+  test("GET /api/affaires — le total et la liste retombent sur montantVenduHt quand quotedAmountCents est absent (reprise)", async () => {
+    const created = await as(cookieOwner).post("/api/affaires", { label: "Affaire reprise sans devis" });
+    expect(created.status).toBe(201);
+    const id = created.body.id as string;
+
+    await as(cookieOwner).patch(`/api/affaires/${id}`, { montantVenduHt: 200000 });
+
+    const res = await as(cookieOwner).get("/api/affaires");
+    expect(res.status).toBe(200);
+    const row = res.body.affaires.find((a: { id: string }) => a.id === id);
+    expect(row.quotedAmountCents).toBeNull();
+    expect(row.montantVenduHt).toBe(200000);
+    expect(res.body.totalQuotedCents).toBeGreaterThanOrEqual(200000);
+  });
+
   test("GET /api/contrats — amountCents masqué pour MEMBER, visible pour ACCOUNTANT", async () => {
     const created = await as(cookieOwner).post("/api/contrats", {
       label: "Contrat masquage",

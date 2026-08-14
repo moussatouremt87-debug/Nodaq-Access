@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams, useLocation } from 'wouter';
-import { ArrowLeft, Pencil, Calendar, Euro, User, FileText, CheckCircle2, Clock } from 'lucide-react';
+import { ArrowLeft, Pencil, Calendar, Euro, User, FileText, CheckCircle2, Clock, TrendingUp, Flag } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -43,6 +43,7 @@ export default function AffaireDetail() {
   const margin = affaire.marginCents ?? 0;
   const quoted = affaire.quotedAmountCents ?? 0;
   const invoiced = affaire.invoicedAmountCents ?? 0;
+  const sold = affaire.montantVenduHt ?? 0;
   const marginPct = quoted > 0 ? Math.round((margin / quoted) * 100) : null;
 
   return (
@@ -85,7 +86,7 @@ export default function AffaireDetail() {
       </div>
 
       {/* Dates */}
-      {(affaire.startDate || affaire.completedAt) && (
+      {(affaire.startDate || affaire.completedAt || affaire.dateFinPrevue) && (
         <div className="rounded-2xl border border-card-border bg-card p-5 space-y-3">
           <h2 className="font-semibold text-sm text-foreground">Dates</h2>
           <div className="grid grid-cols-2 gap-3">
@@ -105,12 +106,38 @@ export default function AffaireDetail() {
                 <p className="text-sm font-semibold text-foreground">{fmtDate(affaire.completedAt)}</p>
               </div>
             )}
+            {affaire.dateFinPrevue && (
+              <div className="rounded-xl bg-muted/30 px-4 py-3">
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+                  <Flag className="h-3.5 w-3.5" /> Fin prévue
+                </div>
+                <p className="text-sm font-semibold text-foreground">{fmtDate(affaire.dateFinPrevue)}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Avancement — non financier, visible indépendamment de l'accès financier */}
+      {affaire.avancementPct != null && (
+        <div className="rounded-2xl border border-card-border bg-card p-5 space-y-2">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold text-sm text-foreground flex items-center gap-1.5">
+              <TrendingUp className="h-3.5 w-3.5" /> Avancement
+            </h2>
+            <span className="text-sm font-semibold text-foreground tabular-nums">{affaire.avancementPct} %</span>
+          </div>
+          <div className="h-2 rounded-full bg-muted/40 overflow-hidden">
+            <div
+              className="h-full rounded-full bg-primary"
+              style={{ width: `${Math.min(100, Math.max(0, affaire.avancementPct))}%` }}
+            />
           </div>
         </div>
       )}
 
       {/* Financials */}
-      {(quoted > 0 || invoiced > 0) && (
+      {(quoted > 0 || invoiced > 0 || sold > 0) && (
         <div className="rounded-2xl border border-card-border bg-card p-5 space-y-3">
           <h2 className="font-semibold text-sm text-foreground">Finances</h2>
           <div className="grid grid-cols-2 gap-3">
@@ -128,6 +155,14 @@ export default function AffaireDetail() {
                   <FileText className="h-3.5 w-3.5" /> Facturé
                 </div>
                 <p className="text-sm font-semibold text-foreground tabular-nums">{fmtEUR(invoiced)}</p>
+              </div>
+            )}
+            {sold > 0 && (
+              <div className="rounded-xl bg-muted/30 px-4 py-3">
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+                  <Euro className="h-3.5 w-3.5" /> Vendu
+                </div>
+                <p className="text-sm font-semibold text-foreground tabular-nums">{fmtEUR(sold)}</p>
               </div>
             )}
           </div>
@@ -159,7 +194,8 @@ export default function AffaireDetail() {
       )}
 
       {/* Empty state when no extra details */}
-      {!affaire.startDate && !affaire.completedAt && quoted === 0 && !affaire.notes && (
+      {!affaire.startDate && !affaire.completedAt && !affaire.dateFinPrevue
+        && affaire.avancementPct == null && quoted === 0 && sold === 0 && !affaire.notes && (
         <div className="rounded-2xl border border-dashed border-border bg-card p-6 text-center">
           <Clock className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
           <p className="text-sm text-muted-foreground">Aucun détail ajouté pour cette affaire.</p>
