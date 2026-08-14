@@ -123,7 +123,7 @@ export default function RapportsPage() {
             { label: "Factures encaissées", icon: Receipt, value: data?.summary.facturesEncaissees ?? 0,
               fmt: (v: number | null) => String(v ?? '—') },
             // Un taux inconnu affiché « 0,0 % » se lit « vous ne gagnez rien ».
-            { label: "Taux de marge", icon: Percent, value: data?.summary.tauxMarge ?? null,
+            { label: "Taux de marge (facturé)", icon: Percent, value: data?.summary.tauxMarge ?? null,
               fmt: (v: number | null) => (v === null ? 'Non mesuré' : `${v.toFixed(1)} %`) },
           ] satisfies ReadonlyArray<{
             label: string;

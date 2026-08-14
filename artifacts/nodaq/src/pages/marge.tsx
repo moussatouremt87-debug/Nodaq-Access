@@ -138,7 +138,7 @@ export default function MargePage() {
 
           <motion.div variants={itemVariants} className="rounded-xl border border-card-border bg-card p-5">
             <div className="text-[11px] uppercase tracking-wide text-muted-foreground flex items-center gap-1.5 mb-3">
-              <TrendingUp className="h-3.5 w-3.5" /> Taux de marge
+              <TrendingUp className="h-3.5 w-3.5" /> Taux de marge (sur facturé)
             </div>
             {isLoading ? <Skeleton className="h-8 w-20" /> : data?.marginPct == null ? (
               <div className="text-base font-medium text-muted-foreground">Non mesuré</div>
@@ -204,7 +204,7 @@ export default function MargePage() {
                   <th className="px-4 py-3 font-medium">Client</th>
                   <th className="px-4 py-3 font-medium text-right">CA facturé</th>
                   <th className="px-4 py-3 font-medium text-right">Marge (€)</th>
-                  <th className="px-4 py-3 font-medium text-right">Marge (%)</th>
+                  <th className="px-4 py-3 font-medium text-right">Marge (% facturé)</th>
                 </tr>
               </thead>
               <tbody>
