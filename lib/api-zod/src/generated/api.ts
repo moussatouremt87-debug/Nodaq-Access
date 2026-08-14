@@ -426,6 +426,8 @@ export const ListProspectsResponse = zod.array(ListProspectsResponseItem)
  * @summary Create a prospect
  */
 
+export const createProspectBodyEstimatedValueCentsMin = 0;
+
 
 
 export const CreateProspectBody = zod.object({
@@ -435,7 +437,7 @@ export const CreateProspectBody = zod.object({
   "email": zod.string().optional(),
   "stage": zod.string().optional(),
   "source": zod.string().optional(),
-  "estimatedValueCents": zod.number().optional(),
+  "estimatedValueCents": zod.number().min(createProspectBodyEstimatedValueCentsMin).optional(),
   "notes": zod.string().optional()
 })
 
@@ -461,6 +463,10 @@ export const UpdateProspectParams = zod.object({
   "id": zod.coerce.string()
 })
 
+export const updateProspectBodyEstimatedValueCentsMin = 0;
+
+
+
 export const UpdateProspectBody = zod.object({
   "name": zod.string().optional(),
   "companyName": zod.string().optional(),
@@ -468,7 +474,7 @@ export const UpdateProspectBody = zod.object({
   "email": zod.string().optional(),
   "stage": zod.string().optional(),
   "source": zod.string().optional(),
-  "estimatedValueCents": zod.number().optional(),
+  "estimatedValueCents": zod.number().min(updateProspectBodyEstimatedValueCentsMin).optional(),
   "notes": zod.string().optional()
 })
 

@@ -39,7 +39,7 @@ const schema = z.object({
   email: z.string().email('Email invalide').optional().or(z.literal('')),
   stage: z.string().optional(),
   source: z.string().optional(),
-  estimatedValueCents: z.coerce.number().optional(),
+  estimatedValueCents: z.coerce.number().min(0, 'La valeur ne peut pas être négative').optional(),
   notes: z.string().optional(),
 });
 
@@ -239,6 +239,7 @@ export function ProspectDialog({
                     <Input
                       type="number"
                       step="0.01"
+                      min={0}
                       placeholder="3200"
                       data-testid="input-prospect-value"
                       {...field}

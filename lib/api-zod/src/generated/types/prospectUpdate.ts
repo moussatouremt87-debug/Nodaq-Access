@@ -13,6 +13,7 @@ export interface ProspectUpdate {
   email?: string;
   stage?: string;
   source?: string;
+  /** @minimum 0 */
   estimatedValueCents?: number;
   notes?: string;
 }
