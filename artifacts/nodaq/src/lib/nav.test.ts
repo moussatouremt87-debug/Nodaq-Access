@@ -29,7 +29,10 @@ function routesDeclarees(): string[] {
       // Les routes à paramètre ne s'affichent pas dans un menu.
       !r.includes(":") &&
       // Écrans hors application authentifiée.
-      !["/login", "/register"].includes(r),
+      // "/mfa" (ticket 4.15) : atteignable via le lien dédié "Sécurité du
+      // compte" du pied de la barre latérale (app-shell.tsx), volontairement
+      // hors de NAV_SECTIONS/MOBILE_NAV — ce n'est pas une section métier.
+      !["/login", "/register", "/mfa"].includes(r),
   );
 }
 

@@ -14,7 +14,7 @@
 import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import app from "../app";
-import { adminPool, cleanupTenants, cleanupUsers, createTestUser, createTestMembership } from "./helpers";
+import { adminPool, cleanupTenants, cleanupUsers, createTestUser, createTestMembership, completeMfaForRegisteredOwner } from "./helpers";
 
 let cookieOwnerA: string;
 let cookieMemberA: string;
@@ -63,6 +63,7 @@ beforeAll(async () => {
       .post("/api/auth/register")
       .send({ email, password: "test-pass-1234", nom: `Patron ${cible}`, tenantNom: `Tenant ${cible}` })
       .expect(201);
+    await completeMfaForRegisteredOwner(reg.body.userId);
     const cookie = reg.headers["set-cookie"]?.[0] ?? "";
     const { body: me } = await request(app).get("/api/auth/me").set("Cookie", cookie).expect(200);
     if (cible === "A") { cookieOwnerA = cookie; tenantA = me.tenantId; }

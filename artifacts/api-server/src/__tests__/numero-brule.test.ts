@@ -50,6 +50,8 @@ beforeAll(async () => {
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: "Owner", tenantNom: "Corp Brûlée" })
     .expect(201);
+  const { completeMfaForRegisteredOwner } = await import("./helpers");
+  await completeMfaForRegisteredOwner(reg.body.userId);
   cookie = reg.headers["set-cookie"]?.[0] ?? "";
   const me = await request(app).get("/api/auth/me").set("Cookie", cookie).expect(200);
   tenants.push(me.body.tenantId);

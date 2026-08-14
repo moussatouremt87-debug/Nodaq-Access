@@ -12,6 +12,8 @@
 import pg from "pg";
 import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
+import { genererSecretProvisoire, enregistrerSecretMfa } from "../lib/totp.js";
+import { marquerSessionMfaVerifiee } from "../lib/authService.js";
 
 // ── Admin pool (superuser — bypasses RLS for fixture setup/tear-down) ─────
 
@@ -78,19 +80,66 @@ export async function createTestMembership(
   );
 }
 
+/**
+ * `mfaVerified` (ticket 4.15) : `true` par défaut — la quasi-totalité des
+ * tests de ce dépôt créent une session directement (sans passer par le vrai
+ * flux /auth/login + /mfa/verify) en tenant pour acquis qu'elle est
+ * pleinement authentifiée. Sans ce défaut, requireMfaVerified bloquerait
+ * silencieusement toute session OWNER/ACCOUNTANT créée par tous les tests
+ * existants qui ne testent PAS le MFA lui-même. Les tests dédiés au MFA
+ * (mfa-auth.test.ts) passent `false` explicitement pour obtenir une session
+ * réellement en attente.
+ */
 export async function createTestSession(
   userId: string,
   tenantId: string,
   expiresAt?: Date,
+  mfaVerified = true,
 ): Promise<TestSession> {
   const exp = expiresAt ?? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
   const { rows } = await adminPool.query<TestSession>(
-    `INSERT INTO sessions (id, user_id, tenant_id, expires_at)
-     VALUES (gen_random_uuid(), $1, $2, $3)
+    `INSERT INTO sessions (id, user_id, tenant_id, expires_at, mfa_verified_at)
+     VALUES (gen_random_uuid(), $1, $2, $3, $4)
      RETURNING id, user_id AS "userId", tenant_id AS "tenantId", expires_at AS "expiresAt"`,
-    [userId, tenantId, exp],
+    [userId, tenantId, exp, mfaVerified ? new Date() : null],
   );
   return rows[0]!;
+}
+
+/**
+ * MFA (ticket 4.15) — complète le MFA pour la session la plus récente d'un
+ * utilisateur inscrit via un VRAI appel HTTP à `/api/auth/register`.
+ *
+ * `/auth/register` crée toujours un OWNER, un rôle financier : la session
+ * qu'il renvoie est désormais bloquée par `requireMfaVerified` tant que le
+ * second facteur n'est pas prouvé — exactement comme en production. Cette
+ * fonction appelle les MÊMES fonctions que la vraie route `/mfa/verify`
+ * (`enregistrerSecretMfa`, `marquerSessionMfaVerifiee`) : ce n'est pas un
+ * raccourci qui contourne le garde, seulement le geste d'enrôlement
+ * interactif qu'un test n'a pas besoin de rejouer par HTTP. Même doctrine
+ * que `createTestSession` ci-dessus, qui pose déjà `mfa_verified_at`
+ * directement plutôt que de rejouer /auth/login + /mfa/verify.
+ *
+ * À appeler juste après un `POST /api/auth/register` réussi, avec le
+ * `userId` de la réponse — le cookie déjà obtenu reste valide, seule la
+ * session qu'il désigne passe de « MFA en attente » à « MFA prouvé ».
+ */
+export async function completeMfaForRegisteredOwner(userId: string): Promise<void> {
+  const { secret } = genererSecretProvisoire(`fixture-${userId}@nodaq.test`);
+  await enregistrerSecretMfa(userId, secret);
+
+  const { rows } = await adminPool.query<{ id: string }>(
+    `SELECT id FROM sessions WHERE user_id = $1 ORDER BY expires_at DESC LIMIT 1`,
+    [userId],
+  );
+  const sessionId = rows[0]?.id;
+  if (!sessionId) {
+    throw new Error(
+      `completeMfaForRegisteredOwner: aucune session trouvée pour l'utilisateur ${userId} — ` +
+        `à appeler juste après un POST /api/auth/register réussi.`,
+    );
+  }
+  await marquerSessionMfaVerifiee(sessionId);
 }
 
 export async function createTestTeamMember(

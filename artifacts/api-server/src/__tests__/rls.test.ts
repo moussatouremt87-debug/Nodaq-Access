@@ -29,6 +29,7 @@ import {
   cleanupTenants,
   cleanupUsers,
   tableInsertSql,
+  completeMfaForRegisteredOwner,
 } from "./helpers";
 
 // Helper: count rows in a table under a given tenant context via withTenant.
@@ -90,6 +91,7 @@ beforeAll(async () => {
     .send({ email: ownerEmail, password: ownerPassword, nom: "RLS Owner", tenantNom: "RLS Test Corp" })
     .expect(201);
 
+  await completeMfaForRegisteredOwner(regRes.body.userId);
   cookieOwner = regRes.headers["set-cookie"]?.[0] ?? "";
   if (!cookieOwner) throw new Error("register did not set a cookie");
 
@@ -385,6 +387,7 @@ describe("e — APPARTENANCE", () => {
       })
       .expect(201);
 
+    await completeMfaForRegisteredOwner(regRes.body.userId);
     const cookie = regRes.headers["set-cookie"]?.[0] ?? "";
     const { body: me } = await request(app)
       .get("/api/auth/me")

@@ -18,6 +18,7 @@ import {
   adminPool,
   cleanupTenants,
   cleanupUsers,
+  completeMfaForRegisteredOwner,
 } from "./helpers";
 
 let cookie: string;
@@ -45,6 +46,7 @@ beforeAll(async () => {
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: "Chef", tenantNom: "Toiture Test" })
     .expect(201);
+  await completeMfaForRegisteredOwner(reg.body.userId);
   cookie = reg.headers["set-cookie"]?.[0] ?? "";
 
   const { body: me } = await request(app).get("/api/auth/me").set("Cookie", cookie).expect(200);

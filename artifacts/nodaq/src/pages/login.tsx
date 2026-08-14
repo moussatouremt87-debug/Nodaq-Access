@@ -42,7 +42,15 @@ export default function LoginPage() {
         });
         return;
       }
+      const data = await res.json().catch(() => ({}));
       await qc.invalidateQueries({ queryKey: ['auth-me'] });
+      // MFA (ticket 4.15) — OWNER/ACCOUNTANT sans second facteur prouvé pour
+      // CETTE session : la connexion a réussi, mais /mfa reste à traverser
+      // avant la destination initialement visée.
+      if (data?.mfaStatus === 'enroll_required' || data?.mfaStatus === 'verify_required') {
+        setLocation(`/mfa?from=${encodeURIComponent(returnTo)}`);
+        return;
+      }
       setLocation(returnTo);
     } catch {
       toast({ title: 'Erreur de connexion', description: 'Impossible de joindre le serveur', variant: 'destructive' });

@@ -53,7 +53,7 @@ afterEach(() => {
 // ── Aller-retour ─────────────────────────────────────────────────────────────
 
 describe("aller-retour", () => {
-  const identite = { tenantId: TENANT_A, cle: "envoi.smtp_password" };
+  const identite = { scope: TENANT_A, cle: "envoi.smtp_password" };
 
   test("une valeur simple revient identique", () => {
     const { valeur } = chiffrer("mot-de-passe", identite);
@@ -98,7 +98,7 @@ describe("deux chiffrements de la même valeur diffèrent", () => {
   test("l'IV est tiré au sort à chaque appel", () => {
     // Réutiliser un IV en GCM est la faute qui casse tout : elle révèle le XOR
     // des deux clairs et permet de forger des étiquettes valides.
-    const identite = { tenantId: TENANT_A, cle: "envoi.smtp_password" };
+    const identite = { scope: TENANT_A, cle: "envoi.smtp_password" };
     const a = chiffrer("même valeur", identite).valeur;
     const b = chiffrer("même valeur", identite).valeur;
     expect(a).not.toBe(b);
@@ -108,7 +108,7 @@ describe("deux chiffrements de la même valeur diffèrent", () => {
   });
 
   test("sur cinquante chiffrements, aucun doublon", () => {
-    const identite = { tenantId: TENANT_A, cle: "c" };
+    const identite = { scope: TENANT_A, cle: "c" };
     const vus = new Set(Array.from({ length: 50 }, () => chiffrer("v", identite).valeur));
     expect(vus.size).toBe(50);
   });
@@ -121,24 +121,24 @@ describe("AAD — un chiffré est lié à SA ligne", () => {
     // C'est le scénario réel : quelqu'un qui obtient un accès en écriture à la
     // base recopie le chiffré du tenant A sur la ligne du tenant B pour se
     // servir de ses identifiants. La RLS ne l'arrête pas — le chiffrement, si.
-    const { valeur } = chiffrer("secret-de-A", { tenantId: TENANT_A, cle: "envoi.smtp_password" });
+    const { valeur } = chiffrer("secret-de-A", { scope: TENANT_A, cle: "envoi.smtp_password" });
     expect(() =>
-      dechiffrer(valeur, { tenantId: TENANT_B, cle: "envoi.smtp_password" }),
+      dechiffrer(valeur, { scope: TENANT_B, cle: "envoi.smtp_password" }),
     ).toThrow(DechiffrementError);
   });
 
   test("recopié sur une AUTRE CLÉ du même tenant, il ne s'ouvre pas", () => {
-    const { valeur } = chiffrer("jeton", { tenantId: TENANT_A, cle: "connecteur.abc.api_key" });
+    const { valeur } = chiffrer("jeton", { scope: TENANT_A, cle: "connecteur.abc.api_key" });
     expect(() =>
-      dechiffrer(valeur, { tenantId: TENANT_A, cle: "envoi.smtp_password" }),
+      dechiffrer(valeur, { scope: TENANT_A, cle: "envoi.smtp_password" }),
     ).toThrow(DechiffrementError);
   });
 
   test("le message d'erreur ne porte que le NOM de la clé, jamais le contenu", () => {
     const clair = "SENTINELLE-NE-DOIT-PAS-FUIR";
-    const { valeur } = chiffrer(clair, { tenantId: TENANT_A, cle: "envoi.smtp_password" });
+    const { valeur } = chiffrer(clair, { scope: TENANT_A, cle: "envoi.smtp_password" });
     try {
-      dechiffrer(valeur, { tenantId: TENANT_B, cle: "envoi.smtp_password" });
+      dechiffrer(valeur, { scope: TENANT_B, cle: "envoi.smtp_password" });
       throw new Error("le déchiffrement aurait dû échouer");
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -153,7 +153,7 @@ describe("AAD — un chiffré est lié à SA ligne", () => {
 // ── Altération ───────────────────────────────────────────────────────────────
 
 describe("altération — jamais un clair silencieusement faux", () => {
-  const identite = { tenantId: TENANT_A, cle: "envoi.smtp_password" };
+  const identite = { scope: TENANT_A, cle: "envoi.smtp_password" };
 
   /** Modifie un octet dans le segment demandé du chiffré stocké. */
   function alterer(stocke: string, segment: 2 | 3 | 4): string {
@@ -191,15 +191,15 @@ describe("altération — jamais un clair silencieusement faux", () => {
 describe("configuration — aucun repli, jamais", () => {
   test("sans ENCRYPTION_KEY, chiffrer lève", () => {
     delete process.env["ENCRYPTION_KEY"];
-    expect(() => chiffrer("x", { tenantId: TENANT_A, cle: "c" })).toThrow(ChiffrementConfigError);
+    expect(() => chiffrer("x", { scope: TENANT_A, cle: "c" })).toThrow(ChiffrementConfigError);
   });
 
   test("sans ENCRYPTION_KEY, déchiffrer lève AUSSI", () => {
     // Le piège serait de rendre `null` et de laisser l'appelant croire qu'il
     // n'y a pas de secret : l'envoi retomberait en repli sans un mot.
-    const { valeur } = chiffrer("x", { tenantId: TENANT_A, cle: "c" });
+    const { valeur } = chiffrer("x", { scope: TENANT_A, cle: "c" });
     delete process.env["ENCRYPTION_KEY"];
-    expect(() => dechiffrer(valeur, { tenantId: TENANT_A, cle: "c" })).toThrow(
+    expect(() => dechiffrer(valeur, { scope: TENANT_A, cle: "c" })).toThrow(
       ChiffrementConfigError,
     );
   });
@@ -247,7 +247,7 @@ describe("configuration — aucun repli, jamais", () => {
 // ── Rotation ─────────────────────────────────────────────────────────────────
 
 describe("rotation — la clé précédente reste lisible", () => {
-  const identite = { tenantId: TENANT_A, cle: "envoi.smtp_password" };
+  const identite = { scope: TENANT_A, cle: "envoi.smtp_password" };
 
   test("un secret écrit avec l'ancienne clé se lit après bascule", () => {
     const ancienne = process.env["ENCRYPTION_KEY"]!;

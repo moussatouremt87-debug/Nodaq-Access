@@ -15,6 +15,10 @@ declare namespace Express {
       role: string;
       email: string;
       nom: string | null;
+      /** MFA (ticket 4.15). Whether THIS session has proven the second factor. */
+      mfaVerifiedAt: Date | null;
+      /** Whether this user has ever completed MFA enrollment (any session). */
+      mfaEnabled: boolean;
     };
     /** Convenience shorthand set by resolveTenant — always equals session.tenantId when present. */
     tenantId?: string;

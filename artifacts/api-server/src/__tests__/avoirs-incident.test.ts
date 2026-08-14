@@ -70,6 +70,7 @@ const {
   createTestMembership,
   createTestSession,
   cookieHeader,
+  completeMfaForRegisteredOwner,
 } = await import("./helpers");
 
 const emails: string[] = [];
@@ -84,6 +85,7 @@ beforeAll(async () => {
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: "Owner", tenantNom: "Corp Sinistrée" })
     .expect(201);
+  await completeMfaForRegisteredOwner(reg.body.userId);
   cookieOwner = reg.headers["set-cookie"]?.[0] ?? "";
   const me = await request(app).get("/api/auth/me").set("Cookie", cookieOwner).expect(200);
   tenantId = me.body.tenantId;
