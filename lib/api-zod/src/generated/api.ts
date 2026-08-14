@@ -792,6 +792,7 @@ export const ListClasseurResponse = zod.object({
   "mimeType": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "affaireId": zod.string().nullish(),
+  "hasContent": zod.boolean().describe('true si les octets du fichier sont archivés et téléchargeables via GET \/classeur\/{id}\/telechargement. false pour un document importé avant la mise en place du stockage (métadonnées seules).\n'),
   "createdAt": zod.coerce.date()
 })),
   "total": zod.number()
@@ -799,20 +800,9 @@ export const ListClasseurResponse = zod.object({
 
 
 /**
+ * Accepts multipart/form-data with fields: file (required), name, category, notes, affaireId (all optional strings). Not called via generated client — use FormData + fetch directly.
  * @summary Add a document to classeur
  */
-
-
-
-export const CreateClasseurDocumentBody = zod.object({
-  "name": zod.string().min(1),
-  "category": zod.enum(['FACTURES', 'CONTRATS', 'DEVIS', 'DIVERS']),
-  "size": zod.number().optional(),
-  "mimeType": zod.string().optional(),
-  "notes": zod.string().optional(),
-  "affaireId": zod.string().optional()
-})
-
 export const CreateClasseurDocumentResponse = zod.object({
   "id": zod.string(),
   "name": zod.string(),
@@ -821,6 +811,7 @@ export const CreateClasseurDocumentResponse = zod.object({
   "mimeType": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "affaireId": zod.string().nullish(),
+  "hasContent": zod.boolean().describe('true si les octets du fichier sont archivés et téléchargeables via GET \/classeur\/{id}\/telechargement. false pour un document importé avant la mise en place du stockage (métadonnées seules).\n'),
   "createdAt": zod.coerce.date()
 })
 
@@ -1057,7 +1048,6 @@ export const UploadChatImageResponse = zod.object({
   "entityId": zod.string().optional().describe('UUID of the created\/updated entity'),
   "entityType": zod.enum(['prospect', 'affaire', 'echeance', 'classeur', 'activity']).optional()
 })).optional(),
-  "binaryDiscarded": zod.boolean().describe('Always true in this version — the image binary is not stored. Binary storage (object storage + classeur thumbnail) is tracked in a follow-up task.\n'),
   "document": zod.object({
   "name": zod.string().describe('Auto-generated classeur document name'),
   "documentType": zod.string(),

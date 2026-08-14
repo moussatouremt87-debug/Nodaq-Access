@@ -34,7 +34,6 @@ import type {
   ChatSuggestions,
   ChatUploadReply,
   ClasseurDocument,
-  ClasseurDocumentInput,
   ClasseurList,
   CockpitKpis,
   ConnectorItem,
@@ -2450,16 +2449,17 @@ export const getCreateClasseurDocumentUrl = () => {
 }
 
 /**
+ * Accepts multipart/form-data with fields: file (required), name, category, notes, affaireId (all optional strings). Not called via generated client — use FormData + fetch directly.
  * @summary Add a document to classeur
  */
-export const createClasseurDocument = async (classeurDocumentInput: ClasseurDocumentInput, options?: Parameters<typeof customFetch>[1]): Promise<ClasseurDocument> => {
+export const createClasseurDocument = async ( options?: Parameters<typeof customFetch>[1]): Promise<ClasseurDocument> => {
 
   return customFetch<ClasseurDocument>(getCreateClasseurDocumentUrl(),
   {
     ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(classeurDocumentInput)
+    method: 'POST'
+
+
   }
 );}
 
@@ -2468,8 +2468,8 @@ export const createClasseurDocument = async (classeurDocumentInput: ClasseurDocu
 
 
 export const getCreateClasseurDocumentMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createClasseurDocument>>, TError,{data: BodyType<ClasseurDocumentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof createClasseurDocument>>, TError,{data: BodyType<ClasseurDocumentInput>}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createClasseurDocument>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createClasseurDocument>>, TError,void, TContext> => {
 
 const mutationKey = ['createClasseurDocument'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -2481,10 +2481,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createClasseurDocument>>, {data: BodyType<ClasseurDocumentInput>}> = (props) => {
-          const {data} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createClasseurDocument>>, void> = () => {
 
-          return  createClasseurDocument(data,requestOptions)
+
+          return  createClasseurDocument(requestOptions)
         }
 
 
@@ -2495,18 +2495,18 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type CreateClasseurDocumentMutationResult = NonNullable<Awaited<ReturnType<typeof createClasseurDocument>>>
-    export type CreateClasseurDocumentMutationBody = BodyType<ClasseurDocumentInput>
+
     export type CreateClasseurDocumentMutationError = ErrorType<unknown>
 
     /**
  * @summary Add a document to classeur
  */
 export const useCreateClasseurDocument = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createClasseurDocument>>, TError,{data: BodyType<ClasseurDocumentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createClasseurDocument>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof createClasseurDocument>>,
         TError,
-        {data: BodyType<ClasseurDocumentInput>},
+        void,
         TContext
       > => {
       return useMutation(getCreateClasseurDocumentMutationOptions(options));

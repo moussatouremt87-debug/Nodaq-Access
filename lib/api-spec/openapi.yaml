@@ -629,12 +629,10 @@ paths:
       operationId: createClasseurDocument
       tags: [classeur]
       summary: Add a document to classeur
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ClasseurDocumentInput"
+      description: >
+        Accepts multipart/form-data with fields: file (required),
+        name, category, notes, affaireId (all optional strings).
+        Not called via generated client — use FormData + fetch directly.
       responses:
         "201":
           description: Created
@@ -1763,7 +1761,7 @@ components:
 
     ChatUploadReply:
       type: object
-      required: [conversationId, message, document, binaryDiscarded]
+      required: [conversationId, message, document]
       properties:
         conversationId:
           type: string
@@ -1773,12 +1771,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AgentAction"
-        binaryDiscarded:
-          type: boolean
-          description: >
-            Always true in this version — the image binary is not stored.
-            Binary storage (object storage + classeur thumbnail) is tracked
-            in a follow-up task.
         document:
           type: object
           required: [name, documentType, summary]
@@ -1915,7 +1907,7 @@ components:
     # ── Classeur ──────────────────────────────────────────────────────────────
     ClasseurDocument:
       type: object
-      required: [id, name, category, createdAt]
+      required: [id, name, category, createdAt, hasContent]
       properties:
         id:
           type: string
@@ -1932,6 +1924,12 @@ components:
           type: ["string", "null"]
         affaireId:
           type: ["string", "null"]
+        hasContent:
+          type: boolean
+          description: >
+            true si les octets du fichier sont archivés et téléchargeables via
+            GET /classeur/{id}/telechargement. false pour un document importé
+            avant la mise en place du stockage (métadonnées seules).
         createdAt:
           type: string
           format: date-time
@@ -1946,25 +1944,6 @@ components:
             $ref: "#/components/schemas/ClasseurDocument"
         total:
           type: number
-
-    ClasseurDocumentInput:
-      type: object
-      required: [name, category]
-      properties:
-        name:
-          type: string
-          minLength: 1
-        category:
-          type: string
-          enum: [FACTURES, CONTRATS, DEVIS, DIVERS]
-        size:
-          type: number
-        mimeType:
-          type: string
-        notes:
-          type: string
-        affaireId:
-          type: string
 
     # ── Échéances fiscales ─────────────────────────────────────────────────────
     Echeance:

@@ -5,7 +5,7 @@ import { tenantsTable } from "./tenants";
  * Custom bytea type: Buffer in application code, BYTEA in PostgreSQL.
  * node-postgres automatically parses BYTEA columns to Buffer objects.
  */
-const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+export const bytea = customType<{ data: Buffer; driverData: Buffer }>({
   dataType() {
     return "bytea";
   },
