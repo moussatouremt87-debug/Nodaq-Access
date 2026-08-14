@@ -377,6 +377,30 @@ export function construirePlan(
 
 // ── Persistance ──────────────────────────────────────────────────────────────
 
+/**
+ * Sérialisation stable, clés triées récursivement.
+ *
+ * `JSON.stringify` seul dépend de l'ORDRE D'INSERTION des clés — et le type
+ * `jsonb` de Postgres ne le préserve pas au stockage (contrairement à `json`).
+ * Deux opérations strictement identiques en mémoire peuvent donc redonner un
+ * texte différent une fois l'une des deux relue depuis `payload`, cassant
+ * silencieusement toute comparaison de doublon par égalité de chaîne.
+ */
+function jsonCanonique(valeur: unknown): string {
+  const trier = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(trier);
+    if (v !== null && typeof v === "object") {
+      return Object.fromEntries(
+        Object.keys(v as Record<string, unknown>)
+          .sort()
+          .map((cle) => [cle, trier((v as Record<string, unknown>)[cle])]),
+      );
+    }
+    return v;
+  };
+  return JSON.stringify(trier(valeur));
+}
+
 /** Résumé d'une ligne de plan, lisible dans la file de validation existante. */
 function resumer(plan: Plan): string {
   if (plan.operations.length === 0) return "Rien à appliquer";
@@ -387,8 +411,33 @@ function resumer(plan: Plan): string {
 }
 
 export async function enregistrerPlan(tenantId: string, plan: Plan): Promise<string> {
-  const [ligne] = await withTenant(tenantId, (tx) =>
-    tx
+  return withTenant(tenantId, async (tx) => {
+    // Un « OK » en langage naturel dans le chat, alors qu'un plan identique
+    // est déjà EN_ATTENTE, ne doit jamais poser un second plan en doublon :
+    // le modèle n'a aucun moyen de distinguer « confirme celui-ci » de
+    // « propose-le à nouveau », donc c'est ici, côté serveur et
+    // déterministe, que le doublon est empêché — pas en espérant que le
+    // modèle ne se répète jamais.
+    const enAttente = await tx
+      .select({ id: pendingActionsTable.id, payload: pendingActionsTable.payload })
+      .from(pendingActionsTable)
+      .where(
+        and(
+          eq(pendingActionsTable.tenantId, tenantId),
+          eq(pendingActionsTable.type, TYPE_PLAN),
+          eq(pendingActionsTable.status, "EN_ATTENTE"),
+          isNull(pendingActionsTable.executeLe),
+          isNull(pendingActionsTable.decidedAt),
+        ),
+      );
+
+    const operationsJson = jsonCanonique(plan.operations);
+    const doublon = enAttente.find(
+      (ligne) => jsonCanonique((ligne.payload as Plan | null)?.operations ?? []) === operationsJson,
+    );
+    if (doublon) return doublon.id;
+
+    const [ligne] = await tx
       .insert(pendingActionsTable)
       .values({
         tenantId,
@@ -399,9 +448,9 @@ export async function enregistrerPlan(tenantId: string, plan: Plan): Promise<str
         payload: plan,
         expireLe: new Date(Date.now() + DUREE_VALIDITE_PLAN_MS),
       })
-      .returning({ id: pendingActionsTable.id }),
-  );
-  return ligne!.id;
+      .returning({ id: pendingActionsTable.id });
+    return ligne!.id;
+  });
 }
 
 // ── Exécution ────────────────────────────────────────────────────────────────

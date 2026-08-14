@@ -11,6 +11,9 @@
  *      sur le CORPS, pas seulement sur le code ;
  *   g. l'agent n'écrit plus directement : zéro ligne en base, une
  *      `pending_action` ; après validation, la ligne apparaît.
+ *   h. un « OK » en langage naturel, plan déjà en attente → jamais un
+ *      second plan en doublon ; une fois le premier décidé, une nouvelle
+ *      demande identique en pose bien un nouveau.
  *
  * Aucun test n'atteint le réseau : le modèle est intercepté par vitest.setup.
  */
@@ -302,5 +305,55 @@ describe("g — l'agent PROPOSE, il n'exécute pas", () => {
     for (const [outil, typeAttendu] of Object.entries(attendus)) {
       expect(proposerEcriture(outil, {}).type, `outil ${outil}`).toBe(typeAttendu);
     }
+  });
+});
+
+// ── h. Un « OK » ne double pas le plan ──────────────────────────────────────
+//
+// Le simulateur (ligne ~232) ne reconnaît qu'un seul nom — « jean dupont » —
+// pour rendre l'appel d'outil `create_prospect` déterministe : c'est donc ce
+// nom, et lui seul, qui doit servir de contenu dans ce bloc.
+
+describe("h — dicter deux fois la même intention ne pose pas deux plans", () => {
+  test("« OK » en langage naturel, plan déjà en attente → même plan, pas un doublon ; une fois décidé, la suivante en pose un nouveau", async () => {
+    const contenu = "Crée un prospect Jean Dupont au 0612345678";
+
+    const premier = await request(app)
+      .post("/api/chat/messages")
+      .set("Cookie", b.cookie)
+      .send({ content: contenu })
+      .expect(200);
+    expect(premier.body.planId, "premier appel : un plan doit être créé").toBeTruthy();
+
+    // Le modèle, relancé sur la même conversation, propose à nouveau
+    // exactement la même opération — c'est le scénario réel d'un « OK » en
+    // langage naturel : il n'a pas de mécanisme pour « approuver », donc il
+    // redécrit ce qu'il a déjà proposé.
+    const second = await request(app)
+      .post("/api/chat/messages")
+      .set("Cookie", b.cookie)
+      .send({ content: contenu })
+      .expect(200);
+    expect(second.body.planId, "second appel : même plan renvoyé, pas un nouveau").toBe(premier.body.planId);
+
+    const enAttente = await adminPool.query(
+      `SELECT count(*)::int AS n FROM pending_actions
+        WHERE id = $1 AND status = 'EN_ATTENTE' AND decided_at IS NULL`,
+      [premier.body.planId],
+    );
+    expect(enAttente.rows[0].n, "toujours une seule pending_action EN_ATTENTE pour ce plan").toBe(1);
+
+    // Une fois ce plan décidé, ce n'est plus « le même plan en attente » —
+    // une nouvelle demande identique doit reposer un plan à part. La garde
+    // contre les doublons ne doit empêcher que le vrai doublon, pas toute
+    // création future.
+    await executer(b, premier.body.planId).expect(200);
+    const troisieme = await request(app)
+      .post("/api/chat/messages")
+      .set("Cookie", b.cookie)
+      .send({ content: contenu })
+      .expect(200);
+    expect(troisieme.body.planId, "après décision, une nouvelle demande repose un plan").toBeTruthy();
+    expect(troisieme.body.planId).not.toBe(premier.body.planId);
   });
 });

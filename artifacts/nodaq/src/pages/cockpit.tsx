@@ -544,6 +544,8 @@ export default function Cockpit() {
                       <motion.li
                         key={action.id}
                         variants={slideRightVariants}
+                        initial="hidden"
+                        animate="visible"
                         exit={{ x: 16, opacity: 0, transition: { duration: 0.2 } }}
                         className="p-4 space-y-2"
                         data-testid={`pending-action-${action.id}`}
