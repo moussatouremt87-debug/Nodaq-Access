@@ -155,6 +155,27 @@ describe("le PDF d'un devis se rend", () => {
     expect(texte).not.toContain("L.441-10");
   });
 
+  test("une ligne à taux réduit (10 %) porte la mention légale de TVA réduite", async () => {
+    // creerDevis() pose vatRate:10 sur ses deux lignes — reproduit le
+    // scénario UAT (ligne à 10 %, aucune mention nulle part sur le document).
+    const d = await creerDevis(a);
+    const r = await request(app).get(`/api/devis/${d.id}/pdf`).set("Cookie", a.cookie).expect(200);
+    const texte = texteBrut(r.body as Buffer);
+    expect(texte).toContain("279-0 bis");
+  });
+
+  test("aucune ligne à taux réduit → pas de mention TVA réduite", async () => {
+    const { body } = await request(app).post("/api/devis").set("Cookie", a.cookie)
+      .send({
+        clientName: "Madame Bernard",
+        lines: [{ description: "Prestation standard", quantity: 1, unitPriceCents: 10_000, vatRate: 20 }],
+      })
+      .expect(201);
+    const r = await request(app).get(`/api/devis/${body.id}/pdf`).set("Cookie", a.cookie).expect(200);
+    const texte = texteBrut(r.body as Buffer);
+    expect(texte).not.toContain("279-0 bis");
+  });
+
   test("un devis d'un autre tenant n'est pas atteignable", async () => {
     const d = await creerDevis(a);
     await request(app).get(`/api/devis/${d.id}/pdf`).set("Cookie", b.cookie).expect(404);
