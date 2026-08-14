@@ -1,83 +1,52 @@
 import { useState, useEffect } from 'react';
 import { Building2, Save } from 'lucide-react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
-import { apiFetch } from '@/lib/auth';
+import { useVertical, useUpdateVerticalMutation } from '@/hooks/use-vertical';
+import { verticalChoices, affaireWords, verticalPack, type Vertical } from '@nodaq/shared';
 
-const API = '/api';
+// US-A1.1 : ce réglage lisait/écrivait sa propre liste de 5 secteurs ad hoc,
+// disjointe du moteur de vocabulaire (`verticalPacks.ts`) — un tenant ayant
+// choisi "commerce" ici n'avait par exemple AUCUN mot de métier associé
+// ailleurs dans l'app. Cet écran est désormais une simple vue sur le même
+// moteur que l'onboarding (`useVertical`, `verticalChoices`).
 
-type MetierData = { metier: string };
-
-const SECTEURS: { value: string; label: string }[] = [
-  { value: 'industrie_btp',       label: 'Industrie / BTP (ancien découpage)' },
-  { value: 'commerce',            label: 'Commerce / Distribution' },
-  { value: 'services_conseil',    label: 'Services / Conseil' },
-  { value: 'sante',               label: 'Santé' },
-  { value: 'autre',               label: 'Autre' },
-];
-
-const VOCAB: Record<string, { nouveau: string; aucun: string; pluriel: string }> = {
-  industrie_btp:    { nouveau: 'Nouveau chantier',   aucun: 'Aucun chantier',   pluriel: 'chantiers en cours' },
-  commerce:         { nouveau: 'Nouvelle commande',  aucun: 'Aucune commande',  pluriel: 'commandes en cours' },
-  services_conseil: { nouveau: 'Nouvelle mission',   aucun: 'Aucune mission',   pluriel: 'missions en cours' },
-  sante:            { nouveau: 'Nouveau dossier',    aucun: 'Aucun dossier',    pluriel: 'dossiers en cours' },
-  autre:            { nouveau: 'Nouvelle affaire',   aucun: 'Aucune affaire',   pluriel: 'affaires en cours' },
-};
-
-function useMetier() {
-  return useQuery<MetierData>({
-    queryKey: ['votre-metier'],
-    queryFn: async () => {
-      const res = await apiFetch(`${API}/votre-metier`);
-      if (!res.ok) throw new Error('Fetch failed');
-      return res.json();
-    },
-  });
-}
+const { cible, ancien } = verticalChoices();
 
 export default function VotreMetierPage() {
-  const qc = useQueryClient();
   const { toast } = useToast();
-  const { data, isLoading } = useMetier();
+  const { vertical, isLoading } = useVertical();
+  const { updateVertical, isPending } = useUpdateVerticalMutation();
 
-  const [selected, setSelected] = useState('industrie_btp');
+  const [selected, setSelected] = useState<Vertical>('industrie_btp');
   const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
-    if (data) {
-      setSelected(data.metier);
+    if (vertical) {
+      setSelected(vertical as Vertical);
       setDirty(false);
     }
-  }, [data]);
+  }, [vertical]);
 
-  const handleChange = (v: string) => {
+  const handleChange = (v: Vertical) => {
     setSelected(v);
-    setDirty(v !== (data?.metier ?? 'industrie_btp'));
+    setDirty(v !== (vertical ?? 'industrie_btp'));
   };
 
-  const saveMut = useMutation({
-    mutationFn: async (metier: string) => {
-      const res = await apiFetch(`${API}/votre-metier`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ metier }),
-      });
-      if (!res.ok) throw new Error('Sauvegarde échouée');
-      return res.json() as Promise<MetierData>;
-    },
-    onSuccess: (d) => {
-      qc.setQueryData(['votre-metier'], d);
-      setDirty(false);
-      toast({ title: 'Métier enregistré' });
-    },
-    onError: (err: Error) => toast({ title: 'Erreur', description: err.message, variant: 'destructive' }),
-  });
+  const handleSave = () => {
+    updateVertical(selected, {
+      onSuccess: () => {
+        setDirty(false);
+        toast({ title: 'Métier enregistré' });
+      },
+      onError: () => toast({ title: 'Erreur', description: 'Sauvegarde échouée', variant: 'destructive' }),
+    });
+  };
 
-  const vocab = VOCAB[selected] ?? VOCAB['autre'];
-  const sectorLabel = SECTEURS.find(s => s.value === selected)?.label ?? selected;
+  const words = affaireWords(selected);
+  const pack = verticalPack(selected);
 
   return (
     <div className="pb-16">
@@ -87,12 +56,12 @@ export default function VotreMetierPage() {
         description="Configurez votre secteur d'activité pour personnaliser le vocabulaire et les modules proposés."
         actions={
           <Button
-            onClick={() => saveMut.mutate(selected)}
-            disabled={!dirty || saveMut.isPending}
+            onClick={handleSave}
+            disabled={!dirty || isPending}
             className="gap-1.5"
           >
             <Save className="h-4 w-4" />
-            {saveMut.isPending ? 'Enregistrement...' : 'Enregistrer'}
+            {isPending ? 'Enregistrement...' : 'Enregistrer'}
           </Button>
         }
       />
@@ -123,23 +92,31 @@ export default function VotreMetierPage() {
                 <label className="text-sm font-medium text-foreground">Métier :</label>
                 <select
                   value={selected}
-                  onChange={e => handleChange(e.target.value)}
+                  onChange={e => handleChange(e.target.value as Vertical)}
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  {SECTEURS.map(s => (
-                    <option key={s.value} value={s.value}>{s.label}</option>
-                  ))}
+                  <optgroup label="Métiers">
+                    {cible.map(s => (
+                      <option key={s.id} value={s.id}>{s.label}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Ancien découpage">
+                    {ancien.map(s => (
+                      <option key={s.id} value={s.id}>{s.label}</option>
+                    ))}
+                  </optgroup>
                 </select>
               </div>
 
               <div className="rounded-lg bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-                Aperçu : « {vocab.nouveau} », « {vocab.aucun} », {vocab.pluriel}.
+                Aperçu : « {words.newLabel} », « {words.noneLabel} », {words.plural} en cours,
+                « {pack.proposalWord} ».
               </div>
             </div>
 
             {!dirty && (
               <p className="text-xs text-muted-foreground">
-                Secteur actuel : <span className="text-foreground font-medium">{sectorLabel}</span>.
+                Secteur actuel : <span className="text-foreground font-medium">{pack.label}</span>.
                 Modifiez le secteur ci-dessus pour activer l'enregistrement.
               </p>
             )}

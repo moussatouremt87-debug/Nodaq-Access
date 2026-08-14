@@ -1,14 +1,19 @@
 /**
  * Onboarding 4.8 — Profil d'entreprise.
  *
- * Trois écrans non bloquants :
- *   Écran 1 : Recherche SIRET / nom → confirmation → détection métier
+ * Quatre écrans non bloquants :
+ *   Écran 0 : Secteur d'activité (US-A1.1) — LA question fondatrice : sans
+ *             elle, tout le vocabulaire qui suit (« chantier », « devis »)
+ *             présume du bâtiment pour un secteur qui n'en est pas.
+ *   Écran 1 : Recherche SIRET / nom → confirmation → détection de pack
  *             + formulaire manuel si l'API est indisponible ou renvoie aucun résultat
  *   Écran 2 : Dépôt ancienne facture (stub OCR honnête) + bouton "Plus tard"
  *   Écran 3 : Décennale + table équipe + taux horaire
  *
  * Règles :
- * - Aucun écran n'est bloquant (bouton "Plus tard" partout).
+ * - Aucun écran n'est bloquant (bouton "Plus tard" partout), y compris le
+ *   secteur — sauter revient au vocabulaire BTP historique (le défaut
+ *   serveur), pas à une valeur devinée.
  * - La détection métier est affichée, jamais gardée silencieuse.
  * - Le stub OCR dit explicitement "non branché" — pas de simulation.
  * - Formulaire manuel disponible dès que la recherche échoue ou renvoie aucun résultat.
@@ -18,7 +23,7 @@ import { useMutation } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Building2, Check, ArrowRight, Upload, FileText,
-  Users, Clock, Shield, ChevronRight, PenLine, Plus, Trash2,
+  Users, Clock, Shield, ChevronRight, PenLine, Plus, Trash2, Briefcase,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,6 +31,8 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { apiFetch } from '@/lib/auth';
 import { useLocation } from 'wouter';
+import { useUpdateVerticalMutation, secteursOnboarding } from '@/hooks/use-vertical';
+import type { Vertical } from '@nodaq/shared';
 
 const API = '/api';
 
@@ -185,6 +192,66 @@ function FormulaireManuel({
         </Button>
         <Button variant="ghost" onClick={onCancel} className="text-muted-foreground">
           Retour à la recherche
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ── Écran 0 — Secteur d'activité (US-A1.1) ─────────────────────────────────
+
+function EcranSecteur({ onNext, onSkip }: { onNext: () => void; onSkip: () => void }) {
+  const { toast } = useToast();
+  const [selected, setSelected] = useState<Vertical | null>(null);
+  const { updateVertical, isPending } = useUpdateVerticalMutation();
+  const secteurs = secteursOnboarding();
+
+  const handleContinue = () => {
+    if (!selected) { onNext(); return; }
+    updateVertical(selected, {
+      onSuccess: onNext,
+      onError: () => {
+        toast({ title: 'Secteur non enregistré', description: 'Vous pourrez le régler depuis "Votre métier".', variant: 'destructive' });
+        onNext();
+      },
+    });
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-semibold text-foreground">Quel est votre secteur d'activité ?</h2>
+        <p className="text-sm text-muted-foreground mt-1">
+          Le vocabulaire de l'application (devis, chantier, mission…) s'adapte à votre métier.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+        {secteurs.map(s => (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => setSelected(s.id)}
+            className={`flex items-center gap-2.5 rounded-xl border p-3.5 text-left text-sm transition-colors ${
+              selected === s.id
+                ? 'border-primary bg-primary/5 text-foreground'
+                : 'border-border bg-card text-muted-foreground hover:border-primary/40'
+            }`}
+            data-testid={`option-secteur-${s.id}`}
+          >
+            <Briefcase className="h-4 w-4 shrink-0" />
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex gap-2">
+        <Button onClick={handleContinue} disabled={isPending} className="gap-1.5">
+          <ArrowRight className="h-4 w-4" />
+          {isPending ? 'Enregistrement…' : 'Continuer'}
+        </Button>
+        <Button variant="ghost" onClick={onSkip} className="text-muted-foreground">
+          Plus tard
         </Button>
       </div>
     </div>
@@ -665,10 +732,10 @@ function EcranMetier({ onDone, onSkip }: { onDone: () => void; onSkip: () => voi
 
 // ── Page principale ────────────────────────────────────────────────────────
 
-type Screen = 'recherche' | 'classeur' | 'metier' | 'done';
+type Screen = 'secteur' | 'recherche' | 'classeur' | 'metier' | 'done';
 
 export default function OnboardingPage() {
-  const [screen, setScreen] = useState<Screen>('recherche');
+  const [screen, setScreen] = useState<Screen>('secteur');
   const [_, navigate] = useLocation();
   const { toast } = useToast();
 
@@ -703,6 +770,7 @@ export default function OnboardingPage() {
   });
 
   const STEPS: { id: Screen; label: string }[] = [
+    { id: 'secteur', label: 'Secteur' },
     { id: 'recherche', label: 'Entreprise' },
     { id: 'classeur', label: 'Documents' },
     { id: 'metier', label: 'Métier' },
@@ -745,6 +813,12 @@ export default function OnboardingPage() {
           <motion.div key={screen}
             initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -16 }} transition={{ duration: 0.2 }}>
+            {screen === 'secteur' && (
+              <EcranSecteur
+                onNext={() => setScreen('recherche')}
+                onSkip={() => setScreen('recherche')}
+              />
+            )}
             {screen === 'recherche' && (
               <EcranRecherche
                 onConfirm={e => confirmMut.mutate(e)}
