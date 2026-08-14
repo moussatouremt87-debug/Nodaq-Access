@@ -8,6 +8,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { CurrencyInput } from '@/components/currency-input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -152,9 +153,9 @@ function LineEditor({ lines, onChange }: {
                       className="h-7 text-xs text-right border-0 bg-transparent px-1 focus-visible:ring-0" min={0.01} step={0.01} />
                   </td>
                   <td className="px-2 py-1.5">
-                    <Input type="number" value={(l.unitPriceCents / 100).toFixed(2)}
-                      onChange={e => update(l.id, 'unitPriceCents', Math.round(Number(e.target.value) * 100))}
-                      className="h-7 text-xs text-right border-0 bg-transparent px-1 focus-visible:ring-0" min={0} step={0.01} />
+                    <CurrencyInput valueCents={l.unitPriceCents}
+                      onChangeCents={cents => update(l.id, 'unitPriceCents', cents)}
+                      className="h-7 text-xs text-right border-0 bg-transparent px-1 focus-visible:ring-0" min={0} />
                   </td>
                   <td className="px-2 py-1.5">
                     <Select value={String(l.vatRate)}

@@ -8,6 +8,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { CurrencyInput } from '@/components/currency-input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -711,9 +712,9 @@ function DevisDialog({ open, onOpenChange, devis, onSaved }: {
                           className="h-8 text-sm text-right border-0 bg-transparent px-1 focus-visible:ring-0" min={1} />
                       </td>
                       <td className="px-2 py-1.5">
-                        <Input type="number" value={(line.unitPriceCents / 100).toFixed(2)}
-                          onChange={e => updateLine(line.id, 'unitPriceCents', Math.round(Number(e.target.value) * 100))}
-                          className="h-8 text-sm text-right border-0 bg-transparent px-1 focus-visible:ring-0" min={0} step={0.01} />
+                        <CurrencyInput valueCents={line.unitPriceCents}
+                          onChangeCents={cents => updateLine(line.id, 'unitPriceCents', cents)}
+                          className="h-8 text-sm text-right border-0 bg-transparent px-1 focus-visible:ring-0" min={0} />
                       </td>
                       <td className="px-3 py-1.5 text-right font-mono-nums text-xs text-muted-foreground">
                         {(line.quantity * line.unitPriceCents / 100).toFixed(2)} €
