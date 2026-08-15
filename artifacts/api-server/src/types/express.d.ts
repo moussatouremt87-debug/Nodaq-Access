@@ -22,5 +22,12 @@ declare namespace Express {
     };
     /** Convenience shorthand set by resolveTenant — always equals session.tenantId when present. */
     tenantId?: string;
+    /**
+     * Raw request body bytes, captured by express.json()'s `verify` hook.
+     * Needed to check a webhook signature (plateforme agréée, US-A2.6) —
+     * re-serializing req.body would not reproduce the exact bytes signed by
+     * the sender.
+     */
+    rawBody?: Buffer;
   }
 }

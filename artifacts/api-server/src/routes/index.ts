@@ -35,6 +35,9 @@ import prospectionRouter from "./prospection";
 import clientsRouter from "./clients";
 import paiementsRouter from "./paiements";
 import affectationsRouter from "./affectations";
+import facturationElectroniqueRouter, {
+  facturationElectroniqueWebhookRouter,
+} from "./facturation-electronique";
 
 import { requireAuth } from "../middleware/requireAuth";
 import { resolveTenant } from "../middleware/resolveTenant";
@@ -52,6 +55,10 @@ router.use(healthRouter);
 router.use(authRouter);
 router.use(publicRouter);   // /public/devis/:token/accept-page, /public/devis/:token/accept
 router.use(membresPublicRouter); // /membres/inviter/:token (lecture + acceptation)
+// Webhook PA (US-A2.6) : pas de session, authentifié par signature HMAC —
+// voir facturation-electronique.ts. Aucune PA réelle contractée à ce jour ;
+// route non testable bout en bout, seulement son authentification.
+router.use(facturationElectroniqueWebhookRouter);
 
 // ── MFA (ticket 4.15) — requireAuth SEUL, pas la chaîne biz ────────────────
 // Une session bloquée par requireMfaVerified doit pouvoir atteindre ces
@@ -114,5 +121,6 @@ router.use(ownerOnly, parametresRouter);
 router.use(ownerOnly, entreprisesRouter);
 router.use(ownerOnly, onboardingWriteRouter);
 router.use(ownerOnly, membresRouter);
+router.use(ownerOnly, facturationElectroniqueRouter);
 
 export default router;

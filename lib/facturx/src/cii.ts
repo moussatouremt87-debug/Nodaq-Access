@@ -223,3 +223,47 @@ export function buildCiiXml(invoice: FacturXInvoice, profile: FacturXProfile): s
 
   return `<?xml version="1.0" encoding="UTF-8"?>${body}`;
 }
+
+// ─── Extraction (réception, US-A2.6) ────────────────────────────────────────
+
+export interface CiiEssentials {
+  /** SIREN de l'émetteur (SellerTradeParty), null si absent ou illisible. */
+  sellerSiren: string | null;
+  /** ram:GrandTotalAmount, en centimes. */
+  grandTotalCents: number | null;
+  /** ram:IssueDateTime de ram:ExchangedDocument, format YYYY-MM-DD. */
+  issueDate: string | null;
+}
+
+/**
+ * Extrait les quelques champs nécessaires à l'écran de réception (US-A2.6) —
+ * PAS un parseur CII général. Portée volontairement étroite : le seul besoin
+ * est d'éviter la ressaisie manuelle du SIREN émetteur, du montant et de la
+ * date sur l'écran de documents reçus. Une facture entrante mal formée rend
+ * simplement des champs `null` — jamais une valeur devinée.
+ *
+ * Recherche par nom d'élément plutôt qu'un DOM XML complet : le format est
+ * normatif (ordre des éléments fixé par le XSD, voir buildCiiXml ci-dessus),
+ * donc une extraction ciblée est fiable pour un Factur-X conforme, sans
+ * dépendance à un analyseur XML complet pour trois champs.
+ */
+export function parseCiiEssentials(xml: string): CiiEssentials {
+  const exchangedDocument = xml.match(/<rsm:ExchangedDocument>([\s\S]*?)<\/rsm:ExchangedDocument>/);
+  const issueDateMatch = exchangedDocument?.[1]?.match(
+    /<ram:IssueDateTime>\s*<udt:DateTimeString[^>]*>(\d{8})<\/udt:DateTimeString>/,
+  );
+  const issueDate = issueDateMatch?.[1]
+    ? `${issueDateMatch[1].slice(0, 4)}-${issueDateMatch[1].slice(4, 6)}-${issueDateMatch[1].slice(6, 8)}`
+    : null;
+
+  const sellerBlock = xml.match(/<ram:SellerTradeParty>([\s\S]*?)<\/ram:SellerTradeParty>/);
+  const sirenMatch = sellerBlock?.[1]?.match(
+    /<ram:SpecifiedLegalOrganization>\s*<ram:ID schemeID="0002">(\d{9})<\/ram:ID>/,
+  );
+  const sellerSiren = sirenMatch?.[1] ?? null;
+
+  const totalMatch = xml.match(/<ram:GrandTotalAmount>([\d.]+)<\/ram:GrandTotalAmount>/);
+  const grandTotalCents = totalMatch?.[1] ? Math.round(parseFloat(totalMatch[1]) * 100) : null;
+
+  return { sellerSiren, grandTotalCents, issueDate };
+}

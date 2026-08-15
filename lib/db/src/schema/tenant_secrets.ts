@@ -44,6 +44,16 @@ export type TenantSecret = typeof tenantSecretsTable.$inferSelect;
 /** Clé logique du mot de passe SMTP de l'artisan. Une seule écriture possible. */
 export const CLE_SMTP_PASSWORD = "envoi.smtp_password";
 
+/** Clé API de la plateforme agréée (US-A2.6) — lue par lib/plateforme-agreee. */
+export const CLE_PA_API_KEY = "plateforme_agreee.api_key";
+
+/**
+ * Secret partagé vérifiant un push entrant de la plateforme agréée (US-A2.6).
+ * Aucune session utilisateur sur un webhook externe — c'est ce secret, pas
+ * `requireAuth`, qui authentifie l'appelant avant résolution du tenant.
+ */
+export const CLE_PA_WEBHOOK_SECRET = "plateforme_agreee.webhook_secret";
+
 /** Préfixe des secrets d'un connecteur : `connecteur.<id>.<champ>`. */
 export function cleConnecteur(connecteurId: string, champ: string): string {
   return `connecteur.${connecteurId}.${champ}`;
