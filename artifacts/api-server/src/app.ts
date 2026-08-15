@@ -137,7 +137,19 @@ if (!sessionSecret) {
   process.exit(1);
 }
 app.use(cookieParser(sessionSecret));
-app.use(express.json());
+app.use(
+  express.json({
+    // Capture les octets bruts du corps — nécessaire pour vérifier la
+    // signature HMAC d'un webhook entrant (plateforme agréée, US-A2.6) : une
+    // re-sérialisation de req.body en JSON ne reproduit pas forcément les
+    // mêmes octets que ceux réellement signés par l'expéditeur (ordre des
+    // clés, espaces). Coût négligeable : express.json() tamponne déjà le
+    // corps en mémoire pour le parser.
+    verify: (req: express.Request, _res, buf) => {
+      req.rawBody = Buffer.from(buf);
+    },
+  }),
+);
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);

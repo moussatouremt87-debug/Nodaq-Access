@@ -3,6 +3,7 @@ import {
   auditInvoice,
   FacturXInvoice,
   buildCiiXml,
+  parseCiiEssentials,
   FACTURX_PROFILES,
   FACTURX_RULES_VERSION,
   OPERATION_CATEGORIES,
@@ -142,6 +143,28 @@ describe("buildCiiXml", () => {
     expect(() => buildCiiXml(INVOICE, "BASIC_WL")).toThrow(/not implemented/);
     expect(FACTURX_PROFILES.MINIMUM.implemented).toBe(false);
     expect(FACTURX_PROFILES.EN16931.implemented).toBe(true);
+  });
+});
+
+describe("parseCiiEssentials — extraction pour la réception (US-A2.6)", () => {
+  it("relit le SIREN émetteur, le montant total et la date d'émission d'un XML qu'elle a elle-même produit", () => {
+    const xml = buildCiiXml(INVOICE, "EN16931");
+    const essentials = parseCiiEssentials(xml);
+    expect(essentials.sellerSiren).toBe("812345676");
+    expect(essentials.grandTotalCents).toBe(154_800);
+    expect(essentials.issueDate).toBe("2026-08-01");
+  });
+
+  it("prend le SIREN du VENDEUR, pas de l'acheteur, même quand les deux sont présents", () => {
+    const xml = buildCiiXml(INVOICE, "EN16931");
+    expect(xml).toContain("523456788"); // le SIREN acheteur est bien dans le XML…
+    // …mais l'essentiel extrait reste celui du vendeur.
+    expect(parseCiiEssentials(xml).sellerSiren).toBe("812345676");
+  });
+
+  it("rend des champs null plutôt qu'une valeur devinée sur un XML qui n'est pas un Factur-X", () => {
+    const essentials = parseCiiEssentials("<not-an-invoice/>");
+    expect(essentials).toEqual({ sellerSiren: null, grandTotalCents: null, issueDate: null });
   });
 });
 

@@ -11,7 +11,8 @@ export {
 export type { FacturXProfile, OperationCategory, VatCategory } from "./profiles.js";
 export { FacturXInvoice, amount, sirenOf } from "./invoice.js";
 export type { FacturXLine, FacturXParty } from "./invoice.js";
-export { buildCiiXml, escapeXml } from "./cii.js";
+export { buildCiiXml, escapeXml, parseCiiEssentials } from "./cii.js";
+export type { CiiEssentials } from "./cii.js";
 export { auditInvoice } from "./audit.js";
 export type { FacturXAudit, FacturXIssue } from "./audit.js";
 export { buildFacturXPdf, extractFacturXXml, listAttachments } from "./pdf.js";

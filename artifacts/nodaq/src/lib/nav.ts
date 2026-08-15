@@ -23,6 +23,7 @@ import {
   DatabaseZap,
   BarChart2,
   Radar,
+  ScrollText,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { AffaireWords } from '@nodaq/shared';
@@ -92,6 +93,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: '/parametres/envoi', label: 'Envoi des documents', icon: Send, testId: 'nav-parametres-envoi' },
       { href: '/onboarding',   label: 'Profil entreprise',   icon: Building2,   testId: 'nav-onboarding',  requiredRoles: ['OWNER'] },
       { href: '/reprise',      label: 'Reprise des données', icon: DatabaseZap, testId: 'nav-reprise',     requiredRoles: ['OWNER'] },
+      { href: '/facturation-electronique', label: 'Facturation électronique', icon: ScrollText, testId: 'nav-facturation-electronique', requiredRoles: ['OWNER'] },
     ],
   },
 ];
