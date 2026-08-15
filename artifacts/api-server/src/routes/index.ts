@@ -38,6 +38,7 @@ import affectationsRouter from "./affectations";
 import facturationElectroniqueRouter, {
   facturationElectroniqueWebhookRouter,
 } from "./facturation-electronique";
+import eReportingRouter from "./e-reporting";
 
 import { requireAuth } from "../middleware/requireAuth";
 import { resolveTenant } from "../middleware/resolveTenant";
@@ -113,6 +114,7 @@ router.use(financierOnly, facturesRouter);
 router.use(financierOnly, avoirsRouter);
 router.use(financierOnly, analyticsRouter);
 router.use(financierOnly, paiementsRouter);
+router.use(financierOnly, eReportingRouter);
 
 // ── OWNER-only routes ─────────────────────────────────────────────────────
 router.use(ownerOnly, equipeRouter);
