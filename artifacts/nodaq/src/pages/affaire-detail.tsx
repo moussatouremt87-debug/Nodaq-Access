@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { AffaireStatusBadge } from '@/components/status-badge';
 import { AffaireDialog } from '@/components/affaire-dialog';
 import { useAffaire } from '@/hooks/use-affaires';
+import { useVertical } from '@/hooks/use-vertical';
 import { fmtEUR, fmtDate } from '@/lib/format';
 import type { Affaire } from '@workspace/api-client-react';
 
@@ -14,6 +15,7 @@ export default function AffaireDetail() {
   const params = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const { words } = useVertical();
 
   const { data: affaire, isLoading, isError } = useAffaire(params.id ?? '');
 
@@ -33,9 +35,11 @@ export default function AffaireDetail() {
     return (
       <div className="p-6">
         <button onClick={handleBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-6">
-          <ArrowLeft className="h-4 w-4" /> Retour aux affaires
+          <ArrowLeft className="h-4 w-4" /> Retour aux {words.plural}
         </button>
-        <p className="text-sm text-muted-foreground">Affaire introuvable.</p>
+        <p className="text-sm text-muted-foreground">
+          {words.singular.charAt(0).toUpperCase() + words.singular.slice(1)} introuvable.
+        </p>
       </div>
     );
   }
@@ -53,7 +57,7 @@ export default function AffaireDetail() {
         onClick={handleBack}
         className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground self-start -ml-1"
       >
-        <ArrowLeft className="h-4 w-4" /> Retour aux affaires
+        <ArrowLeft className="h-4 w-4" /> Retour aux {words.plural}
       </button>
 
       {/* Header card */}
@@ -200,7 +204,7 @@ export default function AffaireDetail() {
           <Clock className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
           <p className="text-sm text-muted-foreground">Aucun détail ajouté pour cette affaire.</p>
           <Button size="sm" variant="outline" className="mt-3 gap-1.5 text-xs" onClick={() => setDialogOpen(true)}>
-            <Pencil className="h-3.5 w-3.5" /> Compléter l'affaire
+            <Pencil className="h-3.5 w-3.5" /> Compléter {words.definite}
           </Button>
         </div>
       )}

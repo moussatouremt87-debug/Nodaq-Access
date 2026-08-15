@@ -30,6 +30,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
+import { useVertical } from '@/hooks/use-vertical';
 import { fmtEUR, fmtDate } from '@/lib/format';
 import { containerVariants, itemVariants } from '@/lib/motion-variants';
 
@@ -84,6 +85,7 @@ function useDevis(params: { statut?: string; search?: string }) {
 export default function DevisPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { proposalWord } = useVertical();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -201,11 +203,15 @@ export default function DevisPage() {
     <div className="pb-16">
       <PageHeader
         eyebrow="Commercial"
-        title="Devis"
+        title={proposalWord}
         description="Créez, envoyez et convertissez vos devis en affaires."
         actions={
+          // Pas de "Nouveau"/"Nouvelle" devant `proposalWord` : ce champ n'a
+          // pas d'accord de genre (voir verticalPacks.ts) — le nom seul reste
+          // grammaticalement correct dans les deux cas ("Devis", "Proposition
+          // commerciale").
           <Button onClick={openCreate} className="gap-1.5">
-            <Plus className="h-4 w-4" /> Nouveau devis
+            <Plus className="h-4 w-4" /> {proposalWord}
           </Button>
         }
       />
@@ -266,7 +272,7 @@ export default function DevisPage() {
                 <EmptyDescription>Créez votre premier devis pour démarrer.</EmptyDescription>
               </EmptyHeader>
               <EmptyContent>
-                <Button onClick={openCreate}><Plus className="h-4 w-4" /> Nouveau devis</Button>
+                <Button onClick={openCreate}><Plus className="h-4 w-4" /> {proposalWord}</Button>
               </EmptyContent>
             </Empty>
           ) : (

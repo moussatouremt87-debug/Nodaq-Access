@@ -63,6 +63,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/auth';
 import { useIsOwner, useHasFinancialAccess } from '@/hooks/use-auth';
+import { useVertical } from '@/hooks/use-vertical';
 
 const API = '/api';
 
@@ -94,6 +95,7 @@ const fmtCentsCompact = (n: number) =>
 
 export default function Cockpit() {
   const queryClient = useQueryClient();
+  const { words } = useVertical();
   const [refreshKey, setRefreshKey] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -234,7 +236,7 @@ export default function Cockpit() {
             <>
               <AnimatedKpi
                 testId="kpi-affaires-en-cours"
-                label="Affaires en cours"
+                label={`${words.plural.charAt(0).toUpperCase() + words.plural.slice(1)} en cours`}
                 target={kpis?.affairesEnCours ?? 0}
                 format={fmtCount}
                 icon={Briefcase}

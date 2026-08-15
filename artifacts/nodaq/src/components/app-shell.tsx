@@ -1,15 +1,18 @@
 import { Link, useLocation } from 'wouter';
 import { Radio, ShieldCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { NAV_SECTIONS, MOBILE_NAV, navIsActive } from '@/lib/nav';
+import { NAV_SECTIONS, MOBILE_NAV, navIsActive, verticalizeNavLabel } from '@/lib/nav';
 import { TopRibbon } from './top-ribbon';
 import { ThemeToggle } from './theme-toggle';
 import { useAuth } from '@/hooks/use-auth';
+import { useVertical } from '@/hooks/use-vertical';
+import type { AffaireWords } from '@nodaq/shared';
 import { MicroFlottant } from '@/components/micro-flottant';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { data } = useAuth();
+  const { words, proposalWord } = useVertical();
   const role = data?.authenticated === true && 'role' in data ? data.role : undefined;
   const peutVoir = (item: { requiredRoles?: readonly string[] }) =>
     !item.requiredRoles || (role !== undefined && item.requiredRoles.includes(role));
@@ -74,7 +77,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                         )}
                         strokeWidth={2}
                       />
-                      <span>{item.label}</span>
+                      <span>{verticalizeNavLabel(item.href, item.label, words, proposalWord)}</span>
                     </Link>
                   );
                 })}
@@ -116,7 +119,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* ── Right column: ribbon + main content ──────────────────── */}
       <div className="flex-1 min-w-0 flex flex-col relative z-10">
         {/* Mobile nav (mobile only, sticky top) */}
-        <MobileNav location={location} peutVoir={peutVoir} />
+        <MobileNav location={location} peutVoir={peutVoir} words={words} proposalWord={proposalWord} />
 
         {/* Desktop top ribbon (desktop only, sticky top-0, h-11) */}
         <TopRibbon />
@@ -138,9 +141,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 function MobileNav({
   location,
   peutVoir,
+  words,
+  proposalWord,
 }: {
   location: string;
   peutVoir: (item: { requiredRoles?: readonly string[] }) => boolean;
+  words: AffaireWords;
+  proposalWord: string;
 }) {
   return (
     <div className="md:hidden sticky top-0 z-30 flex items-center border-b border-sidebar-border bg-sidebar">
@@ -161,7 +168,7 @@ function MobileNav({
               )}
             >
               <Icon className="h-3.5 w-3.5" />
-              {item.label}
+              {verticalizeNavLabel(item.href, item.label, words, proposalWord)}
             </Link>
           );
         })}
