@@ -36,3 +36,5 @@ export * from "./prospection_contacts";
 export * from "./catalogue_alias";
 export * from "./incidents_facturation";
 export * from "./tenant_invites";
+export * from "./pa_documents_recus";
+export * from "./pa_transmissions";

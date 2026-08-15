@@ -22,6 +22,9 @@
       "path": "../../lib/facturx"
     },
     {
+      "path": "../../lib/plateforme-agreee"
+    },
+    {
       "path": "../../lib/llm"
     },
     {
