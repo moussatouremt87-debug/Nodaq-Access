@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  ScrollText, Upload, Download, KeyRound, Webhook, Copy, Check,
+  ScrollText, Upload, Download, KeyRound, Webhook, Copy, Check, FileBarChart, Send,
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PageHeader } from '@/components/page-header';
@@ -14,6 +14,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { apiFetch } from '@/lib/auth';
 import { fmtDate } from '@/lib/format';
+import { toDateString } from '@nodaq/shared';
 
 const API = '/api';
 
@@ -81,6 +82,8 @@ export default function FacturationElectroniquePage() {
 
       <div className="px-5 md:px-8 pt-6 space-y-6 max-w-3xl">
         <ParametragePaCard statut={statut} loading={statutLoading} onChange={invalider} />
+
+        <EReportingCard paConfiguree={statut?.paConfiguree ?? false} />
 
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-medium">Documents reçus</h2>
@@ -279,6 +282,145 @@ function ParametragePaCard({
             )}
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+function moisCourant(): { debut: string; fin: string } {
+  const now = new Date();
+  // toDateString (@nodaq/shared) lit les composants LOCAUX — un .toISOString()
+  // ici convertirait en UTC et ferait glisser le jour d'un cran dans tout
+  // fuseau en avance sur UTC (ex. Europe/Paris l'été), exactement le
+  // problème déjà tranché par ce helper ailleurs dans le produit.
+  return {
+    debut: toDateString(new Date(now.getFullYear(), now.getMonth(), 1)),
+    fin: toDateString(new Date(now.getFullYear(), now.getMonth() + 1, 0)),
+  };
+}
+
+type EReportingApercu = {
+  transactionCount: number;
+  totalCents: number;
+  outOfPeriodCount: number;
+  unusableCount: number;
+  otherCurrencyCount: number;
+};
+
+function EReportingCard({ paConfiguree }: { paConfiguree: boolean }) {
+  const { toast } = useToast();
+  const defaut = moisCourant();
+  const [periodeDebut, setPeriodeDebut] = useState(defaut.debut);
+  const [periodeFin, setPeriodeFin] = useState(defaut.fin);
+  const [tvaDeclareeEuros, setTvaDeclareeEuros] = useState('');
+
+  const { data: apercu, isLoading, isError } = useQuery({
+    queryKey: ['e-reporting-apercu', periodeDebut, periodeFin],
+    queryFn: async () => {
+      const sp = new URLSearchParams({ periodeDebut, periodeFin });
+      const res = await apiFetch(`${API}/e-reporting/apercu?${sp}`);
+      if (!res.ok) throw new Error('Fetch failed');
+      return res.json() as Promise<EReportingApercu>;
+    },
+  });
+
+  const declarer = useMutation({
+    mutationFn: async () => {
+      const tvaDeclareeCents = Math.round(parseFloat(tvaDeclareeEuros || '0') * 100);
+      const res = await apiFetch(`${API}/e-reporting/declarer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ periodeDebut, periodeFin, tvaDeclareeCents }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error ?? 'Déclaration impossible');
+      }
+      return res.json();
+    },
+    onSuccess: () => toast({ title: 'E-reporting transmis' }),
+    onError: (err: Error) => toast({ title: 'Erreur', description: err.message, variant: 'destructive' }),
+  });
+
+  return (
+    <div className="rounded-xl border border-card-border bg-card p-6 space-y-5">
+      <div className="flex items-start gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-sidebar-accent">
+          <FileBarChart className="h-5 w-5 text-sidebar-foreground/70" />
+        </div>
+        <div>
+          <h3 className="font-semibold text-foreground">E-reporting</h3>
+          <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
+            Obligatoire dès le 1er septembre 2026, quelle que soit la taille de votre entreprise.
+            La TVA n'est pas calculée automatiquement — déclarez-la vous-même avant transmission.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Début de période</Label>
+          <Input type="date" value={periodeDebut} onChange={(e) => setPeriodeDebut(e.target.value)} />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Fin de période</Label>
+          <Input type="date" value={periodeFin} onChange={(e) => setPeriodeFin(e.target.value)} />
+        </div>
+      </div>
+
+      {isLoading ? (
+        <Skeleton className="h-20 w-full" />
+      ) : isError || !apercu ? (
+        <div className="text-sm text-destructive">Impossible de calculer l'aperçu pour cette période.</div>
+      ) : (
+        <div className="rounded-lg bg-muted/40 px-4 py-3 space-y-1.5 text-sm" data-testid="e-reporting-apercu">
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Transactions dans la période</span>
+            <span className="font-mono-nums tabular-nums text-foreground">{apercu.transactionCount}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Total HT</span>
+            <span className="font-mono-nums tabular-nums text-foreground">
+              {(apercu.totalCents / 100).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
+            </span>
+          </div>
+          {apercu.outOfPeriodCount > 0 && (
+            <div className="text-xs text-muted-foreground">
+              {apercu.outOfPeriodCount} facture(s) hors période exclue(s).
+            </div>
+          )}
+          {apercu.unusableCount > 0 && (
+            <div className="text-xs text-muted-foreground">
+              {apercu.unusableCount} facture(s) sans montant/date exploitable.
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="space-y-1.5">
+        <Label className="text-sm font-medium text-foreground">TVA à déclarer (€)</Label>
+        <Input
+          type="number"
+          step="0.01"
+          min="0"
+          value={tvaDeclareeEuros}
+          onChange={(e) => setTvaDeclareeEuros(e.target.value)}
+          placeholder="0.00"
+          data-testid="input-tva-declaree"
+        />
+      </div>
+
+      <Button
+        onClick={() => declarer.mutate()}
+        disabled={!paConfiguree || !tvaDeclareeEuros || declarer.isPending}
+        className="gap-1.5"
+      >
+        <Send className="h-4 w-4" /> {declarer.isPending ? 'Transmission...' : 'Déclarer'}
+      </Button>
+      {!paConfiguree && (
+        <p className="text-xs text-muted-foreground">
+          Renseignez une clé API PA ci-dessus pour activer la transmission.
+        </p>
       )}
     </div>
   );
