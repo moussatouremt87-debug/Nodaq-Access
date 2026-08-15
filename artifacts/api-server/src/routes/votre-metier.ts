@@ -2,14 +2,23 @@ import { Router, type IRouter } from "express";
 import { withTenant, settingsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
+import { VERTICALS } from "@nodaq/shared";
 
 const router: IRouter = Router();
 
 const KEY = "votre-metier.metier";
+// Le produit est né BTP : un tenant qui n'a jamais répondu (créé avant
+// US-A1.1, ou onboarding pas encore arrivé à l'écran secteur) garde le
+// vocabulaire BTP historique plutôt que de basculer silencieusement en
+// vocabulaire neutre — ce serait une régression visible pour toute la base
+// existante, pas une neutralité prudente.
 const DEFAULT_METIER = "industrie_btp";
 
+// US-A1.1 : la valeur doit être un vertical connu de verticalPacks.ts, pas
+// n'importe quelle chaîne — la garde vit ici (frontière API), pas en base
+// (voir la note d'architecture dans verticalPacks.ts sur `tenant_profiles`).
 const PatchBody = z.object({
-  metier: z.string().min(1),
+  metier: z.enum(VERTICALS),
 });
 
 router.get("/votre-metier", async (req, res): Promise<void> => {

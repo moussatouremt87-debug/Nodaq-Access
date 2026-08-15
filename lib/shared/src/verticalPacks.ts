@@ -19,17 +19,29 @@
  * (bâtiment, paysage, événementiel, maintenance, services au projet). Les
  * cinq anciens RESTENT, et ce n'est pas de la timidité :
  *
- * - ils sont en base. `tenant_profiles.vertical` porte un `CHECK` : retirer
- *   une valeur, c'est refuser d'enregistrer la fiche d'un tenant qui existe ;
  * - ils portent des OBLIGATIONS LÉGALES. `information-prix` (Code de la
  *   consommation, art. L112-1) est rattachée à `retail`/`negoce` dans la
  *   veille réglementaire. Supprimer ces verticaux retirerait silencieusement
  *   une obligation à un commerçant, par refonte d'un découpage commercial.
  *   Le coût des deux erreurs est asymétrique : un vertical de trop dans une
  *   liste se voit et se corrige, une obligation disparue ne se voit pas.
+ * - CORRECTION (US-A1.1) : une table `tenant_profiles` avec `CHECK` était
+ *   prévue mais n'a jamais été construite — vérifié, elle n'existe nulle
+ *   part dans `lib/db`. Le vertical d'un tenant est stocké via le mécanisme
+ *   `settings` générique (clé `votre-metier.metier`), validé par
+ *   `z.enum(VERTICALS)` à la frontière API plutôt que par un `CHECK` en
+ *   base — pas de nouvelle table pour ce ticket.
  *
  * `inTarget` dit lesquels sont la cible du pivot ; aucune feature n'a besoin
  * d'en savoir plus, et rien n'est supprimé.
+ *
+ * US-A1.1 (backlog v3) ÉTEND ce fichier à sept verticaux supplémentaires
+ * (restauration/CHR, services à la personne, professions libérales,
+ * artisanat de service, services aux entreprises, transport, santé
+ * libérale) pour couvrir les neuf secteurs minimum exigés par l'onboarding,
+ * et ajoute `proposalWord` (« Devis » / « Proposition commerciale ») — un
+ * second axe de vocabulaire, orthogonal à `AffaireWords`, que ce fichier ne
+ * portait pas encore.
  */
 
 /** Bump à chaque ajout de pack ou correction de vocabulaire. */
@@ -60,6 +72,16 @@ export const VERTICALS = [
   "services",
   "negoce",
   "retail",
+  // Cible du pivot multi-secteur (US-A1.1, backlog v3 Epic A1) — les 9 secteurs
+  // que l'onboarding doit couvrir au minimum, moins bâtiment (déjà `batiment`)
+  // et commerce (déjà `retail`).
+  "restauration_chr",
+  "services_personne",
+  "professions_liberales",
+  "artisanat_service",
+  "services_entreprises",
+  "transport",
+  "sante_liberale",
   "autre",
 ] as const;
 
@@ -104,6 +126,14 @@ export interface VerticalPack {
    */
   readonly inTarget: boolean;
   readonly words: AffaireWords;
+  /**
+   * Le mot du document de proposition commerciale — « Devis » pour les
+   * métiers de travaux/exécution, « Proposition commerciale » pour les
+   * métiers de conseil (US-A1.1). Un simple mot d'affichage, pas une
+   * structure `AffaireWords` complète : la story ne demande pas d'accord
+   * grammatical riche sur cet axe.
+   */
+  readonly proposalWord: string;
 }
 
 const AFFAIRE: AffaireWords = {
@@ -153,6 +183,24 @@ const INTERVENTION: AffaireWords = {
   noneLabel: "Aucune intervention",
 };
 
+const PRESTATION: AffaireWords = {
+  singular: "prestation",
+  plural: "prestations",
+  indefinite: "une prestation",
+  definite: "la prestation",
+  newLabel: "Nouvelle prestation",
+  noneLabel: "Aucune prestation",
+};
+
+const DOSSIER: AffaireWords = {
+  singular: "dossier",
+  plural: "dossiers",
+  indefinite: "un dossier",
+  definite: "le dossier",
+  newLabel: "Nouveau dossier",
+  noneLabel: "Aucun dossier",
+};
+
 /**
  * Les packs. Exhaustif par construction (`Record<Vertical, …>`) : ajouter un
  * vertical sans lui écrire de pack ne compile pas.
@@ -163,6 +211,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     label: "Bâtiment / travaux",
     inTarget: true,
     words: CHANTIER,
+    proposalWord: "Devis",
   },
   paysage: {
     id: "paysage",
@@ -171,24 +220,28 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     // Un paysagiste dit « chantier » comme un maçon : le mot suit le métier,
     // pas la nomenclature.
     words: CHANTIER,
+    proposalWord: "Devis",
   },
   evenementiel: {
     id: "evenementiel",
     label: "Événementiel / traiteur",
     inTarget: true,
     words: EVENEMENT,
+    proposalWord: "Devis",
   },
   maintenance: {
     id: "maintenance",
     label: "Maintenance / dépannage",
     inTarget: true,
     words: INTERVENTION,
+    proposalWord: "Devis",
   },
   services_projet: {
     id: "services_projet",
     label: "Services au projet",
     inTarget: true,
     words: MISSION,
+    proposalWord: "Proposition commerciale",
   },
   industrie_btp: {
     id: "industrie_btp",
@@ -198,12 +251,14 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     // est plus large que « bâtiment ». Renommer d'office reclasserait un
     // industriel en entreprise de travaux, sans que personne l'ait demandé.
     words: CHANTIER,
+    proposalWord: "Devis",
   },
   services: {
     id: "services",
     label: "Services (ancien découpage)",
     inTarget: false,
     words: MISSION,
+    proposalWord: "Proposition commerciale",
   },
   negoce: {
     id: "negoce",
@@ -213,18 +268,75 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     // cible. Le mot neutre est le seul honnête : inventer un mot de métier
     // pour un métier qu'on ne sert pas serait une promesse en trop.
     words: AFFAIRE,
+    proposalWord: "Devis",
   },
   retail: {
     id: "retail",
     label: "Commerce de détail",
     inTarget: false,
     words: AFFAIRE,
+    proposalWord: "Devis",
+  },
+  // ── Cible du pivot multi-secteur (US-A1.1) ──────────────────────────────
+  restauration_chr: {
+    id: "restauration_chr",
+    label: "Restauration / CHR",
+    inTarget: true,
+    // Un restaurateur ne travaille pas « à l'affaire » — pas de chantier, pas
+    // de mission au sens où ce produit les entend. Mot neutre, honnête.
+    words: AFFAIRE,
+    proposalWord: "Devis",
+  },
+  services_personne: {
+    id: "services_personne",
+    label: "Services à la personne",
+    inTarget: true,
+    words: INTERVENTION,
+    proposalWord: "Devis",
+  },
+  professions_liberales: {
+    id: "professions_liberales",
+    label: "Professions libérales",
+    inTarget: true,
+    words: MISSION,
+    proposalWord: "Proposition commerciale",
+  },
+  artisanat_service: {
+    id: "artisanat_service",
+    label: "Artisanat de service",
+    inTarget: true,
+    words: PRESTATION,
+    proposalWord: "Devis",
+  },
+  services_entreprises: {
+    id: "services_entreprises",
+    label: "Services aux entreprises",
+    inTarget: true,
+    words: INTERVENTION,
+    proposalWord: "Proposition commerciale",
+  },
+  transport: {
+    id: "transport",
+    label: "Transport",
+    inTarget: true,
+    // Le backlog dit lui-même « mission unitaire vs contrat de transport
+    // récurrent » — le mot suit la source.
+    words: MISSION,
+    proposalWord: "Devis",
+  },
+  sante_liberale: {
+    id: "sante_liberale",
+    label: "Santé libérale",
+    inTarget: true,
+    words: DOSSIER,
+    proposalWord: "Devis",
   },
   autre: {
     id: "autre",
     label: "Autre",
     inTarget: false,
     words: AFFAIRE,
+    proposalWord: "Devis",
   },
 };
 
