@@ -177,6 +177,7 @@ const BUSINESS_TABLES = [
   "incidents_facturation", "factures",
   "pending_actions", "prospects", "settings", "team_members",
   "clients", "tenant_invites",
+  "pa_documents_recus", "pa_transmissions",
 ];
 
 export async function cleanupTenants(...tenantIds: string[]): Promise<void> {
@@ -285,6 +286,9 @@ export function tableInsertSql(table: string, tenantId: string, memberAId?: stri
     parametres_envoi: [`INSERT INTO parametres_envoi (id, tenant_id, mode, domaine) VALUES ($1, $2::uuid, 'repli_nodaq', 'rls-test.example') ON CONFLICT DO NOTHING`, [id, tenantId]],
     // envois_journal : append-only, aucune donnée de contenu.
     envois_journal: [`INSERT INTO envois_journal (id, tenant_id, destinataire, document_type, mode, statut) VALUES ($1, $2::uuid, 'rls-test@example.test', 'DEVIS', 'repli_nodaq', 'envoye') ON CONFLICT DO NOTHING`, [id, tenantId]],
+    // pa_documents_recus: id is TEXT PK, bytes is BYTEA — both supplied explicitly.
+    pa_documents_recus: [`INSERT INTO pa_documents_recus (id, tenant_id, bytes, sha256, byte_size, source) VALUES ($1, $2::uuid, $3, 'rls-test-sha256-placeholder', 8, 'manuel') ON CONFLICT DO NOTHING`, [id, tenantId, Buffer.from("rls-test")]],
+    pa_transmissions: [`INSERT INTO pa_transmissions (id, tenant_id, document_type, document_id, statut) VALUES ($1, $2::uuid, 'FACTURE', $3, 'prete') ON CONFLICT DO NOTHING`, [id, tenantId, crypto.randomUUID()]],
     // tenant_invites : invited_by référence users(id), pas team_members(id)
     // (memberAId porte le mauvais id). Les tenants de ce fixture RLS n'ont
     // pas forcément de membership existant (tenantA/tenantB, notamment) : la

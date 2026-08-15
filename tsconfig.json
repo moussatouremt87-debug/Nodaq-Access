@@ -10,6 +10,7 @@
     { "path": "./lib/classifier" },
     { "path": "./lib/llm" },
     { "path": "./lib/facturx" },
+    { "path": "./lib/plateforme-agreee" },
     { "path": "./lib/crypto" }
   ]
 }

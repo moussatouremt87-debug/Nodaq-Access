@@ -64,6 +64,7 @@ const BUSINESS_TABLES = [
   "clients", "paiements", "affectations",
   "contacts_prospection", "contact_bases", "oppositions",
   "tenant_invites",
+  "pa_documents_recus", "pa_transmissions",
 ] as const;
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -632,7 +633,7 @@ async function sqlstateDe(
 }
 
 describe("h — APPEND-ONLY (privilèges effectifs, pas déclaratifs)", () => {
-  const APPEND_ONLY = ["envois_journal", "archived_pdfs", "objectifs_franchissements", "incidents_facturation"] as const;
+  const APPEND_ONLY = ["envois_journal", "archived_pdfs", "objectifs_franchissements", "incidents_facturation", "pa_documents_recus"] as const;
 
   test("envois_journal : INSERT et SELECT passent, UPDATE et DELETE sont REFUSÉS", async () => {
     const ligneId = `append-only-${Date.now()}`;
@@ -674,6 +675,48 @@ describe("h — APPEND-ONLY (privilèges effectifs, pas déclaratifs)", () => {
     expect(rows[0]?.statut).toBe("envoye");
 
     await adminPool.query("DELETE FROM envois_journal WHERE id = $1", [ligneId]);
+  });
+
+  test("pa_documents_recus : INSERT et SELECT passent, UPDATE et DELETE sont REFUSÉS", async () => {
+    const docId = `append-only-pa-${Date.now()}`;
+
+    // INSERT — doit réussir.
+    const insertion = await sqlstateDe(
+      tenantA.id,
+      sql`INSERT INTO pa_documents_recus (id, tenant_id, bytes, sha256, byte_size, source)
+          VALUES (${docId}, ${tenantA.id}::uuid, ${Buffer.from("append-only-test")}, 'append-only-sha', 16, 'manuel')`,
+    );
+    expect(insertion, "INSERT doit être autorisé sur un document reçu").toBeNull();
+
+    // SELECT — doit réussir.
+    const lecture = await sqlstateDe(
+      tenantA.id,
+      sql`SELECT id FROM pa_documents_recus WHERE id = ${docId}`,
+    );
+    expect(lecture, "SELECT doit être autorisé").toBeNull();
+
+    // UPDATE — doit être refusé par le moteur, code 42501.
+    const modification = await sqlstateDe(
+      tenantA.id,
+      sql`UPDATE pa_documents_recus SET sha256 = 'tampered' WHERE id = ${docId}`,
+    );
+    expect(modification, "UPDATE doit être refusé (42501)").toBe("42501");
+
+    // DELETE — doit être refusé par le moteur, code 42501.
+    const suppression = await sqlstateDe(
+      tenantA.id,
+      sql`DELETE FROM pa_documents_recus WHERE id = ${docId}`,
+    );
+    expect(suppression, "DELETE doit être refusé (42501)").toBe("42501");
+
+    // Et la ligne est intacte, vue par l'administrateur.
+    const { rows } = await adminPool.query<{ sha256: string }>(
+      "SELECT sha256 FROM pa_documents_recus WHERE id = $1",
+      [docId],
+    );
+    expect(rows[0]?.sha256).toBe("append-only-sha");
+
+    await adminPool.query("DELETE FROM pa_documents_recus WHERE id = $1", [docId]);
   });
 
   test.each(APPEND_ONLY)(
