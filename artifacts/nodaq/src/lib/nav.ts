@@ -25,6 +25,7 @@ import {
   Radar,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import type { AffaireWords } from '@nodaq/shared';
 import { FINANCIAL_ROLES, type MembershipRole } from '@/hooks/use-auth';
 
 export type NavItem = {
@@ -124,4 +125,27 @@ export const MOBILE_NAV: Array<{
 /** Returns true when the given nav href matches the current location. */
 export function navIsActive(href: string, location: string): boolean {
   return href === '/' ? location === '/' : location.startsWith(href);
+}
+
+/**
+ * Libellé d'une entrée de menu, adapté au vocabulaire du secteur (US-A1.1).
+ *
+ * Volontairement limité aux DEUX entrées dont le libellé EST le nom générique
+ * de l'entité (« Affaires », « Devis ») — pas aux fonctionnalités qui portent
+ * leur propre nom construit (« Devis dicté », « Avoirs », « Contrats ») : leur
+ * renommage poserait des questions de grammaire (accord de genre sur
+ * `proposalWord`) que ce ticket ne tranche pas — voir `verticalPacks.ts`.
+ * `NAV_SECTIONS`/`MOBILE_NAV` gardent leurs libellés BTP par défaut : ce sont
+ * les repères que la garde `nav.test.ts` lit textuellement, et les valeurs
+ * affichées avant que `useVertical()` ait chargé.
+ */
+export function verticalizeNavLabel(
+  href: string,
+  label: string,
+  words: AffaireWords,
+  proposalWord: string,
+): string {
+  if (href === '/affaires') return words.plural.charAt(0).toUpperCase() + words.plural.slice(1);
+  if (href === '/devis') return proposalWord;
+  return label;
 }

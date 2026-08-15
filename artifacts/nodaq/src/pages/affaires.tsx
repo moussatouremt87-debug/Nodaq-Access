@@ -49,10 +49,12 @@ import { fmtEUR, fmtDate } from '@/lib/format';
 import { listContainerVariants, itemVariants } from '@/lib/motion-variants';
 import { useAffaires, useAffaireStats, useDeleteAffaireMutation } from '@/hooks/use-affaires';
 import { AffaireDialog } from '@/components/affaire-dialog';
+import { useVertical } from '@/hooks/use-vertical';
 import type { Affaire } from '@workspace/api-client-react';
 
 export default function Affaires() {
   const [, navigate] = useLocation();
+  const { words } = useVertical();
   const reducedMotion = useReducedMotion();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -98,11 +100,11 @@ export default function Affaires() {
     <div className="pb-16">
       <PageHeader
         eyebrow="Portefeuille"
-        title="Affaires"
+        title={words.plural.charAt(0).toUpperCase() + words.plural.slice(1)}
         description="Suivez chaque affaire depuis le prospect jusqu'à la facturation."
         actions={
           <Button onClick={openCreate} data-testid="button-create-affaire" className="gap-1.5">
-            <Plus className="h-4 w-4" /> Nouvelle affaire
+            <Plus className="h-4 w-4" /> {words.newLabel}
           </Button>
         }
       />
@@ -194,7 +196,7 @@ export default function Affaires() {
               </EmptyHeader>
               <EmptyContent>
                 <Button onClick={openCreate} data-testid="button-create-affaire-empty">
-                  <Plus className="h-4 w-4" /> Nouvelle affaire
+                  <Plus className="h-4 w-4" /> {words.newLabel}
                 </Button>
               </EmptyContent>
             </Empty>
@@ -202,7 +204,9 @@ export default function Affaires() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                  <th className="px-5 py-3 font-medium">Affaire</th>
+                  <th className="px-5 py-3 font-medium">
+                    {words.singular.charAt(0).toUpperCase() + words.singular.slice(1)}
+                  </th>
                   <th className="px-4 py-3 font-medium">Client</th>
                   <th className="px-4 py-3 font-medium">Statut</th>
                   <th className="px-4 py-3 font-medium text-right">Devisé</th>

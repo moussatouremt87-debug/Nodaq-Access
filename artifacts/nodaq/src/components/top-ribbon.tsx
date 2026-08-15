@@ -2,12 +2,15 @@ import { useState } from 'react';
 import { Link, useLocation } from 'wouter';
 import { ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { NAV_SECTIONS, navIsActive, type NavSection } from '@/lib/nav';
+import { NAV_SECTIONS, navIsActive, verticalizeNavLabel, type NavSection } from '@/lib/nav';
 import { ThemeToggle } from './theme-toggle';
+import { useVertical } from '@/hooks/use-vertical';
+import type { AffaireWords } from '@nodaq/shared';
 
 /** Desktop-only horizontal ribbon. Hidden on mobile (MobileNav handles that). */
 export function TopRibbon() {
   const [location] = useLocation();
+  const { words, proposalWord } = useVertical();
 
   return (
     // Outer bar: full width, no overflow — keeps the toggle always in view
@@ -30,6 +33,8 @@ export function TopRibbon() {
               section={section}
               sectionActive={sectionActive}
               location={location}
+              words={words}
+              proposalWord={proposalWord}
             />
           );
         })}
@@ -47,10 +52,14 @@ function SectionTab({
   section,
   sectionActive,
   location,
+  words,
+  proposalWord,
 }: {
   section: NavSection;
   sectionActive: boolean;
   location: string;
+  words: AffaireWords;
+  proposalWord: string;
 }) {
   const [open, setOpen] = useState(false);
   const primary = section.items[0]!;
@@ -126,7 +135,7 @@ function SectionTab({
                   )}
                   strokeWidth={2}
                 />
-                {item.label}
+                {verticalizeNavLabel(item.href, item.label, words, proposalWord)}
               </Link>
             );
           })}
