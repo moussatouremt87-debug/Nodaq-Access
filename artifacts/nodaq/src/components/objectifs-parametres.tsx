@@ -15,12 +15,14 @@ import { Loader2, Target } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
+import { useVertical } from '@/hooks/use-vertical';
 import { apiFetch } from '@/lib/auth';
 
 const API = '/api';
 
 export function ObjectifsParametres() {
   const { toast } = useToast();
+  const { words } = useVertical();
   const queryClient = useQueryClient();
   const [chargesEuros, setChargesEuros] = useState('');
   const [tauxPct, setTauxPct] = useState('');
@@ -119,7 +121,7 @@ export function ObjectifsParametres() {
         </p>
       )}
       <p className="mb-4 text-xs text-muted-foreground">
-        Ce que vous payez même sans chantier : loyer, assurances, salaires permanents,
+        Ce que vous payez même sans {words.singular} : loyer, assurances, salaires permanents,
         crédits, comptable.
       </p>
 

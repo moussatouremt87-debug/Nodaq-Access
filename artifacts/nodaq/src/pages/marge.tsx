@@ -12,6 +12,9 @@ import {
 } from '@/components/ui/select';
 import { fmtEUR } from '@/lib/format';
 import { containerVariants, itemVariants } from '@/lib/motion-variants';
+import { useVertical } from '@/hooks/use-vertical';
+
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 
 const API = '/api';
@@ -65,6 +68,8 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 export default function MargePage() {
+  const { words } = useVertical();
+  const feminin = words.indefinite.startsWith('une ');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const { data, isLoading, isError } = useMargeStats(statusFilter !== 'ALL' ? statusFilter : undefined);
 
@@ -82,7 +87,7 @@ export default function MargePage() {
       <PageHeader
         eyebrow="Finance"
         title="Marge"
-        description="Analysez votre rentabilité par affaire et par période."
+        description={`Analysez votre rentabilité par ${words.singular} et par période.`}
         actions={
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-48 gap-1.5">
@@ -151,7 +156,7 @@ export default function MargePage() {
             )}
             {!isLoading && (data?.affairesMargeInconnue ?? 0) > 0 && (
               <div className="mt-2 text-[11px] text-muted-foreground">
-                {data!.affairesMargeInconnue} affaire(s) sans marge mesurée, exclue(s) du calcul
+                {data!.affairesMargeInconnue} {words.singular}(s) sans marge mesuré{feminin ? 'e' : ''}(s), exclu{feminin ? 'e' : ''}(s) du calcul
               </div>
             )}
           </motion.div>
@@ -184,7 +189,7 @@ export default function MargePage() {
         {/* Table */}
         <div className="rounded-xl border border-card-border bg-card shadow-sm overflow-hidden">
           <div className="px-5 py-3 border-b border-border">
-            <h2 className="text-sm font-medium">Détail par affaire</h2>
+            <h2 className="text-sm font-medium">Détail par {words.singular}</h2>
           </div>
           {isLoading ? (
             <div className="p-4 space-y-3">
@@ -194,13 +199,13 @@ export default function MargePage() {
             <div className="p-8 text-center text-sm text-destructive">Impossible de charger les données.</div>
           ) : (data?.affaires ?? []).length === 0 ? (
             <div className="p-10 text-center text-sm text-muted-foreground">
-              Aucune affaire avec données de marge pour ce filtre.
+              {words.noneLabel} avec données de marge pour ce filtre.
             </div>
           ) : (
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                  <th className="px-5 py-3 font-medium">Affaire</th>
+                  <th className="px-5 py-3 font-medium">{capitalize(words.singular)}</th>
                   <th className="px-4 py-3 font-medium">Client</th>
                   <th className="px-4 py-3 font-medium text-right">CA facturé</th>
                   <th className="px-4 py-3 font-medium text-right">Marge (€)</th>

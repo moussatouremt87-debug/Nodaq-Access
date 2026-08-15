@@ -21,8 +21,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { useVertical } from '@/hooks/use-vertical';
 import { apiFetch } from '@/lib/auth';
 import { fmtEUR } from '@/lib/format';
+
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 const API = '/api';
 
@@ -68,7 +71,8 @@ function BlocCard({
   onValidate: (data: Record<string, unknown>) => void;
   children: (props: { onValidate: (data: Record<string, unknown>) => void }) => React.ReactNode;
 }) {
-  const label = BLOC_LABELS[bloc] ?? bloc;
+  const { words } = useVertical();
+  const label = bloc === 'chantiers' ? `${capitalize(words.plural)} en cours` : (BLOC_LABELS[bloc] ?? bloc);
 
   if (passe) {
     return (
@@ -109,6 +113,7 @@ interface ChantierRow {
 }
 
 function BlocChantiers({ onValidate }: { onValidate: (data: Record<string, unknown>) => void }) {
+  const { words } = useVertical();
   const [rows, setRows] = useState<ChantierRow[]>([
     { id: crypto.randomUUID(), label: '', client: '', montantHt: '', avancement: '', dateFinPrevue: '' },
   ]);
@@ -139,7 +144,7 @@ function BlocChantiers({ onValidate }: { onValidate: (data: Record<string, unkno
         <table className="w-full text-sm min-w-[600px]">
           <thead>
             <tr className="text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border">
-              <th className="pb-2 text-left font-medium">Chantier</th>
+              <th className="pb-2 text-left font-medium">{capitalize(words.singular)}</th>
               <th className="pb-2 text-left font-medium px-2">Client</th>
               <th className="pb-2 text-right font-medium px-2">Montant HT (€)</th>
               <th className="pb-2 text-right font-medium px-2">Avancement (%)</th>
@@ -152,7 +157,7 @@ function BlocChantiers({ onValidate }: { onValidate: (data: Record<string, unkno
               <tr key={row.id} className="border-b border-border last:border-0">
                 <td className="py-1.5 pr-2">
                   <Input value={row.label} onChange={e => update(row.id, 'label', e.target.value)}
-                    placeholder={`Chantier ${i + 1}`}
+                    placeholder={`${capitalize(words.singular)} ${i + 1}`}
                     className="h-8 text-sm border-0 bg-transparent px-0 focus-visible:ring-0"
                     onKeyDown={e => e.key === 'Tab' && i === rows.length - 1 && (e.preventDefault(), addRow())} />
                 </td>
@@ -188,7 +193,7 @@ function BlocChantiers({ onValidate }: { onValidate: (data: Record<string, unkno
         </table>
       </div>
       <Button variant="ghost" size="sm" onClick={addRow} className="h-7 gap-1 text-xs">
-        <Plus className="h-3.5 w-3.5" /> Ajouter un chantier
+        <Plus className="h-3.5 w-3.5" /> Ajouter {words.indefinite}
       </Button>
       <Button onClick={handleValidate} size="sm" className="gap-1.5">
         <Check className="h-3.5 w-3.5" /> Valider
@@ -390,12 +395,17 @@ function BlocPlanning({ onValidate, donneesInsuffisantes }: {
   onValidate: (data: Record<string, unknown>) => void;
   donneesInsuffisantes?: boolean;
 }) {
+  const { words } = useVertical();
+  // `indefinite` ("un chantier"/"une mission") est le seul endroit où le genre
+  // du mot est explicite dans `AffaireWords` — s'en servir ici pour accorder
+  // "enregistré(e)s", plutôt que de figer un accord féminin hérité d'« affaires ».
+  const feminin = words.indefinite.startsWith('une ');
   if (donneesInsuffisantes) {
     return (
       <div className="space-y-3">
         <div className="rounded-lg bg-muted/50 border border-border p-3 text-sm text-muted-foreground">
-          Avec moins de 3 affaires enregistrées, le planning déduit ne peut pas encore être calculé.
-          Ajoutez d'abord vos chantiers en cours.
+          Avec moins de 3 {words.plural} enregistré{feminin ? 'es' : 's'}, le planning déduit ne peut pas encore être calculé.
+          Ajoutez d'abord vos {words.plural} en cours.
         </div>
         <Button size="sm" onClick={() => onValidate({})} className="gap-1.5">
           <Check className="h-3.5 w-3.5" /> Continuer
@@ -407,7 +417,7 @@ function BlocPlanning({ onValidate, donneesInsuffisantes }: {
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">
-        Le planning est déduit de vos chantiers et de votre équipe.
+        Le planning est déduit de vos {words.plural} et de votre équipe.
         Vous pouvez corriger la répartition de la semaine en cours.
       </p>
       <Button size="sm" onClick={() => onValidate({})} className="gap-1.5">

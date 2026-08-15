@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
+import { useVertical } from '@/hooks/use-vertical';
 import { apiFetch } from '@/lib/auth';
 import { toDateString } from '@/lib/format';
 import { containerVariants, itemVariants } from '@/lib/motion-variants';
@@ -55,6 +56,8 @@ const fmtJour = (iso: string): string => {
 
 export default function Pointages() {
   const { toast } = useToast();
+  const { words } = useVertical();
+  const feminin = words.indefinite.startsWith('une ');
   const queryClient = useQueryClient();
   const [semaineRef, setSemaineRef] = useState<string | null>(null);
   /** Heures ajustées par l'utilisateur, par clé de ligne. */
@@ -163,7 +166,7 @@ export default function Pointages() {
         </div>
       ) : parAffaire.length === 0 ? (
         <div className="rounded-xl border border-card-border bg-card p-8 text-center text-sm text-muted-foreground">
-          Aucun chantier planifié cette semaine. Renseignez le planning de l'équipe pour
+          {words.noneLabel} planifié{feminin ? 'e' : ''} cette semaine. Renseignez le planning de l'équipe pour
           obtenir une proposition pré-remplie.
         </div>
       ) : (

@@ -26,6 +26,7 @@ import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
 } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
+import { useVertical } from '@/hooks/use-vertical';
 import { cn } from '@/lib/utils';
 import { apiFetch } from '@/lib/auth';
 import { toDateString } from '@/lib/format';
@@ -465,6 +466,7 @@ function EquipeBlock({
   onAdd: () => void;
 }) {
   const { toast } = useToast();
+  const { words } = useVertical();
   const activeCount = members.filter(m => m.availability !== 'ABSENT').length;
   const todayStr = toDateString(new Date());
 
@@ -485,7 +487,7 @@ function EquipeBlock({
     const todaySlot = m.schedule.find(s => s.day === TODAY_DAY_CODE);
     if (todaySlot?.affaireId) {
       const aff = affaireById.get(todaySlot.affaireId);
-      return aff ? aff.label : 'chantier en cours';
+      return aff ? aff.label : `${words.singular} en cours`;
     }
     return 'disponible';
   }
