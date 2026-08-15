@@ -22,6 +22,7 @@ import { EvolutionChart } from '@/components/analytique/evolution-chart';
 import { ConcentrationChart, type ClientShare } from '@/components/analytique/concentration-chart';
 import { useIndicateurs, useIndicateurSerie } from '@/hooks/use-analytics';
 import { buildPhrase } from '@/lib/analytics-format';
+import { useVertical } from '@/hooks/use-vertical';
 import { fmtEURCompact } from '@/lib/format';
 import type { PeriodeMode, ComparaisonMode, IndicateurResult } from '@/hooks/use-analytics';
 
@@ -75,12 +76,13 @@ export default function Analytique() {
   const [comparaison, setComparaison] = useState<ComparaisonMode>('meme_periode_n1');
 
   const { data, isLoading } = useIndicateurs({ periode, comparaison });
+  const { words } = useVertical();
 
   // Build all phrases from raw results
   const phrases = useMemo(() => {
     if (!data) return {};
-    return Object.fromEntries(data.map((r) => [r.id, buildPhrase(r)]));
-  }, [data]);
+    return Object.fromEntries(data.map((r) => [r.id, buildPhrase(r, words)]));
+  }, [data, words]);
 
   function ph(id: string) {
     return phrases[id] ?? { phrase: '—', sous: null, explication: '' };

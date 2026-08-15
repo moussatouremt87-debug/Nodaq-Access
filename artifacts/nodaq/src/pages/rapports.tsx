@@ -9,6 +9,7 @@ import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fmtEUR } from '@/lib/format';
+import { useVertical } from '@/hooks/use-vertical';
 
 import { containerVariants, itemVariants } from '@/lib/motion-variants';
 
@@ -70,6 +71,8 @@ function useRapport(mois: string) {
 export default function RapportsPage() {
   const [mois, setMois] = useState(currentMois());
   const { data, isLoading, isError } = useRapport(mois);
+  const { words } = useVertical();
+  const feminin = words.indefinite.startsWith('une ');
 
   const isFuture = mois > currentMois();
 
@@ -116,7 +119,7 @@ export default function RapportsPage() {
           {([
             { label: "CA du mois", icon: TrendingUp, value: data?.summary.caMois ?? 0,
               fmt: (v: number | null) => (v === null ? '—' : fmtEUR(v)), highlight: true },
-            { label: "Nouvelles affaires", icon: Briefcase, value: data?.summary.nouvellesAffaires ?? 0,
+            { label: `${feminin ? 'Nouvelles' : 'Nouveaux'} ${words.plural}`, icon: Briefcase, value: data?.summary.nouvellesAffaires ?? 0,
               fmt: (v: number | null) => String(v ?? '—') },
             { label: "Nouveaux clients", icon: Users, value: data?.summary.nouveauxClients ?? 0,
               fmt: (v: number | null) => String(v ?? '—') },
@@ -157,12 +160,12 @@ export default function RapportsPage() {
           <div className="rounded-xl border border-card-border bg-card shadow-sm overflow-hidden">
             <div className="px-5 py-3 border-b border-border flex items-center gap-2">
               <Briefcase className="h-4 w-4 text-muted-foreground" />
-              <h2 className="text-sm font-medium">Top affaires</h2>
+              <h2 className="text-sm font-medium">Top {words.plural}</h2>
             </div>
             {isLoading ? (
               <div className="p-4 space-y-3">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
             ) : (data?.topAffaires ?? []).length === 0 ? (
-              <div className="p-8 text-center text-sm text-muted-foreground">Aucune affaire ce mois.</div>
+              <div className="p-8 text-center text-sm text-muted-foreground">{words.noneLabel} ce mois.</div>
             ) : (
               <div className="divide-y divide-border">
                 {(data?.topAffaires ?? []).map((a, i) => (

@@ -25,6 +25,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
+import { useVertical } from '@/hooks/use-vertical';
 import { cn } from '@/lib/utils';
 
 import { apiFetch } from '@/lib/auth';
@@ -125,6 +126,7 @@ function RoleBadge({ role }: { role: string }) {
 
 function InviteForm() {
   const { toast } = useToast();
+  const { words } = useVertical();
   const qc = useQueryClient();
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<'MEMBER' | 'ACCOUNTANT'>('MEMBER');
@@ -184,7 +186,7 @@ function InviteForm() {
         </div>
       </div>
       <p className="text-xs text-muted-foreground mt-3">
-        Un membre voit les affaires, devis et contrats sans les montants. Un comptable voit également les données financières (factures, marge, échéancier fiscal).
+        Un membre voit les {words.plural}, devis et contrats sans les montants. Un comptable voit également les données financières (factures, marge, échéancier fiscal).
       </p>
     </div>
   );
@@ -324,6 +326,7 @@ function MembresTab() {
 export default function ParametresPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { words } = useVertical();
   const { data, isLoading } = useSettings();
   const [activeTab, setActiveTab] = useState('notifications');
 
@@ -479,7 +482,7 @@ export default function ParametresPage() {
                 <ModuleCard
                   icon={Building2}
                   label="Marge"
-                  description="Analyse de la rentabilité par affaire et par période"
+                  description={`Analyse de la rentabilité par ${words.singular} et par période`}
                   enabled={modMarge}
                   onChange={setModMarge}
                 />

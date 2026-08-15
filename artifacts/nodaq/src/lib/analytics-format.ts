@@ -9,6 +9,7 @@
  */
 import { fmtEURCompact } from '@/lib/format';
 import type { IndicateurId, IndicateurResult } from '@/hooks/use-analytics';
+import type { AffaireWords } from '@nodaq/shared';
 
 const MOIS_FR = [
   'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
@@ -45,7 +46,7 @@ export interface PhraseResult {
   tone?: 'default' | 'bon' | 'attention' | 'serieux' | 'critique';
 }
 
-type Builder = (r: IndicateurResult) => PhraseResult;
+type Builder = (r: IndicateurResult, words: AffaireWords) => PhraseResult;
 
 const BUILDERS: Record<IndicateurId, Builder> = {
   horizon_travail: (r) => {
@@ -136,12 +137,16 @@ const BUILDERS: Record<IndicateurId, Builder> = {
     };
   },
 
-  carnet_commandes_euros: (r) => ({
-    phrase: `${fmtEURCompact(r.valeur ?? 0)} de travail en cours`,
-    sous: `${r.nbSources} affaire${r.nbSources > 1 ? 's' : ''} active${r.nbSources > 1 ? 's' : ''}`,
-    explication:
-      "Valeur des affaires en cours dont la facturation n'est pas encore complète — c'est le travail déjà vendu qui reste à produire et à facturer.",
-  }),
+  carnet_commandes_euros: (r, words) => {
+    const feminin = words.indefinite.startsWith('une ');
+    const mot = r.nbSources > 1 ? words.plural : words.singular;
+    return {
+      phrase: `${fmtEURCompact(r.valeur ?? 0)} de travail en cours`,
+      sous: `${r.nbSources} ${mot} ${feminin ? 'active' : 'actif'}${r.nbSources > 1 ? 's' : ''}`,
+      explication:
+        `Valeur des ${words.plural} en cours dont la facturation n'est pas encore complète — c'est le travail déjà vendu qui reste à produire et à facturer.`,
+    };
+  },
 
   taux_signature_devis: (r) => {
     const nb = (r.detail?.nbAcceptes as number | undefined) ?? 0;
@@ -166,14 +171,19 @@ const BUILDERS: Record<IndicateurId, Builder> = {
     };
   },
 
-  montant_moyen_affaire: (r) => ({
-    phrase: `${fmtEURCompact(r.valeur ?? 0)} par affaire en moyenne`,
-    sous: `sur ${r.nbSources} affaire${r.nbSources > 1 ? 's' : ''}`,
-    explication:
-      "Valeur moyenne d'une affaire sur la période. Augmenter ce montant en ciblant des chantiers plus importants peut avoir plus d'impact que multiplier les petites affaires.",
-  }),
+  montant_moyen_affaire: (r, words) => {
+    const feminin = words.indefinite.startsWith('une ');
+    const mot = r.nbSources > 1 ? words.plural : words.singular;
+    return {
+      phrase: `${fmtEURCompact(r.valeur ?? 0)} par ${words.singular} en moyenne`,
+      sous: `sur ${r.nbSources} ${mot}`,
+      explication:
+        `Valeur moyenne d'${words.indefinite} sur la période. Augmenter ce montant en ciblant des ${words.plural} plus important${feminin ? 'e' : ''}s peut avoir plus d'impact que multiplier les petit${feminin ? 'e' : ''}s ${words.plural}.`,
+    };
+  },
 
-  jours_factures_sur_payes: (r) => {
+  jours_factures_sur_payes: (r, words) => {
+    const feminin = words.indefinite.startsWith('une ');
     const pct = Math.round(r.valeur ?? 0);
     const joursPayes = r.detail?.joursPayes as number | undefined;
     const joursFactures = r.detail?.joursFactures as number | undefined;
@@ -184,12 +194,12 @@ const BUILDERS: Record<IndicateurId, Builder> = {
           ? `${joursFactures} jours facturés sur ${joursPayes} jours payés`
           : null,
       explication:
-        "Sur les journées que vous payez, la part qui finit facturée à un client. Le reste — reprises, trajets, chantiers non refacturés — est du temps réel qui ne rentre pas.",
+        `Sur les journées que vous payez, la part qui finit facturée à un client. Le reste — reprises, trajets, ${words.plural} non refacturé${feminin ? 'e' : ''}s — est du temps réel qui ne rentre pas.`,
       tone: pct < 50 ? 'critique' : pct < 70 ? 'attention' : pct >= 85 ? 'bon' : 'default',
     };
   },
 
-  ecart_devise_realise: (r) => {
+  ecart_devise_realise: (r, words) => {
     const jours = r.valeur ?? 0;
     const ecartCents = (r.detail?.ecartMoyenCents as number | undefined) ?? 0;
     const sign = jours > 0 ? '+' : '';
@@ -199,7 +209,7 @@ const BUILDERS: Record<IndicateurId, Builder> = {
         ? `${ecartCents > 0 ? '+' : ''}${fmtEURCompact(Math.abs(ecartCents))} d'écart`
         : null,
       explication:
-        "Différence moyenne entre la date de fin prévue au devis et la date de clôture réelle. Un écart positif signifie que les chantiers prennent plus de temps que prévu.",
+        `Différence moyenne entre la date de fin prévue au devis et la date de clôture réelle. Un écart positif signifie que les ${words.plural} prennent plus de temps que prévu.`,
       tone: jours > 14 ? 'attention' : 'default',
     };
   },
@@ -217,26 +227,27 @@ const BUILDERS: Record<IndicateurId, Builder> = {
   },
 };
 
-export function buildPhrase(r: IndicateurResult): PhraseResult {
+export function buildPhrase(r: IndicateurResult, words: AffaireWords): PhraseResult {
   if (r.donneesInsuffisantes) {
     return {
       phrase: 'Pas encore assez de données',
-      sous: `Il faut au moins ${minSourcesLabel(r.id)} pour afficher cet indicateur.`,
-      explication: BUILDERS[r.id]?.(r)?.explication ?? '',
+      sous: `Il faut au moins ${minSourcesLabel(r.id, words)} pour afficher cet indicateur.`,
+      explication: BUILDERS[r.id]?.(r, words)?.explication ?? '',
     };
   }
-  return BUILDERS[r.id]?.(r) ?? { phrase: '—', sous: null, explication: '' };
+  return BUILDERS[r.id]?.(r, words) ?? { phrase: '—', sous: null, explication: '' };
 }
 
-function minSourcesLabel(id: IndicateurId): string {
+function minSourcesLabel(id: IndicateurId, words: AffaireWords): string {
+  const feminin = words.indefinite.startsWith('une ');
   const map: Partial<Record<IndicateurId, string>> = {
-    horizon_travail: '3 affaires en cours',
+    horizon_travail: `3 ${words.plural} en cours`,
     argent_qui_dort: '1 facture en attente',
-    marge_pour_100_euros: '3 affaires clôturées',
+    marge_pour_100_euros: `3 ${words.plural} clôturé${feminin ? 'e' : ''}s`,
     delai_paiement_client: '5 factures réglées',
     taux_signature_devis: '5 devis envoyés',
     delai_reponse_devis: '3 devis signés',
-    ecart_devise_realise: '3 affaires clôturées avec date prévue',
+    ecart_devise_realise: `3 ${words.plural} clôturé${feminin ? 'e' : ''}s avec date prévue`,
   };
   return map[id] ?? 'suffisamment de données';
 }
