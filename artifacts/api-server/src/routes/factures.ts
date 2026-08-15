@@ -8,7 +8,7 @@
  */
 import { Router, type IRouter } from "express";
 import { requireRole } from "../middleware/requireRole.js";
-import { withTenant, facturesTable, avoirsTable, activityTable, settingsTable, archivedPdfsTable, paiementsTable } from "@workspace/db";
+import { withTenant, facturesTable, avoirsTable, activityTable, settingsTable, archivedPdfsTable, paiementsTable, CLE_PA_API_KEY } from "@workspace/db";
 import { and, eq, desc, sql } from "drizzle-orm";
 import { z } from "zod";
 import { auditInvoice } from "@nodaq/facturx";
@@ -26,8 +26,10 @@ import {
   type FactureAddress,
 } from "../lib/pdf-generation.js";
 import { sendDocument } from "../lib/canal-emission.js";
+import { auditEmissionElectronique } from "../lib/emission-electronique.js";
 import { logger } from "../lib/logger.js";
 import { champsErreur } from "../lib/erreur-pg.js";
+import { secretExiste } from "../lib/tenant-secrets.js";
 
 const router: IRouter = Router();
 
@@ -420,6 +422,19 @@ router.post("/factures/:id/emettre", async (req, res): Promise<void> => {
     res.status(422).json({
       error: "Émission bloquée — mentions obligatoires manquantes.",
       issues: blockers.map(i => ({ code: i.code, message: i.message })),
+    });
+    return;
+  }
+
+  // 3bis. Émission électronique obligatoire (US-A2.6) — no-op avant le
+  // 01/09/2027 (voir emission-electronique.ts), donc sans effet aujourd'hui.
+  const paConfiguree = await secretExiste(tenantId, CLE_PA_API_KEY);
+  const emissionIssues = auditEmissionElectronique(new Date(), paConfiguree);
+  const emissionBlockers = emissionIssues.filter(i => i.bloquant);
+  if (emissionBlockers.length > 0) {
+    res.status(422).json({
+      error: "Émission bloquée — facturation électronique obligatoire non configurée.",
+      issues: emissionBlockers.map(i => ({ code: i.code, message: i.message })),
     });
     return;
   }

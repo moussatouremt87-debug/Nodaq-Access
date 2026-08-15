@@ -34,10 +34,24 @@
  */
 
 import { createTransport, type Transporter } from "nodemailer";
-import { eq } from "drizzle-orm";
-import { withTenant, parametresEnvoiTable, envoisJournalTable, CLE_SMTP_PASSWORD } from "@workspace/db";
+import { eq, and } from "drizzle-orm";
+import {
+  withTenant,
+  parametresEnvoiTable,
+  envoisJournalTable,
+  paTransmissionsTable,
+  CLE_SMTP_PASSWORD,
+} from "@workspace/db";
 import type { ModeEnvoi } from "@workspace/db";
 import { lireSecret } from "./tenant-secrets.js";
+import { extractFacturXXml } from "@nodaq/facturx";
+import {
+  getConfig,
+  submitInvoice,
+  isValidTransition,
+  PaConfigError,
+  type SubmissionStatus,
+} from "@nodaq/plateforme-agreee";
 
 export type CanalEmission = "EMAIL" | "PLATEFORME_AGREEE";
 
@@ -233,16 +247,120 @@ async function journaliser(
   }
 }
 
+/**
+ * Écrit (ou met à jour) le statut de transmission d'une facture, en
+ * respectant le vocabulaire normatif : un statut hors ordre (webhook rejoué,
+ * réponse en double) est IGNORÉ plutôt qu'appliqué — voir isValidTransition
+ * dans @nodaq/facturx.
+ */
+async function ecrireTransmission(
+  tenantId: string,
+  documentId: string,
+  nouveauStatut: SubmissionStatus,
+  submissionId?: string,
+): Promise<void> {
+  await withTenant(tenantId, async (tx) => {
+    const [existant] = await tx
+      .select()
+      .from(paTransmissionsTable)
+      .where(
+        and(
+          eq(paTransmissionsTable.tenantId, tenantId),
+          eq(paTransmissionsTable.documentType, "FACTURE"),
+          eq(paTransmissionsTable.documentId, documentId),
+        ),
+      );
+
+    if (existant) {
+      if (!isValidTransition(existant.statut as SubmissionStatus, nouveauStatut)) return;
+      await tx
+        .update(paTransmissionsTable)
+        .set({
+          statut: nouveauStatut,
+          updatedAt: new Date(),
+          ...(submissionId ? { submissionId } : {}),
+        })
+        .where(eq(paTransmissionsTable.id, existant.id));
+      return;
+    }
+
+    await tx.insert(paTransmissionsTable).values({
+      tenantId,
+      documentType: "FACTURE",
+      documentId,
+      statut: nouveauStatut,
+      ...(submissionId ? { submissionId } : {}),
+    });
+  });
+}
+
+/**
+ * Transmission via une plateforme agréée (US-A2.6) — distinct de l'envoi
+ * EMAIL au client : la PA n'a pas d'adresse « to », `opts.to`/`subject`/
+ * `body` ne s'appliquent pas ici. Le document à transmettre est le PREMIER
+ * fichier joint (le Factur-X déjà archivé par factures.ts) ; son XML est
+ * relu via extractFacturXXml plutôt que reconstruit, pour transmettre
+ * EXACTEMENT ce qui a été archivé.
+ */
+async function sendViaPlateformeAgreee(opts: SendOptions, loggedAt: string): Promise<SendResult> {
+  let config;
+  try {
+    config = getConfig();
+  } catch (err) {
+    if (err instanceof PaConfigError) {
+      console.log(`[canal-emission] PLATEFORME_AGREEE — non configurée (${err.missingVar})`);
+      return {
+        success: false,
+        stub: "Aucune plateforme agréée n'est configurée sur ce déploiement.",
+        loggedAt,
+      };
+    }
+    throw err;
+  }
+
+  const piece = opts.attachments?.[0];
+  if (!piece) {
+    return { success: false, error: "Aucun document à transmettre.", loggedAt };
+  }
+  const pdfBytes = Buffer.from(piece.content);
+
+  let xml: string | null;
+  try {
+    xml = await extractFacturXXml(pdfBytes);
+  } catch {
+    xml = null;
+  }
+  if (!xml) {
+    return { success: false, error: "Le document joint n'est pas un Factur-X exploitable.", loggedAt };
+  }
+
+  const documentId = opts.documentId ?? piece.filename;
+
+  let resultat;
+  try {
+    resultat = await submitInvoice(config, {
+      documentType: "FACTURE",
+      documentId,
+      payload: xml,
+      pdfBytes,
+    });
+  } catch (err) {
+    await ecrireTransmission(opts.tenantId, documentId, "erreur");
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[canal-emission] PLATEFORME_AGREEE échec — ${msg}`);
+    return { success: false, error: msg, loggedAt };
+  }
+
+  await ecrireTransmission(opts.tenantId, documentId, resultat.status, resultat.submissionId);
+  console.log(`[canal-emission] PLATEFORME_AGREEE transmis — statut: ${resultat.status}`);
+  return { success: true, messageId: resultat.submissionId, loggedAt };
+}
+
 export async function sendDocument(opts: SendOptions): Promise<SendResult> {
   const loggedAt = new Date().toISOString();
 
   if (opts.canal === "PLATEFORME_AGREEE") {
-    console.log("[canal-emission] PLATEFORME_AGREEE — non branché");
-    return {
-      success: false,
-      stub: "PLATEFORME_AGREEE non branché — ce canal sera activé lors de la connexion à une PDP agréée en 2027.",
-      loggedAt,
-    };
+    return sendViaPlateformeAgreee(opts, loggedAt);
   }
 
   const expediteur = await resoudreExpediteur(opts.tenantId, opts.fromName ?? "NODAQ");
