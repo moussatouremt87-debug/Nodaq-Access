@@ -31,8 +31,10 @@ const API = '/api';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
+// Pas d'entrée `chantiers` ici : son libellé est TOUJOURS résolu par
+// `useVertical()` dans BlocCard ci-dessous (mot adapté au secteur), jamais
+// depuis cette table statique.
 const BLOC_LABELS: Record<string, string> = {
-  chantiers: 'Chantiers en cours',
   'impayés': 'Factures impayées',
   devis: 'Devis en attente',
   ca_ytd: 'Chiffre d\'affaires YTD',

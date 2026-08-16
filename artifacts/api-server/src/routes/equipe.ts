@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { withTenant, DrizzleTx, teamMembersTable, affairesTable, facturesTable, settingsTable } from "@workspace/db";
 import { eq, asc, sql } from "drizzle-orm";
 import { z } from "zod";
-import { toDateString } from "@nodaq/shared";
+import { toDateString, affaireWords } from "@nodaq/shared";
 import {
   buildSemaines,
   calcHorizon,
@@ -171,12 +171,18 @@ router.delete("/equipe/:id", async (req, res): Promise<void> => {
 
 // ── Planning ──────────────────────────────────────────────────────────────
 
+// Même clé et même défaut que routes/votre-metier.ts (US-A1.1) : un tenant
+// qui n'a jamais répondu garde le vocabulaire BTP historique.
+const VERTICAL_SETTING_KEY = "votre-metier.metier";
+const DEFAULT_VERTICAL = "industrie_btp";
+
 async function fetchPlanningData(tenantId: string) {
   return withTenant(tenantId, async (tx) => {
     const tauxRaw = await getSetting(tx, "equipe.tauxJourFacture");
     const coutRaw = await getSetting(tx, "equipe.coutJourCharge");
     const tauxJourFacture = tauxRaw !== null ? Number(tauxRaw) : null;
     const coutJourCharge  = coutRaw !== null ? Number(coutRaw) : null;
+    const metier = (await getSetting(tx, VERTICAL_SETTING_KEY)) ?? DEFAULT_VERTICAL;
 
     const rawMembers = await tx.select().from(teamMembersTable).orderBy(asc(teamMembersTable.createdAt));
 
@@ -192,7 +198,7 @@ async function fetchPlanningData(tenantId: string) {
     const rawAffaires = await tx.select().from(affairesTable);
     const invoices    = await tx.select().from(facturesTable);
 
-    return { tauxJourFacture, coutJourCharge, rawMembers, absences, rawAffaires, invoices };
+    return { tauxJourFacture, coutJourCharge, rawMembers, absences, rawAffaires, invoices, metier };
   });
 }
 
@@ -200,8 +206,9 @@ router.get("/equipe/plannings", async (req, res): Promise<void> => {
   const tenantId = req.tenantId!;
   await ensureDefaultMembers(tenantId);
 
-  const { tauxJourFacture, coutJourCharge, rawMembers, absences, rawAffaires, invoices } =
+  const { tauxJourFacture, coutJourCharge, rawMembers, absences, rawAffaires, invoices, metier } =
     await fetchPlanningData(tenantId);
+  const words = affaireWords(metier);
 
   const parametresManquants = tauxJourFacture === null || coutJourCharge === null;
   const taux = tauxJourFacture ?? 0.7;
@@ -221,7 +228,7 @@ router.get("/equipe/plannings", async (req, res): Promise<void> => {
 
   const today = todayForPlanning();
   const semaines = buildSemaines({ today, members, absences, affaires, weekCount: WEEK_COUNT, tauxJourFacture: taux, coutJourCharge: cout });
-  const horizonResult = calcHorizon(semaines, activeCount);
+  const horizonResult = calcHorizon(semaines, activeCount, words);
 
   const avgDispo = semaines.length > 0
     ? semaines.reduce((s, w) => s + w.joursDisponibles, 0) / semaines.length : 5;
@@ -260,8 +267,9 @@ router.post("/equipe/plannings/simuler", async (req, res): Promise<void> => {
   if (!parsed.success) { res.status(400).json({ error: parsed.error.flatten() }); return; }
 
   const tenantId = req.tenantId!;
-  const { tauxJourFacture, coutJourCharge, rawMembers, absences, rawAffaires } =
+  const { tauxJourFacture, coutJourCharge, rawMembers, absences, rawAffaires, metier } =
     await fetchPlanningData(tenantId);
+  const words = affaireWords(metier);
 
   const taux = tauxJourFacture ?? 0.7;
   const cout = coutJourCharge ?? 250;
@@ -286,7 +294,7 @@ router.post("/equipe/plannings/simuler", async (req, res): Promise<void> => {
   const result = simulerChantier({
     joursNecessaires: parsed.data.joursNecessaires,
     personnesNecessaires: parsed.data.personnesNecessaires,
-    semaines, activeCount,
+    semaines, activeCount, words,
   });
   res.json(result);
 });

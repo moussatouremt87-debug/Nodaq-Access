@@ -38,13 +38,19 @@ import {
   convertirEnChantiers,
   choisirTon,
   joursRestantsExercice,
+  affaireWords,
   MIN_AFFAIRES_POUR_CONVERSION,
   CLE_TAUX_MARGE,
   CLE_CHARGES_FIXES,
   type AffaireTerminee,
+  type AffaireWords,
   type ConversionChantiers,
   type TonObjectif,
 } from "@nodaq/shared";
+
+// Même clé et même défaut que routes/votre-metier.ts (US-A1.1).
+const VERTICAL_SETTING_KEY = "votre-metier.metier";
+const DEFAULT_VERTICAL = "industrie_btp";
 
 const router: IRouter = Router();
 
@@ -85,6 +91,7 @@ function texteObjectif(
   ecartCents: number,
   conversion: ConversionChantiers | null,
   intitule: string,
+  words: AffaireWords,
 ): { titre: string; message: string; action: string | null } {
   if (ton === "atteint") {
     return {
@@ -96,7 +103,7 @@ function texteObjectif(
 
   const chantiers =
     conversion !== null
-      ? ` Soit environ ${conversion.nbChantiers} chantier${conversion.nbChantiers > 1 ? "s" : ""} ` +
+      ? ` Soit environ ${conversion.nbChantiers} ${conversion.nbChantiers > 1 ? words.plural : words.singular} ` +
         `de votre taille habituelle (${euros(conversion.montantMedianCents)}, ` +
         `${conversion.dureeMedianeJours} jours).`
       : "";
@@ -113,7 +120,7 @@ function texteObjectif(
   return {
     titre: intitule,
     message: `Écart restant : ${euros(ecartCents)}.${chantiers}`,
-    action: "Chercher des chantiers",
+    action: `Chercher des ${words.plural}`,
   };
 }
 
@@ -206,6 +213,7 @@ router.get("/cockpit/objectifs", async (req, res): Promise<void> => {
 
     const chargesFixes = nombreOuNull(await reglage(tx, CLE_CHARGES_FIXES));
     const tauxMarge = nombreOuNull(await reglage(tx, CLE_TAUX_MARGE));
+    const metier = (await reglage(tx, VERTICAL_SETTING_KEY)) ?? DEFAULT_VERTICAL;
 
     return {
       caN: caN?.total ?? 0,
@@ -216,8 +224,10 @@ router.get("/cockpit/objectifs", async (req, res): Promise<void> => {
       franchissements,
       chargesFixes,
       tauxMarge,
+      metier,
     };
   });
+  const words = affaireWords(calcul.metier);
 
   const affairesTerminees: AffaireTerminee[] = calcul.affaires
     .map((a) => {
@@ -250,7 +260,7 @@ router.get("/cockpit/objectifs", async (req, res): Promise<void> => {
     objectifs.push({
       id: "exercice_precedent",
       ton,
-      ...texteObjectif(ton, ecart, conversion, "L'exercice précédent"),
+      ...texteObjectif(ton, ecart, conversion, "L'exercice précédent", words),
       ecartCents: ecart,
       // Contexte : où en était-on à la même date l'an dernier.
       avanceSurMemePeriodeCents: Math.round(calcul.caN - calcul.caN1MemePeriode),
@@ -281,7 +291,7 @@ router.get("/cockpit/objectifs", async (req, res): Promise<void> => {
     objectifs.push({
       id: "seuil_rentabilite",
       ton,
-      ...texteObjectif(ton, ecart, conversion, "Le seuil de rentabilité"),
+      ...texteObjectif(ton, ecart, conversion, "Le seuil de rentabilité", words),
       ecartCents: ecart,
       seuilCents: seuil.seuilCents,
       provenance: seuil.provenance,
