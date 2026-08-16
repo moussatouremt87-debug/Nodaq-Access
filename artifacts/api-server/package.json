@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@nodaq/banque-agreee": "workspace:*",
     "@nodaq/classifier": "workspace:*",
     "@nodaq/crypto": "workspace:*",
     "@nodaq/facturx": "workspace:*",

@@ -25,6 +25,9 @@
       "path": "../../lib/plateforme-agreee"
     },
     {
+      "path": "../../lib/banque-agreee"
+    },
+    {
       "path": "../../lib/llm"
     },
     {

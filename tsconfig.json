@@ -11,6 +11,7 @@
     { "path": "./lib/llm" },
     { "path": "./lib/facturx" },
     { "path": "./lib/plateforme-agreee" },
+    { "path": "./lib/banque-agreee" },
     { "path": "./lib/crypto" }
   ]
 }
