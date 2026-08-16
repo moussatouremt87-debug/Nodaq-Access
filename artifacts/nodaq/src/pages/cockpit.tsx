@@ -60,26 +60,9 @@ import {
   useApproveAction,
   useRejectAction,
 } from '@/hooks/use-cockpit';
-import { useQuery } from '@tanstack/react-query';
-import { apiFetch } from '@/lib/auth';
 import { useIsOwner, useHasFinancialAccess } from '@/hooks/use-auth';
 import { useVertical } from '@/hooks/use-vertical';
-
-const API = '/api';
-
-/** Vrai si le profil entreprise n'est pas encore renseigné (SIRET absent). */
-function useProfilIncomplet() {
-  return useQuery({
-    queryKey: ['onboarding-profil'],
-    queryFn: async () => {
-      const res = await apiFetch(`${API}/onboarding/profil`);
-      if (!res.ok) return { incomplete: false };
-      const { profile } = await res.json() as { profile: Record<string, string> };
-      return { incomplete: !profile['company.siret'] };
-    },
-    staleTime: 1000 * 60 * 5,
-  });
-}
+import { useCompanyProfile } from '@/hooks/use-company-profile';
 
 /** Formats a plain integer count for the animated counter */
 const fmtCount = (n: number) => String(n);
@@ -104,7 +87,7 @@ export default function Cockpit() {
   const { data: pendingActions, isLoading: pendingLoading, isError: pendingError } = usePendingActions();
   const { approve, isPending: approving } = useApproveAction();
   const { reject, isPending: rejecting } = useRejectAction();
-  const { data: profilData } = useProfilIncomplet();
+  const { incomplete: profilIncomplet } = useCompanyProfile();
   const isOwner = useIsOwner();
   const financier = useHasFinancialAccess();
 
@@ -197,7 +180,7 @@ export default function Cockpit() {
         )}
 
         {/* CTA : profil entreprise non renseigné (OWNER uniquement) */}
-        {profilData?.incomplete && isOwner && (
+        {profilIncomplet && isOwner && (
           <motion.div
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
