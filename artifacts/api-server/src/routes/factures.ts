@@ -31,6 +31,7 @@ import { auditEmissionElectronique } from "../lib/emission-electronique.js";
 import { logger } from "../lib/logger.js";
 import { champsErreur } from "../lib/erreur-pg.js";
 import { secretExiste } from "../lib/tenant-secrets.js";
+import { estFactureEnRetard, residuelFactureCents } from "../lib/facturesEnRetard.js";
 
 const router: IRouter = Router();
 
@@ -220,15 +221,10 @@ router.get("/factures", async (req, res): Promise<void> => {
     : factures;
 
   const totalAmountCents = filtered.reduce((acc, f) => acc + (f.amountCents ?? 0), 0);
-  // `dueDate` est une date métier (AAAA-MM-JJ), pas un instant. La comparer à
-  // `new Date()` (l'heure exacte) faisait passer en retard une échéance du
-  // jour même dès la première seconde après minuit UTC — absurde pour un
-  // modèle comptant (US-A3.4), et confirmé en UAT. Comparaison chaîne contre
-  // chaîne : une échéance n'est en retard qu'à partir de DEMAIN.
   const aujourdhui = toDateString(new Date());
   const totalOverdueCents = filtered
-    .filter(f => f.statut !== "PAYEE" && f.statut !== "ANNULEE_PAR_AVOIR" && f.dueDate < aujourdhui)
-    .reduce((acc, f) => acc + (f.residualCents ?? f.amountCents ?? 0), 0);
+    .filter(f => estFactureEnRetard(f, aujourdhui))
+    .reduce((acc, f) => acc + residuelFactureCents(f), 0);
 
   res.json({ factures: filtered, totalAmountCents, totalOverdueCents });
 });
