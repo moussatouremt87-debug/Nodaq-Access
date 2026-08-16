@@ -3,16 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>nodaq — Vos clients vous doivent en moyenne 44 jours de trop.</title>
+<title>NODAQ — Vos clients vous doivent en moyenne 44 jours de trop.</title>
 <meta name="description" content="nodaq dicte vos devis, classe vos factures d’un coup de photo, relance vos impayés et calcule la marge de chaque chantier. Assistant souverain français pour les TPE du bâtiment.">
 <meta name="theme-color" content="#0a0b0f">
 
 <meta property="og:type" content="website">
 <meta property="og:locale" content="fr_FR">
-<meta property="og:title" content="nodaq — Vous ne saisissez rien. Vous dictez, vous photographiez, vous validez.">
+<meta property="og:title" content="NODAQ — Vous ne saisissez rien. Vous dictez, vous photographiez, vous validez.">
 <meta property="og:description" content="L’assistant quotidien des TPE du bâtiment. Devis dictés, factures photographiées, marge par chantier, relances d’impayés. Hébergé en France.">
 
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230a0b0f'/><path d='M10 23V9l12 14V9' stroke='%23a3e635' stroke-width='2.6' fill='none' stroke-linecap='square'/></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230a0b0f'/><path d='M8 25V7h4l8 12V7h4v18h-4l-8-12v12z' fill='%23a3e635'/><circle cx='9' cy='24' r='2.4' fill='%23d9f99d'/><circle cx='23' cy='8' r='2.4' fill='%23d9f99d'/></svg>">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -20,9 +20,13 @@
 
 <style>
 /* ═══════════════════════════════════════════════════════════════════════════
-   nodaq — landing pré-lancement (programme Fondateurs)
+   NODAQ — landing pré-lancement v3 (programme Fondateurs)
+   Ordre v3 : le CONSTAT ouvre la page, avant le hero.
    Palette : fond quasi noir, accent UNIQUE vert citron. Aucun bleu.
-   Le dégradé orange→rouge est réservé aux chiffres qui inquiètent.
+   Dégradé orange→rouge : chiffres qui inquiètent seulement, jamais un CTA.
+   Glow appuyé : réservé aux points du logo (charte v2) — le reste du lime
+   reste plat ; seules les lueurs radiales d’ambiance de fond sont permises.
+   Maquette de référence : Figma « NODAQ — Landing Fondateurs v3 ».
    ═══════════════════════════════════════════════════════════════════════════ */
 
 :root {
@@ -42,8 +46,8 @@
 
   --text:      #f4f5f3;
   --text-soft: #a8adb4;
-  /* #838a94 sur #0a0b0f ≈ 5,6:1 — au-dessus du seuil AA (4,5:1), qui s'applique
-     aussi aux lignes de source en 11px. */
+  /* #838a94 sur #0a0b0f ≈ 5,6:1 — au-dessus du seuil AA (4,5:1), qui
+     s’applique aussi aux lignes de source en 11px. */
   --text-mute: #838a94;
 
   --sans: "Inter", ui-sans-serif, system-ui, sans-serif;
@@ -73,6 +77,7 @@ h1, h2, h3, h4 { margin: 0; font-weight: 700; letter-spacing: -0.028em; line-hei
 p { margin: 0; }
 a { color: inherit; text-decoration: none; }
 img, svg, video { display: block; max-width: 100%; }
+button { font: inherit; }
 
 :focus-visible {
   outline: 2px solid var(--lime);
@@ -100,7 +105,7 @@ img, svg, video { display: block; max-width: 100%; }
 }
 .skip-link:focus { left: 0; }
 
-/* ── Lueurs radiales d’ambiance ─────────────────────────────────────────── */
+/* ── Lueurs radiales d’ambiance (fond uniquement, jamais sur un élément) ── */
 .glow {
   position: absolute;
   border-radius: 50%;
@@ -156,12 +161,11 @@ img, svg, video { display: block; max-width: 100%; }
 .btn--primary {
   background: var(--lime);
   color: var(--bg);
-  box-shadow: 0 0 0 rgba(163, 230, 53, 0);
 }
 .btn--primary:hover {
   background: var(--lime-hover);
   transform: translateY(-2px);
-  box-shadow: 0 12px 34px -12px rgba(163, 230, 53, 0.55);
+  box-shadow: 0 12px 34px -12px rgba(163, 230, 53, 0.45);
 }
 .btn--ghost {
   background: transparent;
@@ -208,15 +212,11 @@ img, svg, video { display: block; max-width: 100%; }
   height: 68px;
 }
 .logo { display: inline-flex; align-items: center; gap: 11px; }
-.logo__mark {
-  width: 34px; height: 34px;
-  border-radius: 9px;
-  display: grid; place-items: center;
-  background: var(--lime-dim);
-  border: 1px solid rgba(163, 230, 53, 0.28);
-}
+/* Le monogramme est le SEUL élément avec un glow appuyé (points pâles). */
+.logo__mark { width: 34px; height: 34px; }
+.logo__mark .dot-glow { filter: drop-shadow(0 0 5px rgba(217, 249, 157, 0.9)); }
 .logo__word {
-  font-size: 19px; font-weight: 750; letter-spacing: -0.04em;
+  font-size: 19px; font-weight: 750; letter-spacing: 0.02em;
 }
 .nav__links { display: flex; gap: 30px; }
 .nav__links a {
@@ -226,11 +226,46 @@ img, svg, video { display: block; max-width: 100%; }
 }
 .nav__links a:hover { color: var(--text); }
 
-/* ── Hero ───────────────────────────────────────────────────────────────── */
+/* ── Le constat (ouvre la page, avant le hero — ordre v3) ───────────────── */
+.constat { padding-top: 96px; }
+
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 52px; }
+.stat { display: flex; flex-direction: column; }
+.stat__fig {
+  font-family: var(--mono);
+  font-size: clamp(34px, 4vw, 44px);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1;
+}
+.stat__txt { color: var(--text-soft); font-size: 14.5px; margin-top: 16px; flex: 1; }
+.stat__src {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-mute);
+  line-height: 1.5;
+}
+
+.pivot {
+  margin-top: 42px;
+  padding: 30px 34px;
+  border-radius: var(--radius);
+  border: 1px solid rgba(163, 230, 53, 0.22);
+  background: linear-gradient(115deg, rgba(163, 230, 53, 0.075), rgba(163, 230, 53, 0.015));
+  font-size: clamp(17px, 2.1vw, 20.5px);
+  font-weight: 550;
+  letter-spacing: -0.015em;
+  line-height: 1.55;
+}
+
+/* ── Hero (après le constat) ────────────────────────────────────────────── */
 .hero {
   position: relative;
   overflow: hidden;
-  padding: 96px 0 72px;
+  padding: 88px 0 72px;
   isolation: isolate;
 }
 .hero__video {
@@ -325,6 +360,27 @@ img, svg, video { display: block; max-width: 100%; }
 .avatars span:first-child { margin-left: 0; }
 .proof__text { font-size: 14px; color: var(--text-soft); }
 .proof__text b { color: var(--text); font-weight: 650; }
+
+/* Bouton d’activation du son de la voix off — exigence v3 : la vidéo démarre
+   muette (contrainte navigateur), mais jamais silencieuse sans recours. */
+.sound-btn {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  margin: 30px auto 0;
+  padding: 9px 16px 9px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+.sound-btn.is-available { display: inline-flex; }
+.sound-btn:hover { border-color: rgba(163, 230, 53, 0.45); background: rgba(255, 255, 255, 0.08); }
+.sound-btn svg { color: var(--lime); }
 
 /* ── Maquette dashboard ─────────────────────────────────────────────────── */
 .mock {
@@ -484,39 +540,6 @@ img, svg, video { display: block; max-width: 100%; }
 .trust__t { font-size: 14.5px; font-weight: 650; }
 .trust__d { font-size: 13px; color: var(--text-mute); margin-top: 2px; }
 
-/* ── Le constat ─────────────────────────────────────────────────────────── */
-.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 52px; }
-.stat { display: flex; flex-direction: column; }
-.stat__fig {
-  font-family: var(--mono);
-  font-size: clamp(34px, 4vw, 44px);
-  font-weight: 700;
-  letter-spacing: -0.035em;
-  line-height: 1;
-}
-.stat__txt { color: var(--text-soft); font-size: 14.5px; margin-top: 16px; flex: 1; }
-.stat__src {
-  margin-top: 18px;
-  padding-top: 14px;
-  border-top: 1px solid var(--border);
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--text-mute);
-  line-height: 1.5;
-}
-
-.pivot {
-  margin-top: 42px;
-  padding: 30px 34px;
-  border-radius: var(--radius);
-  border: 1px solid rgba(163, 230, 53, 0.22);
-  background: linear-gradient(115deg, rgba(163, 230, 53, 0.075), rgba(163, 230, 53, 0.015));
-  font-size: clamp(17px, 2.1vw, 20.5px);
-  font-weight: 550;
-  letter-spacing: -0.015em;
-  line-height: 1.55;
-}
-
 /* ── Rachat de temps ────────────────────────────────────────────────────── */
 .buyback { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: center; }
 .calc {
@@ -552,8 +575,9 @@ img, svg, video { display: block; max-width: 100%; }
 .calc__total .calc__v { font-size: 30px; }
 .calc__note { margin-top: 16px; font-size: 12.5px; color: var(--text-mute); }
 
-/* ── Fonctionnalités ────────────────────────────────────────────────────── */
+/* ── Fonctionnalités (7 cartes — la 7e s’étale sur la ligne) ────────────── */
 .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 52px; }
+.feature--wide { grid-column: 1 / -1; }
 .feature__icon {
   width: 42px; height: 42px;
   border-radius: 11px;
@@ -564,6 +588,13 @@ img, svg, video { display: block; max-width: 100%; }
 }
 .feature h3 { font-size: 17.5px; letter-spacing: -0.02em; }
 .feature p { color: var(--text-soft); font-size: 14.5px; margin-top: 11px; }
+.feature__tagline {
+  margin-top: 14px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--lime-pale);
+  font-style: italic;
+}
 
 /* ── Témoignages ────────────────────────────────────────────────────────── */
 .quotes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 44px; }
@@ -634,7 +665,7 @@ img, svg, video { display: block; max-width: 100%; }
   display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap;
   margin-top: 14px;
 }
-/* `word-spacing` négatif : à 48px, l'espace de JetBrains Mono écarte trop
+/* `word-spacing` négatif : à 48px, l’espace de JetBrains Mono écarte trop
    « 49 » de « € » et le prix se lit comme deux blocs séparés. */
 .plan__amount {
   font-family: var(--mono);
@@ -653,10 +684,11 @@ img, svg, video { display: block; max-width: 100%; }
 .plan li svg { flex: none; margin-top: 4px; color: var(--lime); }
 .plan .btn { margin-top: 30px; width: 100%; justify-content: center; }
 
-/* ── Sécurité ───────────────────────────────────────────────────────────── */
-.security { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 44px; }
-.sec h3 { font-size: 15.5px; margin-top: 16px; }
-.sec p { font-size: 13.5px; color: var(--text-mute); margin-top: 9px; }
+/* ── Sécurité (5 items) ─────────────────────────────────────────────────── */
+.security { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-top: 44px; }
+.sec { padding: 24px 22px; }
+.sec h3 { font-size: 15px; margin-top: 16px; letter-spacing: -0.01em; }
+.sec p { font-size: 13px; color: var(--text-mute); margin-top: 9px; }
 
 /* ── Fondateurs ─────────────────────────────────────────────────────────── */
 .founders { position: relative; overflow: hidden; }
@@ -727,8 +759,9 @@ img, svg, video { display: block; max-width: 100%; }
 @media (max-width: 1024px) {
   :root { --pad-y: 88px; }
   .nav__links { display: none; }
-  .stats, .features, .quotes, .steps, .security, .perks,
+  .stats, .features, .quotes, .steps, .perks,
   .kpis, .trust { grid-template-columns: repeat(2, 1fr); }
+  .security { grid-template-columns: repeat(2, 1fr); }
   .panels, .buyback, .pricing { grid-template-columns: 1fr; }
   .buyback { gap: 34px; }
   .founders__box { padding: 48px 30px; }
@@ -737,13 +770,13 @@ img, svg, video { display: block; max-width: 100%; }
 @media (max-width: 640px) {
   :root { --pad-y: 68px; }
   .shell { padding: 0 20px; }
-  .stats, .features, .quotes, .steps, .security, .perks,
-  .trust, .logos { grid-template-columns: 1fr; }
+  .stats, .features, .quotes, .steps, .perks,
+  .trust, .logos, .security { grid-template-columns: 1fr; }
   /* Exception à la règle « tout en 1 colonne » : empilés un par un, les quatre
      indicateurs cessent de se lire comme un tableau de bord. On les garde à 2. */
   .kpis { grid-template-columns: repeat(2, 1fr); }
   .logos { flex-direction: column; gap: 16px; }
-  .hero { padding: 60px 0 48px; }
+  .hero { padding: 56px 0 48px; }
   .hero__ctas .btn { width: 100%; justify-content: center; }
   .mock__body { padding: 16px; }
   .card, .plan, .calc { padding: 24px; }
@@ -759,13 +792,18 @@ img, svg, video { display: block; max-width: 100%; }
 <!-- ═══ NAVIGATION ═══════════════════════════════════════════════════════ -->
 <nav class="nav">
   <div class="shell nav__inner">
-    <a class="logo" href="#" aria-label="nodaq — accueil">
-      <span class="logo__mark" aria-hidden="true">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
-          <path d="M6 19V5l12 14V5" stroke="#a3e635" stroke-width="2.4" stroke-linecap="square"/>
-        </svg>
-      </span>
-      <span class="logo__word">nodaq</span>
+    <a class="logo" href="#" aria-label="NODAQ — accueil">
+      <!-- Monogramme N : lettre pleine lime, onde vocale/performance en négatif
+           sombre, points lumineux aux extrémités (seul glow appuyé autorisé). -->
+      <svg class="logo__mark" viewBox="0 0 100 100" fill="none" aria-hidden="true">
+        <path d="M10 92 V8 H27 L73 62 V8 H90 V92 H73 L27 38 V92 Z" fill="#a3e635"/>
+        <path d="M14 82 L40 50 L52 63 L86 18" stroke="#0d1017" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="40" cy="50" r="6.5" fill="#0d1017"/>
+        <circle cx="52" cy="63" r="6.5" fill="#0d1017"/>
+        <circle class="dot-glow" cx="14" cy="82" r="8" fill="#d9f99d"/>
+        <circle class="dot-glow" cx="86" cy="18" r="8" fill="#d9f99d"/>
+      </svg>
+      <span class="logo__word">NODAQ</span>
     </a>
 
     <div class="nav__links">
@@ -783,14 +821,75 @@ img, svg, video { display: block; max-width: 100%; }
 
 <main id="main">
 
+<!-- ═══ LE CONSTAT — ouvre la page, avant le hero (ordre v3) ════════════ -->
+<section class="section constat" id="chiffres">
+  <div class="glow glow--alert" style="width:560px;height:560px;top:40px;right:-220px"></div>
+  <div class="shell">
+    <p class="eyebrow reveal">Le constat</p>
+    <h2 class="section-title reveal" style="--d:0.05s">Vous n’êtes pas seul — et c’est bien le problème.</h2>
+    <p class="section-lead reveal" style="--d:0.1s">
+      Quatre chiffres publics, aucun commentaire. Ce que vous vivez le soir à la table de
+      la cuisine porte un nom, et il est mesuré.
+    </p>
+
+    <div class="stats">
+      <article class="card stat reveal">
+        <div class="stat__fig grad-alert" data-count="86" data-suffix=" %">0</div>
+        <p class="stat__txt">
+          des entreprises françaises ont été confrontées à des retards de paiement
+          sur les 12 derniers mois — contre 82 % en 2023.
+        </p>
+        <p class="stat__src">Coface, comportements de paiement 2025</p>
+      </article>
+
+      <article class="card stat reveal" style="--d:0.07s">
+        <div class="stat__fig grad-alert" data-count="44" data-suffix=" j">0</div>
+        <p class="stat__txt">
+          de retard moyen pour les TPE, contre 36 jours pour les grandes entreprises.
+          Le BTP figure parmi les secteurs les plus exposés.
+        </p>
+        <p class="stat__src">Coface, comportements de paiement 2025</p>
+      </article>
+
+      <article class="card stat reveal" style="--d:0.14s">
+        <div class="stat__fig grad-alert" data-count="42505">0</div>
+        <p class="stat__txt">
+          défaillances d’entreprises sur les 8 premiers mois de 2025, pour
+          3,6 milliards d’euros de dettes fournisseurs impayées.
+        </p>
+        <p class="stat__src">Coface / Altares, 2025</p>
+      </article>
+
+      <article class="card stat reveal" style="--d:0.21s">
+        <div class="stat__fig grad-alert" data-count="1" data-suffix=" jour">0</div>
+        <p class="stat__txt">
+          par semaine — jusqu’à une journée pleine — englouti par l’administratif
+          pour 19 % des petites entreprises.
+        </p>
+        <p class="stat__src">Enquête charges administratives TPE, SDI</p>
+      </article>
+    </div>
+
+    <p class="pivot reveal" style="--d:0.28s">
+      Le patron qui perd 44 jours à attendre un paiement et une journée par semaine en
+      paperasse n’est pas moins bon que les autres — il fait exactement comme 86 % des
+      entreprises françaises.
+    </p>
+  </div>
+</section>
+
 <!-- ═══ HERO ════════════════════════════════════════════════════════════ -->
 <header class="hero">
   <!--
-    Vidéo d’ambiance : générée à part avec le prompt vidéo du dossier marketing.
-    Absente du dépôt (binaire) — la page reste parfaitement lisible sans elle,
-    le voile ci-dessous tient tout seul sur le fond.
+    Vidéo d’ambiance AVEC voix off française (v3) : générée à part (prompt
+    vidéo + script section 5 du document). Elle démarre muette — contrainte
+    navigateur — mais le bouton « Activer le son » ci-dessous rend la
+    narration accessible en un clic. Absente du dépôt (binaire) : la page
+    reste parfaitement lisible sans elle, le bouton son n’apparaît que si la
+    vidéo est réellement chargée.
   -->
-  <video class="hero__video" autoplay muted loop playsinline preload="none" aria-hidden="true">
+  <video class="hero__video" autoplay muted loop playsinline preload="none"
+         aria-label="Film d’ambiance : la soirée administrative d’un artisan, racontée en voix off.">
     <source src="assets/hero-loop.mp4" type="video/mp4">
   </video>
   <div class="hero__veil"></div>
@@ -834,11 +933,19 @@ img, svg, video { display: block; max-width: 100%; }
       <p class="proof__text"><b>51 artisans</b> déjà sur liste d’attente</p>
     </div>
 
+    <button class="sound-btn" type="button" aria-pressed="false" hidden>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M11 5 6 9H2v6h4l5 4V5Z" fill="currentColor"/>
+        <path class="sound-waves" d="M15.5 8.5a5 5 0 0 1 0 7M19 5a9 9 0 0 1 0 14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      <span class="sound-btn__label">Activer le son</span>
+    </button>
+
     <!-- ─── Maquette du tableau de bord ─────────────────────────────────── -->
     <div class="mock reveal" style="--d:0.3s">
       <div class="mock__bar">
         <i></i><i></i><i></i>
-        <span class="mock__title">nodaq — tableau de bord</span>
+        <span class="mock__title">nodaq — tableau de bord · à jour il y a 3 s</span>
       </div>
 
       <div class="mock__body">
@@ -976,63 +1083,6 @@ img, svg, video { display: block; max-width: 100%; }
   </div>
 </section>
 
-<!-- ═══ LE CONSTAT ══════════════════════════════════════════════════════ -->
-<section class="section" id="chiffres">
-  <div class="glow glow--alert" style="width:560px;height:560px;top:40px;right:-220px"></div>
-  <div class="shell">
-    <p class="eyebrow reveal">Le constat</p>
-    <h2 class="section-title reveal" style="--d:0.05s">Vous n’êtes pas seul — et c’est bien le problème.</h2>
-    <p class="section-lead reveal" style="--d:0.1s">
-      Quatre chiffres publics, aucun commentaire. Ce que vous vivez le soir à la table de
-      la cuisine porte un nom, et il est mesuré.
-    </p>
-
-    <div class="stats">
-      <article class="card stat reveal">
-        <div class="stat__fig grad-alert" data-count="86" data-suffix=" %">0</div>
-        <p class="stat__txt">
-          des entreprises françaises ont été confrontées à des retards de paiement
-          sur les 12 derniers mois — contre 82 % en 2023.
-        </p>
-        <p class="stat__src">Coface, comportements de paiement 2025</p>
-      </article>
-
-      <article class="card stat reveal" style="--d:0.07s">
-        <div class="stat__fig grad-alert" data-count="44" data-suffix=" j">0</div>
-        <p class="stat__txt">
-          de retard moyen pour les TPE, contre 36 jours pour les grandes entreprises.
-          Le BTP figure parmi les secteurs les plus exposés.
-        </p>
-        <p class="stat__src">Coface, comportements de paiement 2025</p>
-      </article>
-
-      <article class="card stat reveal" style="--d:0.14s">
-        <div class="stat__fig grad-alert" data-count="42505">0</div>
-        <p class="stat__txt">
-          défaillances d’entreprises sur les 8 premiers mois de 2025, pour
-          3,6 milliards d’euros de dettes fournisseurs impayées.
-        </p>
-        <p class="stat__src">Coface / Altares, 2025</p>
-      </article>
-
-      <article class="card stat reveal" style="--d:0.21s">
-        <div class="stat__fig grad-alert" data-count="1" data-suffix=" jour">0</div>
-        <p class="stat__txt">
-          par semaine perdu en administratif, jusqu’à, pour 19 % des petites
-          entreprises. Une journée facturable qui ne le sera jamais.
-        </p>
-        <p class="stat__src">Enquête charges administratives TPE, SDI</p>
-      </article>
-    </div>
-
-    <p class="pivot reveal" style="--d:0.28s">
-      Le patron qui perd 44 jours à attendre un paiement et une journée par semaine en
-      paperasse n’est pas moins bon que les autres — il fait exactement comme 86 % des
-      entreprises françaises.
-    </p>
-  </div>
-</section>
-
 <!-- ═══ RACHETER SON TEMPS ══════════════════════════════════════════════ -->
 <section class="section">
   <div class="shell buyback">
@@ -1077,14 +1127,14 @@ img, svg, video { display: block; max-width: 100%; }
   </div>
 </section>
 
-<!-- ═══ FONCTIONNALITÉS ═════════════════════════════════════════════════ -->
+<!-- ═══ FONCTIONNALITÉS — 7 cartes ══════════════════════════════════════ -->
 <section class="section" id="fonctionnalites">
   <div class="glow glow--lime" style="width:600px;height:600px;top:0;left:-280px"></div>
   <div class="shell">
     <p class="eyebrow reveal">Fonctionnalités</p>
     <h2 class="section-title reveal" style="--d:0.05s">Vous ne saisissez rien. Jamais.</h2>
     <p class="section-lead reveal" style="--d:0.1s">
-      Six tâches du quotidien, prises en charge de bout en bout. Vous n’ouvrez un
+      Sept tâches du quotidien, prises en charge de bout en bout. Vous n’ouvrez un
       formulaire que pour dire oui.
     </p>
 
@@ -1166,6 +1216,26 @@ img, svg, video { display: block; max-width: 100%; }
           tôt pour être provisionnées. Plus de découverte le jour même.
         </p>
       </article>
+
+      <!-- Nouvelle carte v3 — fraîcheur temps réel du cockpit -->
+      <article class="card feature feature--wide reveal" style="--d:0.1s">
+        <span class="feature__icon" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/>
+          </svg>
+        </span>
+        <h3>Vos chiffres ne mentent jamais</h3>
+        <p>
+          Le cockpit se met à jour tout seul dès qu’un chiffre change ailleurs — une
+          action de l’agent IA dans le chat, un collègue sur un autre poste, une écriture
+          importée. Jamais besoin de recharger la page pour savoir si ce que vous
+          regardez est encore vrai.
+        </p>
+        <p class="feature__tagline">
+          « Un tableau de bord qui ment est pire qu’un tableau de bord vide — le vôtre ne
+          ment jamais. »
+        </p>
+      </article>
     </div>
   </div>
 </section>
@@ -1179,8 +1249,8 @@ img, svg, video { display: block; max-width: 100%; }
     <div class="quotes">
       <article class="card quote reveal">
         <p>
-          « Je dicte le devis dans la camionnette entre deux chantiers. Le client l’a
-          avant que je sois rentré. Avant, ça attendait le dimanche soir. »
+          « Je dicte le devis dans la camionnette entre deux chantiers. Le client l’a
+          avant que je sois rentré. Avant, ça attendait le dimanche soir. »
         </p>
         <div class="quote__who">
           <span class="quote__ini" aria-hidden="true">KB</span>
@@ -1193,8 +1263,8 @@ img, svg, video { display: block; max-width: 100%; }
 
       <article class="card quote reveal" style="--d:0.07s">
         <p>
-          « Les relances partaient quand j’y pensais, c’est-à-dire trop tard. Maintenant
-          on me les propose au bon moment, je valide d’un pouce. »
+          « Les relances partaient quand j’y pensais, c’est-à-dire trop tard. Maintenant
+          on me les propose au bon moment, je valide d’un pouce. »
         </p>
         <div class="quote__who">
           <span class="quote__ini" aria-hidden="true">SR</span>
@@ -1207,8 +1277,8 @@ img, svg, video { display: block; max-width: 100%; }
 
       <article class="card quote reveal" style="--d:0.14s">
         <p>
-          « J’ai vu qu’un chantier passait sous les 10 % de marge à la troisième semaine.
-          Avant, je l’aurais su à la fin, une fois tout payé. »
+          « J’ai vu qu’un chantier passait sous les 10 % de marge à la troisième semaine.
+          Avant, je l’aurais su à la fin, une fois tout payé. »
         </p>
         <div class="quote__who">
           <span class="quote__ini" aria-hidden="true">TL</span>
@@ -1243,7 +1313,7 @@ img, svg, video { display: block; max-width: 100%; }
         <h3>Vous dictez ou photographiez</h3>
         <p>
           À la voix depuis le chantier, ou d’une photo prise au comptoir du fournisseur.
-          Pas de clavier, pas de formulaire, pas de « je le ferai ce soir ».
+          Pas de clavier, pas de formulaire, pas de « je le ferai ce soir ».
         </p>
       </article>
 
@@ -1344,7 +1414,7 @@ img, svg, video { display: block; max-width: 100%; }
   </div>
 </section>
 
-<!-- ═══ SÉCURITÉ ════════════════════════════════════════════════════════ -->
+<!-- ═══ SÉCURITÉ — 5 items ══════════════════════════════════════════════ -->
 <section class="section">
   <div class="shell">
     <p class="eyebrow reveal">Sécurité</p>
@@ -1359,7 +1429,7 @@ img, svg, video { display: block; max-width: 100%; }
         <p>Vos documents et vos données sont chiffrés sur le disque comme sur le réseau.</p>
       </article>
 
-      <article class="card sec reveal" style="--d:0.07s">
+      <article class="card sec reveal" style="--d:0.06s">
         <span class="trust__icon" aria-hidden="true">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20"/></svg>
         </span>
@@ -1367,7 +1437,7 @@ img, svg, video { display: block; max-width: 100%; }
         <p>Scaleway, région Paris. Aucun transfert hors Union européenne.</p>
       </article>
 
-      <article class="card sec reveal" style="--d:0.14s">
+      <article class="card sec reveal" style="--d:0.12s">
         <span class="trust__icon" aria-hidden="true">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
         </span>
@@ -1375,12 +1445,21 @@ img, svg, video { display: block; max-width: 100%; }
         <p>Cloisonnement strict par entreprise, droit à l’export et à l’effacement.</p>
       </article>
 
-      <article class="card sec reveal" style="--d:0.21s">
+      <article class="card sec reveal" style="--d:0.18s">
         <span class="trust__icon" aria-hidden="true">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11V7a5 5 0 0 1 9.9-1"/><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M12 16v2"/></svg>
         </span>
         <h3>Validation humaine systématique</h3>
         <p>Aucun envoi, aucune écriture sans votre accord explicite. Sans exception.</p>
+      </article>
+
+      <!-- Nouvel item v3 — effacement RGPD complet -->
+      <article class="card sec reveal" style="--d:0.24s">
+        <span class="trust__icon" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+        </span>
+        <h3>L’effacement, vraiment complet</h3>
+        <p>Supprimer une donnée l’efface vraiment, partout où elle avait laissé une trace (droit à l’effacement, RGPD art. 17).</p>
       </article>
     </div>
   </div>
@@ -1476,12 +1555,15 @@ img, svg, video { display: block; max-width: 100%; }
   <div class="shell">
     <div class="footer__inner">
       <a class="logo" href="#">
-        <span class="logo__mark" aria-hidden="true">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
-            <path d="M6 19V5l12 14V5" stroke="#a3e635" stroke-width="2.4" stroke-linecap="square"/>
-          </svg>
-        </span>
-        <span class="logo__word">nodaq</span>
+        <svg class="logo__mark" viewBox="0 0 100 100" fill="none" aria-hidden="true">
+          <path d="M10 92 V8 H27 L73 62 V8 H90 V92 H73 L27 38 V92 Z" fill="#a3e635"/>
+          <path d="M14 82 L40 50 L52 63 L86 18" stroke="#0d1017" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="40" cy="50" r="6.5" fill="#0d1017"/>
+          <circle cx="52" cy="63" r="6.5" fill="#0d1017"/>
+          <circle class="dot-glow" cx="14" cy="82" r="8" fill="#d9f99d"/>
+          <circle class="dot-glow" cx="86" cy="18" r="8" fill="#d9f99d"/>
+        </svg>
+        <span class="logo__word">NODAQ</span>
       </a>
 
       <nav class="footer__links" aria-label="Liens de pied de page">
@@ -1577,11 +1659,38 @@ img, svg, video { display: block; max-width: 100%; }
     });
   }
 
-  /* ── Vidéo du hero : on la retire si le fichier est absent ──────────── */
+  /* ── Vidéo du hero + voix off ───────────────────────────────────────── */
+  // La vidéo démarre muette (autoplay avec son bloqué par les navigateurs),
+  // mais la voix off ne doit jamais rester inaccessible : le bouton
+  // « Activer le son » apparaît dès que la vidéo est réellement chargée.
   var heroVideo = document.querySelector(".hero__video");
-  if (heroVideo) {
-    heroVideo.addEventListener("error", function () { heroVideo.remove(); }, true);
-    // preload="none" + lecture explicite : évite de peser sur le premier rendu.
+  var soundBtn = document.querySelector(".sound-btn");
+
+  if (heroVideo && soundBtn) {
+    heroVideo.addEventListener("error", function () {
+      heroVideo.remove();
+      soundBtn.remove();
+    }, true);
+
+    heroVideo.addEventListener("canplay", function () {
+      soundBtn.hidden = false;
+      soundBtn.classList.add("is-available");
+    });
+
+    soundBtn.addEventListener("click", function () {
+      var unmuting = heroVideo.muted;
+      heroVideo.muted = !unmuting;
+      if (unmuting) {
+        // La narration se comprend depuis le début : on repart de zéro.
+        heroVideo.currentTime = 0;
+        var p = heroVideo.play();
+        if (p && typeof p.catch === "function") p.catch(function () {});
+      }
+      soundBtn.setAttribute("aria-pressed", String(unmuting));
+      soundBtn.querySelector(".sound-btn__label").textContent =
+        unmuting ? "Couper le son" : "Activer le son";
+    });
+
     if (!reduced) {
       var play = heroVideo.play();
       if (play && typeof play.catch === "function") play.catch(function () {});
