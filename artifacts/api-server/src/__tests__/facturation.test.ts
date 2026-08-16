@@ -433,6 +433,64 @@ describe("g — ATTESTATION TVA RÉDUITE", () => {
   });
 });
 
+// ── g2. TVA réduite hors bâtiment (US-A2.5) ───────────────────────────────────
+//
+// `attestation_tva_manquante` et `decennale_manquante` concernent
+// spécifiquement les travaux (art. 279-0 bis CGI, art. L.241-1 C.assur.).
+// Un secteur sans lien contractuel avec un maître d'ouvrage (ici
+// restauration_chr, absent de la liste `garantie-decennale` de
+// regulatoryWatch.ts) doit pouvoir émettre une facture à taux réduit SANS
+// ces cases, à la différence du tenant BTP ci-dessus (section g).
+
+describe("g2 — TVA RÉDUITE HORS BÂTIMENT NE BLOQUE PAS (US-A2.5)", () => {
+  let cookieRestau: string;
+
+  beforeAll(async () => {
+    const email = `fact-restau-${Date.now()}@test.nodaq`;
+    cleanupEmails.push(email);
+    const reg = await request(app)
+      .post("/api/auth/register")
+      .send({ email, password: "test-pass-1234", nom: "Owner Restau", tenantNom: "Chez Restau" })
+      .expect(201);
+    await completeMfaForRegisteredOwner(reg.body.userId);
+    cookieRestau = reg.headers["set-cookie"]?.[0] ?? "";
+
+    const { body: me } = await request(app).get("/api/auth/me").set("Cookie", cookieRestau).expect(200);
+    cleanupTenantIds.push(me.tenantId);
+
+    await request(app)
+      .patch("/api/parametres")
+      .set("Cookie", cookieRestau)
+      .send({ "company.siret": "73282932000074", "company.nom": "Chez Restau SARL" })
+      .expect(200);
+
+    await request(app)
+      .patch("/api/votre-metier")
+      .set("Cookie", cookieRestau)
+      .send({ metier: "restauration_chr" })
+      .expect(200);
+  }, 60_000);
+
+  test("taux réduit (10%), ni attestation ni décennale renseignées → émission autorisée", async () => {
+    const { id } = await createBrouillon(cookieRestau, { attestationTvaFournie: false });
+    const res = await emettre(cookieRestau, id);
+    expect(res.status).toBe(200);
+    const codes = res.body?.issues?.map?.((i: { code: string }) => i.code) ?? [];
+    expect(codes).not.toContain("attestation_tva_manquante");
+    expect(codes).not.toContain("decennale_manquante");
+    console.log("[g2] Restauration, taux réduit sans attestation/décennale → émission OK ✓");
+  });
+
+  test("le tenant BTP (section g) reste bloqué à l'identique — non-régression", async () => {
+    const { id } = await createBrouillon(cookieA, { attestationTvaFournie: false });
+    const res = await emettre(cookieA, id);
+    expect(res.status).toBe(422);
+    const codes = res.body.issues?.map((i: { code: string }) => i.code) ?? [];
+    expect(codes).toContain("attestation_tva_manquante");
+    console.log("[g2] BTP reste bloqué sans attestation — non-régression ✓");
+  });
+});
+
 // ── h. Avoir ──────────────────────────────────────────────────────────────────
 
 describe("h — AVOIR", () => {

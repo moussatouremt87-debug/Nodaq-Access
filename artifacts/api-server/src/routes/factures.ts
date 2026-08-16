@@ -12,7 +12,7 @@ import { withTenant, facturesTable, avoirsTable, activityTable, settingsTable, a
 import { and, eq, desc, sql } from "drizzle-orm";
 import { z } from "zod";
 import { auditInvoice } from "@nodaq/facturx";
-import { toDateString } from "@nodaq/shared";
+import { toDateString, type Vertical } from "@nodaq/shared";
 import { encaisseSurFacture, recalculerFacture } from "../lib/reglement-facture.js";
 import { evaluerFranchissements, messageFranchissement } from "../lib/franchissement-objectifs.js";
 import {
@@ -110,15 +110,25 @@ function computeTotals(lines: FactureLine[], autoliquidation: boolean) {
   return { totalHTCents, totalTVACents, amountCents };
 }
 
-/** Load company settings for a tenant. Returns a SellerInfo. */
-async function loadSellerInfo(tenantId: string): Promise<SellerInfo> {
+// Même clé et même défaut que routes/votre-metier.ts (US-A1.1).
+const VERTICAL_SETTING_KEY = "votre-metier.metier";
+const DEFAULT_VERTICAL: Vertical = "industrie_btp";
+
+/**
+ * Charge les réglages entreprise d'un tenant, et son vertical (US-A2.5 :
+ * `auditMentionsFR` en a besoin pour ne gater les règles travaux
+ * qu'aux secteurs réellement concernés). Une seule lecture `settings` —
+ * `byKey` porte déjà toutes les lignes, la clé vertical n'ajoute aucune
+ * requête.
+ */
+async function loadSellerInfo(tenantId: string): Promise<{ seller: SellerInfo; vertical: Vertical }> {
   const rows = await withTenant(tenantId, async tx =>
     tx.select().from(settingsTable).where(
       sql`${settingsTable.tenantId} = ${tenantId}::uuid`,
     ),
   );
   const byKey = Object.fromEntries(rows.map(r => [r.key, r.value]));
-  return {
+  const seller: SellerInfo = {
     nom: (byKey["company.nom"] as string) ?? "Entreprise",
     formeJuridique: byKey["company.forme_juridique"] as string | undefined,
     siret: (byKey["company.siret"] as string) ?? "",
@@ -130,6 +140,8 @@ async function loadSellerInfo(tenantId: string): Promise<SellerInfo> {
     decennaleNumero: byKey["company.decennale_numero"] as string | undefined,
     decennaleCouverture: byKey["company.decennale_couverture"] as string | undefined,
   };
+  const vertical = (byKey[VERTICAL_SETTING_KEY] as Vertical | undefined) ?? DEFAULT_VERTICAL;
+  return { seller, vertical };
 }
 
 /**
@@ -387,7 +399,7 @@ router.post("/factures/:id/emettre", async (req, res): Promise<void> => {
   const issuedDate = opts.issuedDate ?? toDateString(new Date());
 
   // 1. Load seller info (informational read — not holding a row lock)
-  const seller = await loadSellerInfo(tenantId);
+  const { seller, vertical } = await loadSellerInfo(tenantId);
 
   // 2. Pre-flight read for audits: load facture without locking yet
   const [preCheck] = await withTenant(tenantId, tx =>
@@ -416,7 +428,7 @@ router.post("/factures/:id/emettre", async (req, res): Promise<void> => {
     autoliquidation: preCheck.autoliquidation,
     attestationTvaFournie: preCheck.attestationTvaFournie,
   };
-  const mentionIssues = auditMentionsFR(pdfData);
+  const mentionIssues = auditMentionsFR(pdfData, vertical);
   const blockers = mentionIssues.filter(i => i.bloquant);
   if (blockers.length > 0) {
     res.status(422).json({

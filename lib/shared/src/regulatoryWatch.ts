@@ -367,3 +367,18 @@ export function matchRegulatoryItems(
     label: "information générale à date du catalogue — ne remplace pas un conseil juridique",
   };
 }
+
+/**
+ * Ce vertical a-t-il une exposition aux obligations liées aux travaux
+ * (décennale, attestation TVA taux réduit art. 279-0 bis CGI) ? US-A2.5 :
+ * `auditMentionsFR` (pdf-generation.ts) bloquait l'émission de TOUTE
+ * facture à taux réduit derrière une case "attestation travaux" sans
+ * rapport avec les secteurs hors bâtiment. Réutilise la liste déjà
+ * tranchée de l'entrée `garantie-decennale` — même famille d'obligations,
+ * même justification (art. 1792-1 1° du code civil) — plutôt que d'en
+ * dupliquer une copie qui dériverait avec le temps.
+ */
+export function decennaleApplicable(vertical: Vertical): boolean {
+  const item = REGULATORY_ITEMS.find((i) => i.id === "garantie-decennale");
+  return item?.verticals?.includes(vertical) ?? false;
+}
