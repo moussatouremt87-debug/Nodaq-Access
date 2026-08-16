@@ -96,3 +96,4 @@ export * from "./revenusAcquis.js";
 export * from "./conversationRetention.js";
 export * from "./freshnessRules.js";
 export * from "./dates.js";
+export * from "./previsionnelTresorerie.js";

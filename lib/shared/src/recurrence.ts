@@ -235,3 +235,59 @@ export function planOccurrences(input: RecurrenceInput, todayIso: string): Recur
       : null,
   };
 }
+
+export interface WindowOccurrencesResult {
+  /** Toutes les occurrences dans `[from, to]`, bornes incluses, ordre croissant. */
+  readonly occurrences: readonly string[];
+  /** Français, non nul dès qu'aucune occurrence n'a pu être calculée. */
+  readonly reason: string | null;
+}
+
+/**
+ * Occurrences d'une cadence dans une fenêtre `[from, to]` FERMÉE.
+ *
+ * Distinct de `planOccurrences` : celle-ci ne renvoie qu'UNE prochaine
+ * échéance (plus le retard éventuel) — adaptée à « que dois-je faire
+ * aujourd'hui ? ». Celle-ci répond à « qu'est-ce qui tombe dans les huit
+ * prochaines semaines ? », utile à un prévisionnel. Les deux réutilisent la
+ * même arithmétique de mois bornée au dernier jour (`addMonths`) : le bug
+ * « 31 janvier + 1 mois → 3 mars » ne doit exister qu'une fois dans ce
+ * fichier, jamais réimplémenté ailleurs.
+ */
+export function occurrencesDansFenetre(
+  input: Pick<RecurrenceInput, "cadence" | "startDate" | "endDate">,
+  from: string,
+  to: string,
+): WindowOccurrencesResult {
+  const anchor = input.startDate === null ? null : parse(input.startDate);
+  if (anchor === null) {
+    return { occurrences: [], reason: "contrat sans date de début — aucune échéance calculable" };
+  }
+  if (parse(from) === null || parse(to) === null) {
+    return { occurrences: [], reason: "fenêtre de dates illisible — aucune échéance calculable" };
+  }
+
+  const end = input.endDate;
+  const step = CADENCE_MONTHS[input.cadence];
+  const occurrences: string[] = [];
+
+  // Même avance rapide que `planOccurrences`, bornée sur `from` plutôt que sur
+  // la dernière échéance matérialisée — recule d'un pas pour ne jamais sauter
+  // une occurrence proche du début de fenêtre.
+  const floor = isAfter(from, format(anchor)) ? parse(from) : anchor;
+  let startIndex = 0;
+  if (floor !== null) {
+    const months = (floor.year - anchor.year) * 12 + (floor.month - anchor.month);
+    startIndex = Math.max(0, Math.floor(months / step) - 1);
+  }
+
+  const HARD_STOP = 4_000;
+  for (let index = startIndex; index < startIndex + HARD_STOP; index += 1) {
+    const occurrence = format(addMonths(anchor, index * step));
+    if (end !== null && isAfter(occurrence, end)) break;
+    if (isAfter(occurrence, to)) break;
+    if (isSameOrBefore(from, occurrence)) occurrences.push(occurrence);
+  }
+
+  return { occurrences, reason: null };
+}
