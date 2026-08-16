@@ -151,7 +151,7 @@ beforeAll(async () => {
     await request(app)
       .patch("/api/parametres")
       .set("Cookie", cookie)
-      .send({ "company.siret": siret, "company.nom": nom })
+      .send({ "company.siret": siret, "company.raison_sociale": nom })
       .expect(200);
   }
 }, 60_000);
@@ -461,7 +461,7 @@ describe("g2 — TVA RÉDUITE HORS BÂTIMENT NE BLOQUE PAS (US-A2.5)", () => {
     await request(app)
       .patch("/api/parametres")
       .set("Cookie", cookieRestau)
-      .send({ "company.siret": "73282932000074", "company.nom": "Chez Restau SARL" })
+      .send({ "company.siret": "73282932000074", "company.raison_sociale": "Chez Restau SARL" })
       .expect(200);
 
     await request(app)

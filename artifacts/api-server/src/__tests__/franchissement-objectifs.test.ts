@@ -147,9 +147,9 @@ describe("b — annoncé UNE SEULE FOIS", () => {
     // SIRET valide au sens de Luhn : l'audit des mentions obligatoires le
     // vérifie, et un SIRET fantaisiste fait échouer l'émission en 422.
     for (const cle of [
-      ["company.nom", "Toiture Martin"], ["company.siret", "81234567600009"],
-      ["company.adresse_rue", "12 rue X"], ["company.adresse_cp", "02120"],
-      ["company.adresse_ville", "Marly"],
+      ["company.raison_sociale", "Toiture Martin"], ["company.siret", "81234567600009"],
+      ["company.adresse", "12 rue X"], ["company.code_postal", "02120"],
+      ["company.commune", "Marly"],
     ]) await reglage(t.tenantId, cle[0]!, cle[1]!);
 
     const { body: f } = await request(app).post("/api/factures").set("Cookie", t.cookie)

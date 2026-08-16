@@ -110,7 +110,7 @@ beforeAll(async () => {
   a = await inscrire("a");
   b = await inscrire("b");
   await reglage(a.tenantId, "votre-metier.metier", "batiment");
-  await reglage(a.tenantId, "company.adresse_ville", "Marly-Gomont");
+  await reglage(a.tenantId, "company.commune", "Marly-Gomont");
 }, 90_000);
 
 afterAll(async () => {
@@ -161,7 +161,7 @@ describe("régression #43 — /axes lit votre-metier.metier, pas metier.secteur"
   test("metier.secteur seul (l'ancienne clé morte) ne suffit pas : secteur_absent", async () => {
     configurerSource();
     const t = await inscrire("regression-43");
-    await reglage(t.tenantId, "company.adresse_ville", "Marly-Gomont");
+    await reglage(t.tenantId, "company.commune", "Marly-Gomont");
     // Seule la clé que plus aucun écran ne pose jamais — voir l'issue.
     await reglage(t.tenantId, "metier.secteur", "batiment");
 
@@ -174,7 +174,7 @@ describe("régression #43 — /axes lit votre-metier.metier, pas metier.secteur"
   test("votre-metier.metier (la clé réellement posée par l'écran) suffit : des axes sont proposés", async () => {
     configurerSource();
     const t = await inscrire("regression-43-ok");
-    await reglage(t.tenantId, "company.adresse_ville", "Marly-Gomont");
+    await reglage(t.tenantId, "company.commune", "Marly-Gomont");
     await reglage(t.tenantId, "votre-metier.metier", "batiment");
 
     const { body } = await request(app).get("/api/prospection/axes")
@@ -346,7 +346,7 @@ describe("isolation", () => {
 
   test("les axes d'un tenant dépendent de SES réglages", async () => {
     await reglage(b.tenantId, "votre-metier.metier", "paysage");
-    await reglage(b.tenantId, "company.adresse_ville", "Laon");
+    await reglage(b.tenantId, "company.commune", "Laon");
 
     const rA = await request(app).get("/api/prospection/axes").set("Cookie", a.cookie).expect(200);
     const rB = await request(app).get("/api/prospection/axes").set("Cookie", b.cookie).expect(200);

@@ -91,8 +91,8 @@ const attributionsBrutes = (n: number) =>
 beforeAll(async () => {
   a = await inscrire("a");
   b = await inscrire("b");
-  await reglage(a.tenantId, "company.adresse_ville", "Marly-Gomont");
-  await reglage(a.tenantId, "company.adresse_cp", "02120");
+  await reglage(a.tenantId, "company.commune", "Marly-Gomont");
+  await reglage(a.tenantId, "company.code_postal", "02120");
   await reglage(a.tenantId, "votre-metier.metier", "batiment");
 }, 90_000);
 
@@ -128,8 +128,8 @@ describe("aucune attribution sans zone renseignée", () => {
 describe("aucune attribution sans métier mappé", () => {
   test("un métier sans correspondance CPV établie n'obtient rien, et sait pourquoi", async () => {
     configurerSource();
-    await reglage(b.tenantId, "company.adresse_ville", "Laon");
-    await reglage(b.tenantId, "company.adresse_cp", "02000");
+    await reglage(b.tenantId, "company.commune", "Laon");
+    await reglage(b.tenantId, "company.code_postal", "02000");
     await reglage(b.tenantId, "votre-metier.metier", "negoce");
     const t: TransportDecp = async () => ({ status: 200, texte: JSON.stringify({ results: attributionsBrutes(6) }) });
     const { body } = await request(appAvec(t, b.tenantId)).get("/sous-traitance").expect(200);
@@ -204,8 +204,8 @@ describe("aucun titulaire nommé sans activation explicite", () => {
 describe("isolation", () => {
   test("les agrégats d'un tenant dépendent de SES réglages", async () => {
     configurerSource();
-    await reglage(b.tenantId, "company.adresse_ville", "Laon");
-    await reglage(b.tenantId, "company.adresse_cp", "02000");
+    await reglage(b.tenantId, "company.commune", "Laon");
+    await reglage(b.tenantId, "company.code_postal", "02000");
     await reglage(b.tenantId, "votre-metier.metier", "maintenance");
     const t: TransportDecp = async () => ({ status: 200, texte: JSON.stringify({ results: attributionsBrutes(6) }) });
 

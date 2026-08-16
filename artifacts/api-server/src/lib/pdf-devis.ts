@@ -69,13 +69,13 @@ export async function chargerEmetteur(tenantId: string): Promise<SellerInfo> {
     return typeof v === "string" && v.trim().length > 0 ? v.trim() : undefined;
   };
   return {
-    nom: lire("company.nom") ?? "Entreprise",
+    nom: lire("company.raison_sociale") ?? "Entreprise",
     formeJuridique: lire("company.forme_juridique"),
     siret: lire("company.siret") ?? "",
     tvaIntracom: lire("company.tva_intracom"),
-    adresse: lire("company.adresse_rue"),
-    codePostal: lire("company.adresse_cp"),
-    ville: lire("company.adresse_ville"),
+    adresse: lire("company.adresse"),
+    codePostal: lire("company.code_postal"),
+    ville: lire("company.commune"),
     decennaleAssureur: lire("company.decennale_assureur"),
     decennaleNumero: lire("company.decennale_numero"),
     decennaleCouverture: lire("company.decennale_couverture"),

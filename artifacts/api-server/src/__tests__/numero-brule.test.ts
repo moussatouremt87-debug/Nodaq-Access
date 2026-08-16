@@ -62,7 +62,7 @@ beforeAll(async () => {
   await request(app)
     .patch("/api/parametres")
     .set("Cookie", cookie)
-    .send({ "company.siret": "81234567600009", "company.nom": "Corp Brûlée" })
+    .send({ "company.siret": "81234567600009", "company.raison_sociale": "Corp Brûlée" })
     .expect(200);
 });
 
