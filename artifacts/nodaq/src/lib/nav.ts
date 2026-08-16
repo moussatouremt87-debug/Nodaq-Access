@@ -28,7 +28,7 @@ import {
   LineChart,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import type { AffaireWords } from '@nodaq/shared';
+import { decennaleApplicable, type AffaireWords, type Vertical } from '@nodaq/shared';
 import { FINANCIAL_ROLES, type MembershipRole } from '@/hooks/use-auth';
 
 export type NavItem = {
@@ -38,6 +38,13 @@ export type NavItem = {
   testId: string;
   /** Si présent, l'entrée est masquée pour les rôles hors de cette liste. */
   requiredRoles?: readonly MembershipRole[];
+  /**
+   * Si présent, l'entrée n'est visible que pour les verticaux où ce
+   * prédicat est vrai. `undefined` (vertical pas encore chargé) est traité
+   * comme visible — même doctrine que `verticalizeNavLabel` : les valeurs
+   * par défaut avant chargement ne masquent jamais une entrée à tort.
+   */
+  visibleForVertical?: (vertical: Vertical | undefined) => boolean;
 };
 
 export type NavSection = {
@@ -61,7 +68,15 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: '/devis',     label: 'Devis',     icon: FileText,  testId: 'nav-devis' },
       { href: '/contrats',  label: 'Contrats',  icon: Repeat,    testId: 'nav-contrats' },
       { href: '/prospects', label: 'Prospects', icon: Users,     testId: 'nav-prospects' },
-      { href: '/prospection', label: 'Prospection', icon: Radar, testId: 'nav-prospection' },
+      {
+        href: '/prospection', label: 'Prospection', icon: Radar, testId: 'nav-prospection',
+        // Les 4 sources (BOAMP, sous-traitance BTP, syndics, permis de
+        // construire) sont intrinsèquement des signaux de travaux (US-B1.4,
+        // module Bâtiment) — pas un besoin générique reformulable par
+        // secteur. Réutilise la liste déjà tranchée de `decennaleApplicable`
+        // (même famille d'exposition travaux) plutôt que d'en dupliquer une.
+        visibleForVertical: (v) => v === undefined || decennaleApplicable(v),
+      },
     ],
   },
   {

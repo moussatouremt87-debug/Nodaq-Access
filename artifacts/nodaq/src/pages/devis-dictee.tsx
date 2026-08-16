@@ -32,6 +32,7 @@ import { apiFetch } from '@/lib/auth';
 import { fmtEUR } from '@/lib/format';
 import { containerVariants, itemVariants } from '@/lib/motion-variants';
 import { useDictee } from '@/hooks/use-dictee';
+import { useVertical } from '@/hooks/use-vertical';
 
 const API = '/api';
 
@@ -64,6 +65,7 @@ const ETIQUETTE: Record<Provenance, { texte: string; classe: string }> = {
 
 export default function DevisDictee() {
   const { toast } = useToast();
+  const { proposalWord } = useVertical();
   const [, navigate] = useLocation();
   const [texte, setTexte] = useState('');
   // La transcription s'AJOUTE au texte existant : on dicte souvent en
@@ -121,7 +123,7 @@ export default function DevisDictee() {
       return r.json();
     },
     onSuccess: () => {
-      toast({ title: 'Devis créé', description: 'Relisez-le avant de l’envoyer.' });
+      toast({ title: proposalWord, description: 'Créé — à relire avant l’envoi.' });
       navigate('/devis');
     },
     onError: (e: Error) => toast({ title: 'Échec', description: e.message, variant: 'destructive' }),
@@ -165,7 +167,7 @@ export default function DevisDictee() {
     <div className="mx-auto w-full max-w-3xl px-4 py-6">
       <div className="mb-5 flex items-center gap-2">
         <Mic className="h-5 w-5 text-primary" />
-        <h1 className="text-lg font-semibold">Devis dicté</h1>
+        <h1 className="text-lg font-semibold">{proposalWord} par la voix</h1>
       </div>
 
       {/* L'écran s'appelait « Devis dicté » et affichait « Dictez… » sans
@@ -217,7 +219,7 @@ export default function DevisDictee() {
           <AlertTriangle className="h-4 w-4 shrink-0 text-yellow-400" />
           <div>
             Votre catalogue est vide : aucun prix ne peut être proposé. Renseignez vos tarifs,
-            ou lancez la reprise depuis vos devis déjà émis.
+            ou lancez la reprise depuis vos documents déjà émis.
           </div>
         </div>
       )}
@@ -356,7 +358,7 @@ export default function DevisDictee() {
               {creerDevis.isPending ? (
                 <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Création…</>
               ) : (
-                'Créer le devis'
+                `Créer — ${proposalWord}`
               )}
             </Button>
           </div>
@@ -372,7 +374,7 @@ export default function DevisDictee() {
             <AlertDialogDescription>
               {lignesPerdues.map((l) => l.libelle || '(ligne sans libellé)').join(', ')}
               {' — '}
-              {aCompleter > 1 ? 'ils ne figureront pas' : 'il ne figurera pas'} dans le devis.
+              {aCompleter > 1 ? 'ils ne figureront pas' : 'il ne figurera pas'} dans le document final.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -387,7 +389,7 @@ export default function DevisDictee() {
                 creerDevis.mutate();
               }}
             >
-              Créer le devis sans {aCompleter === 1 ? 'cette ligne' : `ces ${aCompleter} lignes`}
+              Créer — {proposalWord} sans {aCompleter === 1 ? 'cette ligne' : `ces ${aCompleter} lignes`}
             </AlertDialogCancel>
           </AlertDialogFooter>
         </AlertDialogContent>

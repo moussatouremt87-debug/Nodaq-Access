@@ -6,16 +6,18 @@ import { TopRibbon } from './top-ribbon';
 import { ThemeToggle } from './theme-toggle';
 import { useAuth } from '@/hooks/use-auth';
 import { useVertical } from '@/hooks/use-vertical';
-import type { AffaireWords } from '@nodaq/shared';
+import type { AffaireWords, Vertical } from '@nodaq/shared';
+import type { NavItem } from '@/lib/nav';
 import { MicroFlottant } from '@/components/micro-flottant';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { data } = useAuth();
-  const { words, proposalWord } = useVertical();
+  const { vertical, words, proposalWord } = useVertical();
   const role = data?.authenticated === true && 'role' in data ? data.role : undefined;
-  const peutVoir = (item: { requiredRoles?: readonly string[] }) =>
-    !item.requiredRoles || (role !== undefined && item.requiredRoles.includes(role));
+  const peutVoir = (item: Pick<NavItem, 'requiredRoles' | 'visibleForVertical'>) =>
+    (!item.requiredRoles || (role !== undefined && item.requiredRoles.includes(role)))
+    && (!item.visibleForVertical || item.visibleForVertical(vertical as Vertical | undefined));
 
   return (
     <div className="min-h-[100dvh] w-full text-foreground flex grain">
