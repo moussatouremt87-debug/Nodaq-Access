@@ -25,15 +25,38 @@
  * volontairement : c'est une décision de conservation, pas un détail
  * d'implémentation.
  */
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { withTenant, devisTable, settingsTable } from "@workspace/db";
 import type { Devis, DevisLine } from "@workspace/db";
+import { verticalPack, type Vertical } from "@nodaq/shared";
 import {
   generateHumanPdf,
   type FactureForPdf,
   type FactureLine,
   type SellerInfo,
 } from "./pdf-generation.js";
+
+// Même clé et même défaut que routes/votre-metier.ts (US-A1.1).
+const VERTICAL_SETTING_KEY = "votre-metier.metier";
+const DEFAULT_VERTICAL: Vertical = "industrie_btp";
+
+/**
+ * Mot du document pour ce tenant (US-A2.1) — "Devis" ou "Proposition
+ * commerciale" selon son vertical. Requête dédiée plutôt que d'étendre
+ * `chargerEmetteur` : ce dernier a trois appelants (`pdf-devis.ts`,
+ * `routes/devis.ts`, `routes/public.ts` — la page d'acceptation publique
+ * du client) qu'il aurait fallu tous mettre à jour pour un besoin qui ne
+ * concerne que le rendu du PDF.
+ */
+async function chargerLibelleDocument(tenantId: string): Promise<string> {
+  const rows = await withTenant(tenantId, (tx) =>
+    tx.select({ value: settingsTable.value }).from(settingsTable).where(
+      sql`${settingsTable.key} = ${VERTICAL_SETTING_KEY}`,
+    ),
+  );
+  const vertical = (rows[0]?.value as Vertical | undefined) ?? DEFAULT_VERTICAL;
+  return verticalPack(vertical).proposalWord;
+}
 
 /** Coordonnées de l'émetteur, lues dans les réglages du tenant. */
 export async function chargerEmetteur(tenantId: string): Promise<SellerInfo> {
@@ -91,11 +114,13 @@ export async function genererPdfDevis(devis: Devis, emetteur: SellerInfo): Promi
   // pas des dates métier. Le PDF affiche le jour de l'envoi tel que la base
   // l'a horodaté ; il n'y a pas de borne de période ici.
   const dateDocument = (devis.dateEnvoi ?? devis.createdAt).toISOString().slice(0, 10);
+  const documentLabel = await chargerLibelleDocument(devis.tenantId);
 
   const donnees: FactureForPdf = {
     numero: devis.reference,
     type: "DEVIS",
     issuedDate: dateDocument,
+    documentLabel,
     ...(devis.validUntil ? { validUntil: devis.validUntil } : {}),
     seller: emetteur,
     clientName: devis.clientName,

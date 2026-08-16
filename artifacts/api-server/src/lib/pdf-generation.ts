@@ -76,6 +76,14 @@ export interface FactureForPdf {
   attestationTvaFournie?: boolean;
   retenueGarantiePct?: number;
   notes?: string;
+  /**
+   * Mot déjà résolu pour l'en-tête d'un document `type: "DEVIS"` (US-A2.1) —
+   * ex. "Devis" ou "Proposition commerciale" selon le vertical du tenant.
+   * Un mot déjà résolu, pas un vertical brut : ce module reste indépendant
+   * de `@nodaq/shared`/`verticalPacks.ts`, c'est à l'appelant de le
+   * résoudre. Ignoré pour FACTURE/AVOIR, dont le nom légal ne varie pas.
+   */
+  documentLabel?: string;
   factureRefNumero?: string;
   affaireRef?: string;
 }
@@ -195,7 +203,7 @@ export async function generateHumanPdf(data: FactureForPdf): Promise<Buffer> {
 
     const title =
       data.type === "AVOIR" ? `Avoir n° ${data.numero}`
-      : data.type === "DEVIS" ? `Devis n° ${data.numero}`
+      : data.type === "DEVIS" ? `${data.documentLabel ?? "Devis"} n° ${data.numero}`
       : `Facture n° ${data.numero}`;
 
     // Header
