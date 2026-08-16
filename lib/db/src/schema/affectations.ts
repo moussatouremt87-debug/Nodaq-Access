@@ -1,5 +1,6 @@
 import { pgTable, text, timestamp, boolean, uuid, date, numeric, index } from "drizzle-orm/pg-core";
 import { tenantsTable } from "./tenants";
+import { clientsTable } from "./clients";
 
 /**
  * Affectations — LE PRÉVU.
@@ -18,7 +19,13 @@ export const affectationsTable = pgTable(
   {
     id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
     tenantId: uuid("tenant_id").notNull().references(() => tenantsTable.id),
-    affaireId: text("affaire_id").notNull(),
+    /**
+     * Rattachement EXCLUSIF à une affaire OU à un client (US-A4.1) — un métier
+     * sans "chantier" pointe directement sur un client, sans affaire fictive.
+     * L'un des deux est toujours renseigné, contrainte CHECK en migration 032.
+     */
+    affaireId: text("affaire_id"),
+    clientId: text("client_id").references(() => clientsTable.id, { onDelete: "cascade" }),
     membreId: text("membre_id").notNull(),
     /** Dates MÉTIER, en composantes locales. Jamais un instant. */
     dateDebut: date("date_debut").notNull(),
@@ -34,6 +41,7 @@ export const affectationsTable = pgTable(
   (t) => [
     index("affectations_tenant_periode_idx").on(t.tenantId, t.dateDebut, t.dateFin),
     index("affectations_tenant_membre_idx").on(t.tenantId, t.membreId),
+    index("affectations_tenant_client_idx").on(t.tenantId, t.clientId),
   ],
 );
 

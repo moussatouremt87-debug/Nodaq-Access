@@ -369,6 +369,52 @@ describe("e — ANTI-HALLUCINATION (structure)", () => {
     expect(result.donneesInsuffisantes).toBe(true);
     expect(result.valeur).toBeNull();
   });
+
+  // US-A4.1 : un pointage rattaché directement à un CLIENT (pas d'affaire,
+  // « un métier sans chantier ») a bien été PAYÉ — il doit compter dans
+  // jours_pointes/heures_payees au même titre qu'un pointage d'affaire.
+  // Régression visée : la requête SQL de calcJoursFacturesSurPayes faisait un
+  // JOIN (pas un LEFT JOIN) sur affaires, ce qui aurait silencieusement
+  // exclu ces lignes de la jointure elle-même — pas seulement du filtre
+  // « facturé », qui doit lui rester à zéro puisqu'il n'y a pas d'affaire.
+  test("un pointage rattaché à un client seul (sans affaire) compte dans jours_pointes/heures_payees", async () => {
+    const tenant = await createTestTenant("Analytics-JFP-Client");
+    tenantIds.push(tenant.id);
+
+    const { rows: membreRows } = await adminPool.query<{ id: string }>(
+      `INSERT INTO team_members (id, name, tenant_id) VALUES (gen_random_uuid()::text, 'Membre JFP', $1) RETURNING id`,
+      [tenant.id],
+    );
+    const membreId = membreRows[0]!.id;
+
+    const { rows: clientRows } = await adminPool.query<{ id: string }>(
+      `INSERT INTO clients (id, tenant_id, nom) VALUES (gen_random_uuid()::text, $1, 'Client JFP') RETURNING id`,
+      [tenant.id],
+    );
+    const clientId = clientRows[0]!.id;
+
+    // 10 journées DISTINCTES, sans affaire — le seuil de l'indicateur porte
+    // sur count(DISTINCT date), pas sur le nombre de lignes.
+    for (let i = 0; i < 10; i++) {
+      await adminPool.query(
+        `INSERT INTO pointages (id, tenant_id, membre_id, client_id, date, heures)
+         VALUES (gen_random_uuid()::text, $1, $2, $3, (current_date - $4::int), 7)`,
+        [tenant.id, membreId, clientId, i],
+      );
+    }
+
+    const result = await withTenant(tenant.id, (tx) =>
+      CALCULATORS["jours_factures_sur_payes"](tx, parsePeriode("12_mois")),
+    );
+
+    // Le seuil (10 journées) est atteint : donneesInsuffisantes doit tomber,
+    // preuve que le LEFT JOIN a bien laissé passer ces lignes sans affaire.
+    expect(result.donneesInsuffisantes).toBe(false);
+    expect(result.nbSources).toBe(10);
+    // Aucune affaire facturée derrière ces pointages : le ratio facturé/payé
+    // est 0 %, pas « non mesuré » — la distinction que ce test protège.
+    expect(result.valeur).toBe(0);
+  });
 });
 
 // ─── f — PAS DE COMPARAISON EXTERNE ──────────────────────────────────────────

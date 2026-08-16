@@ -811,8 +811,15 @@ async function calcJoursFacturesSurPayes(
         WHERE a.invoiced_amount_cents IS NOT NULL
           AND a.invoiced_amount_cents > 0
       ), 0)::float                                            AS heures_facturees
+    -- LEFT JOIN, pas JOIN : un pointage rattaché directement à un client
+    -- (US-A4.1, pas d'affaire) doit compter dans jours_pointes/heures_payees
+    -- au même titre qu'un pointage d'affaire — ces heures ont été PAYÉES,
+    -- qu'il y ait ou non une affaire derrière. Seul le calcul de
+    -- heures_facturees a besoin de la jointure (a.invoiced_amount_cents),
+    -- et son FILTER exclut déjà naturellement les lignes sans affaire (a
+    -- vaut NULL, la condition ne peut jamais être vraie).
     FROM pointages p
-    JOIN affaires a ON a.id = p.affaire_id
+    LEFT JOIN affaires a ON a.id = p.affaire_id
     WHERE p.date BETWEEN ${toDateString(periode.debut)}::date
                      AND ${toDateString(periode.fin)}::date
   `));
