@@ -1,5 +1,7 @@
 /**
- * Pointage des heures — par membre, par affaire, par jour.
+ * Pointage des heures — par membre, par jour, rattaché à une affaire OU à un
+ * client (US-A4.1 : un métier sans "chantier" pointe directement sur un
+ * client, sans affaire fictive — cf. la contrainte CHECK de la migration 032).
  *
  * Principe d'interaction : l'artisan ne SAISIT pas des heures, il CONFIRME un
  * récapitulatif. `GET /pointages/recapitulatif-semaine` rend une proposition
@@ -21,6 +23,7 @@ import {
   affairesTable,
   absencesTable,
   affectationsTable,
+  clientsTable,
 } from "@workspace/db";
 import { toDateString, bornesSemaine, HEURES_PAR_JOUR_STANDARD } from "@nodaq/shared";
 
@@ -41,14 +44,28 @@ const HeuresSchema = z.coerce
   .positive("Les heures doivent être strictement positives")
   .max(24, "Une journée ne dépasse pas 24 heures");
 
-const CreatePointageBody = z.object({
-  membreId: z.string().min(1),
-  affaireId: z.string().min(1),
-  date: z.string().regex(DATE_ISO, "Format attendu : YYYY-MM-DD"),
-  heures: HeuresSchema,
-  source: z.enum(["confirme", "saisi", "importe"]).optional().default("saisi"),
-  commentaire: z.string().max(500).optional(),
-});
+/**
+ * Rattachement EXCLUSIF à une affaire OU à un client (US-A4.1) : un métier
+ * sans "chantier" pointe directement sur un client, sans affaire fictive. La
+ * contrainte CHECK du moteur (migration 032) fait autorité ; ce `.refine`
+ * donne juste un 400 lisible avant d'y arriver.
+ */
+const RATTACHEMENT_EXCLUSIF_MESSAGE =
+  "Le pointage doit être rattaché à une affaire OU à un client, jamais les deux ni aucun des deux.";
+
+const CreatePointageBody = z
+  .object({
+    membreId: z.string().min(1),
+    affaireId: z.string().min(1).optional(),
+    clientId: z.string().min(1).optional(),
+    date: z.string().regex(DATE_ISO, "Format attendu : YYYY-MM-DD"),
+    heures: HeuresSchema,
+    source: z.enum(["confirme", "saisi", "importe"]).optional().default("saisi"),
+    commentaire: z.string().max(500).optional(),
+  })
+  .refine((d) => Boolean(d.affaireId) !== Boolean(d.clientId), {
+    message: RATTACHEMENT_EXCLUSIF_MESSAGE,
+  });
 
 const UpdatePointageBody = z.object({
   heures: HeuresSchema.optional(),
@@ -59,6 +76,7 @@ const ListQuery = z.object({
   debut: z.string().regex(DATE_ISO).optional(),
   fin: z.string().regex(DATE_ISO).optional(),
   affaireId: z.string().optional(),
+  clientId: z.string().optional(),
   membreId: z.string().optional(),
 });
 
@@ -67,12 +85,17 @@ const ConfirmerBody = z.object({
   date: z.string().regex(DATE_ISO),
   lignes: z
     .array(
-      z.object({
-        membreId: z.string().min(1),
-        affaireId: z.string().min(1),
-        date: z.string().regex(DATE_ISO),
-        heures: z.coerce.number().min(0).max(24),
-      }),
+      z
+        .object({
+          membreId: z.string().min(1),
+          affaireId: z.string().min(1).optional(),
+          clientId: z.string().min(1).optional(),
+          date: z.string().regex(DATE_ISO),
+          heures: z.coerce.number().min(0).max(24),
+        })
+        .refine((l) => Boolean(l.affaireId) !== Boolean(l.clientId), {
+          message: RATTACHEMENT_EXCLUSIF_MESSAGE,
+        }),
     )
     .max(500),
 });
@@ -108,7 +131,7 @@ router.get("/pointages", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const { debut, fin, affaireId, membreId } = parsed.data;
+  const { debut, fin, affaireId, clientId, membreId } = parsed.data;
   const tenantId = req.tenantId!;
 
   const rows = await withTenant(tenantId, (tx) => {
@@ -116,6 +139,7 @@ router.get("/pointages", async (req, res): Promise<void> => {
       debut ? gte(pointagesTable.date, debut) : undefined,
       fin ? lte(pointagesTable.date, fin) : undefined,
       affaireId ? eq(pointagesTable.affaireId, affaireId) : undefined,
+      clientId ? eq(pointagesTable.clientId, clientId) : undefined,
       membreId ? eq(pointagesTable.membreId, membreId) : undefined,
     ].filter((c): c is NonNullable<typeof c> => c !== undefined);
 
@@ -152,6 +176,7 @@ router.get("/pointages/recapitulatif-semaine", async (req, res): Promise<void> =
   const data = await withTenant(tenantId, async (tx) => {
     const membres = await tx.select().from(teamMembersTable);
     const affaires = await tx.select().from(affairesTable);
+    const clients = await tx.select().from(clientsTable);
     const absences = await tx.select().from(absencesTable);
     const existants = await tx
       .select()
@@ -167,12 +192,15 @@ router.get("/pointages/recapitulatif-semaine", async (req, res): Promise<void> =
         lte(affectationsTable.dateDebut, fin),
         gte(affectationsTable.dateFin, debut),
       ));
-    return { membres, affaires, absences, existants, affectations };
+    return { membres, affaires, clients, absences, existants, affectations };
   });
 
   const affairesActives = new Map(
     data.affaires.filter((a) => STATUTS_ACTIFS.includes(a.status)).map((a) => [a.id, a]),
   );
+  // Un client archivé ne doit plus être proposé pour du nouveau temps — au
+  // même titre qu'une affaire non EN_COURS/ACCEPTEE ci-dessus.
+  const clientsActifs = new Map(data.clients.filter((c) => !c.archive).map((c) => [c.id, c]));
 
   /** Un membre est-il absent ce jour-là ? */
   const estAbsent = (membreId: string, jour: string): boolean =>
@@ -180,16 +208,29 @@ router.get("/pointages/recapitulatif-semaine", async (req, res): Promise<void> =
       (a) => a.membreId === membreId && a.dateDebut <= jour && jour <= a.dateFin,
     );
 
+  /**
+   * Clé de rattachement — EXCLUSIVE (US-A4.1) : une ligne pointe soit sur une
+   * affaire, soit sur un client, jamais les deux. Préfixée pour qu'une
+   * affaire et un client de même id (hasard) ne collisionnent jamais.
+   */
+  const cleRattachement = (affaireId: string | null, clientId: string | null): string =>
+    affaireId ? `a:${affaireId}` : `c:${clientId}`;
+
   // Ce qui est déjà pointé fait autorité sur la proposition.
   const dejaPointe = new Map(
-    data.existants.map((p) => [`${p.membreId}|${p.affaireId}|${p.date}`, p]),
+    data.existants.map((p) => [
+      `${p.membreId}|${cleRattachement(p.affaireId, p.clientId)}|${p.date}`,
+      p,
+    ]),
   );
 
   const lignes: Array<{
     membreId: string;
     membreNom: string;
-    affaireId: string;
-    affaireLabel: string;
+    affaireId: string | null;
+    affaireLabel: string | null;
+    clientId: string | null;
+    clientLabel: string | null;
     date: string;
     heures: number;
     origine: "pointe" | "propose";
@@ -198,7 +239,7 @@ router.get("/pointages/recapitulatif-semaine", async (req, res): Promise<void> =
   for (const membre of data.membres) {
     if (membre.availability === "ABSENT") continue;
 
-    let planning: Array<{ day: string; affaireId: string | null }> = [];
+    let planning: Array<{ day: string; affaireId: string | null; clientId?: string | null }> = [];
     try {
       planning = JSON.parse(membre.schedule) as typeof planning;
     } catch {
@@ -248,27 +289,43 @@ router.get("/pointages/recapitulatif-semaine", async (req, res): Promise<void> =
       );
 
       const creneau = planning.find((p) => p.day === JOURS_OUVRES[i]);
-      const candidats: Array<{ affaireId: string; heures: number }> =
+      const candidats: Array<{ affaireId: string | null; clientId: string | null; heures: number }> =
         affectationsDuJour.length > 0
           ? affectationsDuJour.map((a) => ({
               affaireId: a.affaireId,
+              clientId: a.clientId,
               heures: Number(a.heuresParJour),
             }))
           : creneau?.affaireId
-            ? [{ affaireId: creneau.affaireId, heures: HEURES_PAR_JOUR_STANDARD }]
-            : [];
+            ? [{ affaireId: creneau.affaireId, clientId: null, heures: HEURES_PAR_JOUR_STANDARD }]
+            : creneau?.clientId
+              ? [{ affaireId: null, clientId: creneau.clientId, heures: HEURES_PAR_JOUR_STANDARD }]
+              : [];
 
       for (const candidat of candidats) {
-        const affaire = affairesActives.get(candidat.affaireId);
-        if (!affaire) continue;
+        let affaireLabel: string | null = null;
+        let clientLabel: string | null = null;
+        if (candidat.affaireId) {
+          const affaire = affairesActives.get(candidat.affaireId);
+          if (!affaire) continue;
+          affaireLabel = affaire.label;
+        } else if (candidat.clientId) {
+          const client = clientsActifs.get(candidat.clientId);
+          if (!client) continue;
+          clientLabel = client.nom;
+        } else {
+          continue;
+        }
 
-        const cle = `${membre.id}|${candidat.affaireId}|${jour}`;
+        const cle = `${membre.id}|${cleRattachement(candidat.affaireId, candidat.clientId)}|${jour}`;
         const existant = dejaPointe.get(cle);
         lignes.push({
           membreId: membre.id,
           membreNom: membre.name,
           affaireId: candidat.affaireId,
-          affaireLabel: affaire.label,
+          affaireLabel,
+          clientId: candidat.clientId,
+          clientLabel,
           date: jour,
           heures: existant ? heuresEnNombre(existant.heures) : candidat.heures,
           origine: existant ? "pointe" : "propose",
@@ -280,15 +337,23 @@ router.get("/pointages/recapitulatif-semaine", async (req, res): Promise<void> =
   // Les pointages hors planning (saisis à la main) ne doivent pas disparaître
   // du récapitulatif : sinon une confirmation les effacerait sans le dire.
   for (const p of data.existants) {
-    const cle = `${p.membreId}|${p.affaireId}|${p.date}`;
-    if (lignes.some((l) => `${l.membreId}|${l.affaireId}|${l.date}` === cle)) continue;
+    const cle = `${p.membreId}|${cleRattachement(p.affaireId, p.clientId)}|${p.date}`;
+    if (
+      lignes.some(
+        (l) => `${l.membreId}|${cleRattachement(l.affaireId, l.clientId)}|${l.date}` === cle,
+      )
+    )
+      continue;
     const membre = data.membres.find((m) => m.id === p.membreId);
-    const affaire = data.affaires.find((a) => a.id === p.affaireId);
+    const affaire = p.affaireId ? data.affaires.find((a) => a.id === p.affaireId) : undefined;
+    const client = p.clientId ? data.clients.find((c) => c.id === p.clientId) : undefined;
     lignes.push({
       membreId: p.membreId,
       membreNom: membre?.name ?? "—",
       affaireId: p.affaireId,
-      affaireLabel: affaire?.label ?? "—",
+      affaireLabel: p.affaireId ? (affaire?.label ?? "—") : null,
+      clientId: p.clientId,
+      clientLabel: p.clientId ? (client?.nom ?? "—") : null,
       date: p.date,
       heures: heuresEnNombre(p.heures),
       origine: "pointe",
@@ -299,15 +364,27 @@ router.get("/pointages/recapitulatif-semaine", async (req, res): Promise<void> =
 
   const totalHeures = lignes.reduce((acc, l) => acc + l.heures, 0);
   const parAffaire = [...
-    lignes.reduce((acc, l) => {
-      const cur = acc.get(l.affaireId) ?? { affaireId: l.affaireId, affaireLabel: l.affaireLabel, heures: 0 };
-      cur.heures += l.heures;
-      acc.set(l.affaireId, cur);
-      return acc;
-    }, new Map<string, { affaireId: string; affaireLabel: string; heures: number }>())
+    lignes
+      .filter((l) => l.affaireId !== null)
+      .reduce((acc, l) => {
+        const cur = acc.get(l.affaireId!) ?? { affaireId: l.affaireId!, affaireLabel: l.affaireLabel!, heures: 0 };
+        cur.heures += l.heures;
+        acc.set(l.affaireId!, cur);
+        return acc;
+      }, new Map<string, { affaireId: string; affaireLabel: string; heures: number }>())
+      .values()];
+  const parClient = [...
+    lignes
+      .filter((l) => l.clientId !== null)
+      .reduce((acc, l) => {
+        const cur = acc.get(l.clientId!) ?? { clientId: l.clientId!, clientLabel: l.clientLabel!, heures: 0 };
+        cur.heures += l.heures;
+        acc.set(l.clientId!, cur);
+        return acc;
+      }, new Map<string, { clientId: string; clientLabel: string; heures: number }>())
       .values()];
 
-  res.json({ semaine: { debut, fin }, lignes, parAffaire, totalHeures });
+  res.json({ semaine: { debut, fin }, lignes, parAffaire, parClient, totalHeures });
 });
 
 // ── Écriture ──────────────────────────────────────────────────────────────────
@@ -358,9 +435,16 @@ router.post("/pointages/recapitulatif-semaine/confirmer", async (req, res): Prom
     let supprimes = 0;
 
     for (const ligne of lignes) {
+      // Exactement un des deux est renseigné (Zod `.refine` ci-dessus) : la
+      // clé de recherche porte sur celui-là. Un rattachement affaire ne peut
+      // matcher qu'une ligne existante à affaire_id égal — le CHECK exclusif
+      // du moteur garantit que cette ligne, si elle existe, a client_id NULL.
+      const rattachement = ligne.affaireId
+        ? eq(pointagesTable.affaireId, ligne.affaireId)
+        : eq(pointagesTable.clientId, ligne.clientId!);
       const cle = and(
         eq(pointagesTable.membreId, ligne.membreId),
-        eq(pointagesTable.affaireId, ligne.affaireId),
+        rattachement,
         eq(pointagesTable.date, ligne.date),
       );
 
@@ -380,7 +464,8 @@ router.post("/pointages/recapitulatif-semaine/confirmer", async (req, res): Prom
         await tx.insert(pointagesTable).values({
           tenantId,
           membreId: ligne.membreId,
-          affaireId: ligne.affaireId,
+          affaireId: ligne.affaireId ?? null,
+          clientId: ligne.clientId ?? null,
           date: ligne.date,
           heures: ligne.heures.toFixed(2),
           source: "confirme",
@@ -412,7 +497,8 @@ router.post("/pointages", async (req, res): Promise<void> => {
         .values({
           tenantId,
           membreId: d.membreId,
-          affaireId: d.affaireId,
+          affaireId: d.affaireId ?? null,
+          clientId: d.clientId ?? null,
           date: d.date,
           heures: d.heures.toFixed(2),
           source: d.source,
@@ -422,11 +508,11 @@ router.post("/pointages", async (req, res): Promise<void> => {
     );
     res.status(201).json({ ...cree!, heures: heuresEnNombre(cree!.heures) });
   } catch (err) {
-    // Un pointage existe déjà pour ce membre, sur cette affaire, ce jour-là.
+    // Un pointage existe déjà pour ce membre, sur ce rattachement, ce jour-là.
     // On le dit plutôt que d'écraser en silence.
     if (estViolationUnicite(err)) {
       res.status(409).json({
-        error: "Un pointage existe déjà pour ce membre, cette affaire et ce jour. Modifiez-le.",
+        error: "Un pointage existe déjà pour ce membre, ce rattachement et ce jour. Modifiez-le.",
       });
       return;
     }

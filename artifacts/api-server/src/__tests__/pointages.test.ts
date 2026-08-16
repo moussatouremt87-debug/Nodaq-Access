@@ -314,3 +314,130 @@ describe("d — RÉCAPITULATIF DE SEMAINE", () => {
     expect(res.body.error).toMatch(/hors de la semaine/i);
   });
 });
+
+// ── e. Rattachement client direct (US-A4.1) ───────────────────────────────────
+//
+// « Un métier sans chantier » doit pouvoir pointer directement sur un client,
+// sans affaire fictive. Ce que ces tests protègent :
+//   - la création est possible avec clientId seul, refusée avec les deux ou
+//     aucun des deux (Zod ET, séparément, la contrainte CHECK du moteur —
+//     CLAUDE.md : une garde jamais vue échouer n'est pas une garde) ;
+//   - l'unicité (membre, client, jour) est portée par un second index unique
+//     PARTIEL, indépendant de celui côté affaire ;
+//   - le récapitulatif hebdomadaire distingue les deux rattachements.
+
+describe("e — RATTACHEMENT CLIENT DIRECT (US-A4.1)", () => {
+  let clientId: string;
+
+  beforeAll(async () => {
+    const { rows } = await adminPool.query<{ id: string }>(
+      `INSERT INTO clients (id, tenant_id, nom) VALUES (gen_random_uuid()::text, $1, 'Client Test A4.1') RETURNING id`,
+      [tenantId],
+    );
+    clientId = rows[0]!.id;
+  });
+
+  test("un pointage peut être créé directement sur un client, sans affaire", async () => {
+    const res = await request(app)
+      .post("/api/pointages")
+      .set("Cookie", cookie)
+      .send({ membreId, clientId, date: jourDeLaSemaine(5), heures: 4 });
+    expect(res.status).toBe(201);
+    expect(res.body.affaireId).toBeNull();
+    expect(res.body.clientId).toBe(clientId);
+  });
+
+  test("ni affaire ni client → REFUSÉ", async () => {
+    const res = await request(app)
+      .post("/api/pointages")
+      .set("Cookie", cookie)
+      .send({ membreId, date: jourDeLaSemaine(5), heures: 4 });
+    expect(res.status).toBe(400);
+  });
+
+  test("affaire ET client à la fois → REFUSÉ", async () => {
+    const res = await request(app)
+      .post("/api/pointages")
+      .set("Cookie", cookie)
+      .send({ membreId, affaireId, clientId, date: jourDeLaSemaine(5), heures: 4 });
+    expect(res.status).toBe(400);
+  });
+
+  test("un second pointage même membre/client/jour est REFUSÉ (unicité partielle)", async () => {
+    const jour = jourDeLaSemaine(6);
+    await request(app)
+      .post("/api/pointages")
+      .set("Cookie", cookie)
+      .send({ membreId, clientId, date: jour, heures: 3 })
+      .expect(201);
+
+    const doublon = await request(app)
+      .post("/api/pointages")
+      .set("Cookie", cookie)
+      .send({ membreId, clientId, date: jour, heures: 2 });
+    expect(doublon.status).toBe(409);
+  });
+
+  test("GET /pointages?clientId= filtre sur le rattachement client", async () => {
+    const { body } = await request(app)
+      .get(`/api/pointages?clientId=${clientId}`)
+      .set("Cookie", cookie)
+      .expect(200);
+    expect(body.pointages.length).toBeGreaterThan(0);
+    for (const p of body.pointages) {
+      expect(p.clientId).toBe(clientId);
+      expect(p.affaireId).toBeNull();
+    }
+  });
+
+  test("la contrainte CHECK du moteur refuse un rattachement invalide même hors Zod", async () => {
+    // Éprouve la garde structurelle du moteur, pas seulement la validation
+    // applicative de la route — des dates hors de la semaine de test en
+    // cours pour ne heurter aucun autre index unique du fichier.
+    await expect(
+      adminPool.query(
+        `INSERT INTO pointages (id, tenant_id, membre_id, affaire_id, client_id, date, heures)
+         VALUES (gen_random_uuid()::text, $1, $2, $3, $4, '2019-06-15', 1)`,
+        [tenantId, membreId, affaireId, clientId],
+      ),
+    ).rejects.toThrow(/pointages_rattachement_exclusif/);
+
+    await expect(
+      adminPool.query(
+        `INSERT INTO pointages (id, tenant_id, membre_id, affaire_id, client_id, date, heures)
+         VALUES (gen_random_uuid()::text, $1, $2, NULL, NULL, '2019-06-16', 1)`,
+        [tenantId, membreId],
+      ),
+    ).rejects.toThrow(/pointages_rattachement_exclusif/);
+  });
+
+  test("le récapitulatif hebdomadaire distingue les lignes client des lignes affaire", async () => {
+    const jour = jourDeLaSemaine(5); // pointé plus haut, directement sur le client
+    const { body } = await request(app)
+      .get(`/api/pointages/recapitulatif-semaine?date=${jour}`)
+      .set("Cookie", cookie)
+      .expect(200);
+
+    const ligneClient = body.lignes.find(
+      (l: { clientId: string | null; date: string }) => l.clientId === clientId && l.date === jour,
+    );
+    expect(ligneClient).toBeDefined();
+    expect(ligneClient.affaireId).toBeNull();
+    expect(ligneClient.clientLabel).toBe("Client Test A4.1");
+    expect(ligneClient.origine).toBe("pointe");
+
+    const parClientEntry = body.parClient.find(
+      (c: { clientId: string }) => c.clientId === clientId,
+    );
+    expect(parClientEntry).toBeDefined();
+    expect(parClientEntry.heures).toBeGreaterThan(0);
+
+    // Les lignes d'affaire existantes (sections a-d) restent présentes et
+    // n'ont pas de clientLabel — les deux rattachements coexistent.
+    const ligneAffaire = body.lignes.find(
+      (l: { affaireId: string | null }) => l.affaireId === affaireId,
+    );
+    expect(ligneAffaire).toBeDefined();
+    expect(ligneAffaire.clientId).toBeNull();
+  });
+});

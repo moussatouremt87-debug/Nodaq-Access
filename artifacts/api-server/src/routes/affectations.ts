@@ -22,16 +22,42 @@ const router: IRouter = Router();
 
 const DATE_METIER = /^\d{4}-\d{2}-\d{2}$/;
 
-const AffectationBody = z.object({
-  affaireId: z.string().min(1, "L'affaire est obligatoire"),
-  membreId: z.string().min(1, "Le membre est obligatoire"),
-  dateDebut: z.string().regex(DATE_METIER, "Date attendue au format AAAA-MM-JJ"),
-  dateFin: z.string().regex(DATE_METIER, "Date attendue au format AAAA-MM-JJ"),
-  heuresParJour: z.number().positive("Les heures par jour doivent être positives").max(24),
-  joursOuvresSeulement: z.boolean().default(true),
-});
+/**
+ * Rattachement EXCLUSIF à une affaire OU à un client (US-A4.1) : un métier
+ * sans "chantier" doit pouvoir affecter un membre directement à un client,
+ * sans créer d'affaire fictive. `.refine` reproduit ici la contrainte CHECK
+ * du moteur (migration 032) — la base fait autorité, ce refine ne fait que
+ * donner une erreur 400 lisible avant d'y arriver.
+ */
+const AffectationBody = z
+  .object({
+    affaireId: z.string().min(1).optional(),
+    clientId: z.string().min(1).optional(),
+    membreId: z.string().min(1, "Le membre est obligatoire"),
+    dateDebut: z.string().regex(DATE_METIER, "Date attendue au format AAAA-MM-JJ"),
+    dateFin: z.string().regex(DATE_METIER, "Date attendue au format AAAA-MM-JJ"),
+    heuresParJour: z.number().positive("Les heures par jour doivent être positives").max(24),
+    joursOuvresSeulement: z.boolean().default(true),
+  })
+  .refine((d) => Boolean(d.affaireId) !== Boolean(d.clientId), {
+    message: "L'affectation doit être rattachée à une affaire OU à un client, jamais les deux ni aucun des deux.",
+  });
 
-const AffectationPatch = AffectationBody.partial();
+// Le PATCH accepte `null` explicite pour BASCULER de rattachement (passer
+// d'une affaire à un client ou inversement) : un champ absent du corps
+// conserve la valeur existante (voir la route), un champ envoyé à `null` la
+// vide délibérément. La cohérence finale (exactement un rattachement) se
+// vérifie contre l'état FUSIONNÉ existant+patch dans la route, sur le même
+// principe que `periodeIncoherente` ci-dessus pour les dates.
+const AffectationPatch = z.object({
+  affaireId: z.string().min(1).nullable().optional(),
+  clientId: z.string().min(1).nullable().optional(),
+  membreId: z.string().min(1).optional(),
+  dateDebut: z.string().regex(DATE_METIER).optional(),
+  dateFin: z.string().regex(DATE_METIER).optional(),
+  heuresParJour: z.number().positive().max(24).optional(),
+  joursOuvresSeulement: z.boolean().optional(),
+});
 
 /**
  * Une période qui finit avant de commencer n'est pas une période.
@@ -52,6 +78,7 @@ router.get("/affectations", async (req, res): Promise<void> => {
       fin: z.string().regex(DATE_METIER).optional(),
       membreId: z.string().optional(),
       affaireId: z.string().optional(),
+      clientId: z.string().optional(),
     })
     .safeParse(req.query);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
@@ -66,6 +93,7 @@ router.get("/affectations", async (req, res): Promise<void> => {
       ...(f.debut ? [gte(affectationsTable.dateFin, f.debut)] : []),
       ...(f.membreId ? [eq(affectationsTable.membreId, f.membreId)] : []),
       ...(f.affaireId ? [eq(affectationsTable.affaireId, f.affaireId)] : []),
+      ...(f.clientId ? [eq(affectationsTable.clientId, f.clientId)] : []),
     ];
     const q = tx.select().from(affectationsTable);
     return conditions.length > 0
@@ -102,7 +130,8 @@ router.post("/affectations", async (req, res): Promise<void> => {
       .insert(affectationsTable)
       .values({
         tenantId,
-        affaireId: d.affaireId,
+        affaireId: d.affaireId ?? null,
+        clientId: d.clientId ?? null,
         membreId: d.membreId,
         dateDebut: d.dateDebut,
         dateFin: d.dateFin,
@@ -135,10 +164,23 @@ router.patch("/affectations/:id", async (req, res): Promise<void> => {
     const fin = d.dateFin ?? existant.dateFin;
     if (periodeIncoherente(debut, fin)) return { kind: "incoherente" as const };
 
+    // Même principe pour le rattachement : un champ absent du patch conserve
+    // la valeur existante, un `null` explicite la vide (bascule affaire→client
+    // ou l'inverse). C'est l'état FUSIONNÉ qui doit satisfaire « exactement
+    // un des deux » — la contrainte CHECK du moteur (migration 032) le
+    // vérifierait de toute façon, mais un 400 lisible vaut mieux qu'une
+    // erreur Postgres brute.
+    const affaireIdFinal = d.affaireId !== undefined ? d.affaireId : existant.affaireId;
+    const clientIdFinal = d.clientId !== undefined ? d.clientId : existant.clientId;
+    if (Boolean(affaireIdFinal) === Boolean(clientIdFinal)) {
+      return { kind: "rattachement_invalide" as const };
+    }
+
     const [maj] = await tx
       .update(affectationsTable)
       .set({
         ...(d.affaireId !== undefined ? { affaireId: d.affaireId } : {}),
+        ...(d.clientId !== undefined ? { clientId: d.clientId } : {}),
         ...(d.membreId !== undefined ? { membreId: d.membreId } : {}),
         ...(d.dateDebut !== undefined ? { dateDebut: d.dateDebut } : {}),
         ...(d.dateFin !== undefined ? { dateFin: d.dateFin } : {}),
@@ -158,6 +200,12 @@ router.patch("/affectations/:id", async (req, res): Promise<void> => {
   }
   if (resultat.kind === "incoherente") {
     res.status(400).json({ error: "La date de fin ne peut pas précéder la date de début." });
+    return;
+  }
+  if (resultat.kind === "rattachement_invalide") {
+    res.status(400).json({
+      error: "L'affectation doit être rattachée à une affaire OU à un client, jamais les deux ni aucun des deux.",
+    });
     return;
   }
   res.json(resultat.affectation);
