@@ -60,19 +60,34 @@ async function ensureDefaultMembers(tenantId: string): Promise<void> {
         await tx.insert(teamMembersTable).values({
           tenantId, name: m.name, role: m.role, email: m.email,
           availability: m.availability,
-          schedule: JSON.stringify(DAYS.map(day => ({ day, affaireId: null }))),
+          schedule: JSON.stringify(DAYS.map(day => ({ day, affaireId: null, clientId: null }))),
         });
       }
     }
   });
 }
 
+// Un créneau de la semaine type pointe soit sur une affaire, soit
+// directement sur un client (US-A4.1 : un métier sans "chantier"), jamais
+// les deux — même contrainte d'exclusion que `pointages`/`affectations`
+// (migration 032), reproduite ici en Zod puisqu'un JSON texte libre
+// (`team_members.schedule`) ne porte aucune contrainte CHECK côté moteur.
+const ScheduleSlotBody = z
+  .object({
+    day: z.string(),
+    affaireId: z.string().nullable().optional(),
+    clientId: z.string().nullable().optional(),
+  })
+  .refine((s) => !(s.affaireId && s.clientId), {
+    message: "Un créneau ne peut pas être rattaché à la fois à une affaire et à un client.",
+  });
+
 const CreateMemberBody = z.object({
   name: z.string().min(1),
   role: z.string().optional(),
   email: z.string().email().optional(),
   availability: z.enum(["DISPONIBLE", "PARTIEL", "ABSENT"]).optional(),
-  schedule: z.array(z.object({ day: z.string(), affaireId: z.string().nullable() })).optional(),
+  schedule: z.array(ScheduleSlotBody).optional(),
 });
 
 const UpdateMemberBody = CreateMemberBody.partial();

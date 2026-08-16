@@ -24,11 +24,16 @@ import { containerVariants, itemVariants } from '@/lib/motion-variants';
 
 const API = '/api';
 
+// Rattachement EXCLUSIF (US-A4.1) : une ligne pointe soit sur une affaire,
+// soit directement sur un client, jamais les deux — même contrainte que
+// côté moteur (migration 032).
 type Ligne = {
   membreId: string;
   membreNom: string;
-  affaireId: string;
-  affaireLabel: string;
+  affaireId: string | null;
+  affaireLabel: string | null;
+  clientId: string | null;
+  clientLabel: string | null;
   date: string;
   heures: number;
   origine: 'pointe' | 'propose';
@@ -38,12 +43,18 @@ type Recap = {
   semaine: { debut: string; fin: string };
   lignes: Ligne[];
   parAffaire: Array<{ affaireId: string; affaireLabel: string; heures: number }>;
+  parClient: Array<{ clientId: string; clientLabel: string; heures: number }>;
   totalHeures: number;
 };
 
-/** Clé stable d'une ligne : membre + affaire + jour, comme en base. */
-const cleLigne = (l: Pick<Ligne, 'membreId' | 'affaireId' | 'date'>) =>
-  `${l.membreId}|${l.affaireId}|${l.date}`;
+/** Clé de rattachement — préfixée pour qu'une affaire et un client de même
+ *  id (hasard) ne collisionnent jamais. Même construction que côté moteur. */
+const cleRattachement = (l: Pick<Ligne, 'affaireId' | 'clientId'>) =>
+  l.affaireId ? `affaire:${l.affaireId}` : `client:${l.clientId}`;
+
+/** Clé stable d'une ligne : membre + rattachement + jour, comme en base. */
+const cleLigne = (l: Pick<Ligne, 'membreId' | 'affaireId' | 'clientId' | 'date'>) =>
+  `${l.membreId}|${cleRattachement(l)}|${l.date}`;
 
 const fmtJour = (iso: string): string => {
   const [y, m, d] = iso.split('-').map(Number);
@@ -84,24 +95,27 @@ export default function Pointages() {
 
   const heuresDe = (l: Ligne): number => ajustements[cleLigne(l)] ?? l.heures;
 
-  const parAffaire = useMemo(() => {
+  // Un groupe par rattachement — affaire OU client, jamais les deux — sur le
+  // même principe que le regroupement `parAffaire`/`parClient` du serveur.
+  const groupes = useMemo(() => {
     const acc = new Map<string, { label: string; heures: number; lignes: Ligne[] }>();
     for (const l of data?.lignes ?? []) {
-      const cur = acc.get(l.affaireId) ?? { label: l.affaireLabel, heures: 0, lignes: [] };
+      const cle = cleRattachement(l);
+      const cur = acc.get(cle) ?? { label: (l.affaireLabel ?? l.clientLabel)!, heures: 0, lignes: [] };
       cur.heures += heuresDe(l);
       cur.lignes.push(l);
-      acc.set(l.affaireId, cur);
+      acc.set(cle, cur);
     }
-    return [...acc.entries()].map(([affaireId, v]) => ({ affaireId, ...v }));
+    return [...acc.entries()].map(([cle, v]) => ({ cle, ...v }));
   }, [data, ajustements]);
 
-  const total = parAffaire.reduce((acc, a) => acc + a.heures, 0);
+  const total = groupes.reduce((acc, g) => acc + g.heures, 0);
 
   const confirmer = useMutation({
     mutationFn: async () => {
       const lignes = (data?.lignes ?? []).map((l) => ({
         membreId: l.membreId,
-        affaireId: l.affaireId,
+        ...(l.affaireId ? { affaireId: l.affaireId } : { clientId: l.clientId }),
         date: l.date,
         heures: heuresDe(l),
       }));
@@ -164,16 +178,16 @@ export default function Pointages() {
         <div className="rounded-xl border border-destructive/25 bg-destructive/5 p-6 text-center text-sm text-destructive">
           Impossible de charger la semaine.
         </div>
-      ) : parAffaire.length === 0 ? (
+      ) : groupes.length === 0 ? (
         <div className="rounded-xl border border-card-border bg-card p-8 text-center text-sm text-muted-foreground">
           {words.noneLabel} planifié{feminin ? 'e' : ''} cette semaine. Renseignez le planning de l'équipe pour
           obtenir une proposition pré-remplie.
         </div>
       ) : (
         <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-2">
-          {parAffaire.map((affaire) => (
+          {groupes.map((groupe) => (
             <motion.div
-              key={affaire.affaireId}
+              key={groupe.cle}
               variants={itemVariants}
               className="rounded-xl border border-card-border bg-card"
             >
@@ -181,26 +195,26 @@ export default function Pointages() {
                 type="button"
                 className="flex w-full items-center justify-between gap-3 p-4 text-left"
                 onClick={() =>
-                  setDeplie((d) => ({ ...d, [affaire.affaireId]: !d[affaire.affaireId] }))
+                  setDeplie((d) => ({ ...d, [groupe.cle]: !d[groupe.cle] }))
                 }
               >
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium">{affaire.label}</div>
+                  <div className="truncate text-sm font-medium">{groupe.label}</div>
                   <div className="text-[11px] text-muted-foreground">
-                    {affaire.lignes.length} jour(s)
+                    {groupe.lignes.length} jour(s)
                   </div>
                 </div>
-                <div className="font-mono-nums text-base font-semibold">{affaire.heures} h</div>
-                {deplie[affaire.affaireId] ? (
+                <div className="font-mono-nums text-base font-semibold">{groupe.heures} h</div>
+                {deplie[groupe.cle] ? (
                   <ChevronDown className="h-4 w-4 text-muted-foreground" />
                 ) : (
                   <ChevronRight className="h-4 w-4 text-muted-foreground" />
                 )}
               </button>
 
-              {deplie[affaire.affaireId] && (
+              {deplie[groupe.cle] && (
                 <div className="border-t border-border px-4 py-3 space-y-2">
-                  {affaire.lignes.map((l) => (
+                  {groupe.lignes.map((l) => (
                     <div key={cleLigne(l)} className="flex items-center gap-3">
                       <div className="min-w-0 flex-1 text-xs">
                         <div className="truncate text-foreground">{fmtJour(l.date)}</div>
@@ -243,7 +257,7 @@ export default function Pointages() {
         <Button
           className="w-full"
           size="lg"
-          disabled={isLoading || confirmer.isPending || parAffaire.length === 0}
+          disabled={isLoading || confirmer.isPending || groupes.length === 0}
           onClick={() => confirmer.mutate()}
         >
           {confirmer.isPending ? (
