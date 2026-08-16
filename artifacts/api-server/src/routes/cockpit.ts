@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { withTenant, affairesTable, contratsTable, facturesTable, prospectsTable, pendingActionsTable, activityTable, incidentsFacturationTable } from "@workspace/db";
+import { withTenant, affairesTable, contratsTable, facturesTable, prospectsTable, pendingActionsTable, activityTable, incidentsFacturationTable, bankAccountsTable } from "@workspace/db";
 import { sql, eq, isNull } from "drizzle-orm";
 import {
   toDateString,
@@ -70,6 +70,17 @@ router.get("/cockpit/kpis", async (req, res): Promise<void> => {
       .select({ count: sql<number>`count(*)::int` })
       .from(pendingActionsTable)
       .where(eq(pendingActionsTable.status, "EN_ATTENTE"));
+
+    // `count` distingue « pas encore connecté » (aucune ligne, treasuryBalanceCents
+    // reste null) de « connecté mais soldes à zéro » (une ligne existe, la somme
+    // fait foi même si elle vaut 0) — même doctrine que incidentsFacturationCount
+    // ci-dessus : null n'est jamais confondu avec une vraie valeur nulle.
+    const [tresorerie] = await tx
+      .select({
+        count: sql<number>`count(*)::int`,
+        total: sql<number>`coalesce(sum(balance_cents), 0)::int`,
+      })
+      .from(bankAccountsTable);
 
     // Distinct du compteur ci-dessus : un incident de facturation n'est PAS
     // une action à valider (CLAUDE.md §4) — le mélanger fausserait ce que le
@@ -151,6 +162,7 @@ router.get("/cockpit/kpis", async (req, res): Promise<void> => {
       contratsActifs,
       pendingCount,
       incidentsFacturationCount,
+      tresorerie,
       monthlySeries: monthlySeries.rows ?? [],
       caYtdRow,
       caPrevYearRow,
@@ -181,7 +193,7 @@ router.get("/cockpit/kpis", async (req, res): Promise<void> => {
       // `null` pour un rôle sans accès financier — jamais `0` : voir le
       // commentaire au-dessus de `financier`.
       incidentsFacturationCount: data.incidentsFacturationCount?.count ?? null,
-      treasuryBalanceCents: null,
+      treasuryBalanceCents: (data.tresorerie?.count ?? 0) > 0 ? data.tresorerie!.total : null,
       monthlySeries: data.monthlySeries,
       ytd: {
         caYtdCents,
@@ -191,7 +203,7 @@ router.get("/cockpit/kpis", async (req, res): Promise<void> => {
         tauxRecouvrement,
       },
     },
-    ["chiffreAffairesMois", "totalImpayeCents", "monthlySeries", "ytd"],
+    ["chiffreAffairesMois", "totalImpayeCents", "treasuryBalanceCents", "monthlySeries", "ytd"],
     financier,
   ));
 });
