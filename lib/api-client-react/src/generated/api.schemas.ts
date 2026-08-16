@@ -622,6 +622,65 @@ export interface EcheanceUpdate {
   notes?: string;
 }
 
+export type ChargeRecurrenteCategory = typeof ChargeRecurrenteCategory[keyof typeof ChargeRecurrenteCategory];
+
+
+export const ChargeRecurrenteCategory = {
+  LOYER: 'LOYER',
+  MASSE_SALARIALE: 'MASSE_SALARIALE',
+  ABONNEMENT: 'ABONNEMENT',
+  ASSURANCE: 'ASSURANCE',
+  AUTRE: 'AUTRE',
+} as const;
+
+export type ChargeRecurrenteCadence = typeof ChargeRecurrenteCadence[keyof typeof ChargeRecurrenteCadence];
+
+
+export const ChargeRecurrenteCadence = {
+  mensuel: 'mensuel',
+  trimestriel: 'trimestriel',
+  semestriel: 'semestriel',
+  annuel: 'annuel',
+} as const;
+
+export interface ChargeRecurrente {
+  id: string;
+  label: string;
+  category: ChargeRecurrenteCategory;
+  cadence: ChargeRecurrenteCadence;
+  startDate: string;
+  /** @nullable */
+  endDate?: string | null;
+  amountCents: number;
+  active: boolean;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+}
+
+export interface ChargeRecurrenteInput {
+  /** @minLength 1 */
+  label: string;
+  category: string;
+  cadence: string;
+  startDate: string;
+  endDate?: string;
+  amountCents: number;
+  active?: boolean;
+  notes?: string;
+}
+
+export interface ChargeRecurrenteUpdate {
+  label?: string;
+  category?: string;
+  cadence?: string;
+  startDate?: string;
+  endDate?: string;
+  amountCents?: number;
+  active?: boolean;
+  notes?: string;
+}
+
 export interface MargeAffaire {
   id: string;
   label: string;
@@ -921,6 +980,10 @@ search?: string;
 
 export type ListEcheancesParams = {
 statut?: string;
+};
+
+export type ListChargesRecurrentesParams = {
+active?: boolean;
 };
 
 export type GetMargeStatsParams = {

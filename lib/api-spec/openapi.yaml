@@ -20,6 +20,7 @@ tags:
   - name: devis
   - name: classeur
   - name: echeances
+  - name: charges-recurrentes
   - name: marge
   - name: rapports
   - name: equipe
@@ -726,6 +727,86 @@ paths:
       operationId: deleteEcheance
       tags: [echeances]
       summary: Delete a fiscal deadline
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
+  # ── Charges récurrentes ──────────────────────────────────────────────────────
+  /charges-recurrentes:
+    get:
+      operationId: listChargesRecurrentes
+      tags: [charges-recurrentes]
+      summary: List recurring fixed charges
+      parameters:
+        - in: query
+          name: active
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: List of charges récurrentes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ChargeRecurrente"
+    post:
+      operationId: createChargeRecurrente
+      tags: [charges-recurrentes]
+      summary: Create a recurring fixed charge
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChargeRecurrenteInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChargeRecurrente"
+
+  /charges-recurrentes/{id}:
+    patch:
+      operationId: updateChargeRecurrente
+      tags: [charges-recurrentes]
+      summary: Update a recurring fixed charge
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChargeRecurrenteUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChargeRecurrente"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteChargeRecurrente
+      tags: [charges-recurrentes]
+      summary: Delete a recurring fixed charge
       parameters:
         - in: path
           name: id
@@ -2009,6 +2090,82 @@ components:
           type: number
         status:
           type: string
+        notes:
+          type: string
+
+    ChargeRecurrente:
+      type: object
+      required: [id, label, category, cadence, startDate, amountCents, active, createdAt]
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        category:
+          type: string
+          enum: [LOYER, MASSE_SALARIALE, ABONNEMENT, ASSURANCE, AUTRE]
+        cadence:
+          type: string
+          enum: [mensuel, trimestriel, semestriel, annuel]
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: ["string", "null"]
+          format: date
+        amountCents:
+          type: number
+        active:
+          type: boolean
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    ChargeRecurrenteInput:
+      type: object
+      required: [label, category, cadence, startDate, amountCents]
+      properties:
+        label:
+          type: string
+          minLength: 1
+        category:
+          type: string
+        cadence:
+          type: string
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        amountCents:
+          type: number
+        active:
+          type: boolean
+        notes:
+          type: string
+
+    ChargeRecurrenteUpdate:
+      type: object
+      properties:
+        label:
+          type: string
+        category:
+          type: string
+        cadence:
+          type: string
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        amountCents:
+          type: number
+        active:
+          type: boolean
         notes:
           type: string
 

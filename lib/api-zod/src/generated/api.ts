@@ -923,6 +923,101 @@ export const DeleteEcheanceResponse = zod.void()
 
 
 /**
+ * @summary List recurring fixed charges
+ */
+export const ListChargesRecurrentesQueryParams = zod.object({
+  "active": zod.coerce.boolean().optional()
+})
+
+export const ListChargesRecurrentesResponseItem = zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "category": zod.enum(['LOYER', 'MASSE_SALARIALE', 'ABONNEMENT', 'ASSURANCE', 'AUTRE']),
+  "cadence": zod.enum(['mensuel', 'trimestriel', 'semestriel', 'annuel']),
+  "startDate": zod.coerce.date(),
+  "endDate": zod.coerce.date().nullish(),
+  "amountCents": zod.number(),
+  "active": zod.boolean(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+export const ListChargesRecurrentesResponse = zod.array(ListChargesRecurrentesResponseItem)
+
+
+/**
+ * @summary Create a recurring fixed charge
+ */
+
+
+
+export const CreateChargeRecurrenteBody = zod.object({
+  "label": zod.string().min(1),
+  "category": zod.string(),
+  "cadence": zod.string(),
+  "startDate": zod.coerce.date(),
+  "endDate": zod.coerce.date().optional(),
+  "amountCents": zod.number(),
+  "active": zod.boolean().optional(),
+  "notes": zod.string().optional()
+})
+
+export const CreateChargeRecurrenteResponse = zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "category": zod.enum(['LOYER', 'MASSE_SALARIALE', 'ABONNEMENT', 'ASSURANCE', 'AUTRE']),
+  "cadence": zod.enum(['mensuel', 'trimestriel', 'semestriel', 'annuel']),
+  "startDate": zod.coerce.date(),
+  "endDate": zod.coerce.date().nullish(),
+  "amountCents": zod.number(),
+  "active": zod.boolean(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update a recurring fixed charge
+ */
+export const UpdateChargeRecurrenteParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const UpdateChargeRecurrenteBody = zod.object({
+  "label": zod.string().optional(),
+  "category": zod.string().optional(),
+  "cadence": zod.string().optional(),
+  "startDate": zod.coerce.date().optional(),
+  "endDate": zod.coerce.date().optional(),
+  "amountCents": zod.number().optional(),
+  "active": zod.boolean().optional(),
+  "notes": zod.string().optional()
+})
+
+export const UpdateChargeRecurrenteResponse = zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "category": zod.enum(['LOYER', 'MASSE_SALARIALE', 'ABONNEMENT', 'ASSURANCE', 'AUTRE']),
+  "cadence": zod.enum(['mensuel', 'trimestriel', 'semestriel', 'annuel']),
+  "startDate": zod.coerce.date(),
+  "endDate": zod.coerce.date().nullish(),
+  "amountCents": zod.number(),
+  "active": zod.boolean(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a recurring fixed charge
+ */
+export const DeleteChargeRecurrenteParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DeleteChargeRecurrenteResponse = zod.void()
+
+
+/**
  * @summary Global margin analytics
  */
 export const GetMargeStatsQueryParams = zod.object({

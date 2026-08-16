@@ -40,6 +40,7 @@ import facturationElectroniqueRouter, {
 } from "./facturation-electronique";
 import eReportingRouter from "./e-reporting";
 import { banqueWebhookRouter } from "./webhooks-banque";
+import chargesRecurrentesRouter from "./charges-recurrentes";
 
 import { requireAuth } from "../middleware/requireAuth";
 import { resolveTenant } from "../middleware/resolveTenant";
@@ -112,6 +113,7 @@ router.use(biz, affectationsRouter);
 
 // ── Business routes (OWNER ou ACCOUNTANT seulement) ───────────────────────
 router.use(financierOnly, echeancesRouter);
+router.use(financierOnly, chargesRecurrentesRouter);
 router.use(financierOnly, margeRouter);
 router.use(financierOnly, rapportsRouter);
 router.use(financierOnly, compteResultatRouter);
