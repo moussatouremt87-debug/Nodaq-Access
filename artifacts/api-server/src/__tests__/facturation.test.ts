@@ -665,3 +665,37 @@ describe("k — une échéance du jour même n'est pas encore en retard", () => 
     expect(apres.body.totalOverdueCents).toBe(avant.body.totalOverdueCents);
   });
 });
+
+// ── l — cockpit.ts totalImpayeCents suit la même définition que factures.ts ──
+//
+// Bug corrigé (US-A3.1) : `cockpit.ts` comptait TOUTE facture `settled=false`
+// dans `totalImpayeCents`, sans jamais vérifier `dueDate` — une facture
+// fraîchement émise, à échéance future, s'affichait "en retard" (tone
+// warning) sur le tableau de bord principal. Faux positif systématique pour
+// tout tenant à cycle de paiement long (une facture reste "en attente" des
+// semaines avant son échéance), et absurde en particulier pour un profil à
+// encaissement comptant.
+
+describe("l — totalImpayeCents (cockpit) exclut les factures pas encore échues", () => {
+  test("échéance future → n'augmente pas totalImpayeCents", async () => {
+    const avant = await request(app).get("/api/cockpit/kpis").set("Cookie", cookieA).expect(200);
+
+    const { id } = await createBrouillon(cookieA, { dueDate: "2026-12-31" });
+    await emettre(cookieA, id, { dueDate: "2026-12-31" }).expect(200);
+
+    const apres = await request(app).get("/api/cockpit/kpis").set("Cookie", cookieA).expect(200);
+    expect(apres.body.totalImpayeCents).toBe(avant.body.totalImpayeCents);
+  });
+
+  test("échéance passée → augmente totalImpayeCents du montant de la facture", async () => {
+    const avant = await request(app).get("/api/cockpit/kpis").set("Cookie", cookieA).expect(200);
+
+    const { id, amountCents } = await createBrouillon(cookieA, {
+      issuedDate: "2020-01-01", dueDate: "2020-01-31",
+    });
+    await emettre(cookieA, id, { issuedDate: "2020-01-01", dueDate: "2020-01-31" }).expect(200);
+
+    const apres = await request(app).get("/api/cockpit/kpis").set("Cookie", cookieA).expect(200);
+    expect(apres.body.totalImpayeCents).toBe(avant.body.totalImpayeCents + amountCents);
+  });
+});

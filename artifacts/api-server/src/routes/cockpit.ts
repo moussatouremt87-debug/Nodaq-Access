@@ -9,6 +9,7 @@ import {
   hasFinancialAccess,
 } from "@nodaq/shared";
 import { caNetCentsSql, nbFacturesCaSql, conditionFactureCa } from "../lib/chiffreAffaires.js";
+import { conditionFactureEnRetardSql } from "../lib/facturesEnRetard.js";
 import { maskFinancialFields } from "../lib/maskFinancialFields.js";
 
 const router: IRouter = Router();
@@ -51,10 +52,16 @@ router.get("/cockpit/kpis", async (req, res): Promise<void> => {
       .from(facturesTable)
       .where(eq(facturesTable.settled, false));
 
+    // Même définition que `factures.ts` (`totalOverdueCents`) —
+    // `facturesEnRetard.ts` : ni un simple `settled = false` (une facture
+    // fraîchement émise n'est pas "en retard" avant que son échéance ne
+    // passe), ni `amount_cents` brut (un règlement partiel réduit le
+    // résiduel réellement dû).
+    const aujourdhui = toDateString(new Date());
     const [totalImpaye] = await tx
-      .select({ total: sql<number>`coalesce(sum(amount_cents), 0)` })
+      .select({ total: sql<number>`coalesce(sum(coalesce(residual_cents, amount_cents)), 0)` })
       .from(facturesTable)
-      .where(eq(facturesTable.settled, false));
+      .where(conditionFactureEnRetardSql(aujourdhui));
 
     const [prospectsPipeline] = await tx
       .select({ count: sql<number>`count(*)::int` })
