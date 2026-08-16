@@ -144,6 +144,26 @@ describe("le PDF d'un devis se rend", () => {
     expect(texte).not.toContain("Facture n");
   });
 
+  test("US-A2.1 — tenant profession libérale : le titre suit le vertical, pas 'Devis'", async () => {
+    // Tenant DÉDIÉ (pas `a`, réutilisé par tous les tests de ce fichier et
+    // attendu par défaut sur "industrie_btp" → "Devis") pour ne rien faire
+    // fuiter entre tests. Réglé sur professions_liberales, il doit voir
+    // "Proposition commerciale" — le mot que verticalPacks.ts porte pour ce
+    // secteur.
+    const liberal = await inscrire("liberal");
+    await request(app)
+      .patch("/api/votre-metier")
+      .set("Cookie", liberal.cookie)
+      .send({ metier: "professions_liberales" })
+      .expect(200);
+
+    const d = await creerDevis(liberal);
+    const r = await request(app).get(`/api/devis/${d.id}/pdf`).set("Cookie", liberal.cookie).expect(200);
+    const texte = texteBrut(r.body as Buffer);
+    expect(texte).toContain("Proposition commerciale n");
+    expect(texte).not.toContain("Devis n");
+  });
+
   test("il NE contient PAS les mentions de pénalités de retard", async () => {
     // Elles ne concernent que les factures. Les faire figurer sur un devis
     // annoncerait une créance là où il n'y a qu'une proposition.
@@ -290,7 +310,12 @@ describe("les dates sont affichées à la française", () => {
     // Mieux vaut afficher une valeur inattendue que la déformer en silence.
     const { genererPdfDevis } = await import("../lib/pdf-devis.js");
     const devis = {
-      id: "x", tenantId: "t", reference: "DEV-TEST", clientName: "C",
+      // tenantId doit être un UUID syntaxiquement valide — la politique RLS
+      // de 022_rls_tenant_vide.sql caste le réglage courant en ::uuid.
+      // Celui-ci ne correspond à aucun tenant réel : chargerLibelleDocument
+      // lit alors zéro ligne et retombe sur le vertical par défaut, sans
+      // erreur — ce test n'exerce que le format de date, pas le libellé.
+      id: "x", tenantId: "00000000-0000-0000-0000-000000000000", reference: "DEV-TEST", clientName: "C",
       status: "ENVOYE", lines: [], totalHTCents: 0, totalTTCCents: 0,
       tvaRate: 20, remise: 0, autoliquidation: false, retenueGarantiePct: 0,
       validUntil: "date inconnue", notes: null, clientAddress: null, chantierAddress: null,
