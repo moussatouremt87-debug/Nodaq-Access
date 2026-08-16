@@ -20,6 +20,8 @@ import {
   computeVatBreakdown,
 } from "@nodaq/facturx";
 import type { FacturXInvoice, FacturXLine, FacturXParty } from "@nodaq/facturx";
+import { decennaleApplicable } from "@nodaq/shared";
+import type { Vertical } from "@nodaq/shared";
 
 // ── Local type aliases (mirror lib/db/src/schema/factures.ts) ────────────────
 
@@ -86,7 +88,16 @@ export interface MentionIssue {
   bloquant: boolean;
 }
 
-export function auditMentionsFR(data: FactureForPdf): MentionIssue[] {
+/**
+ * `vertical` gate `decennale_manquante` et `attestation_tva_manquante` :
+ * ces deux règles concernent spécifiquement les travaux (décennale,
+ * art. 279-0 bis CGI) — les appliquer à un secteur sans lien contractuel
+ * avec un maître d'ouvrage bloquait à tort l'émission d'une facture
+ * hors bâtiment légitimement à taux réduit (US-A2.5). La liste des
+ * secteurs concernés est celle, déjà tranchée, de `regulatoryWatch.ts`
+ * (entrée `garantie-decennale`) — une seule source de vérité.
+ */
+export function auditMentionsFR(data: FactureForPdf, vertical: Vertical): MentionIssue[] {
   const issues: MentionIssue[] = [];
   const add = (code: string, message: string, bloquant = true) =>
     issues.push({ code, message, bloquant });
@@ -107,15 +118,17 @@ export function auditMentionsFR(data: FactureForPdf): MentionIssue[] {
     add("aucune_ligne", "Facture sans aucune ligne — émission impossible.", false);
   }
 
+  const travauxConcernes = decennaleApplicable(vertical);
+
   const hasReducedRate = data.lines.some(l => l.vatRate === 10 || l.vatRate === 5.5);
-  if (hasReducedRate && !data.attestationTvaFournie) {
+  if (travauxConcernes && hasReducedRate && !data.attestationTvaFournie) {
     add(
       "attestation_tva_manquante",
       "Ligne(s) au taux réduit (10 % ou 5,5 %) sans attestation TVA signée par le client. L'émission est bloquée : récupérez et cochez l'attestation avant d'émettre.",
     );
   }
 
-  if (!data.seller.decennaleAssureur && !data.autoliquidation) {
+  if (travauxConcernes && !data.seller.decennaleAssureur && !data.autoliquidation) {
     add(
       "decennale_manquante",
       "Assurance décennale non renseignée dans Profil entreprise. La mention est obligatoire sur les factures de travaux (art. L.241-1 C.assur.). Complétez votre profil.",
