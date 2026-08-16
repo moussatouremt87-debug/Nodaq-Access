@@ -24,6 +24,7 @@ import {
   BarChart2,
   Radar,
   ScrollText,
+  Landmark,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { AffaireWords } from '@nodaq/shared';
@@ -73,6 +74,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: '/marge',      label: 'Marge',            icon: TrendingUp,    testId: 'nav-marge',      requiredRoles: FINANCIAL_ROLES },
       { href: '/rapports',   label: 'Rapports',         icon: FileBarChart,  testId: 'nav-rapports',   requiredRoles: FINANCIAL_ROLES },
       { href: '/echeancier',      label: 'Échéancier fiscal',   icon: CalendarClock,   testId: 'nav-echeancier',      requiredRoles: FINANCIAL_ROLES },
+      { href: '/charges-recurrentes', label: 'Charges récurrentes', icon: Landmark,    testId: 'nav-charges-recurrentes', requiredRoles: FINANCIAL_ROLES },
       { href: '/compte-resultat', label: 'Compte de résultat', icon: FileSpreadsheet, testId: 'nav-compte-resultat', requiredRoles: FINANCIAL_ROLES },
     ],
   },

@@ -40,3 +40,4 @@ export * from "./pa_documents_recus";
 export * from "./pa_transmissions";
 export * from "./bank_connections";
 export * from "./bank_accounts";
+export * from "./charges_recurrentes";

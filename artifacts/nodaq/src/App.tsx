@@ -26,6 +26,7 @@ import Analytique from '@/pages/analytique';
 import Rapports from '@/pages/rapports';
 import CompteResultat from '@/pages/compte-resultat';
 import Echeancier from '@/pages/echeancier';
+import ChargesRecurrentes from '@/pages/charges-recurrentes';
 import Equipe from '@/pages/equipe';
 import Connecteurs from '@/pages/connecteurs';
 import Parametres from '@/pages/parametres';
@@ -207,6 +208,7 @@ function ApplicationInterne() {
               <Route path="/rapports" component={RoleRoute(Rapports, FINANCIAL_ROLES)} />
               <Route path="/compte-resultat" component={RoleRoute(CompteResultat, FINANCIAL_ROLES)} />
               <Route path="/echeancier" component={RoleRoute(Echeancier, FINANCIAL_ROLES)} />
+              <Route path="/charges-recurrentes" component={RoleRoute(ChargesRecurrentes, FINANCIAL_ROLES)} />
               <Route path="/equipe" component={RoleRoute(Equipe, ['OWNER'])} />
               <Route path="/votre-metier" component={PlatformRoute(VotreMetier)} />
               <Route path="/connecteurs" component={RoleRoute(Connecteurs, ['OWNER'])} />

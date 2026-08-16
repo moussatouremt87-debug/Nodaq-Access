@@ -28,6 +28,9 @@ import type {
   AffaireStats,
   AffaireUpdate,
   Brief,
+  ChargeRecurrente,
+  ChargeRecurrenteInput,
+  ChargeRecurrenteUpdate,
   ChatHistory,
   ChatMessageInput,
   ChatReply,
@@ -64,6 +67,7 @@ import type {
   InvitationEnAttente,
   InviteMembreBody,
   ListAffairesParams,
+  ListChargesRecurrentesParams,
   ListClasseurParams,
   ListDevisParams,
   ListEcheancesParams,
@@ -2879,6 +2883,304 @@ export const useDeleteEcheance = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getDeleteEcheanceMutationOptions(options));
+    }
+
+export const getListChargesRecurrentesUrl = (params?: ListChargesRecurrentesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/charges-recurrentes?${stringifiedParams}` : `/api/charges-recurrentes`
+}
+
+/**
+ * @summary List recurring fixed charges
+ */
+export const listChargesRecurrentes = async (params?: ListChargesRecurrentesParams, options?: Parameters<typeof customFetch>[1]): Promise<ChargeRecurrente[]> => {
+
+  return customFetch<ChargeRecurrente[]>(getListChargesRecurrentesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListChargesRecurrentesQueryKey = (params?: ListChargesRecurrentesParams,) => {
+    return [
+    `/api/charges-recurrentes`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListChargesRecurrentesQueryOptions = <TData = Awaited<ReturnType<typeof listChargesRecurrentes>>, TError = ErrorType<unknown>>(params?: ListChargesRecurrentesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listChargesRecurrentes>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListChargesRecurrentesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listChargesRecurrentes>>> = ({ signal }) => listChargesRecurrentes(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listChargesRecurrentes>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListChargesRecurrentesQueryResult = NonNullable<Awaited<ReturnType<typeof listChargesRecurrentes>>>
+export type ListChargesRecurrentesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List recurring fixed charges
+ */
+
+export function useListChargesRecurrentes<TData = Awaited<ReturnType<typeof listChargesRecurrentes>>, TError = ErrorType<unknown>>(
+ params?: ListChargesRecurrentesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listChargesRecurrentes>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListChargesRecurrentesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateChargeRecurrenteUrl = () => {
+
+
+
+
+  return `/api/charges-recurrentes`
+}
+
+/**
+ * @summary Create a recurring fixed charge
+ */
+export const createChargeRecurrente = async (chargeRecurrenteInput: ChargeRecurrenteInput, options?: Parameters<typeof customFetch>[1]): Promise<ChargeRecurrente> => {
+
+  return customFetch<ChargeRecurrente>(getCreateChargeRecurrenteUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(chargeRecurrenteInput)
+  }
+);}
+
+
+
+
+
+export const getCreateChargeRecurrenteMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createChargeRecurrente>>, TError,{data: BodyType<ChargeRecurrenteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createChargeRecurrente>>, TError,{data: BodyType<ChargeRecurrenteInput>}, TContext> => {
+
+const mutationKey = ['createChargeRecurrente'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createChargeRecurrente>>, {data: BodyType<ChargeRecurrenteInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createChargeRecurrente(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateChargeRecurrenteMutationResult = NonNullable<Awaited<ReturnType<typeof createChargeRecurrente>>>
+    export type CreateChargeRecurrenteMutationBody = BodyType<ChargeRecurrenteInput>
+    export type CreateChargeRecurrenteMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create a recurring fixed charge
+ */
+export const useCreateChargeRecurrente = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createChargeRecurrente>>, TError,{data: BodyType<ChargeRecurrenteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createChargeRecurrente>>,
+        TError,
+        {data: BodyType<ChargeRecurrenteInput>},
+        TContext
+      > => {
+      return useMutation(getCreateChargeRecurrenteMutationOptions(options));
+    }
+
+export const getUpdateChargeRecurrenteUrl = (id: string,) => {
+
+
+
+
+  return `/api/charges-recurrentes/${id}`
+}
+
+/**
+ * @summary Update a recurring fixed charge
+ */
+export const updateChargeRecurrente = async (id: string,
+    chargeRecurrenteUpdate: ChargeRecurrenteUpdate, options?: Parameters<typeof customFetch>[1]): Promise<ChargeRecurrente> => {
+
+  return customFetch<ChargeRecurrente>(getUpdateChargeRecurrenteUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(chargeRecurrenteUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdateChargeRecurrenteMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateChargeRecurrente>>, TError,{id: string;data: BodyType<ChargeRecurrenteUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateChargeRecurrente>>, TError,{id: string;data: BodyType<ChargeRecurrenteUpdate>}, TContext> => {
+
+const mutationKey = ['updateChargeRecurrente'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateChargeRecurrente>>, {id: string;data: BodyType<ChargeRecurrenteUpdate>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateChargeRecurrente(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateChargeRecurrenteMutationResult = NonNullable<Awaited<ReturnType<typeof updateChargeRecurrente>>>
+    export type UpdateChargeRecurrenteMutationBody = BodyType<ChargeRecurrenteUpdate>
+    export type UpdateChargeRecurrenteMutationError = ErrorType<void>
+
+    /**
+ * @summary Update a recurring fixed charge
+ */
+export const useUpdateChargeRecurrente = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateChargeRecurrente>>, TError,{id: string;data: BodyType<ChargeRecurrenteUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateChargeRecurrente>>,
+        TError,
+        {id: string;data: BodyType<ChargeRecurrenteUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateChargeRecurrenteMutationOptions(options));
+    }
+
+export const getDeleteChargeRecurrenteUrl = (id: string,) => {
+
+
+
+
+  return `/api/charges-recurrentes/${id}`
+}
+
+/**
+ * @summary Delete a recurring fixed charge
+ */
+export const deleteChargeRecurrente = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getDeleteChargeRecurrenteUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteChargeRecurrenteMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteChargeRecurrente>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteChargeRecurrente>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['deleteChargeRecurrente'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteChargeRecurrente>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteChargeRecurrente(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteChargeRecurrenteMutationResult = NonNullable<Awaited<ReturnType<typeof deleteChargeRecurrente>>>
+
+    export type DeleteChargeRecurrenteMutationError = ErrorType<void>
+
+    /**
+ * @summary Delete a recurring fixed charge
+ */
+export const useDeleteChargeRecurrente = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteChargeRecurrente>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteChargeRecurrente>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getDeleteChargeRecurrenteMutationOptions(options));
     }
 
 export const getGetMargeStatsUrl = (params?: GetMargeStatsParams,) => {
