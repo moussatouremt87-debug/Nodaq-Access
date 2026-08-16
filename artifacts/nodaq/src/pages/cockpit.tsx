@@ -101,7 +101,7 @@ export default function Cockpit() {
 
   const { data: kpis, isLoading: kpisLoading, isError: kpisError } = useCockpitKpis();
   const { data: activity, isLoading: activityLoading } = useCockpitActivity();
-  const { data: pendingActions, isLoading: pendingLoading } = usePendingActions();
+  const { data: pendingActions, isLoading: pendingLoading, isError: pendingError } = usePendingActions();
   const { approve, isPending: approving } = useApproveAction();
   const { reject, isPending: rejecting } = useRejectAction();
   const { data: profilData } = useProfilIncomplet();
@@ -138,13 +138,23 @@ export default function Cockpit() {
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: getGetCockpitKpisQueryKey() }),
-      queryClient.invalidateQueries({ queryKey: getGetCockpitActivityQueryKey() }),
-      queryClient.invalidateQueries({ queryKey: getListPendingActionsQueryKey() }),
-    ]);
-    setRefreshKey((k) => k + 1);
-    setIsRefreshing(false);
+    // US-A6.2 : sans try/finally, un des trois `invalidateQueries` qui
+    // échoue (ex. panne transitoire sur /pending-actions, exactement le
+    // défaut que ce bouton doit permettre de contourner) fait rejeter le
+    // `Promise.all` — `setIsRefreshing(false)` n'est alors jamais atteint,
+    // et le bouton "Actualiser" reste DÉSACTIVÉ pour de bon, jusqu'au
+    // rechargement de la page. L'utilisateur perd alors le seul moyen de
+    // se rétablir manuellement d'un échec.
+    try {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: getGetCockpitKpisQueryKey() }),
+        queryClient.invalidateQueries({ queryKey: getGetCockpitActivityQueryKey() }),
+        queryClient.invalidateQueries({ queryKey: getListPendingActionsQueryKey() }),
+      ]);
+      setRefreshKey((k) => k + 1);
+    } finally {
+      setIsRefreshing(false);
+    }
   }, [queryClient]);
 
   return (
@@ -521,6 +531,13 @@ export default function Cockpit() {
                   {Array.from({ length: 3 }).map((_, i) => (
                     <Skeleton key={i} className="h-20 w-full" />
                   ))}
+                </div>
+              ) : pendingError ? (
+                // US-A6.2 : un échec de chargement ne doit JAMAIS se confondre
+                // avec "rien à valider" — c'est exactement le défaut confirmé
+                // en recette (panneau vide malgré des données backend correctes).
+                <div className="mx-4 my-4 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+                  Impossible de charger les actions à valider. Réessayez dans un instant.
                 </div>
               ) : pending.length === 0 ? (
                 <Empty className="py-10">

@@ -19,8 +19,19 @@ export function useCockpitActivity() {
   return useGetCockpitActivity();
 }
 
+/**
+ * US-A6.2 — le panneau "Actions à valider" est un pilier de sécurité (CLAUDE.md
+ * §4 : écriture agentique = validation humaine). La config globale du
+ * QueryClient (App.tsx) désactive `retry` et `refetchOnWindowFocus` : sans
+ * override ICI, un seul échec transitoire (401 le temps que la session se
+ * propage, hoquet réseau) laisse `data` à `undefined` indéfiniment, et le
+ * panneau affiche silencieusement "Rien à valider" — indiscernable d'un vide
+ * réel. Retry scoped à CETTE requête, pas au QueryClient global.
+ */
 export function usePendingActions() {
-  return useListPendingActions();
+  return useListPendingActions({
+    query: { queryKey: getListPendingActionsQueryKey(), retry: 2 },
+  });
 }
 
 export function useApproveAction() {
