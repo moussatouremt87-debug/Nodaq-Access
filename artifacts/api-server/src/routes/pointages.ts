@@ -205,10 +205,21 @@ router.get("/pointages/recapitulatif-semaine", async (req, res): Promise<void> =
       planning = [];
     }
 
-    for (let i = 0; i < JOURS_OUVRES.length; i++) {
+    // 7 jours, PAS JOURS_OUVRES.length : bornesSemaine rend une semaine
+    // complète (lundi→dimanche), affectations et pointages sont interrogés
+    // sur cette même plage — mais une boucle bornée à 5 ne générait jamais
+    // samedi ni dimanche comme `jour` candidat. Une affectation posée pour un
+    // week-end (fréquent en bâtiment) disparaissait donc silencieusement de
+    // la proposition, jamais montrée, jamais confirmable — quelle qu'ait été
+    // l'intention de qui l'a créée. `JOURS_OUVRES[i]` reste `undefined`
+    // au-delà de l'index 4 : la SEMAINE TYPE, elle, ne propose toujours rien
+    // par défaut le week-end — seule une affectation explicite le peut,
+    // et seulement si elle a choisi de couvrir le week-end (voir plus bas).
+    for (let i = 0; i < 7; i++) {
       const jourDate = new Date(`${debut}T12:00:00`);
       jourDate.setDate(jourDate.getDate() + i);
       const jour = toDateString(jourDate);
+      const weekEnd = jourDate.getDay() === 0 || jourDate.getDay() === 6;
       if (estAbsent(membre.id, jour)) continue;
 
       // L'AFFECTATION L'EMPORTE SUR LA SEMAINE TYPE.
@@ -222,8 +233,18 @@ router.get("/pointages/recapitulatif-semaine", async (req, res): Promise<void> =
       // Elle reste une PROPOSITION : rien n'est écrit tant que
       // `POST .../confirmer` n'a pas eu lieu. Une heure prévue n'entre dans
       // aucune marge.
+      //
+      // `joursOuvresSeulement` (colonne dédiée, vraie par défaut) est
+      // l'INTENTION posée à la création de l'affectation — une décision
+      // explicite « y compris le week-end » (joursOuvresSeulement: false)
+      // doit rester visible un samedi ou un dimanche ; le défaut, lui, ne
+      // doit pas se mettre à proposer des heures que personne n'a demandées.
       const affectationsDuJour = data.affectations.filter(
-        (a) => a.membreId === membre.id && a.dateDebut <= jour && jour <= a.dateFin,
+        (a) =>
+          a.membreId === membre.id &&
+          a.dateDebut <= jour &&
+          jour <= a.dateFin &&
+          !(weekEnd && a.joursOuvresSeulement),
       );
 
       const creneau = planning.find((p) => p.day === JOURS_OUVRES[i]);
