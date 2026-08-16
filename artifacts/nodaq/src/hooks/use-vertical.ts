@@ -28,9 +28,14 @@ export function useVertical() {
 
   const vertical = data?.metier;
   const words: AffaireWords = affaireWords(vertical);
-  const proposalWord = verticalPack(vertical).proposalWord;
+  const pack = verticalPack(vertical);
+  const proposalWord = pack.proposalWord;
+  // US-A3.1 : délai de paiement usuel du secteur, en jours (0 = comptant).
+  // Déjà disponible côté client — `verticalPack` est isomorphe, pas de route
+  // réseau supplémentaire.
+  const delaiPaiementUsuelJours = pack.delaiPaiementUsuelJours;
 
-  return { vertical, words, proposalWord, isLoading };
+  return { vertical, words, proposalWord, delaiPaiementUsuelJours, isLoading };
 }
 
 export function useUpdateVerticalMutation() {

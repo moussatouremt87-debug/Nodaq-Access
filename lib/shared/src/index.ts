@@ -98,3 +98,4 @@ export * from "./freshnessRules.js";
 export * from "./dates.js";
 export * from "./previsionnelTresorerie.js";
 export * from "./companyProfile.js";
+export * from "./retardPaiement.js";

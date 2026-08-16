@@ -249,12 +249,20 @@ export default function Cockpit() {
                 target={kpis?.facturesEnAttente ?? 0}
                 format={fmtCount}
                 hint={
-                  financier && kpis?.totalImpayeCents
-                    ? `${fmtEUR(kpis.totalImpayeCents)} en retard`
+                  // US-A3.1 : la sévérité affichée dépend du cycle du
+                  // secteur, pas du seul fait qu'une facture soit en retard
+                  // — une facture tout juste échue est normale pour un B2B
+                  // à délai standard, pas pour un commerce à encaissement
+                  // comptant. `totalImpayeSignificatifCents` (pas
+                  // `totalImpayeCents`) porte cette distinction.
+                  financier && kpis?.totalImpayeSignificatifCents
+                    ? kpis.delaiPaiementUsuelJours > 0
+                      ? `${fmtEUR(kpis.totalImpayeSignificatifCents)} en retard — au-delà du délai standard de votre secteur (${kpis.delaiPaiementUsuelJours} j)`
+                      : `${fmtEUR(kpis.totalImpayeSignificatifCents)} en retard`
                     : undefined
                 }
                 icon={FileWarning}
-                tone={financier && kpis?.totalImpayeCents ? 'warning' : 'default'}
+                tone={financier && kpis?.totalImpayeSignificatifCents ? 'warning' : 'default'}
               />
               <AnimatedKpi
                 testId="kpi-prospects-pipeline"

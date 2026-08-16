@@ -24,6 +24,8 @@ export const GetCockpitKpisResponse = zod.object({
   "chiffreAffairesMois": zod.number().describe('Revenue this month in cents'),
   "facturesEnAttente": zod.number(),
   "totalImpayeCents": zod.number().describe('Total overdue in cents'),
+  "totalImpayeSignificatifCents": zod.number().describe('Subset of totalImpayeCents overdue beyond the tenant\'s sector-typical payment delay (US-A3.1) — drives KPI severity, not a second total to add.'),
+  "delaiPaiementUsuelJours": zod.number().describe('Tenant\'s sector-typical payment delay in days (0 = cash business) — not financial data, never masked.'),
   "prospectsPipeline": zod.number(),
   "contratsActifs": zod.number(),
   "pendingActionsCount": zod.number(),

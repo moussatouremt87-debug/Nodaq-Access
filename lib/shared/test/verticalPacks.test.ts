@@ -15,6 +15,7 @@ import {
   verticalLabel,
   verticalPack,
   verticalChoices,
+  delaiPaiementUsuelJours,
 } from "../src/verticalPacks.js";
 
 describe("VERTICALS ↔ VERTICAL_PACKS — exhaustivité", () => {
@@ -27,6 +28,12 @@ describe("VERTICALS ↔ VERTICAL_PACKS — exhaustivité", () => {
   test("chaque pack a un proposalWord non vide", () => {
     for (const id of VERTICALS) {
       expect(VERTICAL_PACKS[id].proposalWord.trim().length).toBeGreaterThan(0);
+    }
+  });
+
+  test("chaque pack a un delaiPaiementUsuelJours défini (0 ou 30)", () => {
+    for (const id of VERTICALS) {
+      expect([0, 30]).toContain(VERTICAL_PACKS[id].delaiPaiementUsuelJours);
     }
   });
 
@@ -102,5 +109,31 @@ describe("verticalChoices — les 9 nouveaux sont bien ciblés (cible), pas rang
 
   test("PIVOT_VERTICALS (ADR-007, 5 valeurs) n'est pas modifié par cette extension", () => {
     expect(PIVOT_VERTICALS).toEqual(["batiment", "paysage", "evenementiel", "maintenance", "services_projet"]);
+  });
+});
+
+describe("delaiPaiementUsuelJours — affectation par vertical (US-A3.1)", () => {
+  test("encaissement comptant : retail, restauration_chr, negoce, evenementiel", () => {
+    for (const id of ["retail", "restauration_chr", "negoce", "evenementiel"]) {
+      expect(delaiPaiementUsuelJours(id)).toBe(0);
+    }
+  });
+
+  test("délai B2B standard : batiment, professions_liberales, services_entreprises, transport, sante_liberale", () => {
+    for (const id of [
+      "batiment", "professions_liberales", "services_entreprises", "transport", "sante_liberale",
+    ]) {
+      expect(delaiPaiementUsuelJours(id)).toBe(30);
+    }
+  });
+
+  test("cas ambigus tranchés prudemment vers le délai standard : services_personne, artisanat_service", () => {
+    expect(delaiPaiementUsuelJours("services_personne")).toBe(30);
+    expect(delaiPaiementUsuelJours("artisanat_service")).toBe(30);
+  });
+
+  test("vertical inconnu/absent → repli neutre (autre), délai standard", () => {
+    expect(delaiPaiementUsuelJours(null)).toBe(30);
+    expect(delaiPaiementUsuelJours("n-importe-quoi")).toBe(30);
   });
 });
