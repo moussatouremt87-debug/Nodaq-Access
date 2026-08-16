@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
-import { withTenant, connectorsTable } from "@workspace/db";
+import { withTenant, connectorsTable, bankConnectionsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
+import { getConfig, creerUtilisateur, creerSessionConnexion, BanqueConfigError } from "@nodaq/banque-agreee";
 
 const router: IRouter = Router();
 
@@ -84,6 +85,51 @@ router.patch("/connecteurs/:type", async (req, res): Promise<void> => {
 
   if (!updated) { res.status(404).json({ error: "Not found" }); return; }
   res.json({ ...updated, config: redactConfig(updated.config as Record<string, string>) });
+});
+
+/**
+ * POST /connecteurs/banque/session
+ *
+ * Crée (au premier appel) l'utilisateur Bridge du tenant, puis une session
+ * Bridge Connect — le front redirige le navigateur sur l'`url` renvoyée.
+ * L'appel réseau vers Bridge reste EN DEHORS de toute transaction : une
+ * latence Bridge ne doit jamais tenir une connexion Postgres ouverte.
+ */
+router.post("/connecteurs/banque/session", async (req, res): Promise<void> => {
+  const tenantId = req.tenantId!;
+
+  let config;
+  try {
+    config = getConfig();
+  } catch (err) {
+    if (err instanceof BanqueConfigError) {
+      res.status(503).json({ error: "Connecteur bancaire non configuré." });
+      return;
+    }
+    throw err;
+  }
+
+  const [existante] = await withTenant(tenantId, (tx) =>
+    tx.select().from(bankConnectionsTable).where(eq(bankConnectionsTable.tenantId, tenantId)),
+  );
+
+  if (!existante) {
+    const utilisateur = await creerUtilisateur(config, tenantId);
+    await withTenant(tenantId, (tx) =>
+      tx.insert(bankConnectionsTable).values({
+        tenantId,
+        bridgeUserUuid: utilisateur.uuid,
+        statut: "en_attente",
+      }),
+    );
+  }
+
+  // APP_URL : base des liens client-facing (même patron que prospection.ts,
+  // membres.ts) — repli sur le site vitrine en dev seulement, jamais en prod
+  // (garde au démarrage dans index.ts).
+  const callbackUrl = `${process.env["APP_URL"] ?? "https://nodaq.fr"}/connecteurs`;
+  const session = await creerSessionConnexion(config, tenantId, callbackUrl);
+  res.json({ url: session.url });
 });
 
 export default router;
