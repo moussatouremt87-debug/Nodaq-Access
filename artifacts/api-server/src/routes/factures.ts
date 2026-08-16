@@ -8,7 +8,7 @@
  */
 import { Router, type IRouter } from "express";
 import { requireRole } from "../middleware/requireRole.js";
-import { withTenant, facturesTable, avoirsTable, activityTable, settingsTable, archivedPdfsTable, paiementsTable, CLE_PA_API_KEY } from "@workspace/db";
+import { withTenant, facturesTable, avoirsTable, activityTable, archivedPdfsTable, paiementsTable, CLE_PA_API_KEY } from "@workspace/db";
 import { and, eq, desc, sql } from "drizzle-orm";
 import { z } from "zod";
 import { auditInvoice } from "@nodaq/facturx";
@@ -25,6 +25,7 @@ import {
   type FactureLine,
   type FactureAddress,
 } from "../lib/pdf-generation.js";
+import { loadCompanySettings, sellerInfoFromSettings } from "../lib/seller-info.js";
 import { sendDocument } from "../lib/canal-emission.js";
 import { auditEmissionElectronique } from "../lib/emission-electronique.js";
 import { logger } from "../lib/logger.js";
@@ -117,29 +118,14 @@ const DEFAULT_VERTICAL: Vertical = "industrie_btp";
 /**
  * Charge les réglages entreprise d'un tenant, et son vertical (US-A2.5 :
  * `auditMentionsFR` en a besoin pour ne gater les règles travaux
- * qu'aux secteurs réellement concernés). Une seule lecture `settings` —
- * `byKey` porte déjà toutes les lignes, la clé vertical n'ajoute aucune
- * requête.
+ * qu'aux secteurs réellement concernés). Une seule lecture `settings`
+ * (`loadCompanySettings`) — `byKey` porte déjà toutes les lignes, la clé
+ * vertical n'ajoute aucune requête. Le mapping `SellerInfo` lui-même vit
+ * dans `lib/seller-info.ts`, partagé avec `avoirs.ts`/`pdf-devis.ts`.
  */
 async function loadSellerInfo(tenantId: string): Promise<{ seller: SellerInfo; vertical: Vertical }> {
-  const rows = await withTenant(tenantId, async tx =>
-    tx.select().from(settingsTable).where(
-      sql`${settingsTable.tenantId} = ${tenantId}::uuid`,
-    ),
-  );
-  const byKey = Object.fromEntries(rows.map(r => [r.key, r.value]));
-  const seller: SellerInfo = {
-    nom: (byKey["company.raison_sociale"] as string) ?? "Entreprise",
-    formeJuridique: byKey["company.forme_juridique"] as string | undefined,
-    siret: (byKey["company.siret"] as string) ?? "",
-    tvaIntracom: byKey["company.tva_intracom"] as string | undefined,
-    adresse: byKey["company.adresse"] as string | undefined,
-    codePostal: byKey["company.code_postal"] as string | undefined,
-    ville: byKey["company.commune"] as string | undefined,
-    decennaleAssureur: byKey["company.decennale_assureur"] as string | undefined,
-    decennaleNumero: byKey["company.decennale_numero"] as string | undefined,
-    decennaleCouverture: byKey["company.decennale_couverture"] as string | undefined,
-  };
+  const byKey = await loadCompanySettings(tenantId);
+  const seller = sellerInfoFromSettings(byKey);
   const vertical = (byKey[VERTICAL_SETTING_KEY] as Vertical | undefined) ?? DEFAULT_VERTICAL;
   return { seller, vertical };
 }

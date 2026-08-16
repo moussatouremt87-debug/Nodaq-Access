@@ -14,9 +14,8 @@
 import { describe, test, expect, beforeAll, afterAll, vi } from "vitest";
 import request from "supertest";
 import crypto from "node:crypto";
-import zlib from "node:zlib";
 import app from "../app";
-import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner } from "./helpers";
+import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner, texteBrut } from "./helpers";
 
 interface Locataire { cookie: string; tenantId: string }
 
@@ -55,55 +54,6 @@ async function creerDevis(l: Locataire): Promise<{ id: string; reference: string
     })
     .expect(201);
   return { id: body.id, reference: body.reference };
-}
-
-/**
- * Le texte d'un PDF, flux décompressés ET chaînes recollées.
- *
- * Deux obstacles, tous deux réels :
- *
- *  1. pdfkit COMPRESSE les flux de contenu (Flate) — lire les octets bruts ne
- *     montre que l'en-tête et les tables d'objets ;
- *  2. il écrit le texte en CHAÎNES HEXADÉCIMALES découpées par le CRÉNAGE :
- *     `[<4465> 15 <766973206eb0…>] TJ` vaut « Devis n° … ». Les nombres de
- *     crénage s'intercalent entre les fragments, donc décoder chaque chaîne
- *     séparément ne recolle pas « Devis ».
- *
- * On inflate, puis on traite chaque tableau `[…] TJ` en BLOC : les fragments
- * hexadécimaux sont décodés et concaténés, les nombres de crénage jetés.
- */
-function texteBrut(pdf: Buffer): string {
-  const flux: string[] = [];
-  let i = 0;
-  for (;;) {
-    const debut = pdf.indexOf("stream", i);
-    if (debut === -1) break;
-    let d = debut + "stream".length;
-    if (pdf[d] === 0x0d) d++;
-    if (pdf[d] === 0x0a) d++;
-    const fin = pdf.indexOf("endstream", d);
-    if (fin === -1) break;
-    try {
-      flux.push(zlib.inflateSync(pdf.subarray(d, fin)).toString("latin1"));
-    } catch {
-      // Flux non compressé ou binaire — polices, images : rien à en tirer.
-    }
-    i = fin + 1;
-  }
-
-  const decodeHex = (hex: string): string => {
-    const propre = hex.replace(/\s+/g, "");
-    if (propre.length === 0 || propre.length % 2 !== 0) return "";
-    return Buffer.from(propre, "hex").toString("latin1");
-  };
-
-  const lisible = flux
-    .join("\n")
-    .replace(/\[([^\]]*)\]\s*TJ/g, (_tout, contenu: string) =>
-      [...contenu.matchAll(/<([0-9A-Fa-f\s]*)>/g)].map((m) => decodeHex(m[1]!)).join(""),
-    );
-
-  return lisible;
 }
 
 beforeAll(async () => {

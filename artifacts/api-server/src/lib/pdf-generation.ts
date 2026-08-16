@@ -51,6 +51,8 @@ export interface SellerInfo {
   nom: string;
   formeJuridique?: string;
   siret: string;
+  /** SIREN (9 chiffres) — mention capital+RCS (US-A1.3). */
+  siren?: string;
   tvaIntracom?: string;
   adresse?: string;
   codePostal?: string;
@@ -59,6 +61,14 @@ export interface SellerInfo {
   decennaleNumero?: string;
   decennaleCouverture?: string;
   tauxHoraire?: number;
+  /** Numéro d'inscription à l'ordre professionnel (US-A1.3), affiché si renseigné. */
+  numeroOrdre?: string;
+  /** Capital social (US-A1.3) — affiché avec `rcsVille` uniquement si les DEUX sont renseignés. */
+  capitalSocial?: string;
+  /** Ville du RCS (US-A1.3) — voir `capitalSocial`. */
+  rcsVille?: string;
+  /** Franchise en base de TVA, art. 293 B CGI (US-A1.3) — déclaré, jamais deviné. */
+  tvaFranchise?: boolean;
 }
 
 export interface FactureForPdf {
@@ -144,6 +154,16 @@ export function auditMentionsFR(data: FactureForPdf, vertical: Vertical): Mentio
     );
   }
 
+  // US-A1.3 : une entreprise en franchise en base de TVA (art. 293 B CGI) ne
+  // peut légalement facturer aucune TVA. Une ligne à taux non nul serait un
+  // document juridiquement faux — bloquer plutôt que l'émettre.
+  if (data.seller.tvaFranchise && data.lines.some(l => (l.vatRate ?? 0) > 0)) {
+    add(
+      "franchise_tva_incoherente",
+      "Le profil entreprise est déclaré en franchise en base de TVA (art. 293 B du CGI), mais une ligne porte un taux de TVA non nul. Corrigez le profil entreprise ou les lignes de la facture avant d'émettre.",
+    );
+  }
+
   return issues;
 }
 
@@ -181,6 +201,32 @@ function fmtDateFr(iso: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso.trim());
   if (!m) return iso;
   return `${m[3]}/${m[2]}/${m[1]}`;
+}
+
+/**
+ * SIREN (9 chiffres) formaté en 3 groupes de 3, ex. "812 345 676".
+ *
+ * Préfère `seller.siren` (posé à l'onboarding, déjà validé) ; à défaut,
+ * dérive les 9 premiers chiffres du SIRET — un calcul déterministe sur une
+ * donnée déjà validée par Luhn, pas une supposition métier. `undefined` si
+ * ni l'un ni l'autre ne fournit 9 chiffres.
+ */
+function formatSiren(seller: SellerInfo): string | undefined {
+  const brut = (seller.siren ?? seller.siret ?? "").replace(/\D/g, "").slice(0, 9);
+  if (brut.length !== 9) return undefined;
+  return brut.replace(/(\d{3})(?=\d)/g, "$1 ").trim();
+}
+
+/**
+ * Mention capital social + RCS (US-A1.3) — affichée UNIQUEMENT si les deux
+ * champs sont renseignés (art. R.123-237 C.com. : la mention n'a de sens
+ * qu'avec les deux éléments réunis). Libellé usuel, non revalidé auprès d'un
+ * expert-comptable — même réserve que la mention taux réduit plus bas.
+ */
+function mentionCapitalRcs(seller: SellerInfo): string {
+  if (!seller.capitalSocial || !seller.rcsVille) return "";
+  const siren = formatSiren(seller);
+  return `Capital social : ${seller.capitalSocial} — RCS ${seller.rcsVille}${siren ? " " + siren : ""}`;
 }
 
 /**
@@ -227,6 +273,10 @@ export async function generateHumanPdf(data: FactureForPdf): Promise<Buffer> {
       [data.seller.codePostal, data.seller.ville].filter(Boolean).join(" "),
       `SIRET : ${data.seller.siret}`,
       data.seller.tvaIntracom ? `N° TVA intracommunautaire : ${data.seller.tvaIntracom}` : "",
+      // US-A1.3 : capital + RCS uniquement si les DEUX sont renseignés — un
+      // seul des deux ne forme pas une mention légale complète.
+      mentionCapitalRcs(data.seller),
+      data.seller.numeroOrdre ? `N° d'inscription à l'ordre professionnel : ${data.seller.numeroOrdre}` : "",
     ].filter(Boolean);
     for (const line of sellerLines) { doc.text(line, 60, y); y += 13; }
 
@@ -283,9 +333,14 @@ export async function generateHumanPdf(data: FactureForPdf): Promise<Buffer> {
       y += 14;
     }
 
-    // Compute VAT by bucket
+    // Compute VAT by bucket. Franchise en base (art. 293 B CGI) : aucune TVA
+    // n'est due, quel que soit le taux porté par une ligne — même garde que
+    // l'autoliquidation. `auditMentionsFR` bloque déjà l'émission d'une
+    // facture incohérente ; ce calcul reste défensif pour les documents
+    // (devis) qui ne passent pas par cet audit.
+    const masquerTva = data.autoliquidation || data.seller.tvaFranchise === true;
     for (const [rate, bucket] of Object.entries(vatCategories)) {
-      bucket.vat = data.autoliquidation ? 0 : Math.round((bucket.base * Number(rate)) / 100);
+      bucket.vat = masquerTva ? 0 : Math.round((bucket.base * Number(rate)) / 100);
     }
     const totalHT = Object.values(vatCategories).reduce((s, b) => s + b.base, 0);
     const totalTVA = Object.values(vatCategories).reduce((s, b) => s + b.vat, 0);
@@ -302,7 +357,7 @@ export async function generateHumanPdf(data: FactureForPdf): Promise<Buffer> {
     for (const [rate, bucket] of Object.entries(vatCategories)) {
       doc.text(`Base TVA ${rate} %`, totX, y, { width: totW });
       doc.text(fmtCents(bucket.base), amtX, y, { width: amtW, align: "right" }); y += 12;
-      if (!data.autoliquidation) {
+      if (!masquerTva) {
         doc.text(`TVA ${rate} %`, totX, y, { width: totW });
         doc.text(fmtCents(bucket.vat), amtX, y, { width: amtW, align: "right" }); y += 12;
       }
@@ -310,7 +365,7 @@ export async function generateHumanPdf(data: FactureForPdf): Promise<Buffer> {
 
     doc.font("Helvetica-Bold");
     doc.text("Total HT", totX, y, { width: totW }); doc.text(fmtCents(totalHT), amtX, y, { width: amtW, align: "right" }); y += 12;
-    if (!data.autoliquidation) {
+    if (!masquerTva) {
       doc.text("Total TVA", totX, y, { width: totW }); doc.text(fmtCents(totalTVA), amtX, y, { width: amtW, align: "right" }); y += 12;
     }
     doc.fontSize(11).text("Total TTC", totX, y, { width: totW }); doc.text(fmtCents(totalTTC), amtX, y, { width: amtW, align: "right" }); y += 18;
@@ -331,6 +386,14 @@ export async function generateHumanPdf(data: FactureForPdf): Promise<Buffer> {
 
     if (data.autoliquidation) {
       doc.text("Autoliquidation — article 283-2 nonies du CGI : TVA non facturée, acquittée par le preneur.", 50, y, { width: W }); y += 24;
+    }
+
+    // US-A1.3 : franchise en base de TVA — LIBELLÉ NON VÉRIFIÉ auprès d'une
+    // source officielle (BOFiP) à ce jour, même réserve que la mention taux
+    // réduit ci-dessous. La condition, elle, est déjà auditée et bloquante
+    // (`franchise_tva_incoherente`).
+    if (data.seller.tvaFranchise) {
+      doc.text("TVA non applicable — article 293 B du CGI (franchise en base).", 50, y, { width: W }); y += 14;
     }
 
     // Réforme 2025 : l'ancienne attestation Cerfa 1301-SD séparée est
@@ -475,9 +538,15 @@ export function buildFacturxInvoice(
       grossCents: netCents + vatCents,
       dueCents: netCents + vatCents,
     },
+    // US-A1.3 : sans cette mention, l'audit Factur-X (BR-CO, `lib/facturx`)
+    // bloque lui-même toute facture sans TVA facturée — indépendamment de
+    // `auditMentionsFR` ci-dessus, qui vérifie la cohérence du PROFIL avec
+    // les LIGNES, pas la présence de cette mention côté Factur-X.
     vatExemptionReason: data.autoliquidation
       ? "Autoliquidation — article 283-2 nonies du CGI"
-      : undefined,
+      : data.seller.tvaFranchise
+        ? "TVA non applicable, art. 293 B du CGI"
+        : undefined,
     note: data.notes?.slice(0, 1000),
   };
 }

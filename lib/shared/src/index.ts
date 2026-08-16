@@ -97,3 +97,4 @@ export * from "./conversationRetention.js";
 export * from "./freshnessRules.js";
 export * from "./dates.js";
 export * from "./previsionnelTresorerie.js";
+export * from "./companyProfile.js";

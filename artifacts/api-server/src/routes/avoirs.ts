@@ -16,7 +16,7 @@
  * implicit row lock: the second UPDATE finds residual already decremented and 0 rows.
  */
 import { Router, type IRouter } from "express";
-import { withTenant, facturesTable, activityTable, avoirsTable, settingsTable, archivedPdfsTable } from "@workspace/db";
+import { withTenant, facturesTable, activityTable, avoirsTable, archivedPdfsTable } from "@workspace/db";
 import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { toDateString } from "@nodaq/shared";
@@ -26,8 +26,8 @@ import {
   readArchivedPdf,
   type FactureForPdf,
   type FactureLine,
-  type SellerInfo,
 } from "../lib/pdf-generation.js";
+import { loadSellerInfo } from "../lib/seller-info.js";
 import { enregistrerIncidentAvoirCompensationEchouee } from "../lib/incidents-facturation.js";
 
 const router: IRouter = Router();
@@ -49,24 +49,6 @@ const CreateAvoirBody = z.object({
   montantTvaCents: z.number().int().nonnegative().default(0),
   motif: z.string().min(1, "Le motif de l'avoir est obligatoire"),
 });
-
-async function loadSellerInfo(tenantId: string): Promise<SellerInfo> {
-  const rows = await withTenant(tenantId, async tx =>
-    tx.select().from(settingsTable).where(
-      sql`${settingsTable.tenantId} = ${tenantId}::uuid`,
-    ),
-  );
-  const byKey = Object.fromEntries(rows.map(r => [r.key, r.value]));
-  return {
-    nom: (byKey["company.raison_sociale"] as string) ?? "Entreprise",
-    formeJuridique: byKey["company.forme_juridique"] as string | undefined,
-    siret: (byKey["company.siret"] as string) ?? "",
-    tvaIntracom: byKey["company.tva_intracom"] as string | undefined,
-    adresse: byKey["company.adresse"] as string | undefined,
-    codePostal: byKey["company.code_postal"] as string | undefined,
-    ville: byKey["company.commune"] as string | undefined,
-  };
-}
 
 /** Assign the next avoir sequence number within an existing transaction. */
 async function assignAvoirNumero(
