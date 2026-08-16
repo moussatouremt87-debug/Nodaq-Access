@@ -35,6 +35,7 @@ import {
   type FactureLine,
   type SellerInfo,
 } from "./pdf-generation.js";
+import { loadSellerInfo } from "./seller-info.js";
 
 // Même clé et même défaut que routes/votre-metier.ts (US-A1.1).
 const VERTICAL_SETTING_KEY = "votre-metier.metier";
@@ -58,28 +59,14 @@ async function chargerLibelleDocument(tenantId: string): Promise<string> {
   return verticalPack(vertical).proposalWord;
 }
 
-/** Coordonnées de l'émetteur, lues dans les réglages du tenant. */
+/**
+ * Coordonnées de l'émetteur, lues dans les réglages du tenant. Exportée sous
+ * ce nom pour ses trois appelants (`pdf-devis.ts`/`routes/devis.ts`/
+ * `routes/public.ts`) ; le mapping `settings → SellerInfo` lui-même vit dans
+ * `lib/seller-info.ts`, partagé avec `factures.ts`/`avoirs.ts`.
+ */
 export async function chargerEmetteur(tenantId: string): Promise<SellerInfo> {
-  const rows = await withTenant(tenantId, (tx) =>
-    tx.select({ key: settingsTable.key, value: settingsTable.value }).from(settingsTable),
-  );
-  const parCle = Object.fromEntries(rows.map((r) => [r.key, r.value]));
-  const lire = (cle: string): string | undefined => {
-    const v = parCle[cle];
-    return typeof v === "string" && v.trim().length > 0 ? v.trim() : undefined;
-  };
-  return {
-    nom: lire("company.raison_sociale") ?? "Entreprise",
-    formeJuridique: lire("company.forme_juridique"),
-    siret: lire("company.siret") ?? "",
-    tvaIntracom: lire("company.tva_intracom"),
-    adresse: lire("company.adresse"),
-    codePostal: lire("company.code_postal"),
-    ville: lire("company.commune"),
-    decennaleAssureur: lire("company.decennale_assureur"),
-    decennaleNumero: lire("company.decennale_numero"),
-    decennaleCouverture: lire("company.decennale_couverture"),
-  };
+  return loadSellerInfo(tenantId);
 }
 
 /**

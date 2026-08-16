@@ -18,46 +18,8 @@
  */
 import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
-import zlib from "node:zlib";
 import app from "../app";
-import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner } from "./helpers";
-
-/**
- * Même technique que `pdf-devis.test.ts` : les flux d'un PDF sont
- * FlateDecode-compressés — une recherche de texte brut sur les octets du
- * buffer ne prouverait rien (la chaîne cherchée n'apparaît de toute façon
- * jamais en clair, bug corrigé ou pas). On inflate chaque flux, puis on
- * décode les tableaux `[…] TJ` (fragments hexadécimaux + crénage).
- */
-function texteBrut(pdf: Buffer): string {
-  const flux: string[] = [];
-  let i = 0;
-  for (;;) {
-    const debut = pdf.indexOf("stream", i);
-    if (debut === -1) break;
-    let d = debut + "stream".length;
-    if (pdf[d] === 0x0d) d++;
-    if (pdf[d] === 0x0a) d++;
-    const fin = pdf.indexOf("endstream", d);
-    if (fin === -1) break;
-    try {
-      flux.push(zlib.inflateSync(pdf.subarray(d, fin)).toString("latin1"));
-    } catch {
-      // Flux non compressé ou binaire — polices, images : rien à en tirer.
-    }
-    i = fin + 1;
-  }
-  const decodeHex = (hex: string): string => {
-    const propre = hex.replace(/\s+/g, "");
-    if (propre.length === 0 || propre.length % 2 !== 0) return "";
-    return Buffer.from(propre, "hex").toString("latin1");
-  };
-  return flux
-    .join("\n")
-    .replace(/\[([^\]]*)\]\s*TJ/g, (_tout, contenu: string) =>
-      [...contenu.matchAll(/<([0-9A-Fa-f\s]*)>/g)].map((m) => decodeHex(m[1]!)).join(""),
-    );
-}
+import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner, texteBrut } from "./helpers";
 
 const suffix = Date.now().toString(36);
 const email = `vendeur-cle-${suffix}@test.nodaq`;

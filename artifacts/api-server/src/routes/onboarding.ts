@@ -74,6 +74,12 @@ export const COMPANY_KEYS = [
   "company.rcs_ville",
   "company.capital",
   "company.logo_url",
+  // US-A1.3 — formes juridiques variées. `type_profil` ne pilote que
+  // l'affichage conditionnel de l'écran de complétion (jamais lu par le
+  // rendu PDF/l'audit — voir lib/shared/src/companyProfile.ts).
+  "company.type_profil",
+  "company.tva_franchise",
+  "company.numero_ordre",
   "company.decennale_assureur",
   "company.decennale_numero",
   "company.decennale_couverture",
