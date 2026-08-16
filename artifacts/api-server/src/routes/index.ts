@@ -39,6 +39,7 @@ import facturationElectroniqueRouter, {
   facturationElectroniqueWebhookRouter,
 } from "./facturation-electronique";
 import eReportingRouter from "./e-reporting";
+import { banqueWebhookRouter } from "./webhooks-banque";
 
 import { requireAuth } from "../middleware/requireAuth";
 import { resolveTenant } from "../middleware/resolveTenant";
@@ -60,6 +61,10 @@ router.use(membresPublicRouter); // /membres/inviter/:token (lecture + acceptati
 // voir facturation-electronique.ts. Aucune PA réelle contractée à ce jour ;
 // route non testable bout en bout, seulement son authentification.
 router.use(facturationElectroniqueWebhookRouter);
+// Webhook Bridge (connecteur bancaire) : pas de session, authentifié par
+// signature HMAC — voir webhooks-banque.ts. Un seul webhook applicatif,
+// tenant résolu via la policy RLS étroite bank_connections_webhook_lookup.
+router.use(banqueWebhookRouter);
 
 // ── MFA (ticket 4.15) — requireAuth SEUL, pas la chaîne biz ────────────────
 // Une session bloquée par requireMfaVerified doit pouvoir atteindre ces

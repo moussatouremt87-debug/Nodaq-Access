@@ -35,8 +35,10 @@ const CONNECTOR_ICONS: Record<string, React.ElementType> = {
   ZAPIER: Zap,
 };
 
+// BANQUE n'a plus d'entrée ici : la connexion passe par le funnel hébergé
+// Bridge Connect (redirection), pas une clé API saisie à la main — voir
+// handleConnecterBanque().
 const CONNECTOR_FIELDS: Record<string, { key: string; label: string; placeholder: string; type?: string }[]> = {
-  BANQUE:       [{ key: 'apiKey', label: 'Clé API bancaire', placeholder: 'sk_bank_••••••••', type: 'password' }],
   PENNYLANE:    [{ key: 'apiKey', label: 'Clé API Pennylane', placeholder: 'pyl_••••••••', type: 'password' }],
   STRIPE:       [{ key: 'secretKey', label: 'Secret key Stripe', placeholder: 'sk_live_••••••••', type: 'password' }, { key: 'webhookSecret', label: 'Webhook secret', placeholder: 'whsec_••••••••', type: 'password' }],
   GOOGLE_DRIVE: [{ key: 'clientId', label: 'Client ID', placeholder: 'xxx.apps.googleusercontent.com' }, { key: 'clientSecret', label: 'Client secret', placeholder: 'GOCSPX-••••••••', type: 'password' }],
@@ -93,6 +95,24 @@ export default function ConnecteursPage() {
   });
 
   const openConfig = (c: Connector) => { setSelected(c); setConfigOpen(true); };
+
+  const connecterBanqueMut = useMutation({
+    mutationFn: async () => {
+      const res = await apiFetch(`${API}/connecteurs/banque/session`, { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error ?? 'Connexion bancaire impossible');
+      }
+      return res.json() as Promise<{ url: string }>;
+    },
+    onSuccess: ({ url }) => {
+      // Redirection PLEINE PAGE, pas une popup : le funnel Bridge Connect
+      // est un webview hébergé, l'utilisateur y saisit ses identifiants
+      // bancaires — jamais dans un iframe NODAQ.
+      window.location.href = url;
+    },
+    onError: (err: Error) => toast({ title: 'Erreur', description: err.message, variant: 'destructive' }),
+  });
 
   return (
     <div className="pb-16">
@@ -168,6 +188,16 @@ export default function ConnecteursPage() {
                         onClick={() => disconnectMut.mutate(c.type)}
                         disabled={disconnectMut.isPending}>
                         <Link2Off className="h-3.5 w-3.5" /> Déconnecter
+                      </Button>
+                    ) : c.type === 'BANQUE' ? (
+                      <Button
+                        size="sm"
+                        className="flex-1 gap-1"
+                        onClick={() => connecterBanqueMut.mutate()}
+                        disabled={connecterBanqueMut.isPending}
+                      >
+                        <Link2 className="h-3.5 w-3.5" />
+                        {connecterBanqueMut.isPending ? 'Redirection...' : 'Connecter'}
                       </Button>
                     ) : (
                       <Button size="sm" className="flex-1 gap-1" onClick={() => openConfig(c)}>
