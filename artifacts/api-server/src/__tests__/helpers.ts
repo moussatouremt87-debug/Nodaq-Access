@@ -178,6 +178,8 @@ const BUSINESS_TABLES = [
   "pending_actions", "prospects", "settings", "team_members",
   "clients", "tenant_invites",
   "pa_documents_recus", "pa_transmissions",
+  // bank_accounts référence bank_connections (connection_id) : avant elle.
+  "bank_accounts", "bank_connections",
 ];
 
 export async function cleanupTenants(...tenantIds: string[]): Promise<void> {
@@ -289,6 +291,23 @@ export function tableInsertSql(table: string, tenantId: string, memberAId?: stri
     // pa_documents_recus: id is TEXT PK, bytes is BYTEA — both supplied explicitly.
     pa_documents_recus: [`INSERT INTO pa_documents_recus (id, tenant_id, bytes, sha256, byte_size, source) VALUES ($1, $2::uuid, $3, 'rls-test-sha256-placeholder', 8, 'manuel') ON CONFLICT DO NOTHING`, [id, tenantId, Buffer.from("rls-test")]],
     pa_transmissions: [`INSERT INTO pa_transmissions (id, tenant_id, document_type, document_id, statut) VALUES ($1, $2::uuid, 'FACTURE', $3, 'prete') ON CONFLICT DO NOTHING`, [id, tenantId, crypto.randomUUID()]],
+    bank_connections: [`INSERT INTO bank_connections (id, tenant_id, bridge_user_uuid) VALUES ($1, $2::uuid, 'rls-test-bridge-uuid') ON CONFLICT DO NOTHING`, [id, tenantId]],
+    // bank_accounts : connection_id référence bank_connections, qui porte
+    // UNIQUE(tenant_id) — un seul au plus par tenant. Contrairement au
+    // patron catalogue_alias (clé étrangère sans contrainte d'unicité sur
+    // le parent), un DO NOTHING simple laisserait ce CTE vide — donc zéro
+    // ligne bank_accounts insérée — si la fixture bank_connections a déjà
+    // créé la ligne pour ce même tenant plus tôt dans la boucle
+    // d'isolation. DO UPDATE (no-op sur updated_at) garantit que la CTE
+    // renvoie toujours un id, que la ligne soit neuve ou déjà là.
+    bank_accounts: [`WITH c AS (
+        INSERT INTO bank_connections (id, tenant_id, bridge_user_uuid)
+        VALUES ('bc-' || $1, $2::uuid, 'rls-test-bridge-uuid')
+        ON CONFLICT (tenant_id) DO UPDATE SET updated_at = NOW() RETURNING id
+      )
+      INSERT INTO bank_accounts (id, tenant_id, connection_id, label, balance_cents)
+      SELECT $1, $2::uuid, c.id, 'RLS Compte', 1000 FROM c
+      ON CONFLICT DO NOTHING`, [id, tenantId]],
     // tenant_invites : invited_by référence users(id), pas team_members(id)
     // (memberAId porte le mauvais id). Les tenants de ce fixture RLS n'ont
     // pas forcément de membership existant (tenantA/tenantB, notamment) : la
