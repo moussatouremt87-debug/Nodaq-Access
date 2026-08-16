@@ -78,6 +78,7 @@ import type {
   MembresListResponse,
   ParametresInput,
   PendingAction,
+  PrevisionnelTresorerie,
   Prospect,
   ProspectInput,
   ProspectUpdate,
@@ -3182,6 +3183,83 @@ export const useDeleteChargeRecurrente = <TError = ErrorType<void>,
       > => {
       return useMutation(getDeleteChargeRecurrenteMutationOptions(options));
     }
+
+export const getGetPrevisionnelTresorerieUrl = () => {
+
+
+
+
+  return `/api/previsionnel-tresorerie`
+}
+
+/**
+ * @summary 8-week cash-flow forecast
+ */
+export const getPrevisionnelTresorerie = async ( options?: Parameters<typeof customFetch>[1]): Promise<PrevisionnelTresorerie> => {
+
+  return customFetch<PrevisionnelTresorerie>(getGetPrevisionnelTresorerieUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPrevisionnelTresorerieQueryKey = () => {
+    return [
+    `/api/previsionnel-tresorerie`
+    ] as const;
+    }
+
+
+export const getGetPrevisionnelTresorerieQueryOptions = <TData = Awaited<ReturnType<typeof getPrevisionnelTresorerie>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPrevisionnelTresorerie>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPrevisionnelTresorerieQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPrevisionnelTresorerie>>> = ({ signal }) => getPrevisionnelTresorerie({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPrevisionnelTresorerie>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPrevisionnelTresorerieQueryResult = NonNullable<Awaited<ReturnType<typeof getPrevisionnelTresorerie>>>
+export type GetPrevisionnelTresorerieQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary 8-week cash-flow forecast
+ */
+
+export function useGetPrevisionnelTresorerie<TData = Awaited<ReturnType<typeof getPrevisionnelTresorerie>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPrevisionnelTresorerie>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPrevisionnelTresorerieQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getGetMargeStatsUrl = (params?: GetMargeStatsParams,) => {
   const normalizedParams = new URLSearchParams();

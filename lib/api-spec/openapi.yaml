@@ -21,6 +21,7 @@ tags:
   - name: classeur
   - name: echeances
   - name: charges-recurrentes
+  - name: previsionnel-tresorerie
   - name: marge
   - name: rapports
   - name: equipe
@@ -818,6 +819,20 @@ paths:
           description: Deleted
         "404":
           description: Not found
+
+  # ── Prévisionnel de trésorerie ────────────────────────────────────────────────
+  /previsionnel-tresorerie:
+    get:
+      operationId: getPrevisionnelTresorerie
+      tags: [previsionnel-tresorerie]
+      summary: 8-week cash-flow forecast
+      responses:
+        "200":
+          description: Forecast
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrevisionnelTresorerie"
 
   # ── Marge ────────────────────────────────────────────────────────────────────
   /marge:
@@ -2168,6 +2183,65 @@ components:
           type: boolean
         notes:
           type: string
+
+    MouvementPrevisionnel:
+      type: object
+      required: [date, libelle, montantCents, source, sourceId]
+      properties:
+        date:
+          type: string
+          format: date
+        libelle:
+          type: string
+        montantCents:
+          type: number
+        source:
+          type: string
+          enum: [facture, echeance, charge_recurrente]
+        sourceId:
+          type: string
+
+    SemainePrevisionnelle:
+      type: object
+      required: [debut, fin, entreesCents, sortiesCents, soldeFinCents, mouvements]
+      properties:
+        debut:
+          type: string
+          format: date
+        fin:
+          type: string
+          format: date
+        entreesCents:
+          type: number
+        sortiesCents:
+          type: number
+        soldeFinCents:
+          type: ["number", "null"]
+        mouvements:
+          type: array
+          items:
+            $ref: "#/components/schemas/MouvementPrevisionnel"
+
+    PrevisionnelTresorerie:
+      type: object
+      required: [donneesInsuffisantes, from, to, soldeDepartCents, semaines, unpricedEcheancesCount]
+      properties:
+        donneesInsuffisantes:
+          type: boolean
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        soldeDepartCents:
+          type: ["number", "null"]
+        semaines:
+          type: array
+          items:
+            $ref: "#/components/schemas/SemainePrevisionnelle"
+        unpricedEcheancesCount:
+          type: number
 
     # ── Marge ─────────────────────────────────────────────────────────────────
     MargeAffaire:
