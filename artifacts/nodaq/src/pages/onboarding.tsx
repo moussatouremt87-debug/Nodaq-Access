@@ -18,21 +18,29 @@
  * - Le stub OCR dit explicitement "non branché" — pas de simulation.
  * - Formulaire manuel disponible dès que la recherche échoue ou renvoie aucun résultat.
  */
-import { useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Building2, Check, ArrowRight, Upload, FileText,
-  Users, Clock, Shield, ChevronRight, PenLine, Plus, Trash2, Briefcase,
+  Users, Clock, Shield, ChevronRight, PenLine, Plus, Trash2, Briefcase, Scale,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { apiFetch } from '@/lib/auth';
 import { useLocation } from 'wouter';
 import { useUpdateVerticalMutation, secteursOnboarding } from '@/hooks/use-vertical';
-import type { Vertical } from '@nodaq/shared';
+import { useCompanyProfile, COMPANY_PROFILE_QUERY_KEY } from '@/hooks/use-company-profile';
+import { COMPANY_TYPE_PROFIL, type CompanyTypeProfil, type Vertical } from '@nodaq/shared';
+
+const TYPE_PROFIL_LABELS: Record<CompanyTypeProfil, string> = {
+  micro_entreprise: 'Micro-entreprise / auto-entrepreneur',
+  profession_liberale: 'Profession libérale réglementée',
+  societe: 'Société (SARL, SAS, EURL…)',
+};
 
 const API = '/api';
 
@@ -536,6 +544,38 @@ function EcranMetier({ onDone, onSkip }: { onDone: () => void; onSkip: () => voi
   const [tauxHoraire, setTauxHoraire] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // US-A1.3 — type de profil et champs conditionnels. Aucune présélection :
+  // tant que rien n'est choisi, aucun champ conditionnel n'apparaît et rien
+  // n'est envoyé pour `type_profil` (jamais un défaut commode).
+  const queryClient = useQueryClient();
+  const { profile } = useCompanyProfile();
+  const [typeProfil, setTypeProfil] = useState<CompanyTypeProfil | null>(null);
+  const [tvaFranchise, setTvaFranchise] = useState(false);
+  const [numeroOrdre, setNumeroOrdre] = useState('');
+  const [capital, setCapital] = useState('');
+  const [rcsVille, setRcsVille] = useState('');
+
+  // Pré-remplissage au chargement du profil existant — un utilisateur qui
+  // revisite cet écran ne doit pas voir son choix précédent disparaître.
+  useEffect(() => {
+    if (!profile) return;
+    const tp = profile['company.type_profil'];
+    if (tp && (COMPANY_TYPE_PROFIL as readonly string[]).includes(tp)) {
+      setTypeProfil(tp as CompanyTypeProfil);
+    }
+    setTvaFranchise(profile['company.tva_franchise'] === 'true');
+    setNumeroOrdre(profile['company.numero_ordre'] ?? '');
+    setCapital(profile['company.capital'] ?? '');
+    setRcsVille(profile['company.rcs_ville'] ?? '');
+  }, [profile]);
+
+  const selectTypeProfil = (tp: CompanyTypeProfil) => {
+    setTypeProfil(tp);
+    // Cas réel majoritaire pour une micro-entreprise sous le seuil — case
+    // décochable, validée explicitement par l'utilisateur en enregistrant.
+    if (tp === 'micro_entreprise') setTvaFranchise(true);
+  };
+
   // Table équipe
   const [equipe, setEquipe] = useState<TeamRow[]>([]);
   const addMembre = () =>
@@ -552,6 +592,11 @@ function EcranMetier({ onDone, onSkip }: { onDone: () => void; onSkip: () => voi
       if (decennale.numero) updates['company.decennale_numero'] = decennale.numero;
       if (decennale.couverture) updates['company.decennale_couverture'] = decennale.couverture;
       if (tauxHoraire) updates['company.taux_horaire_reel'] = tauxHoraire;
+      if (typeProfil) updates['company.type_profil'] = typeProfil;
+      if (typeProfil === 'micro_entreprise') updates['company.tva_franchise'] = String(tvaFranchise);
+      if (numeroOrdre) updates['company.numero_ordre'] = numeroOrdre;
+      if (capital) updates['company.capital'] = capital;
+      if (rcsVille) updates['company.rcs_ville'] = rcsVille;
 
       // Sauvegarder les champs libres du profil
       if (Object.keys(updates).length > 0) {
@@ -561,6 +606,7 @@ function EcranMetier({ onDone, onSkip }: { onDone: () => void; onSkip: () => voi
           body: JSON.stringify(updates),
         });
         if (!r.ok) throw new Error('Sauvegarde profil échouée');
+        queryClient.invalidateQueries({ queryKey: COMPANY_PROFILE_QUERY_KEY });
       }
 
       // Sauvegarder les membres de l'équipe via le bloc de reprise équipe
@@ -597,6 +643,69 @@ function EcranMetier({ onDone, onSkip }: { onDone: () => void; onSkip: () => voi
         <p className="text-sm text-muted-foreground mt-1">
           Ces informations apparaîtront sur vos devis et factures.
         </p>
+      </div>
+
+      {/* Type de profil — US-A1.3 */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Scale className="h-4 w-4 text-primary" />
+          <span className="text-sm font-medium text-foreground">Votre situation</span>
+          <span className="text-xs text-muted-foreground">(mentions légales sur vos documents)</span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          {COMPANY_TYPE_PROFIL.map(tp => (
+            <button
+              key={tp}
+              type="button"
+              onClick={() => selectTypeProfil(tp)}
+              className={`flex items-center gap-2.5 rounded-xl border p-3.5 text-left text-sm transition-colors ${
+                typeProfil === tp
+                  ? 'border-primary bg-primary/5 text-foreground'
+                  : 'border-border bg-card text-muted-foreground hover:border-primary/40'
+              }`}
+              data-testid={`option-type-profil-${tp}`}
+            >
+              {TYPE_PROFIL_LABELS[tp]}
+            </button>
+          ))}
+        </div>
+
+        {typeProfil === 'micro_entreprise' && (
+          <div className="flex items-start gap-2.5 rounded-lg border border-border bg-card p-3">
+            <Checkbox
+              id="tva-franchise"
+              checked={tvaFranchise}
+              onCheckedChange={v => setTvaFranchise(v === true)}
+              className="mt-0.5"
+            />
+            <Label htmlFor="tva-franchise" className="text-sm font-normal leading-snug cursor-pointer">
+              Je bénéficie de la franchise en base de TVA (je ne facture pas de TVA)
+            </Label>
+          </div>
+        )}
+
+        {typeProfil === 'profession_liberale' && (
+          <div className="space-y-1.5">
+            <Label className="text-xs">Numéro d'inscription à l'ordre professionnel</Label>
+            <Input placeholder="ex. Ordre des architectes — n° 12345" value={numeroOrdre}
+              onChange={e => setNumeroOrdre(e.target.value)} />
+          </div>
+        )}
+
+        {typeProfil === 'societe' && (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Capital social</Label>
+              <Input placeholder="ex. 10 000 €" value={capital}
+                onChange={e => setCapital(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Ville du RCS</Label>
+              <Input placeholder="ex. Lyon" value={rcsVille}
+                onChange={e => setRcsVille(e.target.value)} />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Décennale */}

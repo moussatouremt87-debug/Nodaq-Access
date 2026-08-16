@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, FileText, ExternalLink, Send, CheckCircle2, XCircle, Clock,
@@ -32,6 +32,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { fmtEUR, fmtDate, toDateString } from '@/lib/format';
 import { containerVariants, itemVariants } from '@/lib/motion-variants';
+import { useCompanyProfile } from '@/hooks/use-company-profile';
 
 const API = '/api';
 
@@ -106,18 +107,21 @@ function useFactures(statut?: string) {
 
 // ── Line editor ───────────────────────────────────────────────────────────────
 
-function LineEditor({ lines, onChange }: {
+function LineEditor({ lines, onChange, tvaFranchise = false }: {
   lines: FactureLine[];
   onChange: (lines: FactureLine[]) => void;
+  /** Franchise en base de TVA (US-A1.3) — aucun taux ne se choisit, jamais. */
+  tvaFranchise?: boolean;
 }) {
-  const add = () => onChange([...lines, {
-    id: crypto.randomUUID(),
-    description: '',
-    quantity: 1,
-    unitPriceCents: 0,
-    vatRate: 20,
-    vatCategory: 'S',
-  }]);
+  const add = () => onChange([...lines, tvaFranchise
+    ? {
+      id: crypto.randomUUID(), description: '', quantity: 1, unitPriceCents: 0,
+      vatRate: 0, vatCategory: 'E',
+    }
+    : {
+      id: crypto.randomUUID(), description: '', quantity: 1, unitPriceCents: 0,
+      vatRate: 20, vatCategory: 'S',
+    }]);
 
   const remove = (id: string) => onChange(lines.filter(l => l.id !== id));
   const update = (id: string, field: keyof FactureLine, val: unknown) =>
@@ -157,22 +161,26 @@ function LineEditor({ lines, onChange }: {
                       onChangeCents={cents => update(l.id, 'unitPriceCents', cents)}
                       className="h-7 text-xs text-right border-0 bg-transparent px-1 focus-visible:ring-0" min={0} />
                   </td>
-                  <td className="px-2 py-1.5">
-                    <Select value={String(l.vatRate)}
-                      onValueChange={v => {
-                        const rate = Number(v);
-                        update(l.id, 'vatRate', rate);
-                        update(l.id, 'vatCategory', rate === 0 ? 'Z' : 'S');
-                      }}>
-                      <SelectTrigger className="h-7 text-xs border-0 bg-transparent focus:ring-0">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {VAT_RATES.map(r => (
-                          <SelectItem key={r} value={String(r)}>{r} %</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <td className="px-2 py-1.5 text-right">
+                    {tvaFranchise ? (
+                      <span className="text-xs text-muted-foreground">Franchise</span>
+                    ) : (
+                      <Select value={String(l.vatRate)}
+                        onValueChange={v => {
+                          const rate = Number(v);
+                          update(l.id, 'vatRate', rate);
+                          update(l.id, 'vatCategory', rate === 0 ? 'Z' : 'S');
+                        }}>
+                        <SelectTrigger className="h-7 text-xs border-0 bg-transparent focus:ring-0">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {VAT_RATES.map(r => (
+                            <SelectItem key={r} value={String(r)}>{r} %</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
                   </td>
                   <td className="px-2 py-1.5 text-right font-mono-nums text-xs text-muted-foreground">
                     {net.toFixed(2)} €
@@ -207,6 +215,7 @@ function FactureDialog({ open, onOpenChange, onSaved }: {
   onSaved: () => void;
 }) {
   const { toast } = useToast();
+  const { tvaFranchise } = useCompanyProfile();
   const [customerName, setCustomerName] = useState('');
   const [issuedDate, setIssuedDate] = useState(toDateString(new Date()));
   const [dueDate, setDueDate] = useState('');
@@ -217,16 +226,26 @@ function FactureDialog({ open, onOpenChange, onSaved }: {
   }]);
   const [saving, setSaving] = useState(false);
 
+  // US-A1.3 : un profil en franchise ne facture jamais de TVA — aucun champ
+  // ne se demande à l'émission. Corrige les lignes déjà présentes une fois
+  // le profil chargé (l'état initial ci-dessus ne peut pas encore le savoir).
+  useEffect(() => {
+    if (tvaFranchise) {
+      setLines(prev => prev.map(l => ({ ...l, vatRate: 0, vatCategory: 'E' })));
+    }
+  }, [tvaFranchise]);
+
   const hasReducedRate = lines.some(l => l.vatRate === 10 || l.vatRate === 5.5);
+  const masquerTva = autoliquidation || tvaFranchise;
 
   const totals = useMemo(() => {
     const totalHT = lines.reduce((acc, l) => acc + Math.round(l.quantity * l.unitPriceCents), 0);
-    const totalTVA = autoliquidation ? 0 : lines.reduce((acc, l) => {
+    const totalTVA = masquerTva ? 0 : lines.reduce((acc, l) => {
       const base = Math.round(l.quantity * l.unitPriceCents);
       return acc + Math.round((base * l.vatRate) / 100);
     }, 0);
     return { totalHT, totalTVA, totalTTC: totalHT + totalTVA };
-  }, [lines, autoliquidation]);
+  }, [lines, masquerTva]);
 
   const handleSave = async () => {
     if (!customerName.trim() || !issuedDate || !dueDate) return;
@@ -297,7 +316,12 @@ function FactureDialog({ open, onOpenChange, onSaved }: {
           )}
 
           <Label>Lignes</Label>
-          <LineEditor lines={lines} onChange={setLines} />
+          {tvaFranchise && (
+            <p className="text-xs text-muted-foreground">
+              Profil en franchise en base de TVA — aucun taux ne se choisit, aucune TVA n'est facturée.
+            </p>
+          )}
+          <LineEditor lines={lines} onChange={setLines} tvaFranchise={tvaFranchise} />
 
           <div className="flex justify-end">
             <div className="space-y-1 text-sm min-w-[200px]">
@@ -305,7 +329,7 @@ function FactureDialog({ open, onOpenChange, onSaved }: {
                 <span>Total HT</span>
                 <span className="font-mono-nums">{fmtEUR(totals.totalHT)}</span>
               </div>
-              {!autoliquidation && (
+              {!masquerTva && (
                 <div className="flex justify-between text-muted-foreground">
                   <span>Total TVA</span>
                   <span className="font-mono-nums">{fmtEUR(totals.totalTVA)}</span>
@@ -386,7 +410,7 @@ function EmettreDialog({ open, onOpenChange, facture, onEmit }: {
             L'émission verrouille définitivement la facture. Toute correction ultérieure
             devra passer par un avoir.
           </p>
-          {facture?.lines.some(l => l.vatRate < 20) && !facture.attestationTvaFournie && (
+          {facture?.lines.some(l => l.vatRate === 10 || l.vatRate === 5.5) && !facture.attestationTvaFournie && (
             <div className="flex items-center gap-2 rounded-lg border border-orange-500/30 bg-orange-500/5 px-3 py-2 text-xs text-orange-400">
               <AlertCircle className="h-3.5 w-3.5" />
               Cette facture contient des lignes à taux réduit sans attestation TVA cochée. L'émission sera bloquée.
