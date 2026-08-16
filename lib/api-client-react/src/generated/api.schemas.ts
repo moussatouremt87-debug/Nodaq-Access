@@ -681,6 +681,43 @@ export interface ChargeRecurrenteUpdate {
   notes?: string;
 }
 
+export type MouvementPrevisionnelSource = typeof MouvementPrevisionnelSource[keyof typeof MouvementPrevisionnelSource];
+
+
+export const MouvementPrevisionnelSource = {
+  facture: 'facture',
+  echeance: 'echeance',
+  charge_recurrente: 'charge_recurrente',
+} as const;
+
+export interface MouvementPrevisionnel {
+  date: string;
+  libelle: string;
+  montantCents: number;
+  source: MouvementPrevisionnelSource;
+  sourceId: string;
+}
+
+export interface SemainePrevisionnelle {
+  debut: string;
+  fin: string;
+  entreesCents: number;
+  sortiesCents: number;
+  /** @nullable */
+  soldeFinCents: number | null;
+  mouvements: MouvementPrevisionnel[];
+}
+
+export interface PrevisionnelTresorerie {
+  donneesInsuffisantes: boolean;
+  from: string;
+  to: string;
+  /** @nullable */
+  soldeDepartCents: number | null;
+  semaines: SemainePrevisionnelle[];
+  unpricedEcheancesCount: number;
+}
+
 export interface MargeAffaire {
   id: string;
   label: string;

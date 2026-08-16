@@ -1018,6 +1018,32 @@ export const DeleteChargeRecurrenteResponse = zod.void()
 
 
 /**
+ * @summary 8-week cash-flow forecast
+ */
+export const GetPrevisionnelTresorerieResponse = zod.object({
+  "donneesInsuffisantes": zod.boolean(),
+  "from": zod.coerce.date(),
+  "to": zod.coerce.date(),
+  "soldeDepartCents": zod.number().nullable(),
+  "semaines": zod.array(zod.object({
+  "debut": zod.coerce.date(),
+  "fin": zod.coerce.date(),
+  "entreesCents": zod.number(),
+  "sortiesCents": zod.number(),
+  "soldeFinCents": zod.number().nullable(),
+  "mouvements": zod.array(zod.object({
+  "date": zod.coerce.date(),
+  "libelle": zod.string(),
+  "montantCents": zod.number(),
+  "source": zod.enum(['facture', 'echeance', 'charge_recurrente']),
+  "sourceId": zod.string()
+}))
+})),
+  "unpricedEcheancesCount": zod.number()
+})
+
+
+/**
  * @summary Global margin analytics
  */
 export const GetMargeStatsQueryParams = zod.object({

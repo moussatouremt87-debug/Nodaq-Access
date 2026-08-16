@@ -18,7 +18,8 @@ function toDateStr(v: Date | string | null | undefined): string {
   return String(v);
 }
 
-function computeStatus(dueDate: string, currentStatus: string): string {
+/** Exportée pour le prévisionnel de trésorerie (routes/previsionnel-tresorerie.ts) — une seule définition d'À_VENIR/EN_RETARD, jamais dupliquée. */
+export function computeEcheanceStatus(dueDate: string, currentStatus: string): string {
   if (currentStatus === "PAYEE") return "PAYEE";
   const due = new Date(dueDate);
   const today = new Date();
@@ -34,7 +35,7 @@ router.get("/echeances", async (req, res): Promise<void> => {
   let all = await withTenant(tenantId, async (tx) =>
     tx.select().from(echeancesTable).orderBy(asc(echeancesTable.dueDate))
   );
-  all = all.map(e => ({ ...e, status: computeStatus(e.dueDate, e.status) }));
+  all = all.map(e => ({ ...e, status: computeEcheanceStatus(e.dueDate, e.status) }));
   if (parsed.data.statut) all = all.filter(e => e.status === parsed.data.statut);
 
   res.json(all);
