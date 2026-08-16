@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
+  Select, SelectTrigger, SelectValue, SelectContent, SelectItem, SelectGroup, SelectLabel,
 } from '@/components/ui/select';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -34,7 +34,10 @@ import { toDateString } from '@/lib/format';
 const API = '/api';
 
 // ── Types ─────────────────────────────────────────────────────────────────
-type ScheduleSlot = { day: string; affaireId: string | null };
+// Rattachement EXCLUSIF (US-A4.1) : un créneau pointe soit sur une affaire,
+// soit directement sur un client (métier sans "chantier"), jamais les deux —
+// même contrainte que côté moteur (migration 032).
+type ScheduleSlot = { day: string; affaireId: string | null; clientId: string | null };
 type TeamMember = {
   id: string; name: string; role: string; email?: string | null;
   availability: 'DISPONIBLE' | 'PARTIEL' | 'ABSENT'; schedule: ScheduleSlot[];
@@ -65,6 +68,7 @@ type PlanningData = {
   tauxJourFacture: number; coutJourCharge: number;
 };
 type Affaire = { id: string; label: string; status?: string };
+type Client = { id: string; nom: string };
 
 const DAYS = ['LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM', 'DIM'];
 const DAY_LABELS: Record<string, string> = {
@@ -153,6 +157,19 @@ function useAffaires() {
     queryKey: ['affaires'],
     queryFn: async () => {
       const r = await apiFetch(`${API}/affaires`);
+      if (!r.ok) throw new Error('Fetch failed');
+      return r.json();
+    },
+    staleTime: 60_000,
+  });
+}
+
+/** Clients actifs — pour le rattachement direct sans affaire (US-A4.1). */
+function useClients() {
+  return useQuery<{ clients: Client[] }>({
+    queryKey: ['clients'],
+    queryFn: async () => {
+      const r = await apiFetch(`${API}/clients`);
       if (!r.ok) throw new Error('Fetch failed');
       return r.json();
     },
@@ -453,12 +470,13 @@ function SimulateurBlock({ semaines, activeCount }: { semaines: SemaineData[]; a
 
 // ── EquipeBlock ───────────────────────────────────────────────────────────
 function EquipeBlock({
-  members, absences, affaires, loading,
+  members, absences, affaires, clients, loading,
   onEdit, onDelete, onAdd, membersLoading,
 }: {
   members: TeamMember[];
   absences: Absence[];
   affaires: Affaire[];
+  clients: Client[];
   loading: boolean;
   membersLoading: boolean;
   onEdit: (m: TeamMember) => void;
@@ -474,6 +492,10 @@ function EquipeBlock({
     () => new Map(affaires.map(a => [a.id, a])),
     [affaires],
   );
+  const clientById = useMemo(
+    () => new Map(clients.map(c => [c.id, c])),
+    [clients],
+  );
 
   // Derive what each member is doing today
   function getMemberActivity(m: TeamMember): string {
@@ -488,6 +510,10 @@ function EquipeBlock({
     if (todaySlot?.affaireId) {
       const aff = affaireById.get(todaySlot.affaireId);
       return aff ? aff.label : `${words.singular} en cours`;
+    }
+    if (todaySlot?.clientId) {
+      const client = clientById.get(todaySlot.clientId);
+      return client ? client.nom : 'client';
     }
     return 'disponible';
   }
@@ -868,6 +894,8 @@ export default function EquipePage() {
   const { data: absences = [] } = useAbsences();
   const { data: affairesData } = useAffaires();
   const affaires = affairesData?.affaires ?? [];
+  const { data: clientsData } = useClients();
+  const clients = clientsData?.clients ?? [];
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<TeamMember | null>(null);
@@ -934,6 +962,7 @@ export default function EquipePage() {
           members={members}
           absences={absences}
           affaires={affaires}
+          clients={clients}
           loading={planningLoading}
           membersLoading={membersLoading}
           onEdit={handleEdit}
@@ -969,6 +998,7 @@ export default function EquipePage() {
         onOpenChange={setDialogOpen}
         member={editing}
         affaires={affaires}
+        clients={clients}
         onSaved={() => {
           qc.invalidateQueries({ queryKey: ['equipe'] });
           qc.invalidateQueries({ queryKey: ['equipe-plannings'] });
@@ -997,16 +1027,19 @@ export default function EquipePage() {
 }
 
 // ── MemberDialog ──────────────────────────────────────────────────────────
-function MemberDialog({ open, onOpenChange, member, affaires, onSaved }: {
+function MemberDialog({ open, onOpenChange, member, affaires, clients, onSaved }: {
   open: boolean; onOpenChange: (v: boolean) => void; member: TeamMember | null;
-  affaires: Affaire[]; onSaved: () => void;
+  affaires: Affaire[]; clients: Client[]; onSaved: () => void;
 }) {
   const { toast } = useToast();
+  const { words } = useVertical();
   const [name, setName] = useState('');
   const [role, setRole] = useState('Collaborateur');
   const [email, setEmail] = useState('');
   const [availability, setAvailability] = useState<'DISPONIBLE' | 'PARTIEL' | 'ABSENT'>('DISPONIBLE');
-  const [schedule, setSchedule] = useState<ScheduleSlot[]>(DAYS.map(day => ({ day, affaireId: null })));
+  const [schedule, setSchedule] = useState<ScheduleSlot[]>(
+    DAYS.map(day => ({ day, affaireId: null, clientId: null })),
+  );
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -1014,16 +1047,26 @@ function MemberDialog({ open, onOpenChange, member, affaires, onSaved }: {
       if (member) {
         setName(member.name); setRole(member.role); setEmail(member.email ?? '');
         setAvailability(member.availability);
-        setSchedule(DAYS.map(day => member.schedule.find(s => s.day === day) ?? { day, affaireId: null }));
+        setSchedule(DAYS.map(day =>
+          member.schedule.find(s => s.day === day) ?? { day, affaireId: null, clientId: null },
+        ));
       } else {
         setName(''); setRole('Collaborateur'); setEmail(''); setAvailability('DISPONIBLE');
-        setSchedule(DAYS.map(day => ({ day, affaireId: null })));
+        setSchedule(DAYS.map(day => ({ day, affaireId: null, clientId: null })));
       }
     }
   }, [open, member]);
 
-  const setSlotAffaire = (day: string, affaireId: string | null) =>
-    setSchedule(s => s.map(slot => slot.day === day ? { ...slot, affaireId } : slot));
+  // Rattachement EXCLUSIF (US-A4.1) : un seul select par jour, dont la
+  // valeur encode LEQUEL des deux rattachements est choisi
+  // (`affaire:<id>` / `client:<id>` / `__none__`) — décodé ici en un seul
+  // slot cohérent, jamais les deux à la fois.
+  const setSlotRattachement = (day: string, value: string) => {
+    const [kind, id] = value === '__none__' ? [null, null] : value.split(':', 2);
+    setSchedule(s => s.map(slot => slot.day === day
+      ? { ...slot, affaireId: kind === 'affaire' ? id! : null, clientId: kind === 'client' ? id! : null }
+      : slot));
+  };
 
   const handleSave = async () => {
     if (!name.trim()) return;
@@ -1092,19 +1135,33 @@ function MemberDialog({ open, onOpenChange, member, affaires, onSaved }: {
                 ))}
               </div>
               <div className="grid grid-cols-7 divide-x divide-border">
-                {schedule.map(slot => (
-                  <div key={slot.day} className="p-1.5">
-                    <Select value={slot.affaireId ?? '__none__'} onValueChange={v => setSlotAffaire(slot.day, v === '__none__' ? null : v)}>
-                      <SelectTrigger className="h-8 text-[11px] px-2"><SelectValue placeholder="—" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">—</SelectItem>
-                        {affaires.slice(0, 20).map(a => (
-                          <SelectItem key={a.id} value={a.id}>{a.label.slice(0, 20)}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ))}
+                {schedule.map(slot => {
+                  const value = slot.affaireId ? `affaire:${slot.affaireId}`
+                    : slot.clientId ? `client:${slot.clientId}`
+                    : '__none__';
+                  return (
+                    <div key={slot.day} className="p-1.5">
+                      <Select value={value} onValueChange={v => setSlotRattachement(slot.day, v)}>
+                        <SelectTrigger className="h-8 text-[11px] px-2"><SelectValue placeholder="—" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">—</SelectItem>
+                          <SelectGroup>
+                            <SelectLabel>{words.plural.charAt(0).toUpperCase() + words.plural.slice(1)} en cours</SelectLabel>
+                            {affaires.slice(0, 20).map(a => (
+                              <SelectItem key={a.id} value={`affaire:${a.id}`}>{a.label.slice(0, 20)}</SelectItem>
+                            ))}
+                          </SelectGroup>
+                          <SelectGroup>
+                            <SelectLabel>Clients</SelectLabel>
+                            {clients.slice(0, 20).map(c => (
+                              <SelectItem key={c.id} value={`client:${c.id}`}>{c.nom.slice(0, 20)}</SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
