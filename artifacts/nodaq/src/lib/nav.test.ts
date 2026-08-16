@@ -16,6 +16,7 @@
 import { describe, test, expect } from "vitest";
 import { readFileSync } from "fs";
 import { join } from "path";
+import { NAV_SECTIONS } from "./nav";
 
 const RACINE = join(__dirname, "..");
 const SOURCE_NAV = readFileSync(join(RACINE, "lib", "nav.ts"), "utf8");
@@ -103,5 +104,28 @@ describe("navigation mobile — les fonctions principales sont atteignables", ()
 
   test("le paramétrage d'envoi figure explicitement dans les menus", () => {
     expect(NAV_SECTIONS_HREFS).toContain("/parametres/envoi");
+  });
+});
+
+describe("prospection — masquée hors des verticaux exposés aux travaux", () => {
+  const prospection = NAV_SECTIONS
+    .flatMap((section) => section.items)
+    .find((item) => item.href === "/prospection")!;
+
+  test("l'entrée existe et porte un prédicat de vertical", () => {
+    expect(prospection).toBeDefined();
+    expect(prospection.visibleForVertical).toBeTypeOf("function");
+  });
+
+  test("visible pour un vertical bâtiment", () => {
+    expect(prospection.visibleForVertical!("batiment")).toBe(true);
+  });
+
+  test("masquée pour un vertical sans exposition travaux (restauration)", () => {
+    expect(prospection.visibleForVertical!("restauration_chr")).toBe(false);
+  });
+
+  test("visible tant que le vertical n'est pas encore chargé (jamais masquée à tort)", () => {
+    expect(prospection.visibleForVertical!(undefined)).toBe(true);
   });
 });

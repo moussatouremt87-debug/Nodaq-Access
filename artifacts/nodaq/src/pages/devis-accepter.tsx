@@ -102,8 +102,8 @@ export default function DevisAccepterPage() {
     return (
       <StatusScreen
         icon={<Clock className="h-12 w-12 text-yellow-500" />}
-        title="Devis expiré"
-        message={`Le devis ${data.reference} n'est plus valable depuis le ${data.validUntil ? new Date(data.validUntil).toLocaleDateString('fr-FR') : '—'}. Contactez ${data.entreprise?.nom ?? 'votre prestataire'} pour obtenir un devis actualisé.`}
+        title="Document expiré"
+        message={`Le document ${data.reference} n'est plus valable depuis le ${data.validUntil ? new Date(data.validUntil).toLocaleDateString('fr-FR') : '—'}. Contactez ${data.entreprise?.nom ?? 'votre prestataire'} pour obtenir un document actualisé.`}
         pdfUrl={data.pdfUrl}
       />
     );
@@ -115,8 +115,8 @@ export default function DevisAccepterPage() {
     return (
       <StatusScreen
         icon={<CheckCircle2 className="h-12 w-12 text-green-500" />}
-        title="Devis accepté"
-        message={`Le devis ${data.reference} a été accepté${by ? ` par ${by}` : ''}${when ? ` le ${new Date(when).toLocaleDateString('fr-FR', { dateStyle: 'long' })}` : ''}. ${data.entreprise?.nom ?? 'Votre prestataire'} a été notifié.`}
+        title="Document accepté"
+        message={`Le document ${data.reference} a été accepté${by ? ` par ${by}` : ''}${when ? ` le ${new Date(when).toLocaleDateString('fr-FR', { dateStyle: 'long' })}` : ''}. ${data.entreprise?.nom ?? 'Votre prestataire'} a été notifié.`}
         pdfUrl={data.pdfUrl}
       />
     );
@@ -133,7 +133,7 @@ export default function DevisAccepterPage() {
             </div>
           </div>
           <h1 className="text-2xl font-bold tracking-tight">
-            {data.entreprise?.nom ?? 'Acceptation de devis'}
+            {data.entreprise?.nom ?? 'Acceptation de document'}
           </h1>
           {data.entreprise?.siret && (
             <p className="text-xs text-muted-foreground" data-testid="siret-entreprise">
@@ -142,8 +142,8 @@ export default function DevisAccepterPage() {
           )}
           <p className="text-muted-foreground text-sm">
             {data.entreprise?.nom
-              ? `${data.entreprise.nom} vous transmet le devis suivant.`
-              : 'Vous êtes invité(e) à accepter le devis suivant.'}
+              ? `${data.entreprise.nom} vous transmet le document suivant.`
+              : 'Vous êtes invité(e) à accepter le document suivant.'}
           </p>
         </div>
 
@@ -240,7 +240,7 @@ export default function DevisAccepterPage() {
               className="text-base"
             />
             <p className="text-xs text-muted-foreground">
-              En saisissant votre nom et en cliquant sur « Accepter », vous donnez votre accord pour ce devis (bon pour accord électronique).
+              En saisissant votre nom et en cliquant sur « Accepter », vous donnez votre accord pour ce document (bon pour accord électronique).
             </p>
           </div>
 
@@ -258,7 +258,7 @@ export default function DevisAccepterPage() {
           >
             {acceptMut.isPending
               ? <><Loader2 className="h-4 w-4 animate-spin" />Acceptation en cours…</>
-              : <><CheckCircle2 className="h-4 w-4" />Accepter ce devis</>
+              : <><CheckCircle2 className="h-4 w-4" />Accepter ce document</>
             }
           </Button>
         </div>
@@ -284,7 +284,7 @@ function BoutonPdf({ url }: { url?: string | null }) {
     <Button asChild variant="outline" className="w-full gap-2" data-testid="lien-pdf-devis">
       <a href={url} download>
         <Download className="h-4 w-4" />
-        Télécharger le devis en PDF
+        Télécharger le document en PDF
       </a>
     </Button>
   );

@@ -2,7 +2,7 @@
  * Devis dicté — le devis ne perd JAMAIS de ligne en silence.
  *
  * Le défaut d'origine, relevé à l'usage : cinq ouvrages dictés, trois chiffrés
- * par le catalogue, deux « à compléter ». Après clic sur « Créer le devis », le
+ * par le catalogue, deux « à compléter ». Après clic sur « Créer — Devis », le
  * document enregistré contenait TROIS lignes. Le message affiché disait
  * « Devis créé — relisez-le avant de l'envoyer ». Rien ne signalait la perte.
  *
@@ -81,7 +81,7 @@ describe("le devis ne perd pas de ligne en silence", () => {
     await screen.findByDisplayValue("Cloison BA13");
 
     await utilisateur.type(screen.getByPlaceholderText(/Nom du client/i), "Madame Martin");
-    await utilisateur.click(screen.getByRole("button", { name: /Créer le devis/i }));
+    await utilisateur.click(screen.getByRole("button", { name: /^Créer — Devis$/i }));
 
     // La confirmation s'ouvre et NOMME les deux ouvrages perdus.
     const dialogue = await screen.findByRole("alertdialog");
@@ -100,10 +100,10 @@ describe("le devis ne perd pas de ligne en silence", () => {
     await utilisateur.click(screen.getByRole("button", { name: /Proposer les lignes/i }));
     await screen.findByDisplayValue("Cloison BA13");
     await utilisateur.type(screen.getByPlaceholderText(/Nom du client/i), "Madame Martin");
-    await utilisateur.click(screen.getByRole("button", { name: /Créer le devis/i }));
+    await utilisateur.click(screen.getByRole("button", { name: /^Créer — Devis$/i }));
 
     await screen.findByRole("alertdialog");
-    await utilisateur.click(screen.getByRole("button", { name: /Créer le devis sans ces 2 lignes/i }));
+    await utilisateur.click(screen.getByRole("button", { name: /Créer — Devis sans ces 2 lignes/i }));
 
     await waitFor(() => expect(postsDevis()).toHaveLength(1));
 
@@ -126,7 +126,7 @@ describe("le devis ne perd pas de ligne en silence", () => {
     await utilisateur.click(screen.getByRole("button", { name: /Proposer les lignes/i }));
     await screen.findByDisplayValue("Cloison BA13");
     await utilisateur.type(screen.getByPlaceholderText(/Nom du client/i), "Madame Martin");
-    await utilisateur.click(screen.getByRole("button", { name: /Créer le devis/i }));
+    await utilisateur.click(screen.getByRole("button", { name: /^Créer — Devis$/i }));
 
     await screen.findByRole("alertdialog");
     await utilisateur.click(screen.getByRole("button", { name: /Revenir les compléter/i }));
