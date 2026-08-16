@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { withTenant, affairesTable, contratsTable, facturesTable, prospectsTable, pendingActionsTable, activityTable, incidentsFacturationTable, bankAccountsTable } from "@workspace/db";
+import { withTenant, affairesTable, contratsTable, facturesTable, prospectsTable, pendingActionsTable, activityTable, incidentsFacturationTable, bankAccountsTable, settingsTable } from "@workspace/db";
 import { sql, eq, isNull } from "drizzle-orm";
 import {
   toDateString,
@@ -7,10 +7,17 @@ import {
   debutExercicePrecedent,
   memeJourExercicePrecedent,
   hasFinancialAccess,
+  verticalPack,
+  seuilRetardSignificatif,
+  type Vertical,
 } from "@nodaq/shared";
 import { caNetCentsSql, nbFacturesCaSql, conditionFactureCa } from "../lib/chiffreAffaires.js";
 import { conditionFactureEnRetardSql } from "../lib/facturesEnRetard.js";
 import { maskFinancialFields } from "../lib/maskFinancialFields.js";
+
+// Même clé et même défaut que routes/votre-metier.ts (US-A1.1)/factures.ts.
+const VERTICAL_SETTING_KEY = "votre-metier.metier";
+const DEFAULT_VERTICAL: Vertical = "industrie_btp";
 
 const router: IRouter = Router();
 
@@ -62,6 +69,24 @@ router.get("/cockpit/kpis", async (req, res): Promise<void> => {
       .select({ total: sql<number>`coalesce(sum(coalesce(residual_cents, amount_cents)), 0)` })
       .from(facturesTable)
       .where(conditionFactureEnRetardSql(aujourdhui));
+
+    // US-A3.1 : "en retard" (ci-dessus) ne dit rien de la GRAVITÉ — une
+    // facture à peine échue n'a pas le même poids pour un commerce
+    // (encaissement comptant, aucune marge) que pour un B2B/conseil (délai
+    // usuel 30 jours, un léger flottement est normal). `totalImpayeSignificatif`
+    // ne recalcule PAS "en retard" : `conditionFactureEnRetardSql`, appelée
+    // avec le SEUIL décalé du délai sectoriel plutôt qu'avec `aujourdhui`,
+    // reste l'unique définition (voir `seuilRetardSignificatif`).
+    const [verticalRow] = await tx.select({ value: settingsTable.value }).from(settingsTable).where(
+      sql`${settingsTable.key} = ${VERTICAL_SETTING_KEY}`,
+    );
+    const vertical = (verticalRow?.value as Vertical | undefined) ?? DEFAULT_VERTICAL;
+    const delaiPaiementUsuelJours = verticalPack(vertical).delaiPaiementUsuelJours;
+    const seuilSignificatif = seuilRetardSignificatif(aujourdhui, delaiPaiementUsuelJours);
+    const [totalImpayeSignificatif] = await tx
+      .select({ total: sql<number>`coalesce(sum(coalesce(residual_cents, amount_cents)), 0)` })
+      .from(facturesTable)
+      .where(conditionFactureEnRetardSql(seuilSignificatif));
 
     const [prospectsPipeline] = await tx
       .select({ count: sql<number>`count(*)::int` })
@@ -165,6 +190,8 @@ router.get("/cockpit/kpis", async (req, res): Promise<void> => {
       caMonth,
       facturesEnAttente,
       totalImpaye,
+      totalImpayeSignificatif,
+      delaiPaiementUsuelJours,
       prospectsPipeline,
       contratsActifs,
       pendingCount,
@@ -194,6 +221,12 @@ router.get("/cockpit/kpis", async (req, res): Promise<void> => {
       chiffreAffairesMois: data.caMonth?.total ?? 0,
       facturesEnAttente: data.facturesEnAttente?.count ?? 0,
       totalImpayeCents: data.totalImpaye?.total ?? 0,
+      // US-A3.1 : sous-ensemble de `totalImpayeCents` — factures dont le
+      // retard dépasse le délai usuel du secteur, pas seulement leur propre
+      // échéance. Pilote la sévérité affichée (tone/hint), pas un second
+      // total à additionner.
+      totalImpayeSignificatifCents: data.totalImpayeSignificatif?.total ?? 0,
+      delaiPaiementUsuelJours: data.delaiPaiementUsuelJours,
       prospectsPipeline: data.prospectsPipeline?.count ?? 0,
       contratsActifs: data.contratsActifs?.count ?? 0,
       pendingActionsCount: data.pendingCount?.count ?? 0,
@@ -210,7 +243,7 @@ router.get("/cockpit/kpis", async (req, res): Promise<void> => {
         tauxRecouvrement,
       },
     },
-    ["chiffreAffairesMois", "totalImpayeCents", "treasuryBalanceCents", "monthlySeries", "ytd"],
+    ["chiffreAffairesMois", "totalImpayeCents", "totalImpayeSignificatifCents", "treasuryBalanceCents", "monthlySeries", "ytd"],
     financier,
   ));
 });

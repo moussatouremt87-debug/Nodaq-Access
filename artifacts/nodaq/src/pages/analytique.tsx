@@ -76,7 +76,13 @@ export default function Analytique() {
   const [comparaison, setComparaison] = useState<ComparaisonMode>('meme_periode_n1');
 
   const { data, isLoading } = useIndicateurs({ periode, comparaison });
-  const { words } = useVertical();
+  const { words, delaiPaiementUsuelJours } = useVertical();
+  // US-A3.1 : un profil à encaissement comptant (délai usuel 0 j) n'a quasi
+  // aucun délai de paiement à mesurer — `delai_paiement_client` cède sa place
+  // en tuile hero à `ca_encaisse`, plus pertinent pour ce cycle. Permutation
+  // à DEUX positions fixes seulement (ici et "Votre activité" ci-dessous),
+  // même moteur, même 14 indicateurs : aucune nouvelle formule.
+  const encaissementComptant = delaiPaiementUsuelJours === 0;
 
   // Build all phrases from raw results
   const phrases = useMemo(() => {
@@ -194,29 +200,51 @@ export default function Analytique() {
             loading={isLoading}
           />
 
-          {/* delai_paiement_client */}
-          <HeroTuile
-            valeurFormatted={
-              (() => {
-                const r = byId(data, 'delai_paiement_client');
-                if (!r || r.donneesInsuffisantes) return '—';
-                return `${r.valeur} j`;
-              })()
-            }
-            context="délai de paiement moyen"
-            sous={null}
-            comparaison={comp('delai_paiement_client')}
-            explication={ph('delai_paiement_client').explication}
-            tone={ph('delai_paiement_client').tone}
-            loading={isLoading}
-          />
+          {/* delai_paiement_client (délai standard) — ca_encaisse (comptant) */}
+          {encaissementComptant ? (
+            <HeroTuile
+              valeurFormatted={
+                (() => {
+                  const r = byId(data, 'ca_encaisse');
+                  if (!r || r.donneesInsuffisantes) return '—';
+                  return fmtEURCompact(r.valeur ?? 0);
+                })()
+              }
+              context="encaissés"
+              sous={null}
+              comparaison={comp('ca_encaisse')}
+              explication={ph('ca_encaisse').explication}
+              tone={ph('ca_encaisse').tone}
+              loading={isLoading}
+            />
+          ) : (
+            <HeroTuile
+              valeurFormatted={
+                (() => {
+                  const r = byId(data, 'delai_paiement_client');
+                  if (!r || r.donneesInsuffisantes) return '—';
+                  return `${r.valeur} j`;
+                })()
+              }
+              context="délai de paiement moyen"
+              sous={null}
+              comparaison={comp('delai_paiement_client')}
+              explication={ph('delai_paiement_client').explication}
+              tone={ph('delai_paiement_client').tone}
+              loading={isLoading}
+            />
+          )}
         </div>
 
         {/* ── Votre activité ─────────────────────────────────────────────── */}
         <SectionTitle>Votre activité</SectionTitle>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
           <IndicateurTuile phrase={ph('ca_facture')} comparaison={comp('ca_facture')} loading={isLoading} />
-          <IndicateurTuile phrase={ph('ca_encaisse')} comparaison={comp('ca_encaisse')} loading={isLoading} />
+          {encaissementComptant ? (
+            <IndicateurTuile phrase={ph('delai_paiement_client')} comparaison={comp('delai_paiement_client')} loading={isLoading} />
+          ) : (
+            <IndicateurTuile phrase={ph('ca_encaisse')} comparaison={comp('ca_encaisse')} loading={isLoading} />
+          )}
         </div>
 
         {/* Area chart — single series, no legend (spec §10 + §12) */}

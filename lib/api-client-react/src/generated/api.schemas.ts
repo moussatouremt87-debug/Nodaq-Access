@@ -39,6 +39,10 @@ export interface CockpitKpis {
   facturesEnAttente: number;
   /** Total overdue in cents */
   totalImpayeCents: number;
+  /** Subset of totalImpayeCents overdue beyond the tenant's sector-typical payment delay (US-A3.1) — drives KPI severity, not a second total to add. */
+  totalImpayeSignificatifCents: number;
+  /** Tenant's sector-typical payment delay in days (0 = cash business) — not financial data, never masked. */
+  delaiPaiementUsuelJours: number;
   prospectsPipeline: number;
   contratsActifs: number;
   pendingActionsCount: number;

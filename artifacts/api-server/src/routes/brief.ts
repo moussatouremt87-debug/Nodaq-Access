@@ -1,9 +1,14 @@
 import { Router, type IRouter } from "express";
-import { withTenant, affairesTable, facturesTable, prospectsTable, pendingActionsTable } from "@workspace/db";
+import { withTenant, affairesTable, facturesTable, prospectsTable, pendingActionsTable, settingsTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
-import { toDateString } from "@nodaq/shared";
+import { toDateString, verticalPack, estRetardSignificatif, type Vertical } from "@nodaq/shared";
+import { conditionFactureEnRetardSql } from "../lib/facturesEnRetard.js";
 
 const router: IRouter = Router();
+
+// Même clé et même défaut que routes/votre-metier.ts (US-A1.1)/cockpit.ts.
+const VERTICAL_SETTING_KEY = "votre-metier.metier";
+const DEFAULT_VERTICAL: Vertical = "industrie_btp";
 
 router.get("/brief", async (req, res): Promise<void> => {
   const today = new Date();
@@ -11,11 +16,30 @@ router.get("/brief", async (req, res): Promise<void> => {
   const tenantId = req.tenantId!;
 
   const data = await withTenant(tenantId, async (tx) => {
-    const overdueFactures = await tx
+    // Même définition que `factures.ts`/`cockpit.ts` (`facturesEnRetard.ts`) —
+    // `settled = false` (champ legacy, "kept for backward compat" selon le
+    // schéma) divergeait de `statut`, désormais autoritaire. Pas de `.limit`
+    // ici : le tri par sévérité ci-dessous doit porter sur l'ensemble des
+    // factures en retard, pas sur 5 lignes arbitraires déjà tronquées.
+    const overdueFacturesToutes = await tx
       .select()
       .from(facturesTable)
-      .where(sql`settled = false AND due_date < ${todayStr}`)
-      .limit(5);
+      .where(conditionFactureEnRetardSql(todayStr));
+
+    const [verticalRow] = await tx.select({ value: settingsTable.value }).from(settingsTable).where(
+      sql`${settingsTable.key} = ${VERTICAL_SETTING_KEY}`,
+    );
+    const vertical = (verticalRow?.value as Vertical | undefined) ?? DEFAULT_VERTICAL;
+    const delaiPaiementUsuelJours = verticalPack(vertical).delaiPaiementUsuelJours;
+
+    // US-A3.1 : les factures en retard SIGNIFICATIF (au-delà du délai usuel
+    // du secteur) en tête — le brief matin doit attirer l'œil sur ce qui
+    // dépasse le cycle normal de l'artisan, pas sur toute échéance à peine
+    // dépassée pour un profil B2B à délai standard.
+    const overdueFactures = overdueFacturesToutes
+      .map(f => ({ f, significatif: estRetardSignificatif(f.dueDate, todayStr, delaiPaiementUsuelJours) }))
+      .sort((a, b) => (a.significatif === b.significatif ? 0 : a.significatif ? -1 : 1) || (a.f.dueDate < b.f.dueDate ? -1 : 1))
+      .slice(0, 5);
 
     const affairesEnCours = await tx
       .select()
@@ -52,10 +76,12 @@ router.get("/brief", async (req, res): Promise<void> => {
     sections.push({
       type: "overdue",
       title: `${data.overdueFactures.length} facture${data.overdueFactures.length > 1 ? "s" : ""} en retard`,
-      items: data.overdueFactures.map(f => ({
+      items: data.overdueFactures.map(({ f, significatif }) => ({
         label: `${f.customerName} — ${f.number}`,
         meta: fmt(f.amountCents),
-        urgent: true,
+        // US-A3.1 : urgent uniquement pour un retard qui dépasse le délai
+        // usuel du secteur — pas toute facture simplement échue.
+        urgent: significatif,
         link: "/factures",
       })),
     });

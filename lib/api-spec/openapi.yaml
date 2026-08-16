@@ -1262,7 +1262,7 @@ components:
     # ── Cockpit ──────────────────────────────────────────────────────────────
     CockpitKpis:
       type: object
-      required: [affairesEnCours, chiffreAffairesMois, facturesEnAttente, totalImpayeCents, prospectsPipeline, contratsActifs, pendingActionsCount]
+      required: [affairesEnCours, chiffreAffairesMois, facturesEnAttente, totalImpayeCents, totalImpayeSignificatifCents, delaiPaiementUsuelJours, prospectsPipeline, contratsActifs, pendingActionsCount]
       properties:
         affairesEnCours:
           type: number
@@ -1274,6 +1274,12 @@ components:
         totalImpayeCents:
           type: number
           description: Total overdue in cents
+        totalImpayeSignificatifCents:
+          type: number
+          description: Subset of totalImpayeCents overdue beyond the tenant's sector-typical payment delay (US-A3.1) — drives KPI severity, not a second total to add.
+        delaiPaiementUsuelJours:
+          type: number
+          description: Tenant's sector-typical payment delay in days (0 = cash business) — not financial data, never masked.
         prospectsPipeline:
           type: number
         contratsActifs:

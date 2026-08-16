@@ -45,7 +45,7 @@
  */
 
 /** Bump à chaque ajout de pack ou correction de vocabulaire. */
-export const VERTICAL_PACKS_VERSION = "2026-08-04";
+export const VERTICAL_PACKS_VERSION = "2026-08-16";
 
 /**
  * Verticaux STORABLES, dans l'ordre d'affichage : la cible du pivot d'abord,
@@ -134,6 +134,16 @@ export interface VerticalPack {
    * grammatical riche sur cet axe.
    */
   readonly proposalWord: string;
+  /**
+   * Délai de paiement usuel du secteur, en jours (US-A3.1). `0` = encaissement
+   * comptant (commerce, restauration) ; sinon le délai B2B standard. Sert
+   * UNIQUEMENT à calibrer la sévérité d'une facture déjà en retard — jamais à
+   * décider QUAND elle l'est : chaque facture porte sa propre `dueDate`,
+   * convenue par le tenant, qui reste l'unique déclencheur (`estFactureEnRetard`,
+   * `artifacts/api-server/src/lib/facturesEnRetard.ts`). Voir
+   * `retardPaiement.ts` pour le calcul de sévérité qui consomme ce champ.
+   */
+  readonly delaiPaiementUsuelJours: number;
 }
 
 const AFFAIRE: AffaireWords = {
@@ -205,6 +215,12 @@ const DOSSIER: AffaireWords = {
  * Les packs. Exhaustif par construction (`Record<Vertical, …>`) : ajouter un
  * vertical sans lui écrire de pack ne compile pas.
  */
+// Délai de paiement usuel (US-A3.1) — deux valeurs seulement, pas de
+// troisième case "mixte" : le ticket ne demande de distinguer que comptant
+// vs délai standard. `0` = encaissement immédiat, `30` = B2B standard.
+const COMPTANT = 0;
+const DELAI_B2B_STANDARD = 30;
+
 export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
   batiment: {
     id: "batiment",
@@ -212,6 +228,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     inTarget: true,
     words: CHANTIER,
     proposalWord: "Devis",
+    delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
   },
   paysage: {
     id: "paysage",
@@ -221,6 +238,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     // pas la nomenclature.
     words: CHANTIER,
     proposalWord: "Devis",
+    delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
   },
   evenementiel: {
     id: "evenementiel",
@@ -228,6 +246,9 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     inTarget: true,
     words: EVENEMENT,
     proposalWord: "Devis",
+    // Prestation ponctuelle, réglée à l'événement (acompte + solde à la
+    // prestation) — pas un cycle B2B à délai long.
+    delaiPaiementUsuelJours: COMPTANT,
   },
   maintenance: {
     id: "maintenance",
@@ -235,6 +256,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     inTarget: true,
     words: INTERVENTION,
     proposalWord: "Devis",
+    delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
   },
   services_projet: {
     id: "services_projet",
@@ -242,6 +264,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     inTarget: true,
     words: MISSION,
     proposalWord: "Proposition commerciale",
+    delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
   },
   industrie_btp: {
     id: "industrie_btp",
@@ -252,6 +275,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     // industriel en entreprise de travaux, sans que personne l'ait demandé.
     words: CHANTIER,
     proposalWord: "Devis",
+    delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
   },
   services: {
     id: "services",
@@ -259,6 +283,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     inTarget: false,
     words: MISSION,
     proposalWord: "Proposition commerciale",
+    delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
   },
   negoce: {
     id: "negoce",
@@ -269,6 +294,8 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     // pour un métier qu'on ne sert pas serait une promesse en trop.
     words: AFFAIRE,
     proposalWord: "Devis",
+    // Vente comptant en majorité, comme le retail.
+    delaiPaiementUsuelJours: COMPTANT,
   },
   retail: {
     id: "retail",
@@ -276,6 +303,8 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     inTarget: false,
     words: AFFAIRE,
     proposalWord: "Devis",
+    // Le cas nommé explicitement par l'AC1 de US-A3.1.
+    delaiPaiementUsuelJours: COMPTANT,
   },
   // ── Cible du pivot multi-secteur (US-A1.1) ──────────────────────────────
   restauration_chr: {
@@ -286,6 +315,8 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     // de mission au sens où ce produit les entend. Mot neutre, honnête.
     words: AFFAIRE,
     proposalWord: "Devis",
+    // Paiement à table/caisse, immédiat.
+    delaiPaiementUsuelJours: COMPTANT,
   },
   services_personne: {
     id: "services_personne",
@@ -293,6 +324,10 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     inTarget: true,
     words: INTERVENTION,
     proposalWord: "Devis",
+    // Ambigu (mandataire CESU vs prestataire facturé à échéance, US-B4.2) —
+    // tranché prudemment vers le délai standard : classer à tort en comptant
+    // masquerait un indicateur utile, l'erreur inverse est sans conséquence.
+    delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
   },
   professions_liberales: {
     id: "professions_liberales",
@@ -300,6 +335,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     inTarget: true,
     words: MISSION,
     proposalWord: "Proposition commerciale",
+    delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
   },
   artisanat_service: {
     id: "artisanat_service",
@@ -307,6 +343,11 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     inTarget: true,
     words: PRESTATION,
     proposalWord: "Devis",
+    // Regroupe coiffure (comptant) et réparation avec devis préalable (délai
+    // possible) — même compromis que le mot générique déjà retenu pour ce
+    // pack (`words: PRESTATION`) : un choix unique et prudent, pas une
+    // sous-catégorie que ce fichier ne porte pas.
+    delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
   },
   services_entreprises: {
     id: "services_entreprises",
@@ -314,6 +355,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     inTarget: true,
     words: INTERVENTION,
     proposalWord: "Proposition commerciale",
+    delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
   },
   transport: {
     id: "transport",
@@ -323,6 +365,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     // récurrent » — le mot suit la source.
     words: MISSION,
     proposalWord: "Devis",
+    delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
   },
   sante_liberale: {
     id: "sante_liberale",
@@ -330,6 +373,9 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     inTarget: true,
     words: DOSSIER,
     proposalWord: "Devis",
+    // Tiers payant/mutuelle = délai structurel, souvent plus long qu'un B2B
+    // classique — même côté de la frontière que le délai standard.
+    delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
   },
   autre: {
     id: "autre",
@@ -337,6 +383,11 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     inTarget: false,
     words: AFFAIRE,
     proposalWord: "Devis",
+    // Neutre et prudent — c'est aussi le repli effectif d'un nouveau tenant
+    // avant qu'il ait choisi son métier (`verticalPack()` route tout
+    // vertical inconnu ici ; `DEFAULT_METIER` d'onboarding vaut
+    // `industrie_btp`, lui-même délai standard).
+    delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
   },
 };
 
@@ -385,6 +436,11 @@ export function affaireWords(vertical: string | null | undefined): AffaireWords 
 /** Libellé affichable d'un vertical — inconnu compris, jamais une chaîne vide. */
 export function verticalLabel(vertical: string | null | undefined): string {
   return verticalPack(vertical).label;
+}
+
+/** Délai de paiement usuel (jours) du secteur d'un tenant — voir `VerticalPack.delaiPaiementUsuelJours`. */
+export function delaiPaiementUsuelJours(vertical: string | null | undefined): number {
+  return verticalPack(vertical).delaiPaiementUsuelJours;
 }
 
 /** Pack d'un tenant, avec repli neutre. Seule porte d'accès aux données métier
