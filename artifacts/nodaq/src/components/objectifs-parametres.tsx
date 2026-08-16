@@ -144,7 +144,7 @@ export function ObjectifsParametres() {
       )}
       <p className="mb-4 text-xs text-muted-foreground">
         Sur 100 € facturés, ce qu'il vous reste <strong>après</strong> les matériaux et la
-        sous-traitance de ce chantier — avant vos frais fixes. Ce n'est pas votre marge
+        sous-traitance — avant vos frais fixes. Ce n'est pas votre marge
         finale.
       </p>
 

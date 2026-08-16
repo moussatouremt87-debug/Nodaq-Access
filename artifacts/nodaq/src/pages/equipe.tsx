@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 import { useVertical } from '@/hooks/use-vertical';
+import type { AffaireWords } from '@nodaq/shared';
 import { cn } from '@/lib/utils';
 import { apiFetch } from '@/lib/auth';
 import { toDateString } from '@/lib/format';
@@ -76,12 +77,18 @@ const DAY_LABELS: Record<string, string> = {
 };
 const TODAY_DAY_CODE = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'][new Date().getDay()]!;
 
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
 // ── Client-side simulateur ────────────────────────────────────────────────
+// `words` vient de useVertical() (US-A1.1) — cette fonction reste pure, donc
+// appelée avec le vocabulaire déjà résolu plutôt que d'appeler le hook
+// elle-même (elle n'est pas un composant).
 function simulerChantier(
   joursNecessaires: number,
   personnesNecessaires: number,
   semaines: SemaineData[],
   activeCount: number,
+  words: AffaireWords,
 ): { possible: boolean; dateDebutLabel: string; detail: string; decalage: boolean } {
   if (activeCount === 0) return { possible: false, dateDebutLabel: '', detail: "Votre équipe est vide.", decalage: false };
   const pers = Math.max(1, personnesNecessaires);
@@ -89,7 +96,7 @@ function simulerChantier(
     return {
       possible: false,
       dateDebutLabel: '',
-      detail: `Ce chantier nécessite ${pers} personne${pers > 1 ? 's' : ''} mais votre équipe n'en compte que ${activeCount}.`,
+      detail: `${capitalize(words.definite)} nécessite ${pers} personne${pers > 1 ? 's' : ''} mais votre équipe n'en compte que ${activeCount}.`,
       decalage: false,
     };
   }
@@ -102,10 +109,15 @@ function simulerChantier(
       const d = new Date(sem.dateDebut + 'T00:00:00Z');
       const label = `${d.getUTCDate()} ${['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'][d.getUTCMonth()]}`;
       const avgStr = (sem.joursLibres / activeCount).toFixed(1);
+      // Accord du participe passé sur le genre du mot vertical — « décalé »
+      // (chantier, événement, dossier) vs « décalée » (mission, intervention,
+      // prestation, affaire). Dérivé de `indefinite` ("un"/"une"), seule
+      // source de genre exposée par `AffaireWords`.
+      const feminin = words.indefinite.startsWith('une ');
       return {
         possible: true,
         dateDebutLabel: label,
-        detail: `En moyenne ${avgStr} jour${Number(avgStr) > 1 ? 's' : ''} libre${Number(avgStr) > 1 ? 's' : ''} par personne sur cette semaine. Aucun chantier en cours n'est décalé.`,
+        detail: `En moyenne ${avgStr} jour${Number(avgStr) > 1 ? 's' : ''} libre${Number(avgStr) > 1 ? 's' : ''} par personne sur cette semaine. ${words.noneLabel} en cours n'est décalé${feminin ? 'e' : ''}.`,
         decalage: false,
       };
     }
@@ -221,6 +233,7 @@ function GanttBlock({ semaines, devisEnAttente }: {
 }) {
   const [, setLocation] = useLocation();
   const reducedMotion = useReducedMotion();
+  const { words } = useVertical();
 
   // Derive one row per unique affaire, in the order they first appear.
   const affaireRows = useMemo(() => {
@@ -252,7 +265,7 @@ function GanttBlock({ semaines, devisEnAttente }: {
 
       {!hasWork ? (
         <div className="px-5 py-5 text-[13px] text-muted-foreground italic">
-          Aucun chantier planifié sur les prochaines semaines.
+          {words.noneLabel} planifié{words.indefinite.startsWith('une ') ? 'e' : ''} sur les prochaines semaines.
         </div>
       ) : (
         <div className="overflow-x-auto">
@@ -413,21 +426,22 @@ function DevisActionCard({ devis }: { devis: { count: number; semainesPotentiell
 function SimulateurBlock({ semaines, activeCount }: { semaines: SemaineData[]; activeCount: number }) {
   const [jours, setJours] = useState(3);
   const [personnes, setPersonnes] = useState(1);
+  const { words } = useVertical();
 
   const result = useMemo(
-    () => simulerChantier(jours, personnes, semaines, activeCount),
-    [jours, personnes, semaines, activeCount],
+    () => simulerChantier(jours, personnes, semaines, activeCount, words),
+    [jours, personnes, semaines, activeCount, words],
   );
 
   return (
     <div className="rounded-2xl border border-card-border bg-card overflow-hidden">
       <div className="px-5 pt-5 pb-3 border-b border-border">
-        <h2 className="font-serif text-xl font-semibold text-foreground">Puis-je prendre ce chantier&nbsp;?</h2>
+        <h2 className="font-serif text-xl font-semibold text-foreground">Puis-je prendre {words.indefinite}&nbsp;?</h2>
         <p className="text-[13px] text-muted-foreground mt-0.5">Testez avant de répondre au client.</p>
       </div>
       <div className="p-5 space-y-4">
         <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-4">
-          <p className="font-serif text-[17px] text-foreground">Un chantier de&nbsp;…</p>
+          <p className="font-serif text-[17px] text-foreground">{capitalize(words.indefinite)} de&nbsp;…</p>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-[11.5px] text-muted-foreground mb-1.5 block">Combien de jours</Label>

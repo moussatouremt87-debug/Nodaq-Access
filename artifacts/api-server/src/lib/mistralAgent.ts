@@ -34,6 +34,7 @@ import {
 } from "../routes/analytics.js";
 import { parsePeriode, toDateString } from "./analytics-periods.js";
 import type { OperationPlanifiee } from "./plan-vocal.js";
+import { affaireWords } from "@nodaq/shared";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -944,13 +945,24 @@ export async function getContextualSuggestions(tenantId: string): Promise<string
         .orderBy(desc(affairesTable.createdAt))
         .limit(1);
 
-      return { overdueEcheance, latestProspect, activeAffaire };
+      // Même clé et même défaut que routes/votre-metier.ts (US-A1.1).
+      const [metierRow] = (await tx.execute(sql`SELECT value FROM settings WHERE key = 'votre-metier.metier'`)).rows as { value: string }[];
+      const metier = metierRow?.value ?? "industrie_btp";
+
+      return { overdueEcheance, latestProspect, activeAffaire, metier };
     });
 
+    const words = affaireWords(data.metier);
     const suggestions: string[] = [];
     if (data.overdueEcheance) suggestions.push(`Aide-moi avec l'échéance en retard : ${data.overdueEcheance.label}`);
     if (data.latestProspect) suggestions.push(`Relancer le prospect ${data.latestProspect.name} ?`);
-    if (data.activeAffaire) suggestions.push(`État du chantier "${data.activeAffaire.label}" ?`);
+    // « chantier "X" » plutôt que « du chantier "X" » (ou « du » / « de la »
+    // selon le vertical) : la préposition contractée ("de" + "le" = "du")
+    // devrait être recalculée par mot, alors qu'un simple nom-titre reste
+    // correct quel que soit le genre.
+    if (data.activeAffaire) {
+      suggestions.push(`${words.singular.charAt(0).toUpperCase()}${words.singular.slice(1)} "${data.activeAffaire.label}" — où en est-on ?`);
+    }
     suggestions.push("Résume mon activité du jour.");
     suggestions.push("Quelles sont mes priorités cette semaine ?");
 

@@ -3,6 +3,7 @@
  * No database access — all inputs are plain objects.
  * Fully testable without infrastructure.
  */
+import type { AffaireWords } from "@nodaq/shared";
 
 export type MemberRecord = {
   id: string;
@@ -286,7 +287,7 @@ function frLongDate(d: Date): string {
   return `${d.getUTCDate()} ${M[d.getUTCMonth()]}`;
 }
 
-export function calcHorizon(semaines: SemaineData[], activeCount: number): HorizonResult {
+export function calcHorizon(semaines: SemaineData[], activeCount: number, words: AffaireWords): HorizonResult {
   if (activeCount === 0) {
     return {
       horizon: null,
@@ -305,7 +306,7 @@ export function calcHorizon(semaines: SemaineData[], activeCount: number): Horiz
     return {
       horizon: null,
       phrase: "Vous n'avez rien de prévu.",
-      sous: "Aucun chantier n'est planifié dans les prochaines semaines.",
+      sous: `${words.noneLabel} n'est planifié${words.indefinite.startsWith("une ") ? "e" : ""} dans les prochaines semaines.`,
       activeCount,
     };
   }
@@ -384,8 +385,10 @@ export function simulerChantier(params: {
   personnesNecessaires: number;
   semaines: SemaineData[];
   activeCount: number;
+  words: AffaireWords;
 }): SimulateurResult {
-  const { joursNecessaires, personnesNecessaires, semaines, activeCount } = params;
+  const { joursNecessaires, personnesNecessaires, semaines, activeCount, words } = params;
+  const feminin = words.indefinite.startsWith("une ");
   if (activeCount === 0 || semaines.length === 0) {
     return {
       possible: false,
@@ -404,7 +407,7 @@ export function simulerChantier(params: {
       possible: false,
       dateDebutISO: null,
       dateDebutLabel: "",
-      detail: `Ce chantier nécessite ${pers} personne${pers > 1 ? "s" : ""} mais votre équipe n'en compte que ${activeCount}.`,
+      detail: `${words.definite.charAt(0).toUpperCase()}${words.definite.slice(1)} nécessite ${pers} personne${pers > 1 ? "s" : ""} mais votre équipe n'en compte que ${activeCount}.`,
       decalageNecessaire: false,
     };
   }
@@ -424,7 +427,7 @@ export function simulerChantier(params: {
         possible: true,
         dateDebutISO: sem.dateDebut,
         dateDebutLabel: label,
-        detail: `Il reste en moyenne ${(libres / activeCount).toFixed(1)} jour${libres > 1 ? "s" : ""} libre${libres > 1 ? "s" : ""} par personne sur cette semaine. Aucun chantier en cours n'est décalé.`,
+        detail: `Il reste en moyenne ${(libres / activeCount).toFixed(1)} jour${libres > 1 ? "s" : ""} libre${libres > 1 ? "s" : ""} par personne sur cette semaine. ${words.noneLabel} en cours n'est décalé${feminin ? "e" : ""}.`,
         decalageNecessaire: false,
       };
     }
