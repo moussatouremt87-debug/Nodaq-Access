@@ -73,7 +73,7 @@ beforeAll(async () => {
   await request(app)
     .patch("/api/parametres")
     .set("Cookie", cookieA)
-    .send({ "company.siret": "81234567600009", "company.nom": "E-Reporting Corp" })
+    .send({ "company.siret": "81234567600009", "company.raison_sociale": "E-Reporting Corp" })
     .expect(200);
 
   // Deux factures ÉMISES dans la période [2026-08-01, 2026-08-31] : 1000€ + 1000€ HT.

@@ -74,7 +74,7 @@ async function devisAvecLignes(l: Locataire): Promise<{ id: string; token: strin
 beforeAll(async () => {
   a = await inscrire("a");
   b = await inscrire("b");
-  await reglage(a.tenantId, "company.nom", "Toiture Martin SARL");
+  await reglage(a.tenantId, "company.raison_sociale", "Toiture Martin SARL");
   await reglage(a.tenantId, "company.siret", "12345678901234");
 }, 90_000);
 

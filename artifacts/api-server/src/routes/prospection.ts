@@ -490,7 +490,7 @@ router.get("/prospection/axes", async (req, res): Promise<void> => {
   // référentiel différent (CPV, marchés publics).
   const contexte = {
     secteur: await reglage(tenantId, "votre-metier.metier"),
-    zone: (await reglage(tenantId, "company.adresse_ville")) ?? (await reglage(tenantId, "company.adresse_cp")),
+    zone: (await reglage(tenantId, "company.commune")) ?? (await reglage(tenantId, "company.code_postal")),
     sources,
   };
 
@@ -704,8 +704,8 @@ const MESSAGES_SILENCE_MARCHE: Record<Exclude<RaisonSilenceMarche, null>, string
 export function creerRouteAppelsOffres(transport?: TransportBoamp): RequestHandler {
   return async (req: Request, res: Response): Promise<void> => {
     const tenantId = req.tenantId!;
-    const ville = await reglage(tenantId, "company.adresse_ville");
-    const codePostal = await reglage(tenantId, "company.adresse_cp");
+    const ville = await reglage(tenantId, "company.commune");
+    const codePostal = await reglage(tenantId, "company.code_postal");
     // `votre-metier.metier` — pas `metier.secteur` : c'est la clé que l'écran
     // « Votre métier » pose réellement. `metier.secteur` n'est écrite par
     // aucun écran de ce dépôt (vérifié) ; s'y fier rendrait ce filtre
@@ -767,8 +767,8 @@ router.get("/prospection/appels-offres", creerRouteAppelsOffres());
 export function creerRouteSousTraitance(transport?: TransportDecp): RequestHandler {
   return async (req: Request, res: Response): Promise<void> => {
     const tenantId = req.tenantId!;
-    const ville = await reglage(tenantId, "company.adresse_ville");
-    const codePostal = await reglage(tenantId, "company.adresse_cp");
+    const ville = await reglage(tenantId, "company.commune");
+    const codePostal = await reglage(tenantId, "company.code_postal");
     const metier = await reglage(tenantId, "votre-metier.metier");
     const secteur = secteurMarchesPublicsPour(metier);
 
@@ -839,8 +839,8 @@ router.get("/prospection/sous-traitance", creerRouteSousTraitance());
 export function creerRouteSyndics(transport?: TransportRnic): RequestHandler {
   return async (req: Request, res: Response): Promise<void> => {
     const tenantId = req.tenantId!;
-    const ville = await reglage(tenantId, "company.adresse_ville");
-    const codePostal = await reglage(tenantId, "company.adresse_cp");
+    const ville = await reglage(tenantId, "company.commune");
+    const codePostal = await reglage(tenantId, "company.code_postal");
 
     let raison: RaisonSilenceZone = null;
     try {
@@ -915,8 +915,8 @@ router.get("/prospection/syndics", creerRouteSyndics());
 export function creerRoutePermis(transport?: TransportPermis): RequestHandler {
   return async (req: Request, res: Response): Promise<void> => {
   const tenantId = req.tenantId!;
-  const ville = await reglage(tenantId, "company.adresse_ville");
-  const codePostal = await reglage(tenantId, "company.adresse_cp");
+  const ville = await reglage(tenantId, "company.commune");
+  const codePostal = await reglage(tenantId, "company.code_postal");
 
   let raison: RaisonSilenceZone = null;
   try {

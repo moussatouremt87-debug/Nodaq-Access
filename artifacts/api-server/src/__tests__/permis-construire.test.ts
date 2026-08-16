@@ -100,8 +100,8 @@ const permisProfessionnel = () => ({
 beforeAll(async () => {
   a = await inscrire("a");
   b = await inscrire("b");
-  await reglage(a.tenantId, "company.adresse_ville", "Marly-Gomont");
-  await reglage(a.tenantId, "company.adresse_cp", "02120");
+  await reglage(a.tenantId, "company.commune", "Marly-Gomont");
+  await reglage(a.tenantId, "company.code_postal", "02120");
 }, 90_000);
 
 afterAll(async () => {
@@ -191,8 +191,8 @@ describe("aucune piste professionnelle nommée sans activation explicite", () =>
 describe("isolation", () => {
   test("les permis d'un tenant dépendent de SES réglages", async () => {
     configurerSource();
-    await reglage(b.tenantId, "company.adresse_ville", "Laon");
-    await reglage(b.tenantId, "company.adresse_cp", "02000");
+    await reglage(b.tenantId, "company.commune", "Laon");
+    await reglage(b.tenantId, "company.code_postal", "02000");
     const t: TransportPermis = async () => ({ status: 200, texte: JSON.stringify({ results: [permisParticulier()] }) });
 
     const rA = await request(appAvec(t, a.tenantId)).get("/permis").expect(200);

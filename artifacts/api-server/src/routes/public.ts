@@ -171,7 +171,7 @@ async function emetteur(tenantId: string): Promise<{ nom: string | null; siret: 
     const v = parCle.get(cle);
     return typeof v === "string" && v.trim().length > 0 ? v.trim() : null;
   };
-  return { nom: lire("company.nom"), siret: lire("company.siret") };
+  return { nom: lire("company.raison_sociale"), siret: lire("company.siret") };
 }
 
 // ── Routes ───────────────────────────────────────────────────────────────────

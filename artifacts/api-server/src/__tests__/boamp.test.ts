@@ -84,8 +84,8 @@ const marcheBrut = () => ({
 beforeAll(async () => {
   a = await inscrire("a");
   b = await inscrire("b");
-  await reglage(a.tenantId, "company.adresse_ville", "Marly-Gomont");
-  await reglage(a.tenantId, "company.adresse_cp", "02120");
+  await reglage(a.tenantId, "company.commune", "Marly-Gomont");
+  await reglage(a.tenantId, "company.code_postal", "02120");
   // `votre-metier.metier`, pas `metier.secteur` : c'est la clé que l'écran
   // « Votre métier » pose réellement — voir le commentaire dans
   // creerRouteAppelsOffres.
@@ -124,8 +124,8 @@ describe("aucun marché sans zone renseignée", () => {
 describe("aucun marché sans métier mappé", () => {
   test("un métier sans correspondance CPV établie n'obtient rien, et sait pourquoi", async () => {
     configurerSource();
-    await reglage(b.tenantId, "company.adresse_ville", "Laon");
-    await reglage(b.tenantId, "company.adresse_cp", "02000");
+    await reglage(b.tenantId, "company.commune", "Laon");
+    await reglage(b.tenantId, "company.code_postal", "02000");
     await reglage(b.tenantId, "votre-metier.metier", "retail");
     const t: TransportBoamp = async () => ({ status: 200, texte: JSON.stringify({ results: [marcheBrut()] }) });
     const { body } = await request(appAvec(t, b.tenantId)).get("/appels-offres").expect(200);
@@ -173,8 +173,8 @@ describe("avec source, zone et métier mappé", () => {
 describe("isolation", () => {
   test("les marchés d'un tenant dépendent de SES réglages", async () => {
     configurerSource();
-    await reglage(b.tenantId, "company.adresse_ville", "Laon");
-    await reglage(b.tenantId, "company.adresse_cp", "02000");
+    await reglage(b.tenantId, "company.commune", "Laon");
+    await reglage(b.tenantId, "company.code_postal", "02000");
     await reglage(b.tenantId, "votre-metier.metier", "maintenance");
     const t: TransportBoamp = async () => ({ status: 200, texte: JSON.stringify({ results: [marcheBrut()] }) });
 

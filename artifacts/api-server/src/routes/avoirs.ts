@@ -58,13 +58,13 @@ async function loadSellerInfo(tenantId: string): Promise<SellerInfo> {
   );
   const byKey = Object.fromEntries(rows.map(r => [r.key, r.value]));
   return {
-    nom: (byKey["company.nom"] as string) ?? "Entreprise",
+    nom: (byKey["company.raison_sociale"] as string) ?? "Entreprise",
     formeJuridique: byKey["company.forme_juridique"] as string | undefined,
     siret: (byKey["company.siret"] as string) ?? "",
     tvaIntracom: byKey["company.tva_intracom"] as string | undefined,
-    adresse: byKey["company.adresse_rue"] as string | undefined,
-    codePostal: byKey["company.adresse_cp"] as string | undefined,
-    ville: byKey["company.adresse_ville"] as string | undefined,
+    adresse: byKey["company.adresse"] as string | undefined,
+    codePostal: byKey["company.code_postal"] as string | undefined,
+    ville: byKey["company.commune"] as string | undefined,
   };
 }
 

@@ -109,7 +109,7 @@ function texteBrut(pdf: Buffer): string {
 beforeAll(async () => {
   a = await inscrire("a");
   b = await inscrire("b");
-  for (const [cle, valeur] of [["company.nom", "Toiture Martin SARL"], ["company.siret", "12345678901234"]]) {
+  for (const [cle, valeur] of [["company.raison_sociale", "Toiture Martin SARL"], ["company.siret", "12345678901234"]]) {
     await adminPool.query(
       `INSERT INTO settings (tenant_id, key, value) VALUES ($1::uuid, $2, $3)
        ON CONFLICT (tenant_id, key) DO UPDATE SET value = EXCLUDED.value`,
