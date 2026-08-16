@@ -66,6 +66,27 @@ async function affaire(l: Locataire, label = "Chantier test"): Promise<string> {
   return id;
 }
 
+/**
+ * Un jour de semaine (mardi, jamais un bord de semaine) garanti quelle que
+ * soit la date d'exécution du test — pour les tests qui ne veulent PAS
+ * dépendre du jour de la semaine, contrairement à ceux qui l'éprouvent
+ * délibérément (voir « e — une heure PRÉVUE… »).
+ */
+function prochainMardi(): string {
+  const d = new Date();
+  const decalage = (2 - d.getDay() + 7) % 7 || 7;
+  d.setDate(d.getDate() + decalage);
+  return toDateString(d);
+}
+
+/** Le prochain samedi, garanti, quelle que soit la date d'exécution du test. */
+function prochainSamedi(): string {
+  const d = new Date();
+  const decalage = (6 - d.getDay() + 7) % 7 || 7;
+  d.setDate(d.getDate() + decalage);
+  return toDateString(d);
+}
+
 beforeAll(async () => {
   a = await inscrire("a");
   b = await inscrire("b");
@@ -324,7 +345,11 @@ describe("e — une heure PRÉVUE n'entre dans aucune marge", () => {
   test("le récapitulatif PROPOSE depuis l'affectation, sans rien écrire", async () => {
     const aff = await affaire(a, "Chantier proposé");
     const membre = await createTestTeamMember(a.tenantId, "Nicolas");
-    const jour = toDateString(new Date());
+    // Un jour de semaine délibérément fixe : ce test n'éprouve pas la
+    // sémantique week-end (voir le test dédié plus bas) et ne doit donc pas
+    // dépendre de la date d'exécution — `joursOuvresSeulement` vaut `true`
+    // par défaut, ce qui exclurait cette affectation un samedi/dimanche.
+    const jour = prochainMardi();
 
     await request(app).post("/api/affectations").set("Cookie", a.cookie)
       .send({ affaireId: aff, membreId: membre.id, dateDebut: jour, dateFin: jour, heuresParJour: 6 })
@@ -347,6 +372,63 @@ describe("e — une heure PRÉVUE n'entre dans aucune marge", () => {
       `SELECT count(*)::int AS n FROM pointages WHERE affaire_id = $1`, [aff],
     );
     expect(rows[0].n).toBe(0);
+  });
+
+  // Régression : bornesSemaine rend une semaine complète (lundi→dimanche),
+  // mais la boucle qui construit la proposition ne parcourait que 5 jours
+  // (JOURS_OUVRES) — une affectation posée pour le week-end (joursOuvresSeulement:
+  // false, une INTENTION explicite portée par sa propre colonne dédiée,
+  // jamais lue par cette route avant ce correctif) n'apparaissait donc JAMAIS
+  // dans le récapitulatif, quelle que soit l'intention de qui l'avait créée.
+  test("une affectation posée EXPLICITEMENT pour le week-end apparaît dans la proposition", async () => {
+    const jourSamedi = prochainSamedi();
+    const aff = await affaire(a, "Chantier week-end");
+    const membre = await createTestTeamMember(a.tenantId, "Samia");
+
+    await request(app).post("/api/affectations").set("Cookie", a.cookie)
+      .send({
+        affaireId: aff, membreId: membre.id,
+        dateDebut: jourSamedi, dateFin: jourSamedi, heuresParJour: 5,
+        joursOuvresSeulement: false,
+      })
+      .expect(201);
+
+    const { body } = await request(app)
+      .get(`/api/pointages/recapitulatif-semaine?date=${jourSamedi}`)
+      .set("Cookie", a.cookie)
+      .expect(200);
+
+    const ligne = body.lignes?.find(
+      (l: { membreId: string; affaireId: string; date: string }) =>
+        l.membreId === membre.id && l.affaireId === aff && l.date === jourSamedi,
+    );
+    expect(ligne, "l'affectation du samedi doit apparaître dans la proposition").toBeDefined();
+    expect(ligne.heures).toBe(5);
+    expect(ligne.origine).toBe("propose");
+  });
+
+  // Symétrique du test précédent : le défaut (joursOuvresSeulement: true,
+  // non fourni) doit continuer à NE PAS proposer le week-end — la colonne
+  // n'a de sens que si les deux valeurs se comportent différemment.
+  test("une affectation en jours ouvrés par défaut n'apparaît PAS le week-end", async () => {
+    const jourSamedi = prochainSamedi();
+    const aff = await affaire(a, "Chantier semaine seulement");
+    const membre = await createTestTeamMember(a.tenantId, "Karim");
+
+    await request(app).post("/api/affectations").set("Cookie", a.cookie)
+      .send({ affaireId: aff, membreId: membre.id, dateDebut: jourSamedi, dateFin: jourSamedi, heuresParJour: 5 })
+      .expect(201);
+
+    const { body } = await request(app)
+      .get(`/api/pointages/recapitulatif-semaine?date=${jourSamedi}`)
+      .set("Cookie", a.cookie)
+      .expect(200);
+
+    const ligne = body.lignes?.find(
+      (l: { membreId: string; affaireId: string; date: string }) =>
+        l.membreId === membre.id && l.affaireId === aff && l.date === jourSamedi,
+    );
+    expect(ligne, "une affectation en jours ouvrés seulement ne doit rien proposer un samedi").toBeUndefined();
   });
 });
 
