@@ -199,11 +199,12 @@ describe("Masquage des champs financiers", () => {
     expect(contratAcct.amountCents).toBe(5000);
   });
 
-  test("GET /api/cockpit/kpis — chiffreAffairesMois/totalImpayeCents/monthlySeries/ytd null pour MEMBER", async () => {
+  test("GET /api/cockpit/kpis — chiffreAffairesMois/totalImpayeCents/treasuryBalanceCents/monthlySeries/ytd null pour MEMBER", async () => {
     const resMember = await as(cookieMember).get("/api/cockpit/kpis");
     expect(resMember.status).toBe(200);
     expect(resMember.body.chiffreAffairesMois).toBeNull();
     expect(resMember.body.totalImpayeCents).toBeNull();
+    expect(resMember.body.treasuryBalanceCents).toBeNull();
     expect(resMember.body.monthlySeries).toBeNull();
     expect(resMember.body.ytd).toBeNull();
 
@@ -211,6 +212,9 @@ describe("Masquage des champs financiers", () => {
     expect(resAcct.status).toBe(200);
     expect(typeof resAcct.body.chiffreAffairesMois).toBe("number");
     expect(typeof resAcct.body.totalImpayeCents).toBe("number");
+    // Pas encore connecté dans ce fixture — treasuryBalanceCents reste null
+    // même pour un rôle financier, distinct d'un masquage.
+    expect(resAcct.body.treasuryBalanceCents).toBeNull();
     expect(Array.isArray(resAcct.body.monthlySeries)).toBe(true);
     expect(resAcct.body.ytd).not.toBeNull();
   });
