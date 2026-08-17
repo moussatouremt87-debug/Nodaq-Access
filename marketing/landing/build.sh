@@ -8,8 +8,9 @@ set -e
 mkdir -p public
 
 # Chaque fichier : copie locale si présente (déploiement depuis le dépôt),
-# sinon téléchargement depuis main (déploiement « mince » sans git lié).
-RAW="https://raw.githubusercontent.com/moussatouremt87-debug/Nodaq-Access/main/marketing/landing"
+# sinon téléchargement depuis le dépôt (déploiement « mince » sans git lié).
+# LANDING_REF permet de viser une branche ; défaut : main.
+RAW="https://raw.githubusercontent.com/moussatouremt87-debug/Nodaq-Access/${LANDING_REF:-main}/marketing/landing"
 for f in index.html mentions-legales.html confidentialite.html cgv.html robots.txt \
          cockpit-annote.png devis-dicte.png marge-mission.png echeancier.png; do
   cp "$f" "public/$f" 2>/dev/null || curl -sfS -o "public/$f" "$RAW/$f"
