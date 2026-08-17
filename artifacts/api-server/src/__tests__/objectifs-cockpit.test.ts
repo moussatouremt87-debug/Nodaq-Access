@@ -302,3 +302,61 @@ describe("e — CONVERSION en chantiers sous cinq affaires", () => {
     expect(body.minAffairesPourConversion).toBe(5);
   });
 });
+
+// ── f. Répartition de marge par catégorie (US-A3.3) ─────────────────────────
+
+describe("f — RÉPARTITION DE MARGE PAR CATÉGORIE (US-A3.3)", () => {
+  test("une répartition présente prime sur le taux unique, et pondère réellement le seuil", async () => {
+    // tenantA porte déjà objectifs.taux_marge_bp = 3500 (bloc "b") et
+    // objectifs.charges_fixes_annuelles_cents = 12 000 000, posés
+    // directement en base — sans passer par la répartition, le seuil vaudrait
+    // 34 285 714 c (12 000 000 ÷ 0,35). La répartition ci-dessous pondère à
+    // 32 % (60 % à 20 %, 40 % à 50 %) : un seuil DIFFÉRENT prouve qu'elle est
+    // bien utilisée, pas juste acceptée sans effet.
+    await reglage(tenantA, "objectifs.repartition_marge_json", JSON.stringify([
+      { libelle: "Alimentaire", tauxMargeBps: 2000, partCaBps: 6000 },
+      { libelle: "Bazar", tauxMargeBps: 5000, partCaBps: 4000 },
+    ]));
+
+    const { body } = await request(app)
+      .get("/api/cockpit/objectifs")
+      .set("Cookie", cookieOwnerA)
+      .expect(200);
+    const seuil = body.objectifs.find((o: { id: string }) => o.id === "seuil_rentabilite");
+    // 12 000 000 c ÷ 0,32 = 37 500 000 c.
+    expect(seuil.seuilCents).toBe(37_500_000);
+  });
+
+  test("une répartition vide ([]) éteint le mode et replie sur le taux unique", async () => {
+    await reglage(tenantA, "objectifs.repartition_marge_json", "[]");
+
+    const { body } = await request(app)
+      .get("/api/cockpit/objectifs")
+      .set("Cookie", cookieOwnerA)
+      .expect(200);
+    const seuil = body.objectifs.find((o: { id: string }) => o.id === "seuil_rentabilite");
+    // Revenu au taux unique de 35 % posé dans le bloc "b" : 34 285 714 c.
+    expect(seuil.seuilCents).toBe(34_285_714);
+  });
+
+  test("PATCH /api/parametres refuse une répartition invalide", async () => {
+    const res = await request(app)
+      .patch("/api/parametres")
+      .set("Cookie", cookieOwnerA)
+      .send({ "objectifs.repartition_marge_json": JSON.stringify([{ libelle: "", tauxMargeBps: 2000, partCaBps: 5000 }]) });
+    expect(res.status).toBe(400);
+  });
+
+  test("PATCH /api/parametres accepte une répartition valide", async () => {
+    const res = await request(app)
+      .patch("/api/parametres")
+      .set("Cookie", cookieOwnerA)
+      .send({
+        "objectifs.repartition_marge_json": JSON.stringify([
+          { libelle: "Alimentaire", tauxMargeBps: 2000, partCaBps: 6000 },
+          { libelle: "Bazar", tauxMargeBps: 5000, partCaBps: 4000 },
+        ]),
+      });
+    expect(res.status).toBe(200);
+  });
+});

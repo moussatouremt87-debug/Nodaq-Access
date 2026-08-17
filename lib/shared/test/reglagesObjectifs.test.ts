@@ -9,12 +9,15 @@ import { describe, test, expect } from "vitest";
 import {
   verifierReglageObjectif,
   verifierReglagesObjectifs,
+  resoudreTauxMargeBps,
   CLE_TAUX_MARGE,
   CLE_CHARGES_FIXES,
+  CLE_REPARTITION_MARGE,
   TAUX_MARGE_BP_MIN,
   TAUX_MARGE_BP_MAX,
   CHARGES_FIXES_CENTS_MIN,
   CHARGES_FIXES_CENTS_MAX,
+  REPARTITION_MARGE_MAX_CATEGORIES,
 } from "../src/reglagesObjectifs.js";
 
 describe("l'unité est dans le nom", () => {
@@ -106,5 +109,75 @@ describe("les autres réglages ne sont pas jugés", () => {
     });
     expect(refus).toHaveLength(2);
     expect(refus.map((r) => r.cle).sort()).toEqual([CLE_CHARGES_FIXES, CLE_TAUX_MARGE].sort());
+  });
+});
+
+describe("répartition de marge par catégorie — US-A3.3", () => {
+  test("JSON malformé → refusé", () => {
+    expect(verifierReglageObjectif(CLE_REPARTITION_MARGE, "{pas du json")).not.toBeNull();
+  });
+
+  test("pas un tableau → refusé", () => {
+    expect(verifierReglageObjectif(CLE_REPARTITION_MARGE, JSON.stringify({ foo: "bar" }))).not.toBeNull();
+  });
+
+  test("tableau vide → accepté (éteint le mode répartition)", () => {
+    expect(verifierReglageObjectif(CLE_REPARTITION_MARGE, "[]")).toBeNull();
+  });
+
+  test("tableau valide de 2 catégories → accepté", () => {
+    const valeur = JSON.stringify([
+      { libelle: "Alimentaire", tauxMargeBps: 2000, partCaBps: 6000 },
+      { libelle: "Bazar", tauxMargeBps: 5000, partCaBps: 4000 },
+    ]);
+    expect(verifierReglageObjectif(CLE_REPARTITION_MARGE, valeur)).toBeNull();
+  });
+
+  test("plus de catégories que la borne autorisée → refusé", () => {
+    const trop = Array.from({ length: REPARTITION_MARGE_MAX_CATEGORIES + 1 }, (_, i) => ({
+      libelle: `Cat ${i}`, tauxMargeBps: 2000, partCaBps: 100,
+    }));
+    expect(verifierReglageObjectif(CLE_REPARTITION_MARGE, JSON.stringify(trop))).not.toBeNull();
+  });
+
+  test.each([
+    ["libellé vide", [{ libelle: "", tauxMargeBps: 2000, partCaBps: 5000 }]],
+    ["libellé trop long", [{ libelle: "x".repeat(61), tauxMargeBps: 2000, partCaBps: 5000 }]],
+    ["taux hors bornes (0 = même piège que le taux unique)", [{ libelle: "A", tauxMargeBps: 0, partCaBps: 5000 }]],
+    ["taux au-delà de 100 %", [{ libelle: "A", tauxMargeBps: 15_000, partCaBps: 5000 }]],
+    ["part de CA nulle", [{ libelle: "A", tauxMargeBps: 2000, partCaBps: 0 }]],
+    ["part de CA au-delà de 100 %", [{ libelle: "A", tauxMargeBps: 2000, partCaBps: 10_001 }]],
+    ["taux décimal", [{ libelle: "A", tauxMargeBps: 2000.5, partCaBps: 5000 }]],
+  ])("%s → refusé", (_label, valeur) => {
+    expect(verifierReglageObjectif(CLE_REPARTITION_MARGE, JSON.stringify(valeur))).not.toBeNull();
+  });
+});
+
+describe("resoudreTauxMargeBps — LE résolveur partagé", () => {
+  test("répartition présente et non vide → taux pondéré", () => {
+    const reglages = {
+      [CLE_TAUX_MARGE]: "3500", // ignoré : la répartition prime
+      [CLE_REPARTITION_MARGE]: JSON.stringify([
+        { libelle: "Alimentaire", tauxMargeBps: 2000, partCaBps: 6000 },
+        { libelle: "Bazar", tauxMargeBps: 5000, partCaBps: 4000 },
+      ]),
+    };
+    expect(resoudreTauxMargeBps(reglages)).toBe(3200);
+  });
+
+  test("répartition absente → replie sur le taux unique", () => {
+    expect(resoudreTauxMargeBps({ [CLE_TAUX_MARGE]: "3500" })).toBe(3500);
+  });
+
+  test("répartition explicitement vide ([]) → replie aussi sur le taux unique", () => {
+    expect(resoudreTauxMargeBps({ [CLE_TAUX_MARGE]: "3500", [CLE_REPARTITION_MARGE]: "[]" })).toBe(3500);
+  });
+
+  test("ni répartition ni taux unique → null, jamais zéro", () => {
+    expect(resoudreTauxMargeBps({})).toBeNull();
+  });
+
+  test("répartition JSON malformée en base (ne devrait jamais arriver) → replie sans planter", () => {
+    expect(resoudreTauxMargeBps({ [CLE_TAUX_MARGE]: "3500", [CLE_REPARTITION_MARGE]: "{pas du json" })).toBe(3500);
   });
 });
