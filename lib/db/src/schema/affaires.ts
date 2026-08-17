@@ -31,6 +31,8 @@ export const affairesTable = pgTable("affaires", {
    * réécrire un document déjà imprimé.
    */
   clientId: text("client_id"),
+  /** JSON: type[] d'habilitations requises (US-A4.4) — voir team_member_habilitations.type. */
+  habilitationsRequises: text("habilitations_requises").notNull().default("[]"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

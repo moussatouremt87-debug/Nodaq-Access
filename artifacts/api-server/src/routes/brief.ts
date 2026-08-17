@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
-import { withTenant, affairesTable, facturesTable, prospectsTable, pendingActionsTable, settingsTable } from "@workspace/db";
+import { withTenant, affairesTable, facturesTable, prospectsTable, pendingActionsTable, settingsTable, teamMembersTable, teamMemberHabilitationsTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
-import { toDateString, verticalPack, estRetardSignificatif, type Vertical } from "@nodaq/shared";
+import { toDateString, verticalPack, estRetardSignificatif, statutHabilitation, type Vertical } from "@nodaq/shared";
 import { conditionFactureEnRetardSql } from "../lib/facturesEnRetard.js";
 
 const router: IRouter = Router();
@@ -59,7 +59,18 @@ router.get("/brief", async (req, res): Promise<void> => {
       .where(eq(pendingActionsTable.status, "EN_ATTENTE"))
       .limit(5);
 
-    return { overdueFactures, affairesEnCours, newProspects, pendingActions };
+    // US-A4.4 : aucun scheduler dans ce dépôt — le statut d'expiration est
+    // recalculé à chaque visite du brief, jamais poussé par un job de fond.
+    const habilitationsRows = await tx
+      .select({
+        membreNom: teamMembersTable.name,
+        libelle: teamMemberHabilitationsTable.libelle,
+        dateExpiration: teamMemberHabilitationsTable.dateExpiration,
+      })
+      .from(teamMemberHabilitationsTable)
+      .innerJoin(teamMembersTable, eq(teamMemberHabilitationsTable.membreId, teamMembersTable.id));
+
+    return { overdueFactures, affairesEnCours, newProspects, pendingActions, habilitationsRows };
   });
 
   const hour = today.getHours();
@@ -69,6 +80,14 @@ router.get("/brief", async (req, res): Promise<void> => {
 
   const fmt = (cents: number) =>
     new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(cents / 100);
+
+  // US-A4.4 : seules EXPIREE/BIENTOT_EXPIREE remontent — VALIDE et
+  // SANS_EXPIRATION n'ont rien à signaler ce matin.
+  const habilitationsASurveiller = data.habilitationsRows
+    .map(h => ({ ...h, statut: statutHabilitation(h.dateExpiration, todayStr) }))
+    .filter(h => h.statut === "EXPIREE" || h.statut === "BIENTOT_EXPIREE")
+    .sort((a, b) => (a.statut === b.statut ? 0 : a.statut === "EXPIREE" ? -1 : 1))
+    .slice(0, 5);
 
   const sections = [];
 
@@ -83,6 +102,19 @@ router.get("/brief", async (req, res): Promise<void> => {
         // usuel du secteur — pas toute facture simplement échue.
         urgent: significatif,
         link: "/factures",
+      })),
+    });
+  }
+
+  if (habilitationsASurveiller.length > 0) {
+    sections.push({
+      type: "habilitations",
+      title: `${habilitationsASurveiller.length} habilitation${habilitationsASurveiller.length > 1 ? "s" : ""} à surveiller`,
+      items: habilitationsASurveiller.map(h => ({
+        label: `${h.membreNom} — ${h.libelle}`,
+        meta: h.dateExpiration ? `expire le ${h.dateExpiration}` : null,
+        urgent: h.statut === "EXPIREE",
+        link: "/equipe",
       })),
     });
   }

@@ -1383,6 +1383,11 @@ components:
         dateFinPrevue:
           type: ["string", "null"]
           format: date
+        habilitationsRequises:
+          type: array
+          items:
+            type: string
+          description: Types d'habilitation requis pour affecter un salarié à cette affaire (US-A4.4). Avertissement, jamais bloquant.
         createdAt:
           type: string
           format: date-time
@@ -1421,6 +1426,10 @@ components:
         startDate:
           type: string
           format: date
+        habilitationsRequises:
+          type: array
+          items:
+            type: string
 
     AffaireUpdate:
       type: object
@@ -1456,6 +1465,10 @@ components:
         dateFinPrevue:
           type: string
           format: date
+        habilitationsRequises:
+          type: array
+          items:
+            type: string
 
     AffaireStats:
       type: object

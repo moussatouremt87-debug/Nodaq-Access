@@ -169,6 +169,8 @@ const BUSINESS_TABLES = [
   "paiements", "affectations",
   // contact_bases référence contacts_prospection : les enfants d'abord.
   "contact_bases", "oppositions", "contacts_prospection",
+  // team_member_habilitations référence team_members (membre_id) : avant lui.
+  "team_member_habilitations",
   "absences", "activity", "affaires", "analytics_tool_logs", "archived_pdfs", "chat_messages",
   // classeur_document_bytes référence classeur_documents (document_id) : avant elle.
   "classeur_document_bytes", "classeur_documents",
@@ -240,6 +242,9 @@ export function tableInsertSql(table: string, tenantId: string, memberAId?: stri
     team_members:       [`INSERT INTO team_members (id, name, tenant_id) VALUES ($1, 'RLS Member', $2)`, [id, tenantId]],
     absences:           memberAId
       ? [`INSERT INTO absences (id, membre_id, date_debut, date_fin, tenant_id) VALUES ($1, $2, $3, $3, $4) ON CONFLICT DO NOTHING`, [id, memberAId, now, tenantId]]
+      : [`SELECT 1`, []], // skip if no member provided
+    team_member_habilitations: memberAId
+      ? [`INSERT INTO team_member_habilitations (id, membre_id, type, libelle, tenant_id) VALUES ($1, $2, 'rls_test', 'RLS Habilitation', $3) ON CONFLICT DO NOTHING`, [id, memberAId, tenantId]]
       : [`SELECT 1`, []], // skip if no member provided
     // archived_pdfs: id is TEXT PK, bytes is BYTEA — both must be supplied explicitly.
     archived_pdfs:    [`INSERT INTO archived_pdfs (id, tenant_id, document_type, document_id, bytes, sha256, byte_size) VALUES ($1, $2::uuid, 'FACTURE', $3, $4, $5, $6) ON CONFLICT DO NOTHING`, [id, tenantId, crypto.randomUUID(), Buffer.from("rls-test-pdf"), "rls-test-sha256-placeholder", 12]],

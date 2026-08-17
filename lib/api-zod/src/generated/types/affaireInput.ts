@@ -14,4 +14,5 @@ export interface AffaireInput {
   status?: string;
   notes?: string;
   startDate?: Date;
+  habilitationsRequises?: string[];
 }

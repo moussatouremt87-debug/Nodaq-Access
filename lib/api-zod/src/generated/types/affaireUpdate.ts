@@ -25,4 +25,5 @@ export interface AffaireUpdate {
      */
   avancementPct?: number;
   dateFinPrevue?: Date;
+  habilitationsRequises?: string[];
 }
