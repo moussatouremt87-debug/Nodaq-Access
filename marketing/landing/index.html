@@ -254,13 +254,13 @@ button, input, textarea { font: inherit; color: inherit; }
    Chargée par le script sauf prefers-reduced-motion — sinon la page reste
    telle quelle. Bien visible en haut du hero ; le voile se renforce vers le
    bas pour que titre et CTA restent parfaitement lisibles. */
-/* Bande au ratio de la vidéo (16:9) plutôt que tout le hero : le cadrage
-   reste large au lieu d'être recadré-zoomé par object-fit: cover. Plancher
-   à 320 px pour que la bande existe aussi sur mobile (léger recadrage). */
+/* Bande au ratio exact de la vidéo (16:9) plutôt que tout le hero : aucun
+   recadrage par object-fit: cover, le plan complet est visible sur tous
+   les écrans. */
 .hero__bg {
   position: absolute; top: 0; left: 0; right: 0; z-index: 0;
   pointer-events: none; overflow: hidden;
-  height: max(320px, min(56.25vw, 100%));
+  height: min(56.25vw, 100%);
 }
 .hero__bg video {
   width: 100%; height: 100%; object-fit: cover;
