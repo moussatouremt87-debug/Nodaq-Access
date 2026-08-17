@@ -6,10 +6,14 @@
  * OpenAPI spec version: 0.1.0
  */
 
+/**
+ * OWNER crée un co-propriétaire à égalité — réservé aux OWNER existants (route ownerOnly).
+ */
 export type InviteMembreBodyRole = typeof InviteMembreBodyRole[keyof typeof InviteMembreBodyRole];
 
 
 export const InviteMembreBodyRole = {
+  OWNER: 'OWNER',
   MEMBER: 'MEMBER',
   ACCOUNTANT: 'ACCOUNTANT',
 } as const;

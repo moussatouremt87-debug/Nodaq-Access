@@ -10,6 +10,7 @@ export type InvitationApercuRoleOffert = typeof InvitationApercuRoleOffert[keyof
 
 
 export const InvitationApercuRoleOffert = {
+  OWNER: 'OWNER',
   MEMBER: 'MEMBER',
   ACCOUNTANT: 'ACCOUNTANT',
 } as const;

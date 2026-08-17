@@ -2,8 +2,20 @@
  * Membres & accès — qui peut se connecter à ce tenant, et avec quel rôle.
  *
  * ╔═══════════════════════════════════════════════════════════════════════════╗
- * ║  AUCUNE INVITATION NE PEUT DONNER LE RÔLE OWNER.                          ║
+ * ║  PLUSIEURS OWNER À ÉGALITÉ SONT POSSIBLES (US-A5.1) — MAIS UNIQUEMENT    ║
+ * ║  PAR INVITATION D'UN OWNER EXISTANT. LA PROMOTION D'UN MEMBRE DÉJÀ       ║
+ * ║  PRÉSENT EN OWNER RESTE REFUSÉE (PATCH .../role). LE DERNIER OWNER       ║
+ * ║  D'UN TENANT RESTE PROTÉGÉ (DELETE compte les OWNER restants).           ║
  * ╚═══════════════════════════════════════════════════════════════════════════╝
+ *
+ * Avant 038 (US-A5.1), aucune invitation ne pouvait donner OWNER — décision
+ * délibérée, encore documentée dans l'historique de 027_tenant_invites.sql.
+ * Le cas qui a fait revenir dessus : une société d'exercice libéral à
+ * plusieurs associés, où chacun doit porter la même autorité, sans
+ * hiérarchie implicite entre eux. `/membres/inviter` reste réservée aux
+ * OWNER (`ownerOnly`, voir routes/index.ts) : seul quelqu'un qui a déjà
+ * l'autorité totale peut l'accorder à quelqu'un d'autre — inviter en OWNER
+ * n'ouvre donc aucune élévation de privilège qu'un OWNER n'avait pas déjà.
  *
  * Distinct de `equipe.ts`/`teamMembersTable` : ceci concerne des COMPTES DE
  * CONNEXION (memberships), pas la planification/pointages du personnel de
@@ -59,6 +71,7 @@ router.get("/membres", async (req, res): Promise<void> => {
       email: usersTable.email,
       nom: usersTable.nom,
       role: membershipsTable.role,
+      libelle: membershipsTable.libelle,
       createdAt: membershipsTable.createdAt,
     })
     .from(membershipsTable)
@@ -72,6 +85,7 @@ router.get("/membres", async (req, res): Promise<void> => {
         id: tenantInvitesTable.id,
         email: tenantInvitesTable.email,
         role: tenantInvitesTable.role,
+        libelle: tenantInvitesTable.libelle,
         expiresAt: tenantInvitesTable.expiresAt,
         createdAt: tenantInvitesTable.createdAt,
       })
@@ -87,7 +101,10 @@ router.post("/membres/inviter", async (req, res): Promise<void> => {
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const tenantId = req.tenantId!;
   const email = parsed.data.email.toLowerCase().trim();
-  const role = parsed.data.role; // "MEMBER" | "ACCOUNTANT" — le schéma généré l'interdit déjà à "OWNER"
+  // "MEMBER" | "ACCOUNTANT" | "OWNER" (US-A5.1) — cette route est déjà
+  // ownerOnly (routes/index.ts) : seul un OWNER peut accorder OWNER.
+  const role = parsed.data.role;
+  const libelle = parsed.data.libelle?.trim() || null;
 
   const existingUser = await findUserByEmail(email);
   if (existingUser) {
@@ -108,14 +125,15 @@ router.post("/membres/inviter", async (req, res): Promise<void> => {
   const [invite] = await withTenant(tenantId, (tx) =>
     tx
       .insert(tenantInvitesTable)
-      .values({ tenantId, email, role, tokenSha256, invitedBy: req.session!.userId, expiresAt })
+      .values({ tenantId, email, role, libelle, tokenSha256, invitedBy: req.session!.userId, expiresAt })
       .returning(),
   );
 
   const [tenant] = await db.select({ nom: tenantsTable.nom }).from(tenantsTable).where(eq(tenantsTable.id, tenantId));
   const tenantNom = tenant?.nom ?? "votre entreprise";
   const lien = `${process.env["PUBLIC_URL"] ?? "https://nodaq.fr"}/membres/accepter/${token}`;
-  const roleLabel = role === "ACCOUNTANT" ? "comptable" : "membre";
+  const roleLabel = role === "OWNER" ? "copropriétaire, à égalité de droits"
+    : role === "ACCOUNTANT" ? "comptable" : "membre";
 
   const corps = [
     `Bonjour,`,
@@ -141,6 +159,7 @@ router.post("/membres/inviter", async (req, res): Promise<void> => {
     id: invite!.id,
     email: invite!.email,
     role: invite!.role,
+    libelle: invite!.libelle,
     expiresAt: invite!.expiresAt,
     createdAt: invite!.createdAt,
     envoye: envoi.success,
@@ -159,14 +178,28 @@ router.patch("/membres/:id/role", async (req, res): Promise<void> => {
     .from(membershipsTable)
     .where(and(eq(membershipsTable.id, params.data.id), eq(membershipsTable.tenantId, tenantId)));
   if (!cible) { res.status(404).json({ error: "Membre introuvable" }); return; }
-  // Restreindre le NOUVEAU rôle à MEMBER/ACCOUNTANT (schéma généré) ne suffit
-  // pas : rien n'empêcherait sinon un owner de se démettre lui-même par
-  // erreur via cette route. Le rôle ACTUEL d'un OWNER ne se change jamais ici.
-  if (cible.role === "OWNER") { res.status(403).json({ error: "Le rôle du propriétaire ne se change pas depuis cet écran." }); return; }
+
+  // US-A5.1 — garde à deux branches, plus le blocage inconditionnel
+  // d'origine : un OWNER peut désormais exister au pluriel (par invitation,
+  // voir /membres/inviter), mais SEULE cette voie en crée un. Promotion
+  // (MEMBER/ACCOUNTANT → OWNER) et démotion (OWNER → autre chose) restent
+  // toutes deux refusées ici ; seul un passage OWNER→OWNER (donc ne
+  // touchant que `libelle`) est permis.
+  if (parsed.data.role === "OWNER" && cible.role !== "OWNER") {
+    res.status(403).json({ error: "La promotion au rôle propriétaire ne passe pas par cet écran — invitez un copropriétaire directement." });
+    return;
+  }
+  if (cible.role === "OWNER" && parsed.data.role !== "OWNER") {
+    res.status(403).json({ error: "Le rôle du propriétaire ne se change pas depuis cet écran." });
+    return;
+  }
+
+  const updateData: { role: string; libelle?: string | null } = { role: parsed.data.role };
+  if (parsed.data.libelle !== undefined) updateData.libelle = parsed.data.libelle?.trim() || null;
 
   const [updated] = await db
     .update(membershipsTable)
-    .set({ role: parsed.data.role })
+    .set(updateData)
     .where(eq(membershipsTable.id, params.data.id))
     .returning();
   const [user] = await db
@@ -179,6 +212,7 @@ router.patch("/membres/:id/role", async (req, res): Promise<void> => {
     email: user?.email ?? "",
     nom: user?.nom ?? "",
     role: updated!.role,
+    libelle: updated!.libelle,
     createdAt: updated!.createdAt,
   });
 });
@@ -193,7 +227,21 @@ router.delete("/membres/:id", async (req, res): Promise<void> => {
     .from(membershipsTable)
     .where(and(eq(membershipsTable.id, params.data.id), eq(membershipsTable.tenantId, tenantId)));
   if (!cible) { res.status(404).json({ error: "Membre introuvable" }); return; }
-  if (cible.role === "OWNER") { res.status(403).json({ error: "Le propriétaire ne peut pas être révoqué." }); return; }
+
+  // US-A5.1 — le blocage inconditionnel devient un comptage : plusieurs
+  // OWNER peuvent coexister à égalité (voir /membres/inviter), seul LE
+  // DERNIER reste protégé. Comparer à 1, pas à 0 : on compte AVANT la
+  // suppression de la cible.
+  if (cible.role === "OWNER") {
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(membershipsTable)
+      .where(and(eq(membershipsTable.tenantId, tenantId), eq(membershipsTable.role, "OWNER")));
+    if (count <= 1) {
+      res.status(403).json({ error: "Le dernier propriétaire de cet espace ne peut pas être révoqué." });
+      return;
+    }
+  }
 
   await db.delete(membershipsTable).where(eq(membershipsTable.id, params.data.id));
   // Aucune invalidation de session à part : requireMembership revérifie
@@ -330,7 +378,7 @@ membresPublicRouter.post("/membres/inviter/:token/accepter", limiterDebit, async
     if (!updatedInvite) return null;
     await tx
       .insert(membershipsTable)
-      .values({ userId, tenantId: invite.tenantId, role: invite.role })
+      .values({ userId, tenantId: invite.tenantId, role: invite.role, libelle: invite.libelle })
       .onConflictDoNothing();
     return updatedInvite;
   });

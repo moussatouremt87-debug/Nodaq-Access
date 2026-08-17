@@ -12,8 +12,14 @@ export const membershipsTable = pgTable(
     tenantId: uuid("tenant_id")
       .notNull()
       .references(() => tenantsTable.id, { onDelete: "cascade" }),
-    /** OWNER | MEMBER | ACCOUNTANT */
+    /** OWNER | MEMBER | ACCOUNTANT — un tenant peut porter plusieurs OWNER
+     *  à égalité (US-A5.1) ; le dernier OWNER reste protégé, voir
+     *  routes/membres.ts. */
     role: text("role").notNull().default("MEMBER"),
+    /** Qualificatif libre affiché à côté du rôle (ex. "Conjoint
+     *  collaborateur", "Associé fondateur") — le rôle seul détermine les
+     *  droits, ce champ ne fait rien d'autre qu'afficher (US-A5.1). */
+    libelle: text("libelle"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

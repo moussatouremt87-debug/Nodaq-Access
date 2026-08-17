@@ -9,5 +9,8 @@ import type { InviteMembreBodyRole } from './inviteMembreBodyRole';
 
 export interface InviteMembreBody {
   email: string;
+  /** OWNER crée un co-propriétaire à égalité — réservé aux OWNER existants (route ownerOnly). */
   role: InviteMembreBodyRole;
+  /** Qualificatif libre facultatif (ex. "Conjoint collaborateur", "Associé fondateur"). */
+  libelle?: string;
 }

@@ -1365,12 +1365,14 @@ export const ListMembresResponse = zod.object({
   "email": zod.string(),
   "nom": zod.string(),
   "role": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT']),
+  "libelle": zod.string().nullish().describe('Qualificatif libre affiché à côté du rôle (ex. \"Conjoint collaborateur\"). N\'affecte jamais les droits.'),
   "createdAt": zod.coerce.date()
 })),
   "invitationsEnAttente": zod.array(zod.object({
   "id": zod.string(),
   "email": zod.string(),
-  "role": zod.enum(['MEMBER', 'ACCOUNTANT']),
+  "role": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT']),
+  "libelle": zod.string().nullish(),
   "expiresAt": zod.coerce.date(),
   "createdAt": zod.coerce.date()
 }))
@@ -1382,13 +1384,15 @@ export const ListMembresResponse = zod.object({
  */
 export const InviterMembreBody = zod.object({
   "email": zod.string(),
-  "role": zod.enum(['MEMBER', 'ACCOUNTANT'])
+  "role": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT']).describe('OWNER crée un co-propriétaire à égalité — réservé aux OWNER existants (route ownerOnly).'),
+  "libelle": zod.string().optional().describe('Qualificatif libre facultatif (ex. \"Conjoint collaborateur\", \"Associé fondateur\").')
 })
 
 export const InviterMembreResponse = zod.object({
   "id": zod.string(),
   "email": zod.string(),
-  "role": zod.enum(['MEMBER', 'ACCOUNTANT']),
+  "role": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT']),
+  "libelle": zod.string().nullish(),
   "expiresAt": zod.coerce.date(),
   "createdAt": zod.coerce.date()
 })
@@ -1402,7 +1406,8 @@ export const ChangerRoleMembreParams = zod.object({
 })
 
 export const ChangerRoleMembreBody = zod.object({
-  "role": zod.enum(['MEMBER', 'ACCOUNTANT'])
+  "role": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT']).describe('OWNER n\'est accepté ici que pour un membre déjà OWNER (mise à jour du libellé sans changement de rôle) — la promotion d\'un MEMBER\/ACCOUNTANT en OWNER via cette route est toujours refusée par le serveur.'),
+  "libelle": zod.string().nullish().describe('Qualificatif libre facultatif ; absent = inchangé, null = effacé.')
 })
 
 export const ChangerRoleMembreResponse = zod.object({
@@ -1410,6 +1415,7 @@ export const ChangerRoleMembreResponse = zod.object({
   "email": zod.string(),
   "nom": zod.string(),
   "role": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT']),
+  "libelle": zod.string().nullish().describe('Qualificatif libre affiché à côté du rôle (ex. \"Conjoint collaborateur\"). N\'affecte jamais les droits.'),
   "createdAt": zod.coerce.date()
 })
 
@@ -1433,7 +1439,7 @@ export const ApercuInvitationParams = zod.object({
 
 export const ApercuInvitationResponse = zod.object({
   "tenantNom": zod.string(),
-  "roleOffert": zod.enum(['MEMBER', 'ACCOUNTANT']),
+  "roleOffert": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT']),
   "email": zod.string(),
   "compteExistant": zod.boolean(),
   "expire": zod.boolean(),
