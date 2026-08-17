@@ -45,12 +45,11 @@
     Vidéo d'ambiance du hero (décorative) : montage de 17 s en boucle —
     défilé des écrans nodaq alterné avec le quotidien des TPE (départ à
     l'aube, chantier, devis dicté dans le fourgon, paperasse du soir).
-    HÉBERGEMENT PROVISOIRE sur le CDN Higgsfield (constantes VIDEO_FOND et
-    poster dans le fichier) — rapatrier les deux fichiers en auto-hébergé
-    au moment du déploiement, puis remplacer les deux URLs. Chargée
-    uniquement si écran ≥ 640 px et sans prefers-reduced-motion ; muette,
-    sans contrôle, jamais bloquante : si elle échoue, la page est
-    identique à la version sans vidéo.
+    Auto-hébergée : bg-quotidien.mp4 et bg-poster.jpg sont déposés à côté
+    de la page par le script de build (build.sh) au déploiement Vercel.
+    Chargée uniquement si écran ≥ 640 px et sans prefers-reduced-motion ;
+    muette, sans contrôle, jamais bloquante : fichier absent ou échec, la
+    page est identique à la version sans vidéo.
 
     Pages légales (créées, dans la même identité visuelle) :
     mentions-legales.html, confidentialite.html, cgv.html — seuls liens
@@ -741,7 +740,7 @@ button, input, textarea { font: inherit; color: inherit; }
        auto-hébergé au moment du déploiement (voir README). -->
   <div class="hero__bg" aria-hidden="true">
     <video id="bg-video" muted loop playsinline preload="none"
-           poster="https://d2ol7oe51mr4n9.cloudfront.net/user_31RbU03qVIrIECkS5jmxO68g2HF/2c8b0987-213d-4e3d-aa09-bd46a724e72a.jpg"></video>
+           poster="bg-poster.jpg"></video>
   </div>
   <div class="shell">
     <div class="hero__top">
@@ -1150,11 +1149,11 @@ button, input, textarea { font: inherit; color: inherit; }
   var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   /* ── Vidéo d'ambiance du hero (décorative) ──────────────────────────────
-     Hébergement provisoire : CDN Higgsfield — à remplacer par un fichier
-     auto-hébergé au déploiement (voir README). Chargée seulement si écran
-     large et sans prefers-reduced-motion ; en cas d'échec, la page reste
-     identique (le poster couvre, le dégradé fait le reste). */
-  var VIDEO_FOND = "https://d2ol7oe51mr4n9.cloudfront.net/user_31RbU03qVIrIECkS5jmxO68g2HF/b2b42a8b-1cbe-4d60-a9e1-306efa07c2e5.mp4";
+     Fichier auto-hébergé à côté de la page (déposé par le script de build
+     au déploiement — voir README). Chargée seulement si écran large et
+     sans prefers-reduced-motion ; en cas d'échec ou de fichier absent, la
+     page reste identique (le poster couvre, le dégradé fait le reste). */
+  var VIDEO_FOND = "bg-quotidien.mp4";
   (function () {
     var v = document.getElementById("bg-video");
     if (!v || reduced || window.innerWidth < 640) return;

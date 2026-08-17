@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /mentions-legales.html
+Disallow: /confidentialite.html
+Disallow: /cgv.html
