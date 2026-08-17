@@ -81,7 +81,7 @@ Tous documentés dans le commentaire HTML en tête de `index.html` :
 |---|---|---|
 | `[DATE_CALENDRIER]` | Section 5, colonne « À venir » | Laisser visible tant que le fondateur n'a pas fourni la date |
 | `[DATE_OUVERTURE_FONDATEURS]` | FAQ, « Quand est-ce disponible ? » | Idem |
-| `ENDPOINT_FORMULAIRE` | **Branché** | FormSubmit `/ajax` vers `moussatoure.mt.87@gmail.com` — inscription et verbatim, sujets distincts. **Activation une seule fois** : la première soumission depuis le site en ligne déclenche un email de FormSubmit dans cette boîte → cliquer « Activate ». Une réponse `success:"false"` (non activé) est traitée comme un échec, pas de fausse réussite |
+| `ENDPOINT_FORMULAIRE` | **Branché et activé** (17/08) | FormSubmit `/ajax` vers `moussatoure.mt.87@gmail.com` — inscription et verbatim, sujets distincts. L'adresse a été activée par le fondateur (« Form Activated », formulaire `nodaq-landing.vercel.app`) : les soumissions arrivent directement par email. Une réponse `success:"false"` reste traitée comme un échec, pas de fausse réussite |
 | `[ENDPOINT_MESURE]` | Constante dans le `<script>` | Compteur maison sans cookie (`sendBeacon`) : `conversion_email`, `scroll_section3`, `reponse_irritant`. No-op tant que le placeholder reste. Pas de Google Analytics |
 
 Images du prototype à déposer à côté du fichier : `cockpit-annote.png`,
