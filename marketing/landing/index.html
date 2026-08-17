@@ -391,14 +391,38 @@ button, input, textarea { font: inherit; color: inherit; }
   gap: 34px;
   margin-top: 36px;
 }
-/* La prose s'efface (plus petite, plus aérée) : les chiffres en ressortent
-   d'autant — c'est eux qu'on lit en diagonale. */
-.constat__prose p {
-  font-size: clamp(15.5px, 1.9vw, 17.5px);
-  line-height: 2.05;
+/* Le constat en puces : une statistique par ligne, les chiffres en tête —
+   la lecture en diagonale ne rate plus rien (retour de lecteurs : les
+   paragraphes étaient trop longs). Même copy, redécoupée. */
+.constat__kicker {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--lime);
+  margin: 0 0 -18px;
+}
+.constat__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 13px;
+}
+.constat__list li {
+  font-size: clamp(15px, 1.8vw, 16.5px);
+  line-height: 1.75;
   color: var(--text-soft);
   padding-left: 18px;
   border-left: 2px solid rgba(163, 230, 53, 0.3);
+}
+.constat__punch {
+  font-size: clamp(16px, 2vw, 18px);
+  line-height: 1.7;
+  font-weight: 600;
+  color: var(--text);
+  padding-left: 18px;
+  border-left: 2px solid var(--lime);
 }
 .constat__sources {
   margin-top: 26px;
@@ -834,34 +858,44 @@ button, input, textarea { font: inherit; color: inherit; }
     <h2 class="section-title reveal">Ce n’est pas vous. C’est structurel.</h2>
 
     <div class="constat__prose">
-      <p class="reveal">
-        En 2025, <span class="fig" data-count="86" data-suffix="%">86%</span> des
-        entreprises françaises ont subi un retard de paiement dans les 12 derniers
-        mois — contre <span class="fig" data-count="82" data-suffix="%">82%</span> en
-        2023 — avec un retard moyen de
-        <span class="fig" data-count="44" data-suffix=" jours">44 jours</span> pour les
-        TPE, contre <span class="fig" data-count="36">36</span> pour les grandes
-        entreprises ; sur les 8 premiers mois de l’année,
-        <span class="fig" data-count="42505">42 505</span> entreprises ont fait
-        défaillance, laissant <span class="fig">3,6 milliards</span> d’euros de dettes
-        fournisseurs impayées, pendant que
-        <span class="fig" data-count="19" data-suffix="%">19%</span> des petites
-        entreprises perdent jusqu’à une journée entière par semaine en administratif.
-      </p>
-      <p class="reveal" style="--d:0.06s">
-        Début 2026, un dirigeant sur deux déclare que des impayés ont déjà mis son
-        entreprise en danger, <span class="fig" data-count="42" data-suffix="%">42%</span>
-        ont fini par abandonner des factures — renoncer à de l’argent gagné — et
-        <span class="fig" data-count="41" data-suffix="%">41%</span> découvrent des
-        relances oubliées des mois plus tard.
-      </p>
-      <p class="reveal" style="--d:0.12s">
-        Les outils actuels sont soit trop pauvres pour piloter une activité à
-        l’affaire au quotidien — un tableur, un carnet, la mémoire
-        (<span class="fig" data-count="71" data-suffix="%">71%</span> des entreprises
-        n’ont aucun outil dédié au suivi des paiements) — soit pensés pour la
-        conformité comptable après coup, jamais pour la décision en temps réel. Il
-        manque quelque chose entre le tableur du soir et le logiciel qu’il faut
+      <p class="constat__kicker reveal">En 2025</p>
+      <ul class="constat__list">
+        <li class="reveal"><span class="fig" data-count="86" data-suffix="%">86%</span> des
+          entreprises françaises ont subi un retard de paiement dans les 12 derniers
+          mois — contre <span class="fig" data-count="82" data-suffix="%">82%</span> en 2023.</li>
+        <li class="reveal" style="--d:0.05s">Retard moyen pour les TPE :
+          <span class="fig" data-count="44" data-suffix=" jours">44 jours</span>, contre
+          <span class="fig" data-count="36">36</span> pour les grandes entreprises.</li>
+        <li class="reveal" style="--d:0.1s"><span class="fig" data-count="42505">42 505</span>
+          entreprises ont fait défaillance sur les 8 premiers mois de l’année —
+          <span class="fig">3,6 milliards</span> d’euros de dettes fournisseurs impayées.</li>
+        <li class="reveal" style="--d:0.15s"><span class="fig" data-count="19" data-suffix="%">19%</span>
+          des petites entreprises perdent jusqu’à une journée entière par semaine en
+          administratif.</li>
+      </ul>
+
+      <p class="constat__kicker reveal">Début 2026</p>
+      <ul class="constat__list">
+        <li class="reveal">Un dirigeant sur deux déclare que des impayés ont déjà mis
+          son entreprise en danger.</li>
+        <li class="reveal" style="--d:0.05s"><span class="fig" data-count="42" data-suffix="%">42%</span>
+          ont fini par abandonner des factures — renoncer à de l’argent gagné.</li>
+        <li class="reveal" style="--d:0.1s"><span class="fig" data-count="41" data-suffix="%">41%</span>
+          découvrent des relances oubliées des mois plus tard.</li>
+      </ul>
+
+      <p class="constat__kicker reveal">Les outils actuels</p>
+      <ul class="constat__list">
+        <li class="reveal">Soit trop pauvres pour piloter une activité à l’affaire au
+          quotidien — un tableur, un carnet, la mémoire.</li>
+        <li class="reveal" style="--d:0.05s"><span class="fig" data-count="71" data-suffix="%">71%</span>
+          des entreprises n’ont aucun outil dédié au suivi des paiements.</li>
+        <li class="reveal" style="--d:0.1s">Soit pensés pour la conformité comptable
+          après coup, jamais pour la décision en temps réel.</li>
+      </ul>
+
+      <p class="constat__punch reveal">
+        Il manque quelque chose entre le tableur du soir et le logiciel qu’il faut
         nourrir comme un second métier.
       </p>
     </div>
