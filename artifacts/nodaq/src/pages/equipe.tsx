@@ -42,6 +42,9 @@ type ScheduleSlot = { day: string; affaireId: string | null; clientId: string | 
 type TeamMember = {
   id: string; name: string; role: string; email?: string | null;
   availability: 'DISPONIBLE' | 'PARTIEL' | 'ABSENT'; schedule: ScheduleSlot[];
+  // Coûté sur les affaires où il intervient, jamais compté dans la capacité
+  // RH interne (US-A4.3) — voir compteDansCapacite côté serveur.
+  typeLien: 'SALARIE' | 'SOUS_TRAITANT' | 'APPRENTI';
   createdAt: string; updatedAt: string;
 };
 type Absence = {
@@ -1046,11 +1049,12 @@ function MemberDialog({ open, onOpenChange, member, affaires, clients, onSaved }
   affaires: Affaire[]; clients: Client[]; onSaved: () => void;
 }) {
   const { toast } = useToast();
-  const { words } = useVertical();
+  const { words, externalWorkerWords } = useVertical();
   const [name, setName] = useState('');
   const [role, setRole] = useState('Collaborateur');
   const [email, setEmail] = useState('');
   const [availability, setAvailability] = useState<'DISPONIBLE' | 'PARTIEL' | 'ABSENT'>('DISPONIBLE');
+  const [typeLien, setTypeLien] = useState<'SALARIE' | 'SOUS_TRAITANT' | 'APPRENTI'>('SALARIE');
   const [schedule, setSchedule] = useState<ScheduleSlot[]>(
     DAYS.map(day => ({ day, affaireId: null, clientId: null })),
   );
@@ -1061,11 +1065,13 @@ function MemberDialog({ open, onOpenChange, member, affaires, clients, onSaved }
       if (member) {
         setName(member.name); setRole(member.role); setEmail(member.email ?? '');
         setAvailability(member.availability);
+        setTypeLien(member.typeLien ?? 'SALARIE');
         setSchedule(DAYS.map(day =>
           member.schedule.find(s => s.day === day) ?? { day, affaireId: null, clientId: null },
         ));
       } else {
         setName(''); setRole('Collaborateur'); setEmail(''); setAvailability('DISPONIBLE');
+        setTypeLien('SALARIE');
         setSchedule(DAYS.map(day => ({ day, affaireId: null, clientId: null })));
       }
     }
@@ -1087,7 +1093,7 @@ function MemberDialog({ open, onOpenChange, member, affaires, clients, onSaved }
     setSaving(true);
     try {
       const url = member ? `${API}/equipe/${member.id}` : `${API}/equipe`;
-      const payload: Record<string, unknown> = { name, role, availability, schedule };
+      const payload: Record<string, unknown> = { name, role, availability, typeLien, schedule };
       if (email.trim()) payload.email = email.trim();
       const r = await apiFetch(url, {
         method: member ? 'PATCH' : 'POST',
@@ -1137,6 +1143,24 @@ function MemberDialog({ open, onOpenChange, member, affaires, clients, onSaved }
                 </SelectContent>
               </Select>
             </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Type de lien</Label>
+            <Select value={typeLien} onValueChange={v => setTypeLien(v as any)}>
+              <SelectTrigger className="w-full max-w-[240px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="SALARIE">Salarié</SelectItem>
+                <SelectItem value="APPRENTI">Apprenti</SelectItem>
+                <SelectItem value="SOUS_TRAITANT">
+                  {externalWorkerWords.singular.charAt(0).toUpperCase() + externalWorkerWords.singular.slice(1)}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            {typeLien === 'SOUS_TRAITANT' && (
+              <p className="text-xs text-muted-foreground">
+                Coûté sur les {words.plural} concernées, jamais compté dans la capacité de l'équipe.
+              </p>
+            )}
           </div>
           <div className="space-y-2">
             <Label>Planning hebdomadaire</Label>

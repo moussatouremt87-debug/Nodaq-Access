@@ -22,6 +22,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { useVertical } from '@/hooks/use-vertical';
+import { compteDansCapacite } from '@nodaq/shared';
 import { apiFetch } from '@/lib/auth';
 import { fmtEUR } from '@/lib/format';
 
@@ -338,6 +339,7 @@ function BlocCaYtd({ onValidate }: { onValidate: (data: Record<string, unknown>)
 }
 
 function BlocEquipe({ onValidate }: { onValidate: (data: Record<string, unknown>) => void }) {
+  const { externalWorkerWords } = useVertical();
   const [rows, setRows] = useState([
     { id: crypto.randomUUID(), name: '', typeLien: 'SALARIE', joursParSemaine: '5', coutMensuel: '' },
   ]);
@@ -349,13 +351,13 @@ function BlocEquipe({ onValidate }: { onValidate: (data: Record<string, unknown>
 
   const totalCout = rows.reduce((s, r) => s + (Number(r.coutMensuel) || 0), 0);
   const capacite = rows
-    .filter(r => r.typeLien !== 'SOUS_TRAITANT')
+    .filter(r => compteDansCapacite(r.typeLien))
     .reduce((s, r) => s + (Number(r.joursParSemaine) || 5), 0);
 
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">
-        Les sous-traitants sont inclus dans le coût mais pas dans la capacité de production.
+        Les {externalWorkerWords.plural} sont inclus dans le coût mais pas dans la capacité de production.
       </p>
       <div className="space-y-2">
         {rows.map(row => (
@@ -365,7 +367,9 @@ function BlocEquipe({ onValidate }: { onValidate: (data: Record<string, unknown>
             <select value={row.typeLien} onChange={e => update(row.id, 'typeLien', e.target.value)}
               className="h-8 rounded-md border border-input bg-background px-2 text-sm">
               <option value="SALARIE">Salarié</option>
-              <option value="SOUS_TRAITANT">Sous-traitant</option>
+              <option value="SOUS_TRAITANT">
+                {externalWorkerWords.singular.charAt(0).toUpperCase() + externalWorkerWords.singular.slice(1)}
+              </option>
               <option value="APPRENTI">Apprenti</option>
             </select>
             <Input type="number" value={row.joursParSemaine}

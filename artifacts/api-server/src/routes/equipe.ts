@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { withTenant, DrizzleTx, teamMembersTable, affairesTable, facturesTable, settingsTable } from "@workspace/db";
 import { eq, asc, sql } from "drizzle-orm";
 import { z } from "zod";
-import { toDateString, affaireWords } from "@nodaq/shared";
+import { toDateString, affaireWords, compteDansCapacite, TYPE_LIEN_VALUES } from "@nodaq/shared";
 import {
   buildSemaines,
   calcHorizon,
@@ -87,6 +87,10 @@ const CreateMemberBody = z.object({
   role: z.string().optional(),
   email: z.string().email().optional(),
   availability: z.enum(["DISPONIBLE", "PARTIEL", "ABSENT"]).optional(),
+  // US-A4.3 : SALARIE par défaut — un membre créé depuis la gestion d'équipe
+  // courante (hors onboarding) reste salarié tant qu'on ne dit pas le
+  // contraire, cohérent avec le défaut déjà posé par la colonne en base.
+  typeLien: z.enum(TYPE_LIEN_VALUES).optional(),
   schedule: z.array(ScheduleSlotBody).optional(),
 });
 
@@ -115,7 +119,7 @@ router.post("/equipe", async (req, res): Promise<void> => {
   const parsed = CreateMemberBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-  const { name, role = "Collaborateur", email, availability = "DISPONIBLE", schedule = [] } = parsed.data;
+  const { name, role = "Collaborateur", email, availability = "DISPONIBLE", schedule = [], typeLien } = parsed.data;
   const tenantId = req.tenantId!;
 
   const [member] = await withTenant(tenantId, async (tx) =>
@@ -123,6 +127,7 @@ router.post("/equipe", async (req, res): Promise<void> => {
       tenantId, name, role, availability,
       schedule: JSON.stringify(schedule),
       ...(email ? { email } : {}),
+      ...(typeLien ? { typeLien } : {}),
     }).returning()
   );
 
@@ -145,6 +150,7 @@ router.patch("/equipe/:id", async (req, res): Promise<void> => {
     if (parsed.data.role !== undefined) updateData.role = parsed.data.role;
     if (parsed.data.email !== undefined) updateData.email = parsed.data.email;
     if (parsed.data.availability !== undefined) updateData.availability = parsed.data.availability;
+    if (parsed.data.typeLien !== undefined) updateData.typeLien = parsed.data.typeLien;
     if (parsed.data.schedule !== undefined) updateData.schedule = JSON.stringify(parsed.data.schedule);
 
     const [updated] = await tx.update(teamMembersTable)
@@ -215,10 +221,12 @@ router.get("/equipe/plannings", async (req, res): Promise<void> => {
   const cout = coutJourCharge ?? 250;
 
   const members: MemberRecord[] = rawMembers.map(m => ({
-    id: m.id, name: m.name, availability: m.availability,
+    id: m.id, name: m.name, availability: m.availability, typeLien: m.typeLien,
     schedule: (() => { try { return JSON.parse(m.schedule); } catch { return []; } })(),
   }));
-  const activeCount = members.filter(m => m.availability !== "ABSENT").length;
+  // US-A4.3 : même règle que buildSemaines — un sous-traitant ne compte pas
+  // dans l'effectif de capacité affiché (horizon, simulation).
+  const activeCount = members.filter(m => m.availability !== "ABSENT" && compteDansCapacite(m.typeLien)).length;
 
   const affaires: AffaireRecord[] = rawAffaires.map(a => ({
     id: a.id, label: a.label, status: a.status,
@@ -275,10 +283,12 @@ router.post("/equipe/plannings/simuler", async (req, res): Promise<void> => {
   const cout = coutJourCharge ?? 250;
 
   const members: MemberRecord[] = rawMembers.map(m => ({
-    id: m.id, name: m.name, availability: m.availability,
+    id: m.id, name: m.name, availability: m.availability, typeLien: m.typeLien,
     schedule: (() => { try { return JSON.parse(m.schedule); } catch { return []; } })(),
   }));
-  const activeCount = members.filter(m => m.availability !== "ABSENT").length;
+  // US-A4.3 : même règle que buildSemaines — un sous-traitant ne compte pas
+  // dans l'effectif de capacité affiché (horizon, simulation).
+  const activeCount = members.filter(m => m.availability !== "ABSENT" && compteDansCapacite(m.typeLien)).length;
 
   const affaires: AffaireRecord[] = rawAffaires.map(a => ({
     id: a.id, label: a.label, status: a.status,
