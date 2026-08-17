@@ -174,14 +174,24 @@ button, input, textarea { font: inherit; color: inherit; }
   color: transparent;
 }
 
-/* Chiffres inline du constat : mono, largeur stabilisée pour que le compteur
-   animé ne fasse pas danser la ligne. */
+/* Chiffres inline : l'élément DOMINANT de la lecture en diagonale.
+   Gros, mono, en dégradé alerte (ce sont les chiffres du constat) — la prose
+   autour devient le contexte, pas l'inverse. */
 .fig {
   font-family: var(--mono);
-  font-weight: 600;
-  color: var(--text);
+  font-weight: 700;
+  font-size: 1.4em;
+  line-height: 1;
   white-space: nowrap;
+  padding: 0 2px;
+  background: linear-gradient(100deg, var(--alert-from), var(--alert-to));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
+/* Variante lime pour les chiffres positifs (tarifs, places) : même mécanique
+   de clip, aplat lime au lieu du dégradé alerte. */
+.fig--lime { background: linear-gradient(var(--lime), var(--lime)); }
 
 /* ── Boutons (texte sombre sur lime — jamais blanc) ─────────────────────── */
 .btn {
@@ -297,12 +307,14 @@ button, input, textarea { font: inherit; color: inherit; }
 /* ── S2 · Constat ───────────────────────────────────────────────────────── */
 .constat__prose {
   display: grid;
-  gap: 26px;
+  gap: 34px;
   margin-top: 36px;
 }
+/* La prose s'efface (plus petite, plus aérée) : les chiffres en ressortent
+   d'autant — c'est eux qu'on lit en diagonale. */
 .constat__prose p {
-  font-size: clamp(16.5px, 2vw, 19px);
-  line-height: 1.8;
+  font-size: clamp(15.5px, 1.9vw, 17.5px);
+  line-height: 2.05;
   color: var(--text-soft);
   padding-left: 18px;
   border-left: 2px solid rgba(163, 230, 53, 0.3);
@@ -337,13 +349,24 @@ button, input, textarea { font: inherit; color: inherit; }
 /* Le calcul en écriture de relevé : mono, encadré d'un filet lime. */
 .bbyt__calc {
   margin-top: 16px;
-  padding: 14px 18px;
+  padding: 16px 20px;
   border-left: 2px solid var(--lime);
   background: rgba(255, 255, 255, 0.02);
   font-family: var(--mono);
-  font-size: 15px;
-  line-height: 1.9;
-  color: var(--text);
+  font-size: 14.5px;
+  line-height: 2.1;
+  color: var(--text-soft);
+}
+/* Les montants du calcul sautent aux yeux, le reste est l'équation. */
+.bbyt__calc b {
+  font-size: 1.55em;
+  line-height: 1;
+  font-weight: 700;
+  white-space: nowrap;
+  background: linear-gradient(100deg, var(--alert-from), var(--alert-to));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 .bbyt__calc b { color: var(--lime); font-weight: 700; }
 .bbyt__honest { margin-top: 10px; font-size: 12.5px; color: var(--text-mute); }
@@ -360,10 +383,10 @@ button, input, textarea { font: inherit; color: inherit; }
 .problems { display: grid; gap: 16px; margin-top: 36px; }
 .problem { display: grid; gap: 18px; }
 .problem__symptom {
-  font-size: clamp(18px, 2.6vw, 22px);
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  line-height: 1.5;
+  font-size: clamp(19px, 2.8vw, 25px);
+  font-weight: 650;
+  letter-spacing: -0.022em;
+  line-height: 1.45;
 }
 .problem__label {
   font-family: var(--mono);
@@ -388,14 +411,23 @@ button, input, textarea { font: inherit; color: inherit; }
   border-left: 2px solid var(--border-strong);
   font-style: italic;
 }
+/* La réponse nodaq : le second point d'accroche du survol, après le chiffre.
+   Flèche mono en tête, texte plus grand. */
 .problem__answer {
-  padding: 14px 16px;
+  padding: 15px 18px;
   border-radius: 8px;
   background: var(--lime-dim);
   border: 1px solid rgba(163, 230, 53, 0.22);
   color: var(--lime-pale);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.problem__answer::before {
+  content: "→";
+  font-family: var(--mono);
+  color: var(--lime);
+  margin-right: 10px;
 }
 
 /* ── S4 · En construction ───────────────────────────────────────────────── */
@@ -467,9 +499,14 @@ button, input, textarea { font: inherit; color: inherit; }
 .perk svg { flex: none; margin-top: 5px; color: var(--lime); }
 .perk span { font-size: 15px; color: var(--text); }
 .scarcity {
-  margin-top: 22px;
+  display: inline-block;
+  margin-top: 24px;
+  padding: 12px 20px;
+  border: 1px solid rgba(163, 230, 53, 0.3);
+  border-radius: 8px;
+  background: var(--lime-dim);
   font-family: var(--mono);
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--lime);
 }
@@ -643,6 +680,10 @@ button, input, textarea { font: inherit; color: inherit; }
   .section { padding: 104px 0; }
   .status { grid-template-columns: repeat(3, 1fr); gap: 20px; }
   .building { grid-template-columns: repeat(3, 1fr); }
+  /* Problèmes en 2 colonnes : symptôme à gauche, coût à droite, réponse en
+     pleine largeur — trois points d'ancrage par carte au survol. */
+  .problem { grid-template-columns: 5fr 6fr; column-gap: 36px; align-items: start; }
+  .problem .problem__answer { grid-column: 1 / -1; }
 }
 </style>
 </head>
@@ -927,7 +968,7 @@ button, input, textarea { font: inherit; color: inherit; }
     <div class="perks">
       <div class="card perk reveal">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
-        <span>Tarif fondateur garanti à vie — à partir de 49 € HT/mois (+ 9 € HT/mois par salarié)</span>
+        <span>Tarif fondateur garanti à vie — à partir de <span class="fig fig--lime">49 € HT/mois</span> (+ <span class="fig fig--lime">9 € HT/mois</span> par salarié)</span>
       </div>
       <div class="card perk reveal" style="--d:0.05s">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
@@ -943,7 +984,7 @@ button, input, textarea { font: inherit; color: inherit; }
       </div>
     </div>
 
-    <p class="scarcity reveal">50 places pour le programme pilote.</p>
+    <p class="scarcity reveal"><span class="fig fig--lime">50 places</span> pour le programme pilote.</p>
   </div>
 </section>
 
