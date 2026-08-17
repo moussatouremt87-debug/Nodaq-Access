@@ -3,3 +3,5 @@ Allow: /
 Disallow: /mentions-legales.html
 Disallow: /confidentialite.html
 Disallow: /cgv.html
+
+Sitemap: https://nodaq.fr/sitemap.xml

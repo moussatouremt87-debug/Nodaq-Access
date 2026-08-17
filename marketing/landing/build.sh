@@ -11,7 +11,7 @@ mkdir -p public
 # sinon téléchargement depuis le dépôt (déploiement « mince » sans git lié).
 # LANDING_REF permet de viser une branche ; défaut : main.
 RAW="https://raw.githubusercontent.com/moussatouremt87-debug/Nodaq-Access/${LANDING_REF:-main}/marketing/landing"
-for f in index.html mentions-legales.html confidentialite.html cgv.html robots.txt \
+for f in index.html mentions-legales.html confidentialite.html cgv.html robots.txt sitemap.xml \
          cockpit-annote.png devis-dicte.png marge-mission.png echeancier.png; do
   cp "$f" "public/$f" 2>/dev/null || curl -sfS -o "public/$f" "$RAW/$f"
 done
