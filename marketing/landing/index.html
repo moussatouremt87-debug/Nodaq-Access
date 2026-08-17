@@ -42,6 +42,16 @@
     Tant qu'un fichier manque, la page affiche un cadre de substitution
     portant le nom du fichier attendu — rien ne casse.
 
+    Vidéo d'ambiance du hero (décorative) : montage de 17 s en boucle —
+    défilé des écrans nodaq alterné avec le quotidien des TPE (départ à
+    l'aube, chantier, devis dicté dans le fourgon, paperasse du soir).
+    HÉBERGEMENT PROVISOIRE sur le CDN Higgsfield (constantes VIDEO_FOND et
+    poster dans le fichier) — rapatrier les deux fichiers en auto-hébergé
+    au moment du déploiement, puis remplacer les deux URLs. Chargée
+    uniquement si écran ≥ 640 px et sans prefers-reduced-motion ; muette,
+    sans contrôle, jamais bloquante : si elle échoue, la page est
+    identique à la version sans vidéo.
+
     Pages légales (créées, dans la même identité visuelle) :
     mentions-legales.html, confidentialite.html, cgv.html — seuls liens
     autorisés hors CTA. Elles contiennent des jetons [À COMPLÉTER : …] pour
@@ -230,8 +240,25 @@ button, input, textarea { font: inherit; color: inherit; }
 }
 
 /* ── S1 · Hero ──────────────────────────────────────────────────────────── */
-.hero { padding: 28px 0 68px; text-align: center; }
+.hero { padding: 28px 0 68px; text-align: center; position: relative; overflow: hidden; }
+.hero > .shell { position: relative; z-index: 1; }
 .hero__top { display: flex; justify-content: center; padding: 18px 0 44px; }
+
+/* Vidéo d'ambiance : décorative, muette, jamais un obstacle à la lecture.
+   Chargée par le script uniquement si écran ≥ 640 px et sans
+   prefers-reduced-motion — sinon la page reste telle quelle. */
+.hero__bg { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+.hero__bg video {
+  width: 100%; height: 100%; object-fit: cover;
+  opacity: 0.32; filter: saturate(0.85);
+}
+.hero__bg::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(180deg,
+    rgba(10, 11, 15, 0.62) 0%,
+    rgba(10, 11, 15, 0.78) 62%,
+    var(--bg) 100%);
+}
 
 .logo { display: inline-flex; align-items: center; gap: 11px; }
 /* Le monogramme est le SEUL élément avec un glow appuyé (points pâles). */
@@ -702,6 +729,13 @@ button, input, textarea { font: inherit; color: inherit; }
 
 <!-- ═══ S1 · HERO — logo seul, sans menu (attention ratio = 1) ══════════ -->
 <header class="hero">
+  <!-- Défilé écrans nodaq + quotidien TPE (montage 17 s en boucle).
+       Hébergement provisoire sur le CDN Higgsfield — à rapatrier en
+       auto-hébergé au moment du déploiement (voir README). -->
+  <div class="hero__bg" aria-hidden="true">
+    <video id="bg-video" muted loop playsinline preload="none"
+           poster="https://d2ol7oe51mr4n9.cloudfront.net/user_31RbU03qVIrIECkS5jmxO68g2HF/2c8b0987-213d-4e3d-aa09-bd46a724e72a.jpg"></video>
+  </div>
   <div class="shell">
     <div class="hero__top">
       <span class="logo" aria-label="NODAQ">
@@ -1107,6 +1141,24 @@ button, input, textarea { font: inherit; color: inherit; }
   var ENDPOINT_MESURE = "[ENDPOINT_MESURE]";
 
   var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ── Vidéo d'ambiance du hero (décorative) ──────────────────────────────
+     Hébergement provisoire : CDN Higgsfield — à remplacer par un fichier
+     auto-hébergé au déploiement (voir README). Chargée seulement si écran
+     large et sans prefers-reduced-motion ; en cas d'échec, la page reste
+     identique (le poster couvre, le dégradé fait le reste). */
+  var VIDEO_FOND = "https://d2ol7oe51mr4n9.cloudfront.net/user_31RbU03qVIrIECkS5jmxO68g2HF/b2b42a8b-1cbe-4d60-a9e1-306efa07c2e5.mp4";
+  (function () {
+    var v = document.getElementById("bg-video");
+    if (!v || reduced || window.innerWidth < 640) return;
+    var s = document.createElement("source");
+    s.src = VIDEO_FOND;
+    s.type = "video/mp4";
+    v.appendChild(s);
+    v.load();
+    var p = v.play();
+    if (p && p.catch) p.catch(function () { /* autoplay refusé : poster seul */ });
+  })();
 
   /* ── Mesure sans cookie (sendBeacon, no-op tant que le placeholder reste).
      Événements : conversion email, scroll jusqu'à la section 3, réponse à la

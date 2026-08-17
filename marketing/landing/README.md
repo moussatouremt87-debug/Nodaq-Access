@@ -29,8 +29,32 @@ aux chiffres du constat). Par-dessus, un traitement fintech :
 
 Maquette Figma : le fichier
 [NODAQ — Collecte, identité fintech](https://www.figma.com/design/BprHpxE5U4AhKtcRMlYwo2)
-a été créé mais est resté vide : le quota d'appels MCP du plan Figma Starter
-était épuisé. À remplir quand le quota se réinitialise (ou plan supérieur).
+contient la maquette complète des 8 sections (crédit racheté le 17/08) :
+hero avec dégradé d'alerte sur « à l'aveugle », constat aux chiffres en
+dégradé, carte 41 %, calcul BBYT, 3 cartes problèmes, captures réelles du
+prototype, statut 3 colonnes, relevé des avantages fondateurs, FAQ,
+formulaire et footer.
+
+## Vidéo d'ambiance du hero (17/08)
+
+Montage de 17 s en boucle : défilé des 4 écrans réels de nodaq alterné avec
+4 scènes du quotidien des TPE du bâtiment (départ à l'aube, chantier, devis
+dicté dans le fourgon, paperasse du soir), générées via Higgsfield
+(Seedance 1.5 Pro, 4 clips muets) puis assemblées en fondu enchaîné
+(960×540, 646 Ko, fondu vers le fond #0a0b0f aux extrémités pour une
+boucle propre).
+
+- **Décorative uniquement** : opacité 0,32 + dégradé sombre par-dessus —
+  le texte du hero reste le sujet. Muette, sans contrôles, en boucle.
+- **Garde-fous** : chargée seulement si écran ≥ 640 px **et** sans
+  `prefers-reduced-motion` ; si l'autoplay est refusé ou le fichier
+  inaccessible, la page reste identique à la version sans vidéo.
+- **Hébergement provisoire** : vidéo et poster sont servis par le CDN
+  Higgsfield (constante `VIDEO_FOND` + attribut `poster`). **À rapatrier
+  en auto-hébergé au moment du déploiement** (les déposer à côté de
+  `index.html` et remplacer les deux URLs). Le poids de la page elle-même
+  est inchangé (`preload="none"`, rien n'est téléchargé avant que le
+  script ne décide de charger).
 
 ## Règles structurantes (ne pas casser)
 
