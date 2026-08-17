@@ -25,6 +25,7 @@ import ParametresEnvoi from '@/pages/parametres-envoi';
 import Analytique from '@/pages/analytique';
 import Rapports from '@/pages/rapports';
 import CompteResultat from '@/pages/compte-resultat';
+import Cabinet from '@/pages/cabinet';
 import Echeancier from '@/pages/echeancier';
 import ChargesRecurrentes from '@/pages/charges-recurrentes';
 import PrevisionnelTresorerie from '@/pages/previsionnel-tresorerie';
@@ -208,6 +209,7 @@ function ApplicationInterne() {
               <Route path="/parametres/envoi" component={PlatformRoute(ParametresEnvoi)} />
               <Route path="/rapports" component={RoleRoute(Rapports, FINANCIAL_ROLES)} />
               <Route path="/compte-resultat" component={RoleRoute(CompteResultat, FINANCIAL_ROLES)} />
+              <Route path="/cabinet" component={RoleRoute(Cabinet, FINANCIAL_ROLES)} />
               <Route path="/echeancier" component={RoleRoute(Echeancier, FINANCIAL_ROLES)} />
               <Route path="/charges-recurrentes" component={RoleRoute(ChargesRecurrentes, FINANCIAL_ROLES)} />
               <Route path="/previsionnel-tresorerie" component={RoleRoute(PrevisionnelTresorerie, FINANCIAL_ROLES)} />

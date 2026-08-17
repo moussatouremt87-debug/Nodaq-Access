@@ -1,11 +1,15 @@
 import { Link, useLocation } from 'wouter';
-import { Radio, ShieldCheck } from 'lucide-react';
+import { Radio, ShieldCheck, Building2, Check, ChevronsUpDown, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { NAV_SECTIONS, MOBILE_NAV, navIsActive, verticalizeNavLabel } from '@/lib/nav';
 import { TopRibbon } from './top-ribbon';
 import { ThemeToggle } from './theme-toggle';
 import { useAuth } from '@/hooks/use-auth';
 import { useVertical } from '@/hooks/use-vertical';
+import { useMesEspaces, useBasculerEspace, type Espace } from '@/hooks/use-cabinet';
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
+} from '@/components/ui/dropdown-menu';
 import type { AffaireWords, Vertical } from '@nodaq/shared';
 import type { NavItem } from '@/lib/nav';
 import { MicroFlottant } from '@/components/micro-flottant';
@@ -14,10 +18,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { data } = useAuth();
   const { vertical, words, proposalWord } = useVertical();
+  const { estMultiEspaces } = useMesEspaces();
   const role = data?.authenticated === true && 'role' in data ? data.role : undefined;
-  const peutVoir = (item: Pick<NavItem, 'requiredRoles' | 'visibleForVertical'>) =>
+  const peutVoir = (item: Pick<NavItem, 'href' | 'requiredRoles' | 'visibleForVertical'>) =>
     (!item.requiredRoles || (role !== undefined && item.requiredRoles.includes(role)))
-    && (!item.visibleForVertical || item.visibleForVertical(vertical as Vertical | undefined));
+    && (!item.visibleForVertical || item.visibleForVertical(vertical as Vertical | undefined))
+    // US-A5.2 — `/cabinet` n'a de sens que pour un utilisateur qui a
+    // PLUSIEURS espaces. Filtre local plutôt qu'un nouveau prédicat générique
+    // dans `NavItem` : un seul cas, et il ne dépend ni du rôle ni du secteur.
+    && (item.href !== '/cabinet' || estMultiEspaces);
 
   return (
     <div className="min-h-[100dvh] w-full text-foreground flex grain">
@@ -43,6 +52,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </div>
+
+        {/* US-A5.2 — bascule d'espace. Invisible pour un utilisateur
+            mono-tenant, c'est-à-dire l'immense majorité. */}
+        <EspaceSwitcher />
 
         <nav className="flex-1 overflow-y-auto py-3 px-3 space-y-4">
           {NAV_SECTIONS.map(section => {
@@ -140,6 +153,85 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * Bascule d'espace (US-A5.2). Rendu seulement si l'utilisateur a PLUSIEURS
+ * espaces — sinon il n'y a rien à choisir, et un sélecteur à une entrée est du
+ * bruit sur l'écran de tout le monde.
+ *
+ * La bascule change le tenant de la session côté serveur ; `useBasculerEspace`
+ * vide l'intégralité du cache, et on repart du cockpit plutôt que de rester
+ * sur un écran qui pourrait ne pas exister (ou ne pas être autorisé) dans le
+ * nouvel espace.
+ */
+function EspaceSwitcher() {
+  const [, setLocation] = useLocation();
+  const { data } = useAuth();
+  const { espaces, estMultiEspaces } = useMesEspaces();
+  const basculer = useBasculerEspace();
+
+  if (!estMultiEspaces) return null;
+
+  const tenantCourant = data?.authenticated === true && 'tenantId' in data ? data.tenantId : undefined;
+  const courant = espaces.find(e => e.tenantId === tenantCourant);
+
+  const choisir = (espace: Espace) => {
+    if (espace.tenantId === tenantCourant) return;
+    basculer.mutate(espace.tenantId, { onSuccess: () => setLocation('/') });
+  };
+
+  return (
+    <div className="px-3 pt-3">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            data-testid="espace-switcher"
+            disabled={basculer.isPending}
+            className="w-full flex items-center gap-2 rounded-lg border border-sidebar-border bg-sidebar-accent/50 px-3 py-2 text-left hover-elevate transition-colors"
+          >
+            {basculer.isPending
+              ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-sidebar-primary" />
+              : <Building2 className="h-3.5 w-3.5 shrink-0 text-sidebar-primary" />}
+            <span className="flex-1 min-w-0">
+              <span className="block truncate text-[12px] font-medium text-sidebar-foreground/90">
+                {courant?.tenantNom ?? 'Espace courant'}
+              </span>
+              {courant && (
+                <span className="block truncate text-[10px] text-sidebar-foreground/45">
+                  {courant.secteurLabel}
+                </span>
+              )}
+            </span>
+            <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-sidebar-foreground/40" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-60">
+          {espaces.map(espace => (
+            <DropdownMenuItem
+              key={espace.tenantId}
+              onSelect={() => choisir(espace)}
+              className="gap-2"
+            >
+              <Check
+                className={cn(
+                  'h-3.5 w-3.5 shrink-0',
+                  espace.tenantId === tenantCourant ? 'opacity-100' : 'opacity-0',
+                )}
+              />
+              <span className="flex-1 min-w-0">
+                <span className="block truncate text-[13px]">{espace.tenantNom}</span>
+                <span className="block truncate text-[10px] text-muted-foreground">
+                  {espace.secteurLabel}
+                </span>
+              </span>
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
+
 function MobileNav({
   location,
   peutVoir,
@@ -147,7 +239,7 @@ function MobileNav({
   proposalWord,
 }: {
   location: string;
-  peutVoir: (item: { requiredRoles?: readonly string[] }) => boolean;
+  peutVoir: (item: { href: string; requiredRoles?: readonly string[] }) => boolean;
   words: AffaireWords;
   proposalWord: string;
 }) {

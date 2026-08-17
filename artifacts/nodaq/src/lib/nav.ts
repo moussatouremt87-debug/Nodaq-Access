@@ -93,6 +93,11 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: '/charges-recurrentes', label: 'Charges récurrentes', icon: Landmark,    testId: 'nav-charges-recurrentes', requiredRoles: FINANCIAL_ROLES },
       { href: '/previsionnel-tresorerie', label: 'Prévisionnel',   icon: LineChart,    testId: 'nav-previsionnel-tresorerie', requiredRoles: FINANCIAL_ROLES },
       { href: '/compte-resultat', label: 'Compte de résultat', icon: FileSpreadsheet, testId: 'nav-compte-resultat', requiredRoles: FINANCIAL_ROLES },
+      // US-A5.2 — console cabinet. `requiredRoles` ne suffit pas : l'entrée
+      // n'a de sens que pour un utilisateur qui a PLUSIEURS espaces, une
+      // condition qui ne dépend ni du rôle ni du secteur et qui est donc
+      // filtrée dans `app-shell.tsx` (voir `peutVoir`).
+      { href: '/cabinet', label: 'Cabinet', icon: Building2, testId: 'nav-cabinet', requiredRoles: FINANCIAL_ROLES },
     ],
   },
   {
