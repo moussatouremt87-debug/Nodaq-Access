@@ -206,9 +206,16 @@ button, input, textarea { font: inherit; color: inherit; }
   background-clip: text;
   color: transparent;
 }
-/* Variante lime pour les chiffres positifs (tarifs, places) : même mécanique
-   de clip, aplat lime au lieu du dégradé alerte. */
-.fig--lime { background: linear-gradient(var(--lime), var(--lime)); }
+/* Variante lime pour les chiffres positifs (tarifs, places) : texte lime
+   plein, sans clip — un raccourci background: posé après background-clip
+   réinitialise le clip et peint un pavé lime derrière du texte transparent
+   (constaté sur iOS). */
+.fig.fig--lime {
+  background: none;
+  -webkit-background-clip: initial;
+  background-clip: initial;
+  color: var(--lime);
+}
 
 /* ── Boutons (texte sombre sur lime — jamais blanc) ─────────────────────── */
 .btn {
