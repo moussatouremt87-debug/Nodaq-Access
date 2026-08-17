@@ -251,18 +251,20 @@ button, input, textarea { font: inherit; color: inherit; }
 .hero__top { display: flex; justify-content: center; padding: 18px 0 44px; }
 
 /* Vidéo d'ambiance : décorative, muette, jamais un obstacle à la lecture.
-   Chargée par le script uniquement si écran ≥ 640 px et sans
-   prefers-reduced-motion — sinon la page reste telle quelle. */
+   Chargée par le script sauf prefers-reduced-motion — sinon la page reste
+   telle quelle. Bien visible en haut du hero ; le voile se renforce vers le
+   bas pour que titre et CTA restent parfaitement lisibles. */
 .hero__bg { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
 .hero__bg video {
   width: 100%; height: 100%; object-fit: cover;
-  opacity: 0.32; filter: saturate(0.85);
+  opacity: 0.6;
 }
 .hero__bg::after {
   content: ""; position: absolute; inset: 0;
   background: linear-gradient(180deg,
-    rgba(10, 11, 15, 0.62) 0%,
-    rgba(10, 11, 15, 0.78) 62%,
+    rgba(10, 11, 15, 0.18) 0%,
+    rgba(10, 11, 15, 0.45) 45%,
+    rgba(10, 11, 15, 0.82) 78%,
     var(--bg) 100%);
 }
 
@@ -1150,17 +1152,22 @@ button, input, textarea { font: inherit; color: inherit; }
 
   /* ── Vidéo d'ambiance du hero (décorative) ──────────────────────────────
      Fichier auto-hébergé à côté de la page (déposé par le script de build
-     au déploiement — voir README). Chargée seulement si écran large et
-     sans prefers-reduced-motion ; en cas d'échec ou de fichier absent, la
-     page reste identique (le poster couvre, le dégradé fait le reste). */
+     au déploiement — voir README). Chargée partout (646 Ko) sauf
+     prefers-reduced-motion ; en cas d'échec ou de fichier absent, la page
+     reste identique (le poster couvre, le dégradé fait le reste). */
   var VIDEO_FOND = "bg-quotidien.mp4";
+  var VIDEO_FOND_WEBM = "bg-quotidien.webm";
   (function () {
     var v = document.getElementById("bg-video");
-    if (!v || reduced || window.innerWidth < 640) return;
-    var s = document.createElement("source");
-    s.src = VIDEO_FOND;
-    s.type = "video/mp4";
-    v.appendChild(s);
+    if (!v || reduced) return;
+    var s1 = document.createElement("source");
+    s1.src = VIDEO_FOND;
+    s1.type = "video/mp4";
+    v.appendChild(s1);
+    var s2 = document.createElement("source");
+    s2.src = VIDEO_FOND_WEBM;
+    s2.type = "video/webm";
+    v.appendChild(s2);
     v.load();
     var p = v.play();
     if (p && p.catch) p.catch(function () { /* autoplay refusé : poster seul */ });

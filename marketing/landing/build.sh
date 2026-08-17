@@ -19,6 +19,8 @@ done
 HF="https://d2ol7oe51mr4n9.cloudfront.net/user_31RbU03qVIrIECkS5jmxO68g2HF"
 curl -sfS -o public/bg-quotidien.mp4 "$HF/b2b42a8b-1cbe-4d60-a9e1-306efa07c2e5.mp4" \
   || echo "AVERTISSEMENT : vidéo d'ambiance indisponible — la page reste fonctionnelle sans elle."
+curl -sfS -o public/bg-quotidien.webm "$HF/89e5e377-c2eb-43b5-94ef-3fe9ad835e2e.mp4" \
+  || echo "AVERTISSEMENT : variante WebM indisponible."
 curl -sfS -o public/bg-poster.jpg "$HF/2c8b0987-213d-4e3d-aa09-bd46a724e72a.jpg" \
   || echo "AVERTISSEMENT : poster indisponible."
 
