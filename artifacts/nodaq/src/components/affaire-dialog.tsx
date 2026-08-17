@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/select';
 import { AFFAIRE_STATUS_OPTIONS } from '@/components/status-badge';
 import { useCreateAffaireMutation, useUpdateAffaireMutation } from '@/hooks/use-affaires';
+import { useVertical } from '@/hooks/use-vertical';
 
 const schema = z.object({
   label: z.string().min(1, 'Le libellé est requis'),
@@ -58,6 +59,7 @@ export function AffaireDialog({
   affaire?: Affaire | null;
 }) {
   const isEdit = !!affaire;
+  const { words } = useVertical();
   const { createAffaire, isPending: creating } = useCreateAffaireMutation();
   const { updateAffaire, isPending: updating } = useUpdateAffaireMutation();
 
@@ -145,11 +147,11 @@ export function AffaireDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Modifier l'affaire" : 'Nouvelle affaire'}</DialogTitle>
+          <DialogTitle>{isEdit ? `Modifier ${words.definite}` : words.newLabel}</DialogTitle>
           <DialogDescription>
             {isEdit
-              ? 'Mettez à jour les informations de cette affaire.'
-              : 'Renseignez les informations de la nouvelle affaire.'}
+              ? `Mettez à jour ${words.definite}.`
+              : `Renseignez les informations pour créer ${words.indefinite}.`}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -357,7 +359,7 @@ export function AffaireDialog({
                 Annuler
               </Button>
               <Button type="submit" disabled={pending} data-testid="button-submit-affaire">
-                {isEdit ? 'Enregistrer' : "Créer l'affaire"}
+                {isEdit ? 'Enregistrer' : `Créer ${words.indefinite}`}
               </Button>
             </DialogFooter>
           </form>
