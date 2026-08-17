@@ -109,6 +109,38 @@ export function calculerSeuilRentabilite(saisie: SaisieRentabilite): SeuilRentab
   return seuilCents > 0 ? { seuilCents, provenance: "saisie" } : null;
 }
 
+// ── Marge pondérée par catégorie (US-A3.3) ──────────────────────────────────
+
+/**
+ * Une catégorie de produits/prestations déclarée par l'utilisateur — pas une
+ * ligne de vente réelle. Le catalogue et les lignes de facture/devis ne
+ * portent aucun coût ni lien entre eux ; calculer une marge pondérée à partir
+ * de vraies données de vente demanderait ce chantier de données, hors
+ * périmètre ici. Ceci reste une SAISIE, comme `SaisieRentabilite`.
+ */
+export interface CategorieMarge {
+  /** Points de base (3500 = 35 %). */
+  readonly tauxMargeBps: number;
+  /** Part du CA en points de base — n'a pas besoin de sommer à 10 000 entre
+   *  catégories : la moyenne se normalise par la somme réelle des parts. */
+  readonly partCaBps: number;
+}
+
+/**
+ * Moyenne du taux de marge, pondérée par la part de CA de chaque catégorie.
+ *
+ * `null` — jamais 0 — si la liste est vide ou si la somme des parts est
+ * nulle : un taux à zéro ferait diverger par zéro dans `calculerSeuilRentabilite`
+ * ou produirait un seuil infini, deux façons de mentir à l'utilisateur.
+ */
+export function tauxMargePondere(categories: readonly CategorieMarge[]): number | null {
+  if (categories.length === 0) return null;
+  const sommeParts = categories.reduce((s, c) => s + c.partCaBps, 0);
+  if (sommeParts <= 0) return null;
+  const sommePonderee = categories.reduce((s, c) => s + c.tauxMargeBps * c.partCaBps, 0);
+  return Math.round(sommePonderee / sommeParts);
+}
+
 // ── Conversion d'un écart en chantiers ───────────────────────────────────────
 
 /** Une affaire terminée, réduite à ce que la conversion lit. */

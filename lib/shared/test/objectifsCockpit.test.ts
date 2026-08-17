@@ -18,6 +18,7 @@ import {
   debutExercicePrecedent,
   joursRestantsExercice,
   MIN_AFFAIRES_POUR_CONVERSION,
+  tauxMargePondere,
 } from "../src/objectifsCockpit.js";
 
 describe("bornes d'exercice", () => {
@@ -119,6 +120,50 @@ describe("seuil de rentabilité — jamais inventé, jamais zéro", () => {
     });
     // Un seuil à zéro s'afficherait comme un objectif déjà atteint.
     expect(r).toBeNull();
+  });
+});
+
+describe("tauxMargePondere — US-A3.3, marge variable par catégorie", () => {
+  test("2 catégories, parts qui somment à 100 % : moyenne pondérée exacte", () => {
+    // 60 % du CA à 20 %, 40 % à 50 % → (20×60 + 50×40) / 100 = 32 %.
+    const r = tauxMargePondere([
+      { tauxMargeBps: 2000, partCaBps: 6000 },
+      { tauxMargeBps: 5000, partCaBps: 4000 },
+    ]);
+    expect(r).toBe(3200);
+  });
+
+  test("3 catégories, parts qui ne somment PAS à 100 % : normalisée par la somme réelle", () => {
+    // Parts 1000+1000+1000 = 3000 (30 %) au lieu de 10000 — la moyenne se
+    // calcule quand même sur la somme réelle, pas sur une hypothèse de 100 %.
+    const r = tauxMargePondere([
+      { tauxMargeBps: 1000, partCaBps: 1000 },
+      { tauxMargeBps: 2000, partCaBps: 1000 },
+      { tauxMargeBps: 3000, partCaBps: 1000 },
+    ]);
+    expect(r).toBe(2000); // moyenne simple ici, parts égales
+  });
+
+  test("une seule catégorie : la moyenne pondérée est son propre taux", () => {
+    expect(tauxMargePondere([{ tauxMargeBps: 4200, partCaBps: 5000 }])).toBe(4200);
+  });
+
+  test("liste vide → null, jamais zéro", () => {
+    expect(tauxMargePondere([])).toBeNull();
+  });
+
+  test("somme des parts nulle → null (éviterait une division par zéro silencieuse)", () => {
+    expect(tauxMargePondere([{ tauxMargeBps: 3000, partCaBps: 0 }])).toBeNull();
+  });
+
+  test("branché sur calculerSeuilRentabilite : le seuil reflète la moyenne pondérée, pas un taux unique", () => {
+    const taux = tauxMargePondere([
+      { tauxMargeBps: 2000, partCaBps: 6000 },
+      { tauxMargeBps: 5000, partCaBps: 4000 },
+    ]);
+    const seuil = calculerSeuilRentabilite({ chargesFixesAnnuellesCents: 3_200_000, tauxMargeBps: taux });
+    // 3 200 000 c ÷ 0,32 = 10 000 000 c.
+    expect(seuil?.seuilCents).toBe(10_000_000);
   });
 });
 

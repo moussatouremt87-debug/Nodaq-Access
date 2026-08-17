@@ -42,6 +42,8 @@ import {
   MIN_AFFAIRES_POUR_CONVERSION,
   CLE_TAUX_MARGE,
   CLE_CHARGES_FIXES,
+  CLE_REPARTITION_MARGE,
+  resoudreTauxMargeBps,
   type AffaireTerminee,
   type AffaireWords,
   type ConversionChantiers,
@@ -212,7 +214,15 @@ router.get("/cockpit/objectifs", async (req, res): Promise<void> => {
       .where(eq(objectifsFranchissementsTable.exercice, exercice));
 
     const chargesFixes = nombreOuNull(await reglage(tx, CLE_CHARGES_FIXES));
-    const tauxMarge = nombreOuNull(await reglage(tx, CLE_TAUX_MARGE));
+    // US-A3.3 : même résolveur partagé que `franchissement-objectifs.ts` —
+    // le taux de marge peut venir d'une répartition par catégorie (commerce
+    // à marges variables) autant que du taux unique.
+    const brutTauxMarge = await reglage(tx, CLE_TAUX_MARGE);
+    const brutRepartition = await reglage(tx, CLE_REPARTITION_MARGE);
+    const tauxMarge = resoudreTauxMargeBps({
+      ...(brutTauxMarge !== null ? { [CLE_TAUX_MARGE]: brutTauxMarge } : {}),
+      ...(brutRepartition !== null ? { [CLE_REPARTITION_MARGE]: brutRepartition } : {}),
+    });
     const metier = (await reglage(tx, VERTICAL_SETTING_KEY)) ?? DEFAULT_VERTICAL;
 
     return {
