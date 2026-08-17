@@ -1,98 +1,72 @@
-# Landing page pré-lancement — programme Fondateurs (v3)
+# Landing pré-lancement — collecte de liste d'attente
 
-Page de **génération de leads inbound**, générée à partir du document de génération
-« Prompt complet — génération de la landing page NODAQ (v3) » (document de travail,
-non versionné ici). Ce n'est pas une page de vente : aucun paiement, aucun champ de
-saisie, aucun simulateur. Son seul objectif de conversion est le clic vers le Google
-Form externe.
+Page **mono-objectif** générée depuis le prompt d'exécution validé par le fondateur
+(`structure-landing-page-nodaq-FINALE.md`, framework Dunford/Wiebe/Fletch/Gardner).
+Elle remplace intégralement les versions précédentes (v2/v3 « vitrine ») — ce n'est
+plus une landing SaaS classique mais une page de collecte d'emails qualifiés.
 
-Fichier unique et autonome : `index.html` (HTML + CSS + JS inline). Aucun build, aucune
-dépendance à installer. Elle vit hors des workspaces pnpm — c'est un livrable statique,
-pas un paquet du monorepo.
+Fichier unique : `index.html` (HTML + CSS + JS inline, 46 Ko hors polices — cible
+< 200 Ko respectée). Aucun build, aucune dépendance hors polices Google Fonts.
 
-## Ce qui distingue la v3 de la v2
+## Règles structurantes (ne pas casser)
 
-- **Le constat ouvre la page**, juste après la nav, avant le hero — la page ne « vend »
-  qu'après avoir démontré qu'elle comprend le problème.
-- **7 cartes fonctionnalités** : ajout de « Vos chiffres ne mentent jamais » (fraîcheur
-  temps réel du cockpit), en carte large pleine ligne.
-- **5 items sécurité** : ajout de « L'effacement, vraiment complet » (RGPD art. 17).
-- **Vidéo hero avec voix off** : démarrage muet (contrainte navigateur), bouton
-  « Activer le son » visible dès que la vidéo est chargée — jamais silencieuse sans
-  recours. À l'activation, la narration repart du début.
-- **Logo réel** : monogramme « N » lime à onde vocale en négatif sombre, points pâles
-  lumineux aux extrémités. **Seul élément autorisé au glow appuyé** (charte v2) — le
-  vert citron reste plat partout ailleurs.
-- Maquette de référence construite dans Figma avant le code :
-  [NODAQ — Landing Fondateurs v3](https://www.figma.com/design/xZ57hDOGiokFubJut7gjhI)
-  (page « 🧩 Tokens & Composants » : variables de couleur scopées, styles de texte,
-  composants Bouton/Badge/Cartes ; page « 🖥 Landing v3 » : la maquette complète).
+- **Attention ratio = 1** : aucun menu, aucun lien sortant. Les seuls éléments
+  cliquables sont le CTA hero (ancre vers le formulaire), le bouton de soumission,
+  et les 2 liens légaux du footer (obligation légale). Le lien d'évitement
+  (`skip-link`) est une exigence d'accessibilité, pas un lien concurrent.
+- **Un seul champ : l'email.** La question ouverte (verbatims) n'apparaît qu'APRÈS
+  la conversion, dans l'état de confirmation.
+- **Toute la copy vient du prompt.** Rien inventer : ni statistique, ni citation,
+  ni témoignage. Les citations du bloc 3 sont des dirigeants qui décrivent le
+  problème (initiale + métier), jamais des avis produit — pas d'avatar, pas
+  d'étoiles.
+- **Aucun faux signal** : pas de compte à rebours, pas de compteur « en direct »,
+  pas de logos clients. « 50 places pour le programme pilote. » est un texte
+  statique mis à jour à la main.
+- **Statut « en développement » assumé** — c'est le substitut de la preuve sociale.
 
-## Prévisualiser
+## Placeholders à remplacer avant mise en ligne
 
-```bash
-cd marketing/landing && python3 -m http.server 8080
-# puis http://localhost:8080
-```
+Tous documentés dans le commentaire HTML en tête de `index.html` :
 
-## À FAIRE avant toute mise en ligne
+| Placeholder | Où | Quoi |
+|---|---|---|
+| `[DATE_CALENDRIER]` | Section 5, colonne « À venir » | Laisser visible tant que le fondateur n'a pas fourni la date |
+| `[DATE_OUVERTURE_FONDATEURS]` | FAQ, « Quand est-ce disponible ? » | Idem |
+| `[ENDPOINT_FORMULAIRE]` | Constante dans le `<script>` | POST du formulaire (champ `email`) et de la question ouverte (champs `email` + `irritant`). Google Form en fallback, sinon endpoint API |
+| `[ENDPOINT_MESURE]` | Constante dans le `<script>` | Compteur maison sans cookie (`sendBeacon`) : `conversion_email`, `scroll_section3`, `reponse_irritant`. No-op tant que le placeholder reste. Pas de Google Analytics |
 
-1. **Remplacer `PLACEHOLDER_GOOGLE_FORM_URL`** par l'URL réelle du formulaire.
-   Cinq occurrences : nav, hero, carte tarifaire, section Fondateurs, CTA finale.
+Images du prototype à déposer à côté du fichier : `cockpit-annote.png`,
+`devis-dicte.png`, `marge-mission.png`, `echeancier.png`. Tant qu'un fichier manque,
+un cadre de substitution affiche le nom attendu — rien ne casse.
 
-   ```bash
-   grep -c PLACEHOLDER_GOOGLE_FORM_URL index.html   # doit renvoyer 0 avant publication
-   ```
+Pages légales à créer : `mentions-legales.html`, `confidentialite.html`.
 
-2. **Renseigner les liens légaux du footer** (mentions légales, confidentialité, CGV),
-   aujourd'hui en `href="#"`.
+## Comportement du formulaire
 
-3. **Témoignages.** Les trois citations (Karim B., Sofiane R., Thomas L.) sont des
-   personas, pas de vrais clients — étiquetées « Exemples d'usage » sous la grille.
-   Cette mention doit rester tant que les citations ne sont pas de vrais retours.
+- Validation email côté client, message d'erreur sobre.
+- Tant que `[ENDPOINT_FORMULAIRE]` n'est pas branché, la soumission affiche
+  l'erreur sobre — **pas de fausse réussite**.
+- Après succès : l'état de confirmation remplace le formulaire (« Merci — vous êtes
+  sur la liste. ») puis pose la question ouverte. La réponse POSTe réellement vers
+  le même endpoint avec le champ distinct `irritant` — c'est la boucle de collecte
+  de verbatims qui alimentera la V2 de la page.
 
-4. **Vidéo + voix off.** Le hero attend `assets/hero-loop.mp4` : clip 16-20 s, 16:9,
-   en boucle, AVEC la narration française (script : « Ce soir encore, vous finissez la
-   journée à minuit… »). À générer via Higgsfield (prompts en section 5 du document de
-   génération). **Blocage constaté le 16/08 : le compte Higgsfield de la session est à
-   0 crédit (plan gratuit)** — la génération attend soit des crédits, soit un autre
-   outil. La page ne dépend pas du fichier : sans lui, le `<video>` se retire au
-   premier `error` et le bouton son n'apparaît jamais.
+## Vérifié (Chromium)
 
-5. **Vérifier le bouton son en réel.** Le circuit « pas de vidéo → bouton caché » est
-   testé ; le circuit « unmute → narration depuis le début » est relu mais n'a pas pu
-   être éprouvé sans fichier vidéo réel (pas de ffmpeg dans l'environnement de build).
+- Mobile d'abord (390/640), puis 1024, puis 1440 : aucune erreur JS, aucun
+  débordement horizontal, révélations et compteurs fonctionnels.
+- Parcours formulaire complet testé contre un endpoint local : email invalide →
+  erreur ; email valide → confirmation (formulaire remplacé) ; verbatim → POST réel
+  en champ distinct ; « Ignorer » referme la question.
+- FAQ `<details>/<summary>` : fermée par défaut, navigable au clavier (testé
+  Entrée sur le focus).
+- 4 cadres de substitution visibles pour les images prototype absentes.
+- Contrastes : gris le plus faible `#838a94` sur `#0a0b0f` ≈ 5,6:1 (AA). Aucun
+  bleu, aucun blanc pur en fond, texte sombre sur les aplats vert citron.
+- Poids : 45,6 Ko hors polices.
 
-## Repères de conception
+## Reste à faire humainement
 
-- **Palette** : fond `#0a0b0f`, accent **unique** vert citron `#a3e635`
-  (`#bef264` hover, `#d9f99d` clair). Aucun bleu. Le dégradé orange→rouge
-  `#f59e0b`→`#ef4444` est réservé aux chiffres qui inquiètent — jamais un CTA.
-- **Contraste** : sur un aplat vert citron, le texte est sombre (`#0a0b0f`), jamais
-  blanc.
-- **Glow** : réservé aux deux points du logo. Les `.glow` de fond sont des lueurs
-  d'ambiance radiales, pas des effets sur des éléments.
-- **Chiffres** : les quatre statistiques du constat et leurs sources (Coface 2025,
-  Coface/Altares 2025, SDI) sont celles du document. Ne pas en inventer d'autres.
-- **Compteur de places** : texte statique, mis à jour à la main. Pas de compte à
-  rebours, pas de compteur « en direct ».
-- **Tarifs** : offre Essentiel v1 (49 € HT/mois + 9 € HT/salarié, essai 30 jours,
-  290 € HT de mise en route). Le programme Fondateurs promet le verrouillage de CE
-  tarif : ne pas ajouter de découpage Essentiel/Pro sans validation explicite.
-
-## Vérifié
-
-Rendu contrôlé sous Chromium à 1440 / 900 / 390 px : aucune erreur JS, aucun
-débordement horizontal, révélations au scroll et compteurs fonctionnels.
-
-Pièges rencontrés, à ne pas réintroduire :
-
-- Les lueurs `.glow` ont des décalages négatifs et élargissaient le document — d'où la
-  barre de défilement horizontale. `.section` porte `overflow: hidden` pour cette
-  raison.
-- `html` porte `scroll-behavior: smooth` (pour les ancres). Un script de test qui
-  appelle `window.scrollTo` en boucle doit passer `behavior: 'instant'`, sinon le
-  défilement animé ne rend jamais les zones traversées et les révélations semblent
-  cassées à tort.
-- La passe typographique (apostrophes courbes) doit sauter la ligne de la favicon :
-  ses apostrophes droites sont des délimiteurs d'attributs SVG.
+**Le test de Shapiro** : faire lire la page à 3 lecteurs hors secteur, dont un hors
+bâtiment — non automatisable, à organiser par le fondateur.
