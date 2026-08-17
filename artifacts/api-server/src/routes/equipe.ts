@@ -1,8 +1,8 @@
 import { Router, type IRouter } from "express";
-import { withTenant, DrizzleTx, teamMembersTable, affairesTable, facturesTable, settingsTable } from "@workspace/db";
-import { eq, asc, sql } from "drizzle-orm";
+import { withTenant, DrizzleTx, teamMembersTable, affairesTable, facturesTable, settingsTable, teamMemberHabilitationsTable } from "@workspace/db";
+import { eq, and, asc, sql } from "drizzle-orm";
 import { z } from "zod";
-import { toDateString, affaireWords, compteDansCapacite, TYPE_LIEN_VALUES } from "@nodaq/shared";
+import { toDateString, affaireWords, compteDansCapacite, TYPE_LIEN_VALUES, statutHabilitation } from "@nodaq/shared";
 import {
   buildSemaines,
   calcHorizon,
@@ -104,15 +104,77 @@ router.get("/equipe", async (req, res): Promise<void> => {
   const tenantId = req.tenantId!;
   await ensureDefaultMembers(tenantId);
 
-  const members = await withTenant(tenantId, async (tx) =>
-    tx.select().from(teamMembersTable).orderBy(asc(teamMembersTable.createdAt))
-  );
+  const { members, habilitationsParMembre } = await withTenant(tenantId, async (tx) => {
+    const members = await tx.select().from(teamMembersTable).orderBy(asc(teamMembersTable.createdAt));
+    const habilitations = await tx.select().from(teamMemberHabilitationsTable);
+    const habilitationsParMembre = new Map<string, typeof habilitations>();
+    for (const h of habilitations) {
+      const liste = habilitationsParMembre.get(h.membreId) ?? [];
+      liste.push(h);
+      habilitationsParMembre.set(h.membreId, liste);
+    }
+    return { members, habilitationsParMembre };
+  });
 
+  // US-A4.4 : le statut de chaque habilitation est calculé au vol, jamais
+  // stocké — aucun scheduler dans ce dépôt, voir statutHabilitation.
+  const todayStr = toDateString(new Date());
   const parsed = members.map(m => ({
     ...m,
     schedule: (() => { try { return JSON.parse(m.schedule); } catch { return []; } })(),
+    habilitations: (habilitationsParMembre.get(m.id) ?? []).map(h => ({
+      id: h.id,
+      type: h.type,
+      libelle: h.libelle,
+      dateExpiration: h.dateExpiration,
+      statut: statutHabilitation(h.dateExpiration, todayStr),
+    })),
   }));
   res.json(parsed);
+});
+
+const CreateHabilitationBody = z.object({
+  type: z.string().min(1),
+  libelle: z.string().min(1).max(120),
+  dateExpiration: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "dateExpiration must be YYYY-MM-DD").nullable().optional(),
+});
+
+router.post("/equipe/:id/habilitations", async (req, res): Promise<void> => {
+  const { id: membreId } = req.params as { id: string };
+  const parsed = CreateHabilitationBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+  const tenantId = req.tenantId!;
+  const { type, libelle, dateExpiration } = parsed.data;
+
+  const created = await withTenant(tenantId, async (tx) => {
+    const [membre] = await tx.select({ id: teamMembersTable.id }).from(teamMembersTable).where(eq(teamMembersTable.id, membreId));
+    if (!membre) return null;
+
+    const [habilitation] = await tx.insert(teamMemberHabilitationsTable).values({
+      tenantId, membreId, type, libelle,
+      ...(dateExpiration ? { dateExpiration } : {}),
+    }).returning();
+    return habilitation;
+  });
+
+  if (!created) { res.status(404).json({ error: "Membre introuvable" }); return; }
+
+  const todayStr = toDateString(new Date());
+  res.status(201).json({ ...created, statut: statutHabilitation(created.dateExpiration, todayStr) });
+});
+
+router.delete("/equipe/:id/habilitations/:habilitationId", async (req, res): Promise<void> => {
+  const { id: membreId, habilitationId } = req.params as { id: string; habilitationId: string };
+  const tenantId = req.tenantId!;
+
+  const [deleted] = await withTenant(tenantId, async (tx) =>
+    tx.delete(teamMemberHabilitationsTable)
+      .where(and(eq(teamMemberHabilitationsTable.id, habilitationId), eq(teamMemberHabilitationsTable.membreId, membreId)))
+      .returning()
+  );
+  if (!deleted) { res.status(404).json({ error: "Not found" }); return; }
+  res.status(204).send();
 });
 
 router.post("/equipe", async (req, res): Promise<void> => {

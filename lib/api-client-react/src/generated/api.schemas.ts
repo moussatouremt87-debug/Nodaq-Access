@@ -107,6 +107,8 @@ export interface Affaire {
   avancementPct?: number | null;
   /** @nullable */
   dateFinPrevue?: string | null;
+  /** Types d'habilitation requis pour affecter un salarié à cette affaire (US-A4.4). Avertissement, jamais bloquant. */
+  habilitationsRequises?: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -126,6 +128,7 @@ export interface AffaireInput {
   status?: string;
   notes?: string;
   startDate?: string;
+  habilitationsRequises?: string[];
 }
 
 export interface AffaireUpdate {
@@ -147,6 +150,7 @@ export interface AffaireUpdate {
      */
   avancementPct?: number;
   dateFinPrevue?: string;
+  habilitationsRequises?: string[];
 }
 
 export interface StatusCount {

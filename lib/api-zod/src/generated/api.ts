@@ -82,6 +82,7 @@ export const ListAffairesResponse = zod.object({
   "montantVenduHt": zod.number().nullish().describe('Montant vendu HT en centimes, issu du devis signé ou d\'une reprise de l\'existant.'),
   "avancementPct": zod.number().nullish().describe('Avancement en %, 0 à 100.'),
   "dateFinPrevue": zod.coerce.date().nullish(),
+  "habilitationsRequises": zod.array(zod.string()).optional().describe('Types d\'habilitation requis pour affecter un salarié à cette affaire (US-A4.4). Avertissement, jamais bloquant.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })),
@@ -102,7 +103,8 @@ export const CreateAffaireBody = zod.object({
   "quotedAmountCents": zod.number().optional(),
   "status": zod.string().optional(),
   "notes": zod.string().optional(),
-  "startDate": zod.coerce.date().optional()
+  "startDate": zod.coerce.date().optional(),
+  "habilitationsRequises": zod.array(zod.string()).optional()
 })
 
 export const CreateAffaireResponse = zod.object({
@@ -120,6 +122,7 @@ export const CreateAffaireResponse = zod.object({
   "montantVenduHt": zod.number().nullish().describe('Montant vendu HT en centimes, issu du devis signé ou d\'une reprise de l\'existant.'),
   "avancementPct": zod.number().nullish().describe('Avancement en %, 0 à 100.'),
   "dateFinPrevue": zod.coerce.date().nullish(),
+  "habilitationsRequises": zod.array(zod.string()).optional().describe('Types d\'habilitation requis pour affecter un salarié à cette affaire (US-A4.4). Avertissement, jamais bloquant.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -147,6 +150,7 @@ export const GetAffaireResponse = zod.object({
   "montantVenduHt": zod.number().nullish().describe('Montant vendu HT en centimes, issu du devis signé ou d\'une reprise de l\'existant.'),
   "avancementPct": zod.number().nullish().describe('Avancement en %, 0 à 100.'),
   "dateFinPrevue": zod.coerce.date().nullish(),
+  "habilitationsRequises": zod.array(zod.string()).optional().describe('Types d\'habilitation requis pour affecter un salarié à cette affaire (US-A4.4). Avertissement, jamais bloquant.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -177,7 +181,8 @@ export const UpdateAffaireBody = zod.object({
   "completedAt": zod.coerce.date().optional(),
   "montantVenduHt": zod.number().optional().describe('Montant vendu HT en centimes.'),
   "avancementPct": zod.number().min(updateAffaireBodyAvancementPctMin).max(updateAffaireBodyAvancementPctMax).optional(),
-  "dateFinPrevue": zod.coerce.date().optional()
+  "dateFinPrevue": zod.coerce.date().optional(),
+  "habilitationsRequises": zod.array(zod.string()).optional()
 })
 
 export const UpdateAffaireResponse = zod.object({
@@ -195,6 +200,7 @@ export const UpdateAffaireResponse = zod.object({
   "montantVenduHt": zod.number().nullish().describe('Montant vendu HT en centimes, issu du devis signé ou d\'une reprise de l\'existant.'),
   "avancementPct": zod.number().nullish().describe('Avancement en %, 0 à 100.'),
   "dateFinPrevue": zod.coerce.date().nullish(),
+  "habilitationsRequises": zod.array(zod.string()).optional().describe('Types d\'habilitation requis pour affecter un salarié à cette affaire (US-A4.4). Avertissement, jamais bloquant.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -778,6 +784,7 @@ export const ConvertDevisToAffaireResponse = zod.object({
   "montantVenduHt": zod.number().nullish().describe('Montant vendu HT en centimes, issu du devis signé ou d\'une reprise de l\'existant.'),
   "avancementPct": zod.number().nullish().describe('Avancement en %, 0 à 100.'),
   "dateFinPrevue": zod.coerce.date().nullish(),
+  "habilitationsRequises": zod.array(zod.string()).optional().describe('Types d\'habilitation requis pour affecter un salarié à cette affaire (US-A4.4). Avertissement, jamais bloquant.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
