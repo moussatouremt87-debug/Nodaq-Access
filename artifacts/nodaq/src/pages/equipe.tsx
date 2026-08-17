@@ -3,7 +3,7 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { listContainerVariants, itemVariants } from '@/lib/motion-variants';
 import {
   Users, MoreVertical, Pencil, Trash2, CheckCircle2,
-  Clock, AlertCircle, UserPlus, Mic, Settings, CalendarOff,
+  Clock, AlertCircle, UserPlus, Mic, Settings, CalendarOff, Plus,
 } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
@@ -27,7 +27,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 import { useVertical } from '@/hooks/use-vertical';
-import type { AffaireWords } from '@nodaq/shared';
+import { habilitationsSuggereesParVertical, type AffaireWords } from '@nodaq/shared';
 import { cn } from '@/lib/utils';
 import { apiFetch } from '@/lib/auth';
 import { toDateString } from '@/lib/format';
@@ -39,12 +39,21 @@ const API = '/api';
 // soit directement sur un client (métier sans "chantier"), jamais les deux —
 // même contrainte que côté moteur (migration 032).
 type ScheduleSlot = { day: string; affaireId: string | null; clientId: string | null };
+// Statut calculé côté serveur (US-A4.4) — jamais recalculé côté client,
+// même doctrine que le reste du produit : un chiffre/statut affiché vient
+// toujours d'un calcul déterministe unique, pas d'une seconde copie.
+type StatutHabilitation = 'EXPIREE' | 'BIENTOT_EXPIREE' | 'VALIDE' | 'SANS_EXPIRATION';
+type Habilitation = {
+  id: string; type: string; libelle: string;
+  dateExpiration: string | null; statut: StatutHabilitation;
+};
 type TeamMember = {
   id: string; name: string; role: string; email?: string | null;
   availability: 'DISPONIBLE' | 'PARTIEL' | 'ABSENT'; schedule: ScheduleSlot[];
   // Coûté sur les affaires où il intervient, jamais compté dans la capacité
   // RH interne (US-A4.3) — voir compteDansCapacite côté serveur.
   typeLien: 'SALARIE' | 'SOUS_TRAITANT' | 'APPRENTI';
+  habilitations: Habilitation[];
   createdAt: string; updatedAt: string;
 };
 type Absence = {
@@ -71,7 +80,7 @@ type PlanningData = {
   journees: JourneesResult;
   tauxJourFacture: number; coutJourCharge: number;
 };
-type Affaire = { id: string; label: string; status?: string };
+type Affaire = { id: string; label: string; status?: string; habilitationsRequises?: string[] };
 type Client = { id: string; nom: string };
 
 const DAYS = ['LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM', 'DIM'];
@@ -1049,7 +1058,7 @@ function MemberDialog({ open, onOpenChange, member, affaires, clients, onSaved }
   affaires: Affaire[]; clients: Client[]; onSaved: () => void;
 }) {
   const { toast } = useToast();
-  const { words, externalWorkerWords } = useVertical();
+  const { vertical, words, externalWorkerWords } = useVertical();
   const [name, setName] = useState('');
   const [role, setRole] = useState('Collaborateur');
   const [email, setEmail] = useState('');
@@ -1060,6 +1069,17 @@ function MemberDialog({ open, onOpenChange, member, affaires, clients, onSaved }
   );
   const [saving, setSaving] = useState(false);
 
+  // US-A4.4 — état géré séparément du reste du formulaire : chaque
+  // ajout/suppression d'habilitation appelle immédiatement son propre
+  // endpoint (elle est une sous-ressource, pas un champ du membre), pas
+  // différé jusqu'au clic sur "Enregistrer".
+  const [habilitations, setHabilitations] = useState<Habilitation[]>([]);
+  const suggestions = habilitationsSuggereesParVertical(vertical);
+  const [novType, setNovType] = useState<string>('__libre__');
+  const [novLibelle, setNovLibelle] = useState('');
+  const [novExpiration, setNovExpiration] = useState('');
+  const [addingHab, setAddingHab] = useState(false);
+
   useEffect(() => {
     if (open) {
       if (member) {
@@ -1069,13 +1089,68 @@ function MemberDialog({ open, onOpenChange, member, affaires, clients, onSaved }
         setSchedule(DAYS.map(day =>
           member.schedule.find(s => s.day === day) ?? { day, affaireId: null, clientId: null },
         ));
+        setHabilitations(member.habilitations ?? []);
       } else {
         setName(''); setRole('Collaborateur'); setEmail(''); setAvailability('DISPONIBLE');
         setTypeLien('SALARIE');
         setSchedule(DAYS.map(day => ({ day, affaireId: null, clientId: null })));
+        setHabilitations([]);
       }
+      setNovType('__libre__'); setNovLibelle(''); setNovExpiration('');
     }
   }, [open, member]);
+
+  const handleAddHabilitation = async () => {
+    if (!member || !novLibelle.trim()) return;
+    setAddingHab(true);
+    try {
+      const suggestion = suggestions.find(s => s.type === novType);
+      const r = await apiFetch(`${API}/equipe/${member.id}/habilitations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: suggestion?.type ?? novLibelle.trim(),
+          libelle: novLibelle.trim(),
+          ...(novExpiration ? { dateExpiration: novExpiration } : {}),
+        }),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        toast({ title: 'Erreur', description: (err as any).error ?? "Impossible d'ajouter l'habilitation", variant: 'destructive' });
+        return;
+      }
+      const created = await r.json();
+      setHabilitations(hs => [...hs, created]);
+      setNovType('__libre__'); setNovLibelle(''); setNovExpiration('');
+      onSaved();
+    } finally { setAddingHab(false); }
+  };
+
+  const handleDeleteHabilitation = async (habilitationId: string) => {
+    if (!member) return;
+    const r = await apiFetch(`${API}/equipe/${member.id}/habilitations/${habilitationId}`, { method: 'DELETE' });
+    if (!r.ok) {
+      toast({ title: 'Erreur', description: "Impossible de retirer l'habilitation", variant: 'destructive' });
+      return;
+    }
+    setHabilitations(hs => hs.filter(h => h.id !== habilitationId));
+    onSaved();
+  };
+
+  // US-A4.4, AC2 — AVERTISSEMENT, jamais un blocage : ce dérivé ne désactive
+  // aucun bouton, il informe seulement. Une habilitation EXPIREE ne compte
+  // pas comme détenue ; BIENTOT_EXPIREE/VALIDE/SANS_EXPIRATION comptent.
+  const typesDetenus = new Set(
+    habilitations.filter(h => h.statut !== 'EXPIREE').map(h => h.type),
+  );
+  const manquesParAffaire = new Map<string, string[]>();
+  for (const slot of schedule) {
+    if (!slot.affaireId) continue;
+    const affaire = affaires.find(a => a.id === slot.affaireId);
+    const requises = affaire?.habilitationsRequises ?? [];
+    const manquantes = requises.filter(t => !typesDetenus.has(t));
+    if (manquantes.length > 0 && affaire) manquesParAffaire.set(affaire.label, manquantes);
+  }
 
   // Rattachement EXCLUSIF (US-A4.1) : un seul select par jour, dont la
   // valeur encode LEQUEL des deux rattachements est choisi
@@ -1202,7 +1277,105 @@ function MemberDialog({ open, onOpenChange, member, affaires, clients, onSaved }
                 })}
               </div>
             </div>
+            {manquesParAffaire.size > 0 && (
+              <div
+                className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400"
+                data-testid="avertissement-habilitations"
+              >
+                <p className="font-medium">Habilitation manquante — avertissement, pas un blocage :</p>
+                <ul className="mt-1 space-y-0.5">
+                  {[...manquesParAffaire.entries()].map(([label, types]) => (
+                    <li key={label}>
+                      {label} : {types.map(t => suggestions.find(s => s.type === t)?.libelle ?? t).join(', ')}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
+
+          {member && (
+            <div className="space-y-2">
+              <Label>Habilitations</Label>
+              {habilitations.length > 0 && (
+                <ul className="space-y-1.5">
+                  {habilitations.map(h => (
+                    <li
+                      key={h.id}
+                      className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-1.5 text-sm"
+                    >
+                      <span className="flex items-center gap-2 min-w-0">
+                        <span className="truncate">{h.libelle}</span>
+                        {h.dateExpiration ? (
+                          <span className={cn(
+                            'text-xs shrink-0',
+                            h.statut === 'EXPIREE' ? 'text-destructive font-medium'
+                              : h.statut === 'BIENTOT_EXPIREE' ? 'text-amber-600 dark:text-amber-400'
+                              : 'text-muted-foreground',
+                          )}>
+                            {h.statut === 'EXPIREE' ? 'expirée le' : 'expire le'} {h.dateExpiration}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground shrink-0">sans expiration</span>
+                        )}
+                      </span>
+                      <Button
+                        size="icon" variant="ghost" className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+                        onClick={() => handleDeleteHabilitation(h.id)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="grid grid-cols-[1fr_1fr_140px_32px] gap-2 items-end">
+                <div className="space-y-1">
+                  <Label className="text-xs">Type</Label>
+                  <Select
+                    value={novType}
+                    onValueChange={v => {
+                      setNovType(v);
+                      const s = suggestions.find(sug => sug.type === v);
+                      if (s) setNovLibelle(s.libelle);
+                    }}
+                  >
+                    <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__libre__">Autre (préciser)</SelectItem>
+                      {suggestions.map(s => (
+                        <SelectItem key={s.type} value={s.type}>{s.libelle}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Libellé</Label>
+                  <Input
+                    className="h-9 text-sm"
+                    value={novLibelle}
+                    onChange={e => setNovLibelle(e.target.value)}
+                    placeholder="ex. Habilitation électrique B0"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Expiration</Label>
+                  <Input
+                    type="date" className="h-9 text-sm"
+                    value={novExpiration}
+                    onChange={e => setNovExpiration(e.target.value)}
+                  />
+                </div>
+                <Button
+                  size="icon" variant="outline" className="h-9 w-9"
+                  disabled={addingHab || !novLibelle.trim()}
+                  onClick={handleAddHabilitation}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>

@@ -5,6 +5,7 @@
  */
 import { describe, test, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { AffaireDialog } from "./affaire-dialog";
 
 const useVerticalMock = vi.fn();
@@ -71,5 +72,70 @@ describe("édition — le titre et la description suivent aussi le mot du métie
     expect(screen.getByText("Mettez à jour le chantier.")).toBeTruthy();
     // Le bouton reste "Enregistrer" en édition, neutre quel que soit le métier.
     expect(screen.getByRole("button", { name: "Enregistrer" })).toBeTruthy();
+  });
+});
+
+describe("habilitations requises (US-A4.4)", () => {
+  test("ajout en texte libre : la puce apparaît", async () => {
+    const utilisateur = userEvent.setup();
+    useVerticalMock.mockReturnValue({ words: WORDS_BATIMENT, vertical: "batiment" });
+    render(<AffaireDialog open onOpenChange={() => {}} />);
+
+    await utilisateur.type(screen.getByTestId("input-habilitation-libre"), "Carte pro sécurité");
+    await utilisateur.click(screen.getByTestId("button-ajouter-habilitation"));
+
+    expect(screen.getByText("Carte pro sécurité")).toBeTruthy();
+    // Le champ se vide après ajout, prêt pour une nouvelle saisie.
+    expect(screen.getByTestId("input-habilitation-libre")).toHaveValue("");
+  });
+
+  test("une puce se retire", async () => {
+    const utilisateur = userEvent.setup();
+    useVerticalMock.mockReturnValue({ words: WORDS_BATIMENT, vertical: "batiment" });
+    render(<AffaireDialog open onOpenChange={() => {}} />);
+
+    await utilisateur.type(screen.getByTestId("input-habilitation-libre"), "Carte pro sécurité");
+    await utilisateur.click(screen.getByTestId("button-ajouter-habilitation"));
+    expect(screen.getByText("Carte pro sécurité")).toBeTruthy();
+
+    await utilisateur.click(screen.getByLabelText("Retirer Carte pro sécurité"));
+    expect(screen.queryByText("Carte pro sécurité")).toBeNull();
+  });
+
+  test("un clic sur Ajouter avec un champ vide ne plante pas et n'ajoute rien", async () => {
+    const utilisateur = userEvent.setup();
+    useVerticalMock.mockReturnValue({ words: WORDS_BATIMENT, vertical: "batiment" });
+    render(<AffaireDialog open onOpenChange={() => {}} />);
+
+    await utilisateur.click(screen.getByTestId("button-ajouter-habilitation"));
+    expect(screen.queryByRole("button", { name: /Retirer/ })).toBeNull();
+  });
+
+  test("ajouter deux fois le même texte ne crée pas de doublon", async () => {
+    const utilisateur = userEvent.setup();
+    useVerticalMock.mockReturnValue({ words: WORDS_BATIMENT, vertical: "batiment" });
+    render(<AffaireDialog open onOpenChange={() => {}} />);
+
+    await utilisateur.type(screen.getByTestId("input-habilitation-libre"), "Carte pro");
+    await utilisateur.click(screen.getByTestId("button-ajouter-habilitation"));
+    await utilisateur.type(screen.getByTestId("input-habilitation-libre"), "Carte pro");
+    await utilisateur.click(screen.getByTestId("button-ajouter-habilitation"));
+
+    expect(screen.getAllByText("Carte pro")).toHaveLength(1);
+  });
+
+  test("une affaire existante pré-remplit ses habilitations requises", () => {
+    useVerticalMock.mockReturnValue({ words: WORDS_BATIMENT, vertical: "batiment" });
+    render(
+      <AffaireDialog
+        open
+        onOpenChange={() => {}}
+        affaire={{ id: "a1", label: "Toiture Dupont", habilitationsRequises: ["habilitation_electrique"] } as never}
+      />,
+    );
+    // "habilitation_electrique" est une suggestion connue du vertical bâtiment :
+    // la puce affiche son libellé lisible, pas la clé technique.
+    const puce = screen.getByTestId("badge-habilitation-requise");
+    expect(puce.textContent).toContain("Habilitation électrique");
   });
 });
