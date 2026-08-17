@@ -8,7 +8,7 @@
  * silencieusement ignoré.
  */
 import { describe, test, expect } from "vitest";
-import { calcHorizon, simulerChantier, type SemaineData } from "../services/planning-service";
+import { buildSemaines, calcHorizon, simulerChantier, type MemberRecord, type SemaineData } from "../services/planning-service";
 import { affaireWords } from "@nodaq/shared";
 
 const CHANTIER = affaireWords("industrie_btp"); // "chantier" — vocabulaire historique
@@ -27,6 +27,62 @@ function semaineLibre(dateDebut: string): SemaineData {
     joursVendus: 0,
   };
 }
+
+describe("buildSemaines — capacité RH (US-A4.3)", () => {
+  // Un lundi non férié, pour que les 5 jours ouvrés de la semaine comptent
+  // pleinement — évite tout bruit de jour férié dans le calcul de capacité.
+  const LUNDI = new Date("2026-08-10T00:00:00Z");
+
+  function membre(overrides: Partial<MemberRecord>): MemberRecord {
+    return {
+      id: "m1", name: "Test", availability: "DISPONIBLE", typeLien: "SALARIE",
+      schedule: [], ...overrides,
+    };
+  }
+
+  test("un salarié compte pleinement dans la capacité", () => {
+    const semaines = buildSemaines({
+      today: LUNDI,
+      members: [membre({ typeLien: "SALARIE" })],
+      absences: [], affaires: [], weekCount: 1,
+      tauxJourFacture: 1, coutJourCharge: 250,
+    });
+    expect(semaines[0]!.joursDisponibles).toBe(5);
+  });
+
+  test("un sous-traitant disponible ne compte PAS dans la capacité (l'angle mort corrigé)", () => {
+    const semaines = buildSemaines({
+      today: LUNDI,
+      members: [membre({ typeLien: "SOUS_TRAITANT" })],
+      absences: [], affaires: [], weekCount: 1,
+      tauxJourFacture: 1, coutJourCharge: 250,
+    });
+    expect(semaines[0]!.joursDisponibles).toBe(0);
+  });
+
+  test("un apprenti compte, comme un salarié", () => {
+    const semaines = buildSemaines({
+      today: LUNDI,
+      members: [membre({ typeLien: "APPRENTI" })],
+      absences: [], affaires: [], weekCount: 1,
+      tauxJourFacture: 1, coutJourCharge: 250,
+    });
+    expect(semaines[0]!.joursDisponibles).toBe(5);
+  });
+
+  test("un salarié et un sous-traitant : seul le salarié compte", () => {
+    const semaines = buildSemaines({
+      today: LUNDI,
+      members: [
+        membre({ id: "m1", typeLien: "SALARIE" }),
+        membre({ id: "m2", typeLien: "SOUS_TRAITANT" }),
+      ],
+      absences: [], affaires: [], weekCount: 1,
+      tauxJourFacture: 1, coutJourCharge: 250,
+    });
+    expect(semaines[0]!.joursDisponibles).toBe(5);
+  });
+});
 
 describe("calcHorizon — vocabulaire adaptatif", () => {
   test("aucune semaine travaillée : le sous-titre reprend le mot du vertical (BTP)", () => {

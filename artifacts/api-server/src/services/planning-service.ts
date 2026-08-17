@@ -3,12 +3,15 @@
  * No database access — all inputs are plain objects.
  * Fully testable without infrastructure.
  */
-import type { AffaireWords } from "@nodaq/shared";
+import { compteDansCapacite, type AffaireWords } from "@nodaq/shared";
 
 export type MemberRecord = {
   id: string;
   name: string;
   availability: string;
+  /** SALARIE | SOUS_TRAITANT | APPRENTI — un sous-traitant est coûté, jamais
+   *  compté dans la capacité (US-A4.3, voir compteDansCapacite). */
+  typeLien: string;
   schedule: Array<{ day: string; affaireId: string | null }>;
 };
 
@@ -178,7 +181,12 @@ export function buildSemaines(params: {
   coutJourCharge: number;
 }): SemaineData[] {
   const { today, members, absences, affaires, weekCount, tauxJourFacture, coutJourCharge } = params;
-  const activeMembers = members.filter((m) => m.availability !== "ABSENT");
+  // US-A4.3 : un sous-traitant est coûté sur les affaires où il intervient,
+  // mais ne compte jamais dans la capacité RH interne — même règle que
+  // /reprise/capacite-equipe, via la même fonction partagée.
+  const activeMembers = members.filter(
+    (m) => m.availability !== "ABSENT" && compteDansCapacite(m.typeLien),
+  );
   const mondayOfToday = getMondayOf(today);
   const todayStr = toISODate(today);
   const feries = buildFeriesSet(mondayOfToday, weekCount + 2);
