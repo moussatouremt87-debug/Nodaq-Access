@@ -64,10 +64,13 @@
    Mobile d'abord : les styles de base visent < 640 px ; les media queries
    min-width élargissent. Aucun bleu. Glow réservé au logo. ═══════════════ */
 
+/* Identité fintech : surfaces pleines type produit, rayons resserrés,
+   filets hairline de relevé bancaire, chiffres tabulaires. L'austérité est
+   le signal de confiance — aucune lueur d'ambiance, le glow reste au logo. */
 :root {
   --bg:        #0a0b0f;
-  --bg-raised: #0f1116;
-  --card:      rgba(255, 255, 255, 0.024);
+  --bg-raised: #0e1015;
+  --card:      #0e1015;
   --border:        rgba(255, 255, 255, 0.06);
   --border-strong: rgba(255, 255, 255, 0.11);
 
@@ -86,6 +89,8 @@
 
   --sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  --radius: 10px;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -117,7 +122,20 @@ button, input, textarea { font: inherit; color: inherit; }
 
 .shell { width: 100%; max-width: 880px; margin: 0 auto; padding: 0 20px; }
 .shell--wide { max-width: 1040px; }
-.section { padding: 68px 0; position: relative; overflow: hidden; }
+/* Filet hairline entre sections — rythme de relevé bancaire. */
+.section { padding: 68px 0; position: relative; overflow: hidden; border-top: 1px solid var(--border); }
+
+/* Index de section : la numérotation réelle du prompt (S.02 → S.08),
+   en mono registre au-dessus du titre. */
+.idx {
+  display: block;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  color: var(--lime);
+  margin-bottom: 16px;
+}
 
 .mono { font-family: var(--mono); font-variant-ligatures: none; font-feature-settings: "tnum" 1; }
 
@@ -167,7 +185,7 @@ button, input, textarea { font: inherit; color: inherit; }
   justify-content: center;
   gap: 10px;
   padding: 16px 30px;
-  border-radius: 10px;
+  border-radius: 8px;
   font-size: 16px;
   font-weight: 650;
   letter-spacing: -0.01em;
@@ -175,20 +193,17 @@ button, input, textarea { font: inherit; color: inherit; }
   background: var(--lime);
   color: var(--bg);
   cursor: pointer;
-  transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+  transition: background 0.15s ease;
   white-space: nowrap;
 }
-.btn:hover {
-  background: var(--lime-hover);
-  transform: translateY(-2px);
-  box-shadow: 0 12px 34px -12px rgba(163, 230, 53, 0.45);
-}
+.btn:hover { background: var(--lime-hover); }
 
-/* ── Cartes ─────────────────────────────────────────────────────────────── */
+/* ── Cartes : surface produit pleine, hairline, liseré haut ─────────────── */
 .card {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-top-color: var(--border-strong);
+  border-radius: var(--radius);
   padding: 26px 22px;
 }
 
@@ -218,8 +233,9 @@ button, input, textarea { font: inherit; color: inherit; }
 .hero__cta { margin-top: 34px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .hero__micro {
   font-family: var(--mono);
-  font-size: 12px;
-  letter-spacing: 0.04em;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   color: var(--text-mute);
 }
 
@@ -227,10 +243,9 @@ button, input, textarea { font: inherit; color: inherit; }
 .proto {
   margin: 44px auto 0;
   border: 1px solid var(--border-strong);
-  border-radius: 16px;
-  background: linear-gradient(180deg, var(--bg-raised), #0b0d12);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
   overflow: hidden;
-  box-shadow: 0 40px 100px -42px rgba(0, 0, 0, 0.95);
 }
 .proto img { width: 100%; }
 .proto.is-missing img { display: none; }
@@ -252,17 +267,21 @@ button, input, textarea { font: inherit; color: inherit; }
   max-width: 560px;
   text-align: left;
 }
+/* Annotations en pastilles « registre » : mono, capitales espacées. */
 .anno {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  border: 1px solid rgba(163, 230, 53, 0.22);
-  border-radius: 10px;
+  gap: 9px;
+  padding: 9px 13px;
+  border: 1px solid rgba(163, 230, 53, 0.25);
+  border-radius: 6px;
   background: var(--lime-dim);
   color: var(--lime-pale);
-  font-size: 13.5px;
-  font-weight: 600;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 .anno i {
   flex: none;
@@ -291,10 +310,12 @@ button, input, textarea { font: inherit; color: inherit; }
   color: var(--text-mute);
 }
 
+/* Carte métrique : règle lime en tête, comme un indicateur de dashboard. */
 .vedette {
   margin-top: 34px;
   text-align: center;
   padding: 34px 22px;
+  border-top: 2px solid var(--lime);
 }
 .vedette__fig {
   font-family: var(--mono);
@@ -308,8 +329,12 @@ button, input, textarea { font: inherit; color: inherit; }
 
 .bbyt { margin-top: 16px; }
 .bbyt h3 { font-size: 19px; }
+/* Le calcul en écriture de relevé : mono, encadré d'un filet lime. */
 .bbyt__calc {
   margin-top: 16px;
+  padding: 14px 18px;
+  border-left: 2px solid var(--lime);
+  background: rgba(255, 255, 255, 0.02);
   font-family: var(--mono);
   font-size: 15px;
   line-height: 1.9;
@@ -360,7 +385,7 @@ button, input, textarea { font: inherit; color: inherit; }
 }
 .problem__answer {
   padding: 14px 16px;
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--lime-dim);
   border: 1px solid rgba(163, 230, 53, 0.22);
   color: var(--lime-pale);
@@ -384,13 +409,17 @@ button, input, textarea { font: inherit; color: inherit; }
   color: var(--lime);
   margin-bottom: 14px;
 }
-.status__col ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.status__col ul { list-style: none; margin: 0; padding: 0; }
+/* Lignes de registre : chaque entrée séparée d'un filet hairline. */
 .status__col li {
   display: flex;
   gap: 10px;
   font-size: 14.5px;
   color: var(--text-soft);
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
 }
+.status__col li:last-child { border-bottom: 0; }
 .status__col li::before {
   content: "";
   flex: none;
@@ -410,14 +439,26 @@ button, input, textarea { font: inherit; color: inherit; }
   padding: 2px 8px;
 }
 
-/* ── S6 · Les 50 premiers ───────────────────────────────────────────────── */
-.perks { display: grid; gap: 12px; margin-top: 36px; }
-.perk {
+/* ── S6 · Les 50 premiers — un seul relevé à filets, pas 4 cartes ───────── */
+.perks {
+  margin-top: 36px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-top-color: var(--border-strong);
+  border-radius: var(--radius);
+  padding: 4px 20px;
+}
+.perks .perk {
   display: flex;
   gap: 12px;
   align-items: flex-start;
-  padding: 16px 18px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  padding: 16px 0;
 }
+.perks .perk:last-child { border-bottom: 0; }
 .perk svg { flex: none; margin-top: 5px; color: var(--lime); }
 .perk span { font-size: 15px; color: var(--text); }
 .scarcity {
@@ -432,7 +473,8 @@ button, input, textarea { font: inherit; color: inherit; }
 .faq { display: grid; gap: 10px; margin-top: 36px; }
 .faq details {
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-top-color: var(--border-strong);
+  border-radius: var(--radius);
   background: var(--card);
 }
 .faq summary {
@@ -483,7 +525,7 @@ button, input, textarea { font: inherit; color: inherit; }
 .signup input[type="email"] {
   width: 100%;
   padding: 15px 18px;
-  border-radius: 10px;
+  border-radius: 8px;
   border: 1px solid var(--border-strong);
   background: var(--bg-raised);
   color: var(--text);
@@ -516,7 +558,7 @@ button, input, textarea { font: inherit; color: inherit; }
   min-height: 96px;
   margin-top: 10px;
   padding: 13px 16px;
-  border-radius: 10px;
+  border-radius: 8px;
   border: 1px solid var(--border-strong);
   background: var(--bg-raised);
   color: var(--text);
@@ -596,7 +638,6 @@ button, input, textarea { font: inherit; color: inherit; }
   .section { padding: 104px 0; }
   .status { grid-template-columns: repeat(3, 1fr); gap: 20px; }
   .building { grid-template-columns: repeat(3, 1fr); }
-  .perks { grid-template-columns: repeat(2, 1fr); }
 }
 </style>
 </head>
@@ -655,6 +696,7 @@ button, input, textarea { font: inherit; color: inherit; }
 <!-- ═══ S2 · CONSTAT + BUY BACK YOUR TIME ═══════════════════════════════ -->
 <section class="section" id="constat">
   <div class="shell">
+    <span class="idx reveal">S.02</span>
     <h2 class="section-title reveal">Ce n’est pas vous. C’est structurel.</h2>
 
     <div class="constat__prose">
@@ -719,6 +761,7 @@ button, input, textarea { font: inherit; color: inherit; }
 <!-- ═══ S3 · LES 3 PROBLÈMES ════════════════════════════════════════════ -->
 <section class="section" id="problemes">
   <div class="shell">
+    <span class="idx reveal">S.03</span>
     <h2 class="section-title reveal">Trois problèmes. Pas dix.</h2>
 
     <div class="problems">
@@ -800,6 +843,7 @@ button, input, textarea { font: inherit; color: inherit; }
 <!-- ═══ S4 · CE QU'ON CONSTRUIT ═════════════════════════════════════════ -->
 <section class="section" id="construction">
   <div class="shell shell--wide">
+    <span class="idx reveal">S.04</span>
     <h2 class="section-title reveal">Ce qu’on est en train de construire</h2>
     <p class="hero__sub reveal" style="--d:0.05s; margin-left:0; max-width:56ch; text-align:left;">
       nodaq est en développement. Voici l’état réel du produit — pas des maquettes
@@ -835,6 +879,7 @@ button, input, textarea { font: inherit; color: inherit; }
 <!-- ═══ S5 · STATUT ET CALENDRIER ═══════════════════════════════════════ -->
 <section class="section" id="statut">
   <div class="shell shell--wide">
+    <span class="idx reveal">S.05</span>
     <h2 class="section-title reveal">Où on en est, sans enjoliver</h2>
 
     <div class="status">
@@ -871,6 +916,7 @@ button, input, textarea { font: inherit; color: inherit; }
 <!-- ═══ S6 · LES 50 PREMIERS ════════════════════════════════════════════ -->
 <section class="section" id="fondateurs">
   <div class="shell">
+    <span class="idx reveal">S.06</span>
     <h2 class="section-title reveal">Ce que les 50 premiers obtiennent</h2>
 
     <div class="perks">
@@ -899,6 +945,7 @@ button, input, textarea { font: inherit; color: inherit; }
 <!-- ═══ S7 · FAQ ════════════════════════════════════════════════════════ -->
 <section class="section" id="faq">
   <div class="shell">
+    <span class="idx reveal">S.07</span>
     <h2 class="section-title reveal">Questions directes, réponses directes</h2>
 
     <div class="faq reveal">
@@ -939,6 +986,7 @@ button, input, textarea { font: inherit; color: inherit; }
 <!-- ═══ S8 · CTA FINAL + COLLECTE ═══════════════════════════════════════ -->
 <section class="section signup" id="inscription">
   <div class="shell">
+    <span class="idx reveal">S.08</span>
     <h2 class="signup__promise reveal">
       Arrêtez de piloter à l’aveugle. Dictez, photographiez, validez — nodaq
       s’occupe du reste.

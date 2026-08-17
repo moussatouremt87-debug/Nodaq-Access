@@ -5,8 +5,32 @@ Page **mono-objectif** générée depuis le prompt d'exécution validé par le f
 Elle remplace intégralement les versions précédentes (v2/v3 « vitrine ») — ce n'est
 plus une landing SaaS classique mais une page de collecte d'emails qualifiés.
 
-Fichier unique : `index.html` (HTML + CSS + JS inline, 46 Ko hors polices — cible
+Fichier unique : `index.html` (HTML + CSS + JS inline, ~47 Ko hors polices — cible
 < 200 Ko respectée). Aucun build, aucune dépendance hors polices Google Fonts.
+
+## Identité visuelle : fintech (demande du fondateur, 17/08)
+
+La charte NODAQ v2 reste la base (fond `#0a0b0f`, accent unique lime `#a3e635`,
+logo N à onde vocale — seul élément au glow appuyé, dégradé orange→rouge réservé
+aux chiffres du constat). Par-dessus, un traitement fintech :
+
+- surfaces pleines type produit (`#0e1015`), rayons resserrés (8-10 px),
+  liseré haut plus clair sur les cartes ;
+- filets hairline entre sections et dans les listes — rythme de relevé bancaire
+  (statut, avantages des 50 premiers en un seul relevé à filets) ;
+- chiffres en JetBrains Mono tabulaire, labels « registre » en capitales
+  espacées (annotations, micro-copy) ;
+- index de sections `S.02 → S.08` en mono lime — la numérotation réelle du
+  prompt, pas une décoration ;
+- calcul Buy Back Your Time encadré d'un filet lime, carte métrique 41 % avec
+  règle lime en tête ;
+- aucune lueur d'ambiance, aucune ombre portée — l'austérité comme signal de
+  confiance.
+
+Maquette Figma : le fichier
+[NODAQ — Collecte, identité fintech](https://www.figma.com/design/BprHpxE5U4AhKtcRMlYwo2)
+a été créé mais est resté vide : le quota d'appels MCP du plan Figma Starter
+était épuisé. À remplir quand le quota se réinitialise (ou plan supérieur).
 
 ## Règles structurantes (ne pas casser)
 
