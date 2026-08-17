@@ -36,7 +36,7 @@ a été créé mais est resté vide : le quota d'appels MCP du plan Figma Starte
 
 - **Attention ratio = 1** : aucun menu, aucun lien sortant. Les seuls éléments
   cliquables sont le CTA hero (ancre vers le formulaire), le bouton de soumission,
-  et les 2 liens légaux du footer (obligation légale). Le lien d'évitement
+  et les 3 liens légaux du footer (mentions, confidentialité, CGV). Le lien d'évitement
   (`skip-link`) est une exigence d'accessibilité, pas un lien concurrent.
 - **Un seul champ : l'email.** La question ouverte (verbatims) n'apparaît qu'APRÈS
   la conversion, dans l'état de confirmation.
@@ -64,7 +64,15 @@ Images du prototype à déposer à côté du fichier : `cockpit-annote.png`,
 `devis-dicte.png`, `marge-mission.png`, `echeancier.png`. Tant qu'un fichier manque,
 un cadre de substitution affiche le nom attendu — rien ne casse.
 
-Pages légales à créer : `mentions-legales.html`, `confidentialite.html`.
+Pages légales (créées, même identité visuelle, `noindex`) :
+`mentions-legales.html`, `confidentialite.html`, `cgv.html` — liées depuis le
+footer. Elles portent des jetons visibles `[À COMPLÉTER : …]` pour les
+informations que seul le fondateur connaît (raison sociale, SIREN, hébergeur
+du site, durées de conservation, tribunal compétent…). Les CGV sont une
+**version préparatoire** clairement annoncée sur la page (produit non
+commercialisé) — à faire valider par un conseil juridique avant toute
+souscription. Le lien CGV est un ajout demandé par le fondateur par rapport
+au prompt initial (qui ne prévoyait que mentions légales + confidentialité).
 
 ## Comportement du formulaire
 
