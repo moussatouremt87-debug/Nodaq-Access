@@ -57,7 +57,7 @@ Tous documentés dans le commentaire HTML en tête de `index.html` :
 |---|---|---|
 | `[DATE_CALENDRIER]` | Section 5, colonne « À venir » | Laisser visible tant que le fondateur n'a pas fourni la date |
 | `[DATE_OUVERTURE_FONDATEURS]` | FAQ, « Quand est-ce disponible ? » | Idem |
-| `[ENDPOINT_FORMULAIRE]` | Constante dans le `<script>` | POST du formulaire (champ `email`) et de la question ouverte (champs `email` + `irritant`). Google Form en fallback, sinon endpoint API |
+| `ENDPOINT_FORMULAIRE` | **Branché** | FormSubmit `/ajax` vers `moussatoure.mt.87@gmail.com` — inscription et verbatim, sujets distincts. **Activation une seule fois** : la première soumission depuis le site en ligne déclenche un email de FormSubmit dans cette boîte → cliquer « Activate ». Une réponse `success:"false"` (non activé) est traitée comme un échec, pas de fausse réussite |
 | `[ENDPOINT_MESURE]` | Constante dans le `<script>` | Compteur maison sans cookie (`sendBeacon`) : `conversion_email`, `scroll_section3`, `reponse_irritant`. No-op tant que le placeholder reste. Pas de Google Analytics |
 
 Images du prototype à déposer à côté du fichier : `cockpit-annote.png`,
@@ -77,8 +77,10 @@ au prompt initial (qui ne prévoyait que mentions légales + confidentialité).
 ## Comportement du formulaire
 
 - Validation email côté client, message d'erreur sobre.
-- Tant que `[ENDPOINT_FORMULAIRE]` n'est pas branché, la soumission affiche
-  l'erreur sobre — **pas de fausse réussite**.
+- L'endpoint est branché sur FormSubmit → boîte Gmail du fondateur. Tant que
+  l'adresse n'est pas activée chez FormSubmit (un clic dans l'email
+  d'activation reçu à la première soumission), la soumission affiche l'erreur
+  sobre — **pas de fausse réussite**.
 - Après succès : l'état de confirmation remplace le formulaire (« Merci — vous êtes
   sur la liste. ») puis pose la question ouverte. La réponse POSTe réellement vers
   le même endpoint avec le champ distinct `irritant` — c'est la boucle de collecte

@@ -12,13 +12,20 @@
     [DATE_CALENDRIER]            Section 5, colonne « À venir » du calendrier.
     [DATE_OUVERTURE_FONDATEURS]  Section 7, réponse FAQ « Quand est-ce
                                  disponible ? ».
-    [ENDPOINT_FORMULAIRE]        Constante ENDPOINT_FORMULAIRE dans le <script>
-                                 en bas de page. POST du formulaire email
-                                 (champ « email ») et de la question ouverte
-                                 (champs « email » + « irritant »). Brancher sur
-                                 l'outil choisi (Google Form en fallback, sinon
-                                 endpoint API). Tant que le placeholder reste,
-                                 la soumission affiche l'erreur sobre.
+    ENDPOINT_FORMULAIRE          BRANCHÉ : FormSubmit (mode /ajax) relaie
+                                 chaque soumission par email vers
+                                 moussatoure.mt.87@gmail.com — inscription
+                                 (champ « email ») et verbatim (champs
+                                 « email » + « irritant »), avec un sujet
+                                 distinct par cas. ACTIVATION REQUISE UNE
+                                 FOIS : la première soumission depuis le
+                                 site déclenche un email d'activation de
+                                 FormSubmit dans cette boîte — cliquer
+                                 « Activate » une seule fois ; ensuite tout
+                                 arrive directement. Une réponse
+                                 success:"false" (adresse non activée) est
+                                 traitée comme un échec — pas de fausse
+                                 réussite.
     [ENDPOINT_MESURE]            Constante ENDPOINT_MESURE dans le <script>.
                                  Compteur maison sans cookie (sendBeacon) :
                                  conversion email, profondeur de scroll jusqu'à
@@ -1092,8 +1099,11 @@ button, input, textarea { font: inherit; color: inherit; }
 (function () {
   "use strict";
 
-  /* Placeholders à brancher — voir le commentaire en tête de fichier. */
-  var ENDPOINT_FORMULAIRE = "[ENDPOINT_FORMULAIRE]";
+  /* Endpoint réel : FormSubmit relaie chaque soumission par email vers la
+     boîte du fondateur (moussatoure.mt.87@gmail.com). Le mode /ajax renvoie
+     du JSON et accepte le POST JSON de fetch. [ENDPOINT_MESURE] reste un
+     placeholder — voir le commentaire en tête de fichier. */
+  var ENDPOINT_FORMULAIRE = "https://formsubmit.co/ajax/moussatoure.mt.87@gmail.com";
   var ENDPOINT_MESURE = "[ENDPOINT_MESURE]";
 
   var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -1208,10 +1218,17 @@ button, input, textarea { font: inherit; color: inherit; }
     }
     return fetch(ENDPOINT_FORMULAIRE, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
       body: JSON.stringify(payload),
     }).then(function (r) {
       if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    }).then(function (j) {
+      // FormSubmit peut répondre 200 avec success:"false" (adresse pas encore
+      // activée) : ce serait une fausse réussite — on la traite comme un échec.
+      if (!(j.success === true || j.success === "true")) {
+        throw new Error("refus du relais");
+      }
     });
   }
 
@@ -1225,7 +1242,12 @@ button, input, textarea { font: inherit; color: inherit; }
       form.email.focus();
       return;
     }
-    post({ email: email }).then(function () {
+    post({
+      email: email,
+      _subject: "NODAQ — nouvelle inscription à la liste d'attente",
+      _template: "table",
+      _captcha: "false",
+    }).then(function () {
       submittedEmail = email;
       track("conversion_email");
       form.hidden = true;
@@ -1251,7 +1273,13 @@ button, input, textarea { font: inherit; color: inherit; }
   document.getElementById("irritant-send").addEventListener("click", function () {
     var value = document.getElementById("irritant").value.trim();
     if (!value) { finishConfirm(""); return; }
-    post({ email: submittedEmail, irritant: value }).then(function () {
+    post({
+      email: submittedEmail,
+      irritant: value,
+      _subject: "NODAQ — verbatim d'un inscrit (irritant)",
+      _template: "table",
+      _captcha: "false",
+    }).then(function () {
       track("reponse_irritant");
       finishConfirm("Merci, c’est noté.");
     }).catch(function () {
