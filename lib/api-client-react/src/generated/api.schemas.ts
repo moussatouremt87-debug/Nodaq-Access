@@ -913,6 +913,11 @@ export interface Membre {
   email: string;
   nom: string;
   role: MembreRole;
+  /**
+     * Qualificatif libre affiché à côté du rôle (ex. "Conjoint collaborateur"). N'affecte jamais les droits.
+     * @nullable
+     */
+  libelle?: string | null;
   createdAt: string;
 }
 
@@ -920,6 +925,7 @@ export type InvitationEnAttenteRole = typeof InvitationEnAttenteRole[keyof typeo
 
 
 export const InvitationEnAttenteRole = {
+  OWNER: 'OWNER',
   MEMBER: 'MEMBER',
   ACCOUNTANT: 'ACCOUNTANT',
 } as const;
@@ -928,6 +934,8 @@ export interface InvitationEnAttente {
   id: string;
   email: string;
   role: InvitationEnAttenteRole;
+  /** @nullable */
+  libelle?: string | null;
   expiresAt: string;
   createdAt: string;
 }
@@ -937,35 +945,53 @@ export interface MembresListResponse {
   invitationsEnAttente: InvitationEnAttente[];
 }
 
+/**
+ * OWNER crée un co-propriétaire à égalité — réservé aux OWNER existants (route ownerOnly).
+ */
 export type InviteMembreBodyRole = typeof InviteMembreBodyRole[keyof typeof InviteMembreBodyRole];
 
 
 export const InviteMembreBodyRole = {
+  OWNER: 'OWNER',
   MEMBER: 'MEMBER',
   ACCOUNTANT: 'ACCOUNTANT',
 } as const;
 
 export interface InviteMembreBody {
   email: string;
+  /** OWNER crée un co-propriétaire à égalité — réservé aux OWNER existants (route ownerOnly). */
   role: InviteMembreBodyRole;
+  /** Qualificatif libre facultatif (ex. "Conjoint collaborateur", "Associé fondateur"). */
+  libelle?: string;
 }
 
+/**
+ * OWNER n'est accepté ici que pour un membre déjà OWNER (mise à jour du libellé sans changement de rôle) — la promotion d'un MEMBER/ACCOUNTANT en OWNER via cette route est toujours refusée par le serveur.
+ */
 export type RoleMembreBodyRole = typeof RoleMembreBodyRole[keyof typeof RoleMembreBodyRole];
 
 
 export const RoleMembreBodyRole = {
+  OWNER: 'OWNER',
   MEMBER: 'MEMBER',
   ACCOUNTANT: 'ACCOUNTANT',
 } as const;
 
 export interface RoleMembreBody {
+  /** OWNER n'est accepté ici que pour un membre déjà OWNER (mise à jour du libellé sans changement de rôle) — la promotion d'un MEMBER/ACCOUNTANT en OWNER via cette route est toujours refusée par le serveur. */
   role: RoleMembreBodyRole;
+  /**
+     * Qualificatif libre facultatif ; absent = inchangé, null = effacé.
+     * @nullable
+     */
+  libelle?: string | null;
 }
 
 export type InvitationApercuRoleOffert = typeof InvitationApercuRoleOffert[keyof typeof InvitationApercuRoleOffert];
 
 
 export const InvitationApercuRoleOffert = {
+  OWNER: 'OWNER',
   MEMBER: 'MEMBER',
   ACCOUNTANT: 'ACCOUNTANT',
 } as const;

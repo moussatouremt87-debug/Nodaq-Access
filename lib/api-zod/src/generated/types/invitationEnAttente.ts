@@ -11,6 +11,8 @@ export interface InvitationEnAttente {
   id: string;
   email: string;
   role: InvitationEnAttenteRole;
+  /** @nullable */
+  libelle?: string | null;
   expiresAt: Date;
   createdAt: Date;
 }

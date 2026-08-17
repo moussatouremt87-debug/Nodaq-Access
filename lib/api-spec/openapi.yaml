@@ -1132,7 +1132,7 @@ paths:
     post:
       operationId: inviterMembre
       tags: [membres]
-      summary: Invite a collaborator (OWNER only) — role restricted to MEMBER/ACCOUNTANT
+      summary: Invite a collaborator (OWNER only) — OWNER role allowed, grants equal authority
       requestBody:
         required: true
         content:
@@ -1153,7 +1153,7 @@ paths:
     patch:
       operationId: changerRoleMembre
       tags: [membres]
-      summary: Change a member's role (OWNER only) — cannot target or grant OWNER
+      summary: Change a member's role or libelle (OWNER only) — cannot promote to or demote from OWNER
       parameters:
         - in: path
           name: id
@@ -1174,7 +1174,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Membre"
         "403":
-          description: Target membership is OWNER, or new role is OWNER
+          description: Would promote a non-OWNER to OWNER, or demote an existing OWNER
         "404":
           description: Not found
 
@@ -1182,7 +1182,7 @@ paths:
     delete:
       operationId: revoquerMembre
       tags: [membres]
-      summary: Revoke a member's access (OWNER only) — cannot target OWNER
+      summary: Revoke a member's access (OWNER only) — cannot revoke the last remaining OWNER
       parameters:
         - in: path
           name: id
@@ -1193,7 +1193,7 @@ paths:
         "204":
           description: Revoked
         "403":
-          description: Target membership is OWNER
+          description: Target is the last remaining OWNER of this tenant
         "404":
           description: Not found
 
@@ -2498,6 +2498,9 @@ components:
         role:
           type: string
           enum: [OWNER, MEMBER, ACCOUNTANT]
+        libelle:
+          type: ["string", "null"]
+          description: Qualificatif libre affiché à côté du rôle (ex. "Conjoint collaborateur"). N'affecte jamais les droits.
         createdAt:
           type: string
           format: date-time
@@ -2512,7 +2515,9 @@ components:
           type: string
         role:
           type: string
-          enum: [MEMBER, ACCOUNTANT]
+          enum: [OWNER, MEMBER, ACCOUNTANT]
+        libelle:
+          type: ["string", "null"]
         expiresAt:
           type: string
           format: date-time
@@ -2541,7 +2546,11 @@ components:
           type: string
         role:
           type: string
-          enum: [MEMBER, ACCOUNTANT]
+          enum: [OWNER, MEMBER, ACCOUNTANT]
+          description: OWNER crée un co-propriétaire à égalité — réservé aux OWNER existants (route ownerOnly).
+        libelle:
+          type: string
+          description: Qualificatif libre facultatif (ex. "Conjoint collaborateur", "Associé fondateur").
 
     RoleMembreBody:
       type: object
@@ -2549,7 +2558,14 @@ components:
       properties:
         role:
           type: string
-          enum: [MEMBER, ACCOUNTANT]
+          enum: [OWNER, MEMBER, ACCOUNTANT]
+          description: >-
+            OWNER n'est accepté ici que pour un membre déjà OWNER (mise à jour du
+            libellé sans changement de rôle) — la promotion d'un MEMBER/ACCOUNTANT
+            en OWNER via cette route est toujours refusée par le serveur.
+        libelle:
+          type: ["string", "null"]
+          description: Qualificatif libre facultatif ; absent = inchangé, null = effacé.
 
     InvitationApercu:
       type: object
@@ -2559,7 +2575,7 @@ components:
           type: string
         roleOffert:
           type: string
-          enum: [MEMBER, ACCOUNTANT]
+          enum: [OWNER, MEMBER, ACCOUNTANT]
         email:
           type: string
         compteExistant:
