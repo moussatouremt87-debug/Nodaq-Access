@@ -92,12 +92,12 @@ async function loadEquipeHint(tx: DrizzleTx): Promise<number> {
   }
 }
 
-type LineResult = PcgLine & {
+export type LineResult = PcgLine & {
   autoAmountCents: number;
   manualAmountCents: number | null;
 };
 
-async function buildLineResults(tx: DrizzleTx, from: string, to: string): Promise<LineResult[]> {
+export async function buildLineResults(tx: DrizzleTx, from: string, to: string): Promise<LineResult[]> {
   const pKey = periodKey(from, to);
 
   const factures = await tx.select().from(facturesTable);
@@ -125,7 +125,7 @@ async function buildLineResults(tx: DrizzleTx, from: string, to: string): Promis
   });
 }
 
-function computeTotals(lines: LineResult[]) {
+export function computeTotals(lines: LineResult[]) {
   const val  = (line: LineResult) => line.manualAmountCents !== null ? line.manualAmountCents : line.autoAmountCents;
   // DEDUCTIONS_RESULTAT is intentionally excluded — those lines are read individually below.
   const sum  = (section: Exclude<PcgSection, "DEDUCTIONS_RESULTAT">) =>
@@ -151,6 +151,68 @@ function computeTotals(lines: LineResult[]) {
     resultatCourant, totalProduitsExcept, totalChargesExcept,
     resultatExceptionnel, participation, impots, resultatExercice,
   };
+}
+
+export type Totals = ReturnType<typeof computeTotals>;
+
+/**
+ * Construit les lignes CSV du compte de résultat PCG pour UNE période —
+ * réutilisée telle quelle par l'export mono-tenant (ci-dessous) et par
+ * l'export consolidé cabinet (US-A5.2, routes/cabinet.ts) : même structure
+ * PCG partout, aucune logique dupliquée entre les deux.
+ */
+export function buildCompteResultatCsvRows(
+  lines: LineResult[],
+  totals: Totals,
+  from: string,
+  to: string,
+): string[] {
+  const fmtCents = (c: number) => (c / 100).toFixed(2).replace(".", ",");
+  const val = (l: LineResult) => l.manualAmountCents !== null ? l.manualAmountCents : l.autoAmountCents;
+
+  const rows: string[] = [];
+  const row = (label: string, amount?: number) =>
+    rows.push(`"${label.replace(/"/g, '""')}";${amount !== undefined ? `"${fmtCents(amount)} €"` : ""}`);
+
+  row(`Compte de Résultat PCG — ${from} au ${to}`);
+  row("Désignation", undefined);
+  rows[rows.length - 1] += `;"Montant (€)"`;
+
+  const sectionHeader = (title: string) => { rows.push(""); row(title); };
+  const linesBySection = (section: PcgSection) => lines.filter(l => l.section === section);
+
+  sectionHeader("I — PRODUITS D'EXPLOITATION");
+  for (const l of linesBySection("PRODUITS_EXPLOITATION")) row(l.label, val(l));
+  row("TOTAL I — Produits d'exploitation", totals.totalProduitsExploit);
+  sectionHeader("II — CHARGES D'EXPLOITATION");
+  for (const l of linesBySection("CHARGES_EXPLOITATION")) row(l.label, val(l));
+  row("TOTAL II — Charges d'exploitation", totals.totalChargesExploit);
+  rows.push("");
+  row("RÉSULTAT D'EXPLOITATION (I − II)", totals.resultatExploit);
+  sectionHeader("IV — PRODUITS FINANCIERS");
+  for (const l of linesBySection("PRODUITS_FINANCIERS")) row(l.label, val(l));
+  row("TOTAL IV — Produits financiers", totals.totalProduitsFinanciers);
+  sectionHeader("V — CHARGES FINANCIÈRES");
+  for (const l of linesBySection("CHARGES_FINANCIERES")) row(l.label, val(l));
+  row("TOTAL V — Charges financières", totals.totalChargesFinancieres);
+  rows.push("");
+  row("RÉSULTAT FINANCIER (IV − V)", totals.resultatFinancier);
+  row("RÉSULTAT COURANT AVANT IMPÔTS (I−II + IV−V)", totals.resultatCourant);
+  sectionHeader("VII — PRODUITS EXCEPTIONNELS");
+  for (const l of linesBySection("PRODUITS_EXCEPTIONNELS")) row(l.label, val(l));
+  row("TOTAL VII — Produits exceptionnels", totals.totalProduitsExcept);
+  sectionHeader("VIII — CHARGES EXCEPTIONNELLES");
+  for (const l of linesBySection("CHARGES_EXCEPTIONNELS")) row(l.label, val(l));
+  row("TOTAL VIII — Charges exceptionnelles", totals.totalChargesExcept);
+  rows.push("");
+  row("RÉSULTAT EXCEPTIONNEL (VII − VIII)", totals.resultatExceptionnel);
+  rows.push("");
+  row("Participation des salariés aux résultats", val(lines.find(l => l.lineCode === "PARTICIPATION_SALARIES")!));
+  row("Impôts sur les bénéfices",                val(lines.find(l => l.lineCode === "IMPOTS_BENEFICES")!));
+  rows.push("");
+  row(`RÉSULTAT DE L'EXERCICE (${totals.resultatExercice >= 0 ? "BÉNÉFICE" : "PERTE"})`, totals.resultatExercice);
+
+  return rows;
 }
 
 // ── GET /compte-resultat ──────────────────────────────────────────────────
@@ -341,50 +403,7 @@ router.get("/compte-resultat/export/csv", async (req, res): Promise<void> => {
     return { lines, totals: computeTotals(lines) };
   });
 
-  const fmtCents = (c: number) => (c / 100).toFixed(2).replace(".", ",");
-  const val = (l: LineResult) => l.manualAmountCents !== null ? l.manualAmountCents : l.autoAmountCents;
-
-  const rows: string[] = [];
-  const row = (label: string, amount?: number) =>
-    rows.push(`"${label.replace(/"/g, '""')}";${amount !== undefined ? `"${fmtCents(amount)} €"` : ""}`);
-
-  row(`Compte de Résultat PCG — ${from} au ${to}`);
-  row("Désignation", undefined);
-  rows[rows.length - 1] += `;"Montant (€)"`;
-
-  const sectionHeader = (title: string) => { rows.push(""); row(title); };
-  const linesBySection = (section: PcgSection) => lines.filter(l => l.section === section);
-
-  sectionHeader("I — PRODUITS D'EXPLOITATION");
-  for (const l of linesBySection("PRODUITS_EXPLOITATION")) row(l.label, val(l));
-  row("TOTAL I — Produits d'exploitation", totals.totalProduitsExploit);
-  sectionHeader("II — CHARGES D'EXPLOITATION");
-  for (const l of linesBySection("CHARGES_EXPLOITATION")) row(l.label, val(l));
-  row("TOTAL II — Charges d'exploitation", totals.totalChargesExploit);
-  rows.push("");
-  row("RÉSULTAT D'EXPLOITATION (I − II)", totals.resultatExploit);
-  sectionHeader("IV — PRODUITS FINANCIERS");
-  for (const l of linesBySection("PRODUITS_FINANCIERS")) row(l.label, val(l));
-  row("TOTAL IV — Produits financiers", totals.totalProduitsFinanciers);
-  sectionHeader("V — CHARGES FINANCIÈRES");
-  for (const l of linesBySection("CHARGES_FINANCIERES")) row(l.label, val(l));
-  row("TOTAL V — Charges financières", totals.totalChargesFinancieres);
-  rows.push("");
-  row("RÉSULTAT FINANCIER (IV − V)", totals.resultatFinancier);
-  row("RÉSULTAT COURANT AVANT IMPÔTS (I−II + IV−V)", totals.resultatCourant);
-  sectionHeader("VII — PRODUITS EXCEPTIONNELS");
-  for (const l of linesBySection("PRODUITS_EXCEPTIONNELS")) row(l.label, val(l));
-  row("TOTAL VII — Produits exceptionnels", totals.totalProduitsExcept);
-  sectionHeader("VIII — CHARGES EXCEPTIONNELLES");
-  for (const l of linesBySection("CHARGES_EXCEPTIONNELS")) row(l.label, val(l));
-  row("TOTAL VIII — Charges exceptionnelles", totals.totalChargesExcept);
-  rows.push("");
-  row("RÉSULTAT EXCEPTIONNEL (VII − VIII)", totals.resultatExceptionnel);
-  rows.push("");
-  row("Participation des salariés aux résultats", val(lines.find(l => l.lineCode === "PARTICIPATION_SALARIES")!));
-  row("Impôts sur les bénéfices",                val(lines.find(l => l.lineCode === "IMPOTS_BENEFICES")!));
-  rows.push("");
-  row(`RÉSULTAT DE L'EXERCICE (${totals.resultatExercice >= 0 ? "BÉNÉFICE" : "PERTE"})`, totals.resultatExercice);
+  const rows = buildCompteResultatCsvRows(lines, totals, from, to);
 
   const bom = "\uFEFF";
   const csv = bom + rows.join("\r\n");

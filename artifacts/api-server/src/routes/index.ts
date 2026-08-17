@@ -17,6 +17,7 @@ import echeancesRouter from "./echeances";
 import margeRouter from "./marge";
 import rapportsRouter from "./rapports";
 import compteResultatRouter from "./compte-resultat";
+import cabinetRouter from "./cabinet";
 import equipeRouter from "./equipe";
 import connecteursRouter from "./connecteurs";
 import parametresRouter from "./parametres";
@@ -124,6 +125,10 @@ router.use(financierOnly, avoirsRouter);
 router.use(financierOnly, analyticsRouter);
 router.use(financierOnly, paiementsRouter);
 router.use(financierOnly, eReportingRouter);
+// US-A5.2 — boucle elle-même sur PLUSIEURS tenants (listUserMemberships),
+// pas sur req.tenantId ; financierOnly ne sert ici qu'à exiger un accès
+// financier sur le tenant COURANT avant d'exposer le portefeuille entier.
+router.use(financierOnly, cabinetRouter);
 
 // ── OWNER-only routes ─────────────────────────────────────────────────────
 router.use(ownerOnly, equipeRouter);

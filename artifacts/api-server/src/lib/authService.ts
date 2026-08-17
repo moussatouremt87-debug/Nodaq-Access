@@ -181,3 +181,58 @@ export async function findUserMemberships(userId: string): Promise<Membership[]>
     .orderBy(desc(membershipsTable.createdAt))
     .limit(5);
 }
+
+export interface UserEspace {
+  tenantId: string;
+  tenantNom: string;
+  role: string;
+  createdAt: Date;
+}
+
+/**
+ * TOUS les tenants d'un utilisateur (US-A5.2 — console cabinet), sans la
+ * limite à 5 de `findUserMemberships` : celle-ci sert à choisir LE tenant
+ * par défaut au login (un cas où 5 suffisent largement), pas à lister un
+ * portefeuille de clients qui peut légitimement en compter des dizaines.
+ */
+export async function listUserMemberships(userId: string): Promise<UserEspace[]> {
+  const { desc } = await import("drizzle-orm");
+  const rows = await db
+    .select({
+      tenantId: membershipsTable.tenantId,
+      tenantNom: tenantsTable.nom,
+      role: membershipsTable.role,
+      createdAt: membershipsTable.createdAt,
+    })
+    .from(membershipsTable)
+    .innerJoin(tenantsTable, eq(tenantsTable.id, membershipsTable.tenantId))
+    .where(eq(membershipsTable.userId, userId))
+    .orderBy(desc(membershipsTable.createdAt));
+  return rows;
+}
+
+/**
+ * Bascule la session courante vers un autre tenant du même utilisateur —
+ * EN PLACE, pas une nouvelle session : `findValidSession` relit
+ * `session.tenantId` en base à chaque requête (requireAuth.ts), la bascule
+ * prend donc effet dès la requête suivante. Le témoin MFA déjà posé sur
+ * cette session (`mfa_verified_at`) survit intact — il authentifie
+ * l'UTILISATEUR, pas le couple session+tenant.
+ *
+ * `null` si l'utilisateur n'a aucun membership sur ce tenant — l'appelant
+ * doit refuser (403), jamais basculer vers un tenant où l'appartenance
+ * n'est pas prouvée.
+ */
+export async function basculerEspace(
+  sessionId: string,
+  userId: string,
+  tenantId: string,
+): Promise<Membership | null> {
+  const membership = await checkMembership(userId, tenantId);
+  if (!membership) return null;
+  await db
+    .update(sessionsTable)
+    .set({ tenantId, expiresAt: newExpiry() })
+    .where(eq(sessionsTable.id, sessionId));
+  return membership;
+}
