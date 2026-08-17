@@ -129,12 +129,14 @@ function InviteForm() {
   const { words } = useVertical();
   const qc = useQueryClient();
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState<'MEMBER' | 'ACCOUNTANT'>('MEMBER');
+  const [role, setRole] = useState<'OWNER' | 'MEMBER' | 'ACCOUNTANT'>('MEMBER');
+  const [libelle, setLibelle] = useState('');
   const inviter = useInviterMembre({
     mutation: {
       onSuccess: () => {
         qc.invalidateQueries({ queryKey: getListMembresQueryKey() });
         setEmail('');
+        setLibelle('');
         toast({ title: 'Invitation envoyée', description: `Un e-mail a été envoyé à ${email.trim()}.` });
       },
       onError: (err: Error) => toast({ title: 'Erreur', description: err.message, variant: 'destructive' }),
@@ -144,7 +146,7 @@ function InviteForm() {
   const handleInvite = () => {
     const trimmed = email.trim();
     if (!trimmed) return;
-    inviter.mutate({ data: { email: trimmed, role } });
+    inviter.mutate({ data: { email: trimmed, role, ...(libelle.trim() ? { libelle: libelle.trim() } : {}) } });
   };
 
   return (
@@ -166,11 +168,12 @@ function InviteForm() {
         </div>
         <div className="space-y-1.5 sm:w-48">
           <Label>Rôle</Label>
-          <Select value={role} onValueChange={v => setRole(v as 'MEMBER' | 'ACCOUNTANT')}>
+          <Select value={role} onValueChange={v => setRole(v as 'OWNER' | 'MEMBER' | 'ACCOUNTANT')}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="MEMBER">Membre</SelectItem>
               <SelectItem value="ACCOUNTANT">Comptable — accès financier</SelectItem>
+              <SelectItem value="OWNER">Copropriétaire — même autorité que vous</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -185,8 +188,17 @@ function InviteForm() {
           </Button>
         </div>
       </div>
+      <div className="mt-3 space-y-1.5 sm:max-w-xs">
+        <Label htmlFor="invite-libelle">Fonction (facultatif)</Label>
+        <Input
+          id="invite-libelle"
+          value={libelle}
+          onChange={e => setLibelle(e.target.value)}
+          placeholder="ex. Conjoint collaborateur, Associé fondateur"
+        />
+      </div>
       <p className="text-xs text-muted-foreground mt-3">
-        Un membre voit les {words.plural}, devis et contrats sans les montants. Un comptable voit également les données financières (factures, marge, échéancier fiscal).
+        Un membre voit les {words.plural}, devis et contrats sans les montants. Un comptable voit également les données financières (factures, marge, échéancier fiscal). Un copropriétaire a l'accès complet, à égalité — jamais de hiérarchie entre propriétaires.
       </p>
     </div>
   );
@@ -229,6 +241,18 @@ function MembresTab() {
 
   const membres = data?.membres ?? [];
   const invitations = data?.invitationsEnAttente ?? [];
+  // US-A5.1 — plusieurs OWNER peuvent coexister à égalité ; seul LE DERNIER
+  // reste protégé. Ce compte, recalculé à chaque rendu depuis la liste déjà
+  // chargée, évite d'exposer un bouton de révocation qui échouerait à coup
+  // sûr (le 403 backend reste la garde réelle, ceci n'évite qu'une erreur
+  // inutile).
+  const nbOwners = membres.filter(m => m.role === 'OWNER').length;
+
+  const commitLibelle = (m: Membre, libelle: string) => {
+    const trimmed = libelle.trim();
+    if ((m.libelle ?? '') === trimmed) return;
+    changerRole.mutate({ id: m.id, data: { role: m.role as 'OWNER' | 'MEMBER' | 'ACCOUNTANT', libelle: trimmed || null } });
+  };
 
   return (
     <div className="max-w-2xl space-y-5">
@@ -252,8 +276,27 @@ function MembresTab() {
                 <div className="text-sm font-medium text-foreground truncate">{m.nom}</div>
                 <div className="text-xs text-muted-foreground truncate">{m.email}</div>
               </div>
+              <Input
+                key={m.id}
+                defaultValue={m.libelle ?? ''}
+                onBlur={e => commitLibelle(m, e.target.value)}
+                placeholder="Fonction (facultatif)"
+                className="h-8 w-44 text-xs shrink-0"
+              />
               {m.role === 'OWNER' ? (
-                <RoleBadge role={m.role} />
+                <>
+                  <RoleBadge role={m.role} />
+                  {nbOwners > 1 && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0 text-destructive"
+                      onClick={() => setToRevoke(m)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </>
               ) : (
                 <>
                   <Select
@@ -291,6 +334,7 @@ function MembresTab() {
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium text-foreground truncate">{inv.email}</div>
                 <div className="text-xs text-muted-foreground">
+                  {inv.libelle ? `${inv.libelle} — ` : ''}
                   Expire le {new Date(inv.expiresAt).toLocaleDateString('fr-FR', { dateStyle: 'medium' })}
                 </div>
               </div>
