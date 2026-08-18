@@ -295,6 +295,49 @@
     @apply font-sans antialiased bg-background text-foreground;
     letter-spacing: var(--tracking-normal);
   }
+
+  /* ── Cibles tactiles en contexte de travail physique (US-A8.1) ──────────
+     Gants de chantier, mains grasses en cuisine ou en mécanique, doigts
+     mouillés : le doigt vise mal, et il vise encore moins bien à travers un
+     gant. Les tailles de `Button` (36 px, 32 px en `sm`) sont dimensionnées
+     pour un curseur, pas pour ça.
+
+     Gaté sur `pointer: coarse`, DÉLIBÉRÉMENT : seuls les appareils dont le
+     pointeur principal est imprécis — doigt, stylet — sont concernés. Sur un
+     poste piloté à la souris, aucun pixel ne bouge, et la densité des écrans
+     de bureau est préservée. C'est aussi ce qui permet de traiter cette
+     story sans entamer la refonte responsive, qui est différée.
+
+     AUCUNE condition de secteur ici, et c'est le fond du sujet : les mêmes
+     contraintes physiques existent en cuisine, en atelier et en paysagisme.
+     Une règle réservée au bâtiment serait précisément le dimensionnement
+     spécifique que l'AC1 interdit. Vérifié par `src/lib/terrain.test.ts`. */
+  @media (pointer: coarse) {
+    button,
+    [role='button'],
+    [role='tab'],
+    [role='switch'],
+    [role='checkbox'],
+    [role='radio'],
+    a[href],
+    input:not([type='hidden']),
+    select,
+    textarea,
+    summary {
+      min-height: 44px;
+      min-width: 44px;
+    }
+
+    /* Un lien DANS un paragraphe est du texte, pas une cible : lui imposer
+       44 px de haut disloquerait la ligne. La règle ne vaut que pour les
+       liens qui se comportent en commande. */
+    p a[href],
+    li a[href],
+    a[href].inline-link {
+      min-height: 0;
+      min-width: 0;
+    }
+  }
 }
 
 @layer utilities {

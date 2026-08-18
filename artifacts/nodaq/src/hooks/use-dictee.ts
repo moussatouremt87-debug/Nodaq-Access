@@ -18,6 +18,34 @@ const API_BASE = '/api';
 /** En deçà, c'est un appui malencontreux, pas une phrase. */
 const TAILLE_MINIMALE_OCTETS = 1000;
 
+/**
+ * Contraintes de captation — POINT DE SORTIE UNIQUE vers le micro (US-A8.1).
+ *
+ * L'utilisateur ne dicte pas dans un bureau : cuisine de restaurant, atelier,
+ * bord de route, chantier. `{ audio: true }` laisse chaque navigateur décider
+ * seul du traitement, et ils ne décident pas pareil — ce qui est actif par
+ * défaut sur un Chrome de bureau ne l'est pas forcément sur le Safari du
+ * téléphone qui est justement l'appareil utilisé sur le terrain. Demander
+ * explicitement retire cette variable.
+ *
+ * Ce sont des DEMANDES, pas des garanties : une contrainte non gérée est
+ * ignorée par le navigateur plutôt que de faire échouer la captation. C'est
+ * voulu — mieux vaut enregistrer sans réduction de bruit que ne pas
+ * enregistrer.
+ *
+ * Toute captation du produit passe par cette constante. `use-chat.ts` l'a
+ * longtemps eue en double, et c'est exactement ce que l'en-tête de ce fichier
+ * annonçait vouloir éviter. La garde de `use-dictee.test.ts` interdit
+ * désormais un `{ audio: true }` nu ailleurs dans les sources.
+ */
+export const CONTRAINTES_AUDIO: MediaStreamConstraints = {
+  audio: {
+    noiseSuppression: true,
+    echoCancellation: true,
+    autoGainControl: true,
+  },
+};
+
 export interface UseDictee {
   readonly enregistre: boolean;
   readonly transcrit: boolean;
@@ -36,7 +64,7 @@ export function useDictee(onTexte: (texte: string) => void): UseDictee {
   const demarrer = useCallback(async () => {
     if (enregistre) return;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia(CONTRAINTES_AUDIO);
       streamRef.current = stream;
       morceauxRef.current = [];
 
