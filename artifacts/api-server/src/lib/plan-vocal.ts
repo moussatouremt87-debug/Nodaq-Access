@@ -56,6 +56,7 @@ import {
   absencesTable,
   affectationsTable,
   teamMembersTable,
+  journalDecisionsTable,
 } from "@workspace/db";
 import {
   type Intention,
@@ -608,7 +609,14 @@ export type ResultatExecution =
  * écrite. Un plan à moitié appliqué est le pire résultat — l'artisan croit
  * avoir tout dicté.
  */
-export async function executerPlan(tenantId: string, planId: string): Promise<ResultatExecution> {
+export async function executerPlan(
+  tenantId: string,
+  planId: string,
+  /** US-A6.4 — qui approuve. Les deux appelants le connaissent
+   *  (`/voix/executer` et `/pending-actions/:id/approve`) ; sans lui le
+   *  journal ne prouverait que la date, pas l'auteur. */
+  decideur?: { userId: string; email: string },
+): Promise<ResultatExecution> {
   return withTenant(tenantId, async (tx) => {
     const [ligne] = await tx
       .select()
@@ -635,6 +643,20 @@ export async function executerPlan(tenantId: string, planId: string): Promise<Re
       .returning({ id: pendingActionsTable.id });
     if (!reserve) return { kind: "deja_applique" as const, executeLe: new Date() };
 
+    // US-A6.4 — dans LA MÊME transaction que l'exécution : si une opération
+    // échoue plus bas, tout est annulé, journal compris. On ne consigne jamais
+    // une approbation qui n'a rien produit.
+    await tx.insert(journalDecisionsTable).values({
+      tenantId,
+      actionId: planId,
+      actionType: ligne.type,
+      actionLabel: ligne.label,
+      actionPayload: ligne.payload,
+      decision: "APPROUVEE",
+      decideePar: decideur?.userId ?? null,
+      decideeParEmail: decideur?.email ?? null,
+    });
+
     for (const op of operations) {
       await executerOperation(tx, tenantId, op);
     }
@@ -643,9 +665,25 @@ export async function executerPlan(tenantId: string, planId: string): Promise<Re
   });
 }
 
-/** Purge des plans expirés jamais validés. */
+/**
+ * Purge des plans expirés jamais validés.
+ *
+ * US-A6.4 — journalise AVANT de supprimer. Sans cela, câbler un jour cette
+ * fonction viderait l'historique en silence : les expirations n'y figurent
+ * aujourd'hui que parce que la ligne d'origine traîne encore en base.
+ */
 export async function purgerPlansExpires(tenantId: string): Promise<number> {
   return withTenant(tenantId, async (tx) => {
+    await tx.execute(sql`
+      INSERT INTO journal_decisions
+        (id, tenant_id, action_id, action_type, action_label, action_payload, decision, decidee_le)
+      SELECT gen_random_uuid()::text, tenant_id, id, type, label, payload, 'EXPIREE', COALESCE(expire_le, NOW())
+        FROM pending_actions
+       WHERE type = ${TYPE_PLAN}
+         AND execute_le IS NULL
+         AND expire_le IS NOT NULL
+         AND expire_le < NOW()
+    `);
     const res = await tx.execute(sql`
       DELETE FROM pending_actions
        WHERE type = ${TYPE_PLAN}

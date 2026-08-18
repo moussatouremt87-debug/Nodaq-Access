@@ -51,6 +51,7 @@ import { requireRole } from "../middleware/requireRole";
 import { requireMfaVerified } from "../middleware/requireMfaVerified";
 import { lectureSeuleMethode, lectureSeulePerimetre } from "../middleware/lectureSeule";
 import { FINANCIAL_ROLES } from "@nodaq/shared";
+import journalDecisionsRouter from "./journal-decisions";
 import membresRouter, { membresPublicRouter } from "./membres";
 import mfaRouter from "./mfa";
 
@@ -145,6 +146,9 @@ router.use(ownerOnly, connecteursRouter);
 router.use(ownerOnly, parametresRouter);
 router.use(ownerOnly, entreprisesRouter);
 router.use(ownerOnly, onboardingWriteRouter);
+// US-A6.4 — preuve à produire en cas de contrôle : c'est l'OWNER qui la
+// produit, pas un collaborateur.
+router.use(ownerOnly, journalDecisionsRouter);
 router.use(ownerOnly, membresRouter);
 router.use(ownerOnly, facturationElectroniqueRouter);
 

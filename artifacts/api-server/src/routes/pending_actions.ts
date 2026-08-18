@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { withTenant, pendingActionsTable, activityTable } from "@workspace/db";
+import { withTenant, pendingActionsTable, activityTable, journalDecisionsTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import {
   ApprovePendingActionParams,
@@ -38,7 +38,10 @@ router.post("/pending-actions/:id/approve", async (req, res): Promise<void> => {
   if (avant.type === TYPE_PLAN) {
     let resultat;
     try {
-      resultat = await executerPlan(tenantId, params.data.id);
+      resultat = await executerPlan(tenantId, params.data.id, {
+        userId: req.session!.userId,
+        email: req.session!.email,
+      });
     } catch (err) {
       logger.error(
         { err: err instanceof Error ? err.message : "erreur" },
@@ -88,6 +91,17 @@ router.post("/pending-actions/:id/approve", async (req, res): Promise<void> => {
       label: `Action approuvée : ${action.label}`,
       meta: null,
     });
+    // US-A6.4 — même transaction que la décision.
+    await tx.insert(journalDecisionsTable).values({
+      tenantId,
+      actionId: action.id,
+      actionType: action.type,
+      actionLabel: action.label,
+      actionPayload: action.payload,
+      decision: "APPROUVEE",
+      decideePar: req.session!.userId,
+      decideeParEmail: req.session!.email,
+    });
     return action;
   });
 
@@ -100,12 +114,28 @@ router.post("/pending-actions/:id/reject", async (req, res): Promise<void> => {
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const tenantId = req.tenantId!;
 
-  const [action] = await withTenant(tenantId, async (tx) =>
-    tx.update(pendingActionsTable)
+  const [action] = await withTenant(tenantId, async (tx) => {
+    const lignes = await tx.update(pendingActionsTable)
       .set({ status: "REJETE", decidedAt: new Date() })
       .where(eq(pendingActionsTable.id, params.data.id))
-      .returning()
-  );
+      .returning();
+    const rejetee = lignes[0];
+    // US-A6.4 — un rejet est une décision : il se prouve autant qu'une
+    // approbation. Journalisé dans la même transaction.
+    if (rejetee) {
+      await tx.insert(journalDecisionsTable).values({
+        tenantId,
+        actionId: rejetee.id,
+        actionType: rejetee.type,
+        actionLabel: rejetee.label,
+        actionPayload: rejetee.payload,
+        decision: "REJETEE",
+        decideePar: req.session!.userId,
+        decideeParEmail: req.session!.email,
+      });
+    }
+    return lignes;
+  });
   if (!action) { res.status(404).json({ error: "Action not found" }); return; }
   res.json(action);
 });
