@@ -79,8 +79,8 @@ Tous documentés dans le commentaire HTML en tête de `index.html` :
 
 | Placeholder | Où | Quoi |
 |---|---|---|
-| `[DATE_CALENDRIER]` | Section 5, colonne « À venir » | Laisser visible tant que le fondateur n'a pas fourni la date |
-| `[DATE_OUVERTURE_FONDATEURS]` | FAQ, « Quand est-ce disponible ? » | Idem |
+| `[DATE_CALENDRIER]` | **Renseigné** (17/08) | « À venir — Décembre 2026 », contenu : Paiement en USDC |
+| `[DATE_OUVERTURE_FONDATEURS]` | **Renseigné** (17/08) | « le 1er octobre 2026 » dans la FAQ |
 | `ENDPOINT_FORMULAIRE` | **Branché et activé** (17/08) | FormSubmit `/ajax` vers `moussatoure.mt.87@gmail.com` — inscription et verbatim, sujets distincts. L'adresse a été activée par le fondateur (« Form Activated », formulaire `nodaq-landing.vercel.app`) : les soumissions arrivent directement par email. Une réponse `success:"false"` reste traitée comme un échec, pas de fausse réussite |
 | `[ENDPOINT_MESURE]` | Constante dans le `<script>` | Compteur maison sans cookie (`sendBeacon`) : `conversion_email`, `scroll_section3`, `reponse_irritant`. No-op tant que le placeholder reste. Pas de Google Analytics |
 
