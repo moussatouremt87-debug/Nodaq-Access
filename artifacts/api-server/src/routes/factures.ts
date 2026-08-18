@@ -610,6 +610,18 @@ router.post("/factures/:id/emettre", async (req, res): Promise<void> => {
 
   res.json({
     ...emitted,
+    /**
+     * US-A7.1 — les mentions manquantes NON bloquantes.
+     *
+     * Elles étaient calculées puis jetées : `blockers` seul était rendu, et
+     * une règle non bloquante (la décennale, par exemple) n'atteignait donc
+     * jamais l'utilisateur. Une vérification dont le résultat est écarté ne
+     * vérifie rien. Champ ADDITIF, sur le modèle d'`objectifsFranchis`
+     * juste en dessous — aucun appelant existant n'en dépend.
+     */
+    avertissementsMentions: mentionIssues
+      .filter((i) => !i.bloquant)
+      .map((i) => ({ code: i.code, message: i.message })),
     /** Objectifs franchis PAR CETTE ÉMISSION. Vide le reste du temps. */
     objectifsFranchis: franchis.map((f) => ({
       objectif: f.objectif,
