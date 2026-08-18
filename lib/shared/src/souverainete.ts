@@ -90,6 +90,28 @@ export const SOUS_TRAITANTS: readonly SousTraitant[] = [
       "Sortie modèle unique : toute destination vient de LLM_BASE_URL, résolue dans lib/llm. Hôte constaté à l'émission de la présente attestation.",
   },
   {
+    id: "synthese-vocale",
+    role: "Synthèse vocale de l'agent de relance téléphonique",
+    nom: "ElevenLabs",
+    // ÉTATS-UNIS, et il faut le lire tel quel : c'est le seul sous-traitant du
+    // produit hors du périmètre souverain. L'arbitrage est documenté dans
+    // docs/adr/002-tts-elevenlabs.md — aucune solution auto-hébergée ne tenait
+    // à la fois le naturel et le temps réel en août 2026, et un agent à la voix
+    // robotique fait raccrocher.
+    pays: "États-Unis",
+    region: null,
+    donnees:
+      "Le texte des répliques prononcées par l'agent. Contient des données personnelles des débiteurs : montants dus, dates de règlement, et selon les cas leur nom.",
+    variableEnv: "VOICE_TTS_BASE_URL",
+    // PAS de `hoteAttendu`, délibérément. La synthèse n'est pas configurée chez
+    // tous les tenants ; armer la comparaison ferait REFUSER l'attestation
+    // partout où elle est absente, alors que son absence n'est pas une
+    // divergence — c'est un service non utilisé. L'hôte est donc constaté et
+    // imprimé, comme pour l'envoi d'e-mails.
+    source:
+      "Décision d'août 2026 (ADR 002). Réversible : le protocole TextToSpeech ne connaît aucun fournisseur, et la migration vers un moteur souverain est un changement d'adaptateur.",
+  },
+  {
     id: "envoi-email",
     role: "Envoi des e-mails transactionnels (devis, factures, relances)",
     // Délibérément non nommé : ce dépôt n'écrit aucune URL de fournisseur en

@@ -3,11 +3,19 @@ name = "nodaq-voice"
 version = "0.1.0"
 description = "Outbound voice agent runtime — dunning calls (ticket 4.18)."
 requires-python = ">=3.12"
-# No provider SDK yet, and that is deliberate: lot 0 ships the seams, not the
-# implementations. Telnyx, LiveKit, Gladia/Voxtral land in `voice.adapters`
-# once the accounts exist — never in `voice.core`, which the layering guard
-# enforces (see tests/test_layering.py).
-dependencies = []
+# `httpx` and nothing else. The ElevenLabs adapter speaks plain HTTP rather
+# than taking the vendor SDK: three endpoints do not justify a dependency, a
+# release cadence and a surface — and it keeps the adapter readable as exactly
+# what goes over the wire, which matters when what goes over the wire is
+# personal data leaving the sovereign perimeter.
+#
+# Kokoro-82M and Chatterbox Multilingual were installed here during the August
+# 2026 evaluation and removed once the arbitration was made (ADR 002): keeping
+# fourteen gigabytes of weights in the manifest would describe a product we do
+# not ship. The measurements survive in the ADR.
+dependencies = [
+    "httpx>=0.28.1",
+]
 
 [dependency-groups]
 dev = [
