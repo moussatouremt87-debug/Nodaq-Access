@@ -8,6 +8,7 @@ import { useAuth, useLectureSeule } from '@/hooks/use-auth';
 import { useVertical } from '@/hooks/use-vertical';
 import { routeOuverteEnLectureSeule } from '@nodaq/shared';
 import { useMesEspaces, useBasculerEspace, type Espace } from '@/hooks/use-cabinet';
+import { useModules, cheminsDeModulesEteints } from '@/hooks/use-modules';
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
 } from '@/components/ui/dropdown-menu';
@@ -21,6 +22,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { vertical, words, proposalWord } = useVertical();
   const { estMultiEspaces } = useMesEspaces();
   const lectureSeule = useLectureSeule();
+  const { data: modules } = useModules();
+  const masquesParModule = cheminsDeModulesEteints(modules);
   const role = data?.authenticated === true && 'role' in data ? data.role : undefined;
   const peutVoir = (item: Pick<NavItem, 'href' | 'requiredRoles' | 'visibleForVertical'>) =>
     (!item.requiredRoles || (role !== undefined && item.requiredRoles.includes(role)))
@@ -33,7 +36,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     // US-A5.2 — `/cabinet` n'a de sens que pour un utilisateur qui a
     // PLUSIEURS espaces. Filtre local plutôt qu'un nouveau prédicat générique
     // dans `NavItem` : un seul cas, et il ne dépend ni du rôle ni du secteur.
-    && (item.href !== '/cabinet' || estMultiEspaces);
+    && (item.href !== '/cabinet' || estMultiEspaces)
+    // Registre 3.11 — un module éteint retire sa page du menu. L'état vient
+    // du SERVEUR (`GET /modules`), qui seul connaît le secteur du tenant et
+    // donc les défauts applicables ; le recalculer ici ferait deux vérités.
+    //
+    // Ce n'est pas une frontière de sécurité : la route reste atteignable par
+    // son URL, avec ses contrôles d'accès inchangés.
+    && !masquesParModule.has(item.href);
 
   return (
     <div className="min-h-[100dvh] w-full text-foreground flex grain">
