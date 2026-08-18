@@ -236,10 +236,18 @@ export function registresInterdits(propos: string): RegistreDetecte[] {
  * faux dans l'autre sens.
  */
 export function annonceOuverture(nomEntreprise: string): string {
+  // Écrit en français PARLÉ, phrases courtes, marqueurs d'oral. Une annonce
+  // en registre écrit — « je me permets de vous informer que notre échange
+  // fait l'objet d'une retranscription » — s'entend comme une machine dès la
+  // première seconde, et on raccroche avant la deuxième.
+  //
+  // Le contenu légal reste entier : assistant automatique (AI Act),
+  // transcription, porte de sortie. C'est la FORME qui change, pas le fond.
   return (
-    `Bonjour, je suis l'assistant automatique de ${nomEntreprise}. ` +
-    `Notre échange est retranscrit, sans enregistrement audio. ` +
-    `Vous pouvez à tout moment me demander de vous rappeler ou de parler à quelqu'un.`
+    `Bonjour ! Je suis l'assistant automatique de ${nomEntreprise}. ` +
+    `Alors, je vous préviens tout de suite : notre échange est retranscrit. ` +
+    `Par contre on n'enregistre pas l'audio. ` +
+    `Et si vous préférez parler à quelqu'un, vous me le dites.`
   );
 }
 

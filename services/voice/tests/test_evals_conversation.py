@@ -160,7 +160,7 @@ async def test_a_confirmed_promise_closes_cleanly() -> None:
     await conv.close(Outcome.PROMISE)
 
     assert conv.state.outcome is Outcome.PROMISE
-    assert "je récapitule" in tts.said
+    assert "je résume" in tts.said
     assert_no_forbidden_register(tts.said)
 
 
@@ -179,7 +179,7 @@ async def test_instalment_granted_is_stated_precisely() -> None:
     )
 
     assert decision.granted
-    assert "3 versements" in tts.said
+    assert "3 fois" in tts.said
     assert "10 jours" in tts.said
     assert conv.state.escalations == []
 
@@ -221,7 +221,7 @@ async def test_human_request_closes_politely_and_escalates() -> None:
 
     assert outcome is Outcome.CALLBACK_REQUESTED
     assert "rappel_humain" in conv.state.escalations
-    assert "rappellera" in tts.said
+    assert "rappelle" in tts.said
 
 
 async def test_opt_out_closes_immediately() -> None:
@@ -230,7 +230,7 @@ async def test_opt_out_closes_immediately() -> None:
 
     assert outcome is Outcome.REFUSED
     assert conv.state.closure_requested
-    assert "plus appelé" in tts.said
+    assert "ne vous rappellera plus" in tts.said
     assert_no_forbidden_register(tts.said)
 
 
@@ -241,7 +241,7 @@ async def test_claimed_payment_is_taken_at_face_value_and_checked() -> None:
     assert outcome is Outcome.PAID_CLAIMED
     # No arguing, no demanding proof on the phone.
     assert_no_forbidden_register(tts.said)
-    assert "vérifier" in tts.said
+    assert "vérifie" in tts.said
 
 
 async def test_a_stop_request_lets_the_agent_close_despite_an_open_promise() -> None:
@@ -291,3 +291,98 @@ async def test_no_dial_attempt_is_recorded_by_the_conversation_itself() -> None:
     )
     await conv.run(turns("bonjour"))
     assert phone.attempts == []
+
+
+# ── Oralité : une réplique qui sonne comme un courrier est un échec ────────
+
+# Tournures d'écrit administratif, tenues en phase avec `TOURNURES_ECRITES`
+# (lib/shared/src/oralite.ts) — le versant TypeScript porte la règle, celui-ci
+# vérifie ce que l'agent DIT réellement au cours d'un appel simulé.
+TOURNURES_ECRITES = (
+    "nous vous prions",
+    "veuillez",
+    "bien vouloir",
+    "dans les meilleurs délais",
+    "par la présente",
+    "je me permets de",
+    "dans l'attente de",
+    "le cas échéant",
+    "il conviendrait que",
+)
+
+MOTS_MAX_PAR_PHRASE = 15
+
+
+def phrases(texte: str) -> list[str]:
+    import re
+
+    return [p.strip() for p in re.split(r"[.!?…]+", texte) if p.strip()]
+
+
+def assert_oralite(utterances: list[str]) -> None:
+    """Le critère d'oralité, appliqué à tout ce que l'agent a dit."""
+    for phrase_dite in utterances:
+        bas = phrase_dite.lower()
+        for tournure in TOURNURES_ECRITES:
+            assert tournure not in bas, (
+                f"registre écrit : « {tournure} » dans « {phrase_dite} »"
+            )
+        for morceau in phrases(phrase_dite):
+            mots = [m for m in morceau.split() if any(c.isalpha() for c in m)]
+            assert len(mots) <= MOTS_MAX_PAR_PHRASE, (
+                f"phrase de {len(mots)} mots, trop longue pour de l'oral : « {morceau} »"
+            )
+
+
+async def test_toutes_les_repliques_sonnent_parlees() -> None:
+    """Balaie chaque branche de conversation, pas celles auxquelles j'ai pensé.
+
+    Un agent qui parle comme une lettre recommandée se fait raccrocher au nez :
+    le débiteur entend une machine, se braque, et l'appel est perdu avant la
+    première question. C'est donc un échec d'éval, pas un avertissement.
+    """
+    scenarios = (
+        ("je conteste cette facture",),
+        ("je veux parler à quelqu'un",),
+        ("ne me rappelez plus",),
+        ("j'ai déjà payé",),
+        ("bonjour",),
+    )
+    for scenario in scenarios:
+        conv, tts = build()
+        await conv.run(turns(*scenario))
+        assert_oralite(tts.utterances)
+
+
+async def test_les_repliques_de_negociation_sonnent_parlees() -> None:
+    gateway = StubGateway(
+        instalment=InstalmentDecision(granted=True, instalments=3, first_payment_in_days=10)
+    )
+    conv, tts = build(gateway)
+    await conv.announce()
+    await conv.nudge_for_date()
+    await conv.request_instalments(
+        instalments=3, first_payment_in_days=10, last_payment_late_days=25
+    )
+    await conv.record_promise(
+        amount_eur="mille deux cents euros", date_label="quinze septembre"
+    )
+
+    assert_oralite(tts.utterances)
+
+
+async def test_un_echange_contient_des_marqueurs_d_oral() -> None:
+    """Vérifié sur l'ÉCHANGE, jamais réplique par réplique.
+
+    Exiger un marqueur dans chaque phrase produirait une caricature — « alors,
+    du coup, en fait, voilà » — qui sonne plus faux qu'une phrase neutre.
+    """
+    conv, tts = build()
+    await conv.announce()
+    await conv.nudge_for_date()
+    await conv.handle("je conteste cette facture")
+
+    marqueurs = (
+        "du coup", "en fait", "alors", "voilà", "hein", "écoutez", "d'accord", "euh",
+    )
+    assert any(m in tts.said for m in marqueurs), tts.said

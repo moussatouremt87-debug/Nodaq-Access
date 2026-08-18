@@ -182,3 +182,20 @@ def test_zero_retention_from_env_requires_the_exact_string(
         assert ElevenLabsConfig.from_env().zero_retention is False
     monkeypatch.setenv("VOICE_TTS_ZERO_RETENTION", "true")
     assert ElevenLabsConfig.from_env().zero_retention is True
+
+
+def test_empty_env_vars_fall_back_to_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A present-but-empty variable is the most common state of a copied `.env`.
+
+    Using `get(name, default)` would return "" and ask for a model with no
+    name — an error that only surfaces on the first real call.
+    """
+    monkeypatch.setenv("VOICE_TTS_API_KEY", "x")
+    monkeypatch.setenv("VOICE_TTS_VOICE_ID", "v")
+    monkeypatch.setenv("VOICE_TTS_MODEL", "")
+    monkeypatch.setenv("VOICE_TTS_BASE_URL", "")
+
+    cfg = ElevenLabsConfig.from_env()
+
+    assert cfg.model_id == MODEL_TEMPS_REEL
+    assert cfg.base_url.startswith("https://")

@@ -153,8 +153,8 @@ class DunningConversation:
             # Opt-out (US-7). Recorded by the caller; here the call simply ends.
             self.state.closure_requested = True
             await self._say(
-                "C'est noté, vous ne serez plus appelé. Je vous remercie et vous "
-                "souhaite une bonne journée."
+                "D'accord, c'est noté. On ne vous rappellera plus. "
+                "Merci, et bonne journée."
             )
             await self.close(Outcome.REFUSED)
             return
@@ -163,8 +163,8 @@ class DunningConversation:
             self.state.closure_requested = True
             self.state.escalations.append("rappel_humain")
             await self._say(
-                "Bien sûr. Je note votre demande et quelqu'un vous rappellera. "
-                "Merci et bonne journée."
+                "Bien sûr. Alors je note, et quelqu'un vous rappelle. "
+                "Merci, bonne journée."
             )
             await self.close(Outcome.CALLBACK_REQUESTED)
             return
@@ -174,8 +174,8 @@ class DunningConversation:
             self.state.closure_requested = True
             self.state.escalations.append("contestation")
             await self._say(
-                "Je comprends, je note votre contestation et la transmets. "
-                "Quelqu'un reviendra vers vous. Bonne journée."
+                "Ah, d'accord. Écoutez, je note, et je transmets. "
+                "Quelqu'un revient vers vous. Bonne journée."
             )
             await self.close(Outcome.DISPUTE)
             return
@@ -184,8 +184,8 @@ class DunningConversation:
             self.state.closure_requested = True
             self.state.escalations.append("paiement_annonce")
             await self._say(
-                "Très bien, je note que le règlement est parti et je le fais "
-                "vérifier. Merci, bonne journée."
+                "Ah, très bien. Du coup je note, et on vérifie de notre côté. "
+                "Merci, bonne journée."
             )
             await self.close(Outcome.PAID_CLAIMED)
             return
@@ -199,7 +199,7 @@ class DunningConversation:
         if not await self._gateway.may_nudge(self.state.nudges):
             return False
         self.state.nudges += 1
-        await self._say("Quel jour exactement puis-je noter ?")
+        await self._say("Alors, quel jour exactement je peux noter ?")
         return True
 
     async def request_instalments(
@@ -214,15 +214,16 @@ class DunningConversation:
 
         if decision.granted:
             await self._say(
-                f"Nous pouvons faire {decision.instalments} versements, "
-                f"le premier sous {decision.first_payment_in_days} jours."
+                f"Alors, on peut faire {decision.instalments} fois. "
+                f"Le premier sous {decision.first_payment_in_days} jours. Ça vous irait ?"
             )
         else:
             # No internal reason is voiced. The debtor hears a neutral hand-off;
             # the *owner* gets the detailed reason in the cockpit.
             self.state.escalations.append("echelonnement_a_decider")
             await self._say(
-                "Je note votre demande et la transmets. Vous serez recontacté à ce sujet."
+                "Écoutez, je note votre demande et je la transmets. "
+                "On revient vers vous là-dessus."
             )
         return decision
 
@@ -230,7 +231,7 @@ class DunningConversation:
         """Take a promise and lock it by recap (US-3)."""
         self.state.promise_obtained = True
         await self._say(
-            f"Je récapitule : vous réglez {amount_eur} le {date_label}, c'est bien cela ?"
+            f"Alors je résume. Vous réglez {amount_eur} le {date_label}. C'est bien ça ?"
         )
 
     async def confirm_promise(self) -> None:

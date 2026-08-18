@@ -76,8 +76,12 @@ class ElevenLabsConfig:
         return ElevenLabsConfig(
             api_key=key,
             voice_id=voice,
-            model_id=os.environ.get("VOICE_TTS_MODEL", MODEL_TEMPS_REEL),
-            base_url=os.environ.get("VOICE_TTS_BASE_URL", API_BASE),
+            # `or` et non le défaut de `get` : une variable PRÉSENTE MAIS VIDE
+            # — l'état le plus courant d'un `.env` recopié — rendrait "" et
+            # écraserait le défaut par une chaîne vide. On demanderait alors un
+            # modèle sans nom, et l'erreur arriverait au premier appel réel.
+            model_id=os.environ.get("VOICE_TTS_MODEL") or MODEL_TEMPS_REEL,
+            base_url=os.environ.get("VOICE_TTS_BASE_URL") or API_BASE,
             zero_retention=os.environ.get("VOICE_TTS_ZERO_RETENTION", "") == "true",
         )
 
