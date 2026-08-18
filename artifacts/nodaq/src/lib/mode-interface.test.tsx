@@ -117,7 +117,7 @@ describe("d — un habillage, pas une seconde application", () => {
     // un que personne ne relit.
     const src = SRC('contexts/mode-interface.tsx');
     const corps = src.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
-    const chemins = corps.match(/['"]\/[a-z-]+['"]/g) ?? [];
+    const chemins: string[] = corps.match(/['"]\/[a-z-]+['"]/g) ?? [];
     expect(
       chemins,
       "des chemins d'écran sont écrits en dur dans mode-interface.tsx — ce qui est essentiel se déclare sur NavItem.essentiel",
@@ -130,7 +130,8 @@ describe("d — un habillage, pas une seconde application", () => {
     const corps = clause.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
     // `/cabinet` est l'exception documentée d'US-A5.2, antérieure et sans
     // rapport avec le mode ; toute autre serait une liste qui commence.
-    const chemins = (corps.match(/['"]\/[a-z-]+['"]/g) ?? []).filter((c) => !c.includes('cabinet'));
+    const trouves: string[] = corps.match(/['"]\/[a-z-]+['"]/g) ?? [];
+    const chemins = trouves.filter((c) => !c.includes('cabinet'));
     expect(chemins, 'la clause de visibilité énumère des écrans').toEqual([]);
   });
 
