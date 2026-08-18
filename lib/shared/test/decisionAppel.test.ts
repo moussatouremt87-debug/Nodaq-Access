@@ -6,6 +6,7 @@
  * serait un bug, et pas une dérive de prompt qu'on ne saurait pas reproduire.
  */
 import { describe, test, expect } from "vitest";
+import { contientMarqueurOral, verifierOralite } from "../src/oralite.js";
 import {
   CONVERSATION_INITIALE,
   INSISTANCES_MAX,
@@ -242,7 +243,15 @@ describe("f — US-2 : l'agent s'annonce, et dit la vérité sur la transcriptio
     // qui n'a pas lieu serait faux dans l'autre sens.
     const annonce = annonceOuverture("Dubois");
     expect(annonce).toMatch(/retranscrit/i);
-    expect(annonce).toMatch(/sans enregistrement/i);
+    // Formulé à l'oral (« on enregistre pas ») plutôt qu'en registre écrit
+    // (« sans enregistrement »). C'est le fond qui compte : dire qu'aucun
+    // audio n'est conservé.
+    //
+    // Le motif porte sur « enregistre pas » et non sur « n'enregistre pas » :
+    // la négation sans « ne » est précisément le marqueur de familier qu'on a
+    // demandé, et un test qui épingle la LETTRE au lieu du FOND casse au
+    // premier ajustement de registre — ce qui est arrivé ici.
+    expect(annonce).toMatch(/enregistre pas/i);
   });
 
   test("elle propose la sortie — humain ou rappel", () => {
@@ -262,5 +271,27 @@ describe("g — US-6 : les issues d'appel sont celles du ticket", () => {
     expect([...ISSUES_APPEL].sort()).toEqual(
       ["callback_requested", "dispute", "paid_claimed", "promise", "refused", "unreachable"].sort(),
     );
+  });
+});
+
+// ── h. Oralité des répliques produites par le noyau ────────────────────────
+
+describe("h — l'agent parle, il ne rédige pas", () => {
+  test("l'annonce d'ouverture passe la garde d'oralité", () => {
+    // Une réplique qui sonne comme un courrier est un échec, pas un
+    // avertissement : c'est ce qui fait raccrocher.
+    const anomalies = verifierOralite(annonceOuverture("Charpente Dubois"));
+    expect(anomalies, JSON.stringify(anomalies)).toEqual([]);
+  });
+
+  test("elle contient au moins un marqueur d'oral", () => {
+    expect(contientMarqueurOral(annonceOuverture("Dubois"))).toBe(true);
+  });
+
+  test("aucune phrase de l'annonce ne dépasse quinze mots", () => {
+    const trop = verifierOralite(annonceOuverture("Dubois")).filter(
+      (a) => a.nature === "phrase_trop_longue",
+    );
+    expect(trop).toEqual([]);
   });
 });

@@ -228,6 +228,46 @@ globalThis.fetch = async function patchedFetch(
       );
     }
 
+    // ── Formulation des répliques de l'agent vocal (4.18) ──────────────────
+    //
+    // Le simulateur produit délibérément des répliques FAUTIVES quand on le lui
+    // demande — un chiffre inventé, une menace. C'est le seul moyen d'éprouver
+    // les gardes de sortie de la route : un simulateur qui ne rendrait que du
+    // conforme laisserait croire que les gardes fonctionnent sans jamais les
+    // avoir vues se déclencher (règle 7 du CLAUDE.md).
+    if (userText.includes("objectif :")) {
+      const repondre = (contenu: string): Response =>
+        new Response(
+          JSON.stringify({
+            id: "chatcmpl-vitest-formulation",
+            object: "chat.completion",
+            model: "test/fake-chat-model",
+            choices: [{ index: 0, message: { role: "assistant", content: contenu }, finish_reason: "stop" }],
+            usage: { prompt_tokens: 40, completion_tokens: 15, total_tokens: 55 },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+
+      // Panne du modèle : `chatCompletion` lève, la route doit prononcer le filet.
+      if (userText.includes("formulation-test-panne")) {
+        return new Response('{"error":"boom"}', { status: 500 });
+      }
+      if (userText.includes("formulation-test-menace")) {
+        return repondre("Sans règlement rapide, on passe au contentieux.");
+      }
+      if (userText.includes("formulation-test-chiffre")) {
+        // 9999 ne figure dans aucun fait : la garde de la règle 3 doit mordre.
+        return repondre("Alors, vous réglez 9999 euros. C'est bien ça ?");
+      }
+      if (userText.includes("formulation-test-courrier")) {
+        return repondre("Nous vous prions de bien vouloir procéder au règlement.");
+      }
+      // Cas nominal : une réplique parlée, sans aucun chiffre, qui rebondit.
+      // Elle est volontairement encadrée de guillemets — un modèle en met
+      // malgré la consigne, et la route doit les retirer sans toucher au reste.
+      return repondre('"Ah, d\'accord. Alors, je note ça."');
+    }
+
     // create_prospect simulation: one round only (no pending tool result)
     if (!hasPendingToolResult && userText.includes("jean dupont")) {
       const toolCallBody = JSON.stringify({

@@ -6,22 +6,34 @@ how many nudges are allowed, what the mandate permits — all of that lives in
 `MandateGateway`. Re-deriving any of it here would create a second source of
 truth, and the permissive one always wins the day the two drift.
 
-What *does* live here is the conduct of the call: announce yourself, listen,
-ask the gateway, say what it answered, recap before hanging up. Those are
-behaviours, and behaviours are what the §5 evals assert on.
+**It holds no wording either.** What the agent *says* comes from the model,
+through `Phrasing`. The driver decides the conversational move — ask for a
+date, offer the instalments that were granted, recap before hanging up — and
+hands over the facts that move is allowed to mention. The model turns that into
+spoken French; `lib/shared/src/formulation.ts` guards what comes back.
 
-The split matters for a practical reason too. An eval that re-implemented the
-mandate would pass against its own copy of the rules — proving nothing about
-the product. Here the evals feed decisions in and check what the agent *did*
-with them.
+That split is the whole point of this file. Lines written here would recite:
+same word in the same place on every call, no reaction to what the person just
+said. A debtor hears that within two turns. The driver conducts; the model
+speaks.
+
+Two things stay deliberately out of the model's hands:
+
+* **The opening announcement.** It comes from the gateway (`opening_line`),
+  produced word for word by `annonceOuverture()`. US-2 makes it a transparency
+  obligation, and an announcement a model may rephrase is one that can, one
+  day, stop announcing.
+* **Every figure.** Amounts, instalment counts and delays reach the model as
+  *facts*; it may repeat them and nothing else. That is CLAUDE.md rule 3, and
+  `chiffresInventes` enforces it on the way back.
 """
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Protocol
+from typing import Literal, Protocol
 
 from voice.core.interfaces import SpeechToText, TelephonyProvider, TextToSpeech
 
@@ -42,6 +54,41 @@ class Outcome(StrEnum):
     PAID_CLAIMED = "paid_claimed"
 
 
+class Intent(StrEnum):
+    """A conversational move the model may put into words.
+
+    Mirrors `INTENTIONS_REPLIQUE` in `lib/shared/src/formulation.ts`, values
+    included — the string is what travels over the wire, so a drift would be a
+    404 on a live call. `tests/test_intents_parity.py` fails if the two lists
+    stop matching.
+
+    There is no entry for the opening announcement, and that absence is the
+    rule, not an oversight (US-2 — see the module docstring).
+    """
+
+    ASK_DATE = "demander_date"
+    OFFER_INSTALMENTS = "offrir_echelonnement"
+    DECLINE_AND_FORWARD = "refuser_et_transmettre"
+    RECAP_PROMISE = "recapituler_promesse"
+    CLOSE_DISPUTE = "clore_contestation"
+    CLOSE_PAID_CLAIMED = "clore_paiement_annonce"
+    CLOSE_HUMAN_REQUESTED = "clore_rappel_humain"
+    CLOSE_OPT_OUT = "clore_opposition"
+
+
+@dataclass(frozen=True, slots=True)
+class Turn:
+    """One thing that was said, by one of the two parties.
+
+    The history is what lets the model *react* instead of reciting. It is sent
+    to the formulation route and never written to a log — CLAUDE.md rule 6
+    forbids conversation verbatim in logs.
+    """
+
+    speaker: Literal["agent", "debiteur"]
+    text: str
+
+
 @dataclass(frozen=True, slots=True)
 class InstalmentDecision:
     """What the decision core answered about an instalment request.
@@ -49,7 +96,8 @@ class InstalmentDecision:
     `granted` false means the agent must not concede anything — it takes note
     and closes. The reason is *not* repeated to the debtor: telling someone
     "my owner disabled this for your campaign" exposes an internal setting and
-    invites an argument the agent is forbidden to have.
+    invites an argument the agent is forbidden to have. That is why the reason
+    never reaches `facts` either — the model cannot voice what it never sees.
     """
 
     granted: bool
@@ -69,6 +117,25 @@ class MandateGateway(Protocol):
     async def opening_line(self) -> str: ...
 
 
+class Phrasing(Protocol):
+    """Turns a decided move into spoken French.
+
+    Implemented over HTTP against `POST /relance/formulation`, which calls the
+    model through `lib/llm` and checks the result before returning it. No
+    fallback wording lives on this side: the route already answers with a safe
+    line when the model fails or is unreachable, and a second copy here would
+    be a second thing to keep in step.
+    """
+
+    async def line(
+        self,
+        intent: Intent,
+        *,
+        facts: Mapping[str, str],
+        history: Sequence[Turn],
+    ) -> str: ...
+
+
 @dataclass
 class CallState:
     """Everything the driver knows about the call in progress."""
@@ -80,6 +147,7 @@ class CallState:
     closure_requested: bool = False
     outcome: Outcome | None = None
     escalations: list[str] = field(default_factory=list)
+    history: list[Turn] = field(default_factory=list)
 
 
 # Phrases the driver reacts to. Deliberately narrow: this is a fallback for the
@@ -97,7 +165,7 @@ def _contains(text: str, needles: tuple[str, ...]) -> bool:
 
 
 class DunningConversation:
-    """Runs one call. Knows how to behave, not what to allow."""
+    """Runs one call. Knows how to behave, not what to allow nor how to word it."""
 
     def __init__(
         self,
@@ -106,25 +174,46 @@ class DunningConversation:
         tts: TextToSpeech,
         telephony: TelephonyProvider,
         gateway: MandateGateway,
+        phrasing: Phrasing,
     ) -> None:
         self._stt = stt
         self._tts = tts
         self._telephony = telephony
         self._gateway = gateway
+        self._phrasing = phrasing
         self.state = CallState()
 
-    async def _say(self, line: str) -> None:
+    async def _speak(self, line: str) -> None:
+        """Synthesise one line and remember it as a turn."""
+        self.state.history.append(Turn(speaker="agent", text=line))
         async for _chunk in self._tts.synthesize(line):
             pass
+
+    async def _say(self, intent: Intent, facts: Mapping[str, str] | None = None) -> str:
+        """Have the model word this move, then speak it.
+
+        Every spoken line goes through here. `test_no_literal_line.py` asserts
+        that no string literal is ever handed to the synthesiser directly —
+        without that guard, one hurried fix would quietly put a scripted phrase
+        back into the call.
+        """
+        line = await self._phrasing.line(
+            intent, facts=facts or {}, history=tuple(self.state.history)
+        )
+        await self._speak(line)
+        return line
+
+    def hear(self, utterance: str) -> None:
+        """Record what the debtor said, so the model can react to it."""
+        self.state.history.append(Turn(speaker="debiteur", text=utterance))
 
     async def announce(self) -> None:
         """Always first, and never skippable (US-2, AI Act transparency).
 
-        The line comes from the decision core rather than being written here:
-        an announcement a runtime is free to rephrase is an announcement that
-        can one day stop announcing.
+        The only line the model never writes. It comes from the decision core
+        through the gateway, word for word.
         """
-        await self._say(await self._gateway.opening_line())
+        await self._speak(await self._gateway.opening_line())
         self.state.announced = True
 
     async def close(self, outcome: Outcome) -> None:
@@ -149,23 +238,19 @@ class DunningConversation:
 
     async def handle(self, utterance: str) -> None:
         """React to one thing the debtor said."""
+        self.hear(utterance)
+
         if _contains(utterance, _STOP_REQUESTED):
             # Opt-out (US-7). Recorded by the caller; here the call simply ends.
             self.state.closure_requested = True
-            await self._say(
-                "C'est noté, vous ne serez plus appelé. Je vous remercie et vous "
-                "souhaite une bonne journée."
-            )
+            await self._say(Intent.CLOSE_OPT_OUT)
             await self.close(Outcome.REFUSED)
             return
 
         if _contains(utterance, _HUMAN_REQUESTED):
             self.state.closure_requested = True
             self.state.escalations.append("rappel_humain")
-            await self._say(
-                "Bien sûr. Je note votre demande et quelqu'un vous rappellera. "
-                "Merci et bonne journée."
-            )
+            await self._say(Intent.CLOSE_HUMAN_REQUESTED)
             await self.close(Outcome.CALLBACK_REQUESTED)
             return
 
@@ -173,20 +258,14 @@ class DunningConversation:
             # US-4: never argue. Record, close, hand to a human.
             self.state.closure_requested = True
             self.state.escalations.append("contestation")
-            await self._say(
-                "Je comprends, je note votre contestation et la transmets. "
-                "Quelqu'un reviendra vers vous. Bonne journée."
-            )
+            await self._say(Intent.CLOSE_DISPUTE)
             await self.close(Outcome.DISPUTE)
             return
 
         if _contains(utterance, _ALREADY_PAID):
             self.state.closure_requested = True
             self.state.escalations.append("paiement_annonce")
-            await self._say(
-                "Très bien, je note que le règlement est parti et je le fais "
-                "vérifier. Merci, bonne journée."
-            )
+            await self._say(Intent.CLOSE_PAID_CLAIMED)
             await self.close(Outcome.PAID_CLAIMED)
             return
 
@@ -199,7 +278,7 @@ class DunningConversation:
         if not await self._gateway.may_nudge(self.state.nudges):
             return False
         self.state.nudges += 1
-        await self._say("Quel jour exactement puis-je noter ?")
+        await self._say(Intent.ASK_DATE)
         return True
 
     async def request_instalments(
@@ -213,24 +292,27 @@ class DunningConversation:
         )
 
         if decision.granted:
+            # The granted figures — and only those — are what the model may say.
             await self._say(
-                f"Nous pouvons faire {decision.instalments} versements, "
-                f"le premier sous {decision.first_payment_in_days} jours."
+                Intent.OFFER_INSTALMENTS,
+                {
+                    "nombre_de_versements": str(decision.instalments),
+                    "jours_avant_le_premier_versement": str(decision.first_payment_in_days),
+                },
             )
         else:
-            # No internal reason is voiced. The debtor hears a neutral hand-off;
-            # the *owner* gets the detailed reason in the cockpit.
+            # NO facts. The refusal reason stays internal: the debtor hears a
+            # neutral hand-off, the owner gets the detail in the cockpit. A
+            # model cannot voice what it was never given.
             self.state.escalations.append("echelonnement_a_decider")
-            await self._say(
-                "Je note votre demande et la transmets. Vous serez recontacté à ce sujet."
-            )
+            await self._say(Intent.DECLINE_AND_FORWARD)
         return decision
 
     async def record_promise(self, *, amount_eur: str, date_label: str) -> None:
         """Take a promise and lock it by recap (US-3)."""
         self.state.promise_obtained = True
         await self._say(
-            f"Je récapitule : vous réglez {amount_eur} le {date_label}, c'est bien cela ?"
+            Intent.RECAP_PROMISE, {"montant": amount_eur, "date": date_label}
         )
 
     async def confirm_promise(self) -> None:

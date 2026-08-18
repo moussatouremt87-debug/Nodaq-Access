@@ -14,15 +14,26 @@ Two things make these assertions possible, and both come from lot 0:
   eval must assert nothing was attempted, since a call that failed for
   unrelated reasons would otherwise pass for compliance.
 
-The gateway is a stub here **on purpose**. It does not re-implement the
-mandate: the rules are tested on the TypeScript side, where they live. Feeding
-decisions in and checking what the agent does with them is what keeps these
-evals honest.
+Both stubs hold no rules **on purpose**. The gateway does not re-implement the
+mandate and the phrasing does not re-implement the style: those are tested on
+the TypeScript side, where they live.
+
+── What moved out of this file, and why ──────────────────────────────────────
+The agent's wording is no longer written here — it comes from the model,
+through `Phrasing`. Asserting orality against a stub would only prove the stub
+was written politely, which is exactly the trap the module note above warns
+about. Those assertions now sit where the words are produced and guarded:
+`lib/shared/test/formulation.test.ts` and the route's own tests.
+
+What is asserted here instead is stronger, because it is what this side
+actually controls: **which move the driver chose, and which facts it was
+willing to hand over.** An agent cannot voice a refusal reason it was never
+given — see `test_the_refusal_reason_never_reaches_the_model`.
 """
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass, field
 
 import pytest
@@ -30,7 +41,9 @@ import pytest
 from voice.core.conversation import (
     DunningConversation,
     InstalmentDecision,
+    Intent,
     Outcome,
+    Turn,
 )
 from voice.core.simulation import (
     SimulatedSpeechToText,
@@ -77,17 +90,54 @@ class StubGateway:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class Asked:
+    """One formulation request, as the driver made it."""
+
+    intent: Intent
+    facts: Mapping[str, str]
+    history: tuple[Turn, ...]
+
+
+@dataclass
+class RecordingPhrasing:
+    """Records what the driver asked for, answers something plausible.
+
+    The answer is deliberately bland. These evals assert on the *request* —
+    which move, which facts — because that is what the driver decides. The
+    wording is the model's job and the TypeScript guards' business.
+    """
+
+    asked: list[Asked] = field(default_factory=list)
+
+    async def line(
+        self,
+        intent: Intent,
+        *,
+        facts: Mapping[str, str],
+        history: Sequence[Turn],
+    ) -> str:
+        self.asked.append(Asked(intent, dict(facts), tuple(history)))
+        details = " ".join(facts.values())
+        return f"[{intent.value}] {details}".strip()
+
+    def intents(self) -> list[Intent]:
+        return [a.intent for a in self.asked]
+
+
 def build(
     gateway: StubGateway | None = None,
-) -> tuple[DunningConversation, SimulatedTextToSpeech]:
+) -> tuple[DunningConversation, SimulatedTextToSpeech, RecordingPhrasing]:
     tts = SimulatedTextToSpeech()
+    phrasing = RecordingPhrasing()
     conv = DunningConversation(
         stt=SimulatedSpeechToText([]),
         tts=tts,
         telephony=SimulatedTelephony(),
         gateway=gateway or StubGateway(),
+        phrasing=phrasing,
     )
-    return conv, tts
+    return conv, tts, phrasing
 
 
 async def turns(*utterances: str) -> AsyncIterator[str]:
@@ -104,7 +154,7 @@ def assert_no_forbidden_register(said: str) -> None:
 
 
 async def test_agent_always_announces_itself_first() -> None:
-    conv, tts = build()
+    conv, tts, _ = build()
     await conv.run(turns("bonjour"))
 
     assert conv.state.announced
@@ -116,17 +166,29 @@ async def test_agent_always_announces_itself_first() -> None:
 async def test_announcement_mentions_transcription_not_recording() -> None:
     # The product keeps no audio (§6). Announcing a recording that never
     # happens would be false in the other direction.
-    conv, tts = build()
+    conv, tts, _ = build()
     await conv.announce()
     assert "retranscrit" in tts.said
     assert "sans enregistrement" in tts.said
+
+
+async def test_the_announcement_never_goes_through_the_model() -> None:
+    """US-2: the one line a model may not rephrase.
+
+    An announcement a runtime is free to reword is an announcement that can,
+    one day, stop announcing. It comes from the gateway, word for word, and
+    the phrasing port is not consulted.
+    """
+    conv, _, phrasing = build()
+    await conv.announce()
+    assert phrasing.asked == []
 
 
 # ── Nudging stops at two (US-3, US-4) ──────────────────────────────────────
 
 
 async def test_agent_nudges_at_most_twice() -> None:
-    conv, tts = build(StubGateway(nudges_allowed=2))
+    conv, tts, _ = build(StubGateway(nudges_allowed=2))
     await conv.announce()
 
     assert await conv.nudge_for_date() is True
@@ -142,7 +204,7 @@ async def test_agent_nudges_at_most_twice() -> None:
 
 
 async def test_cannot_close_on_an_unconfirmed_promise() -> None:
-    conv, _ = build()
+    conv, _, _ = build()
     await conv.announce()
     await conv.record_promise(amount_eur="1 200 €", date_label="15 septembre")
 
@@ -153,25 +215,40 @@ async def test_cannot_close_on_an_unconfirmed_promise() -> None:
 
 
 async def test_a_confirmed_promise_closes_cleanly() -> None:
-    conv, tts = build()
+    conv, tts, phrasing = build()
     await conv.announce()
     await conv.record_promise(amount_eur="1 200 €", date_label="15 septembre")
     await conv.confirm_promise()
     await conv.close(Outcome.PROMISE)
 
     assert conv.state.outcome is Outcome.PROMISE
-    assert "je récapitule" in tts.said
+    assert Intent.RECAP_PROMISE in phrasing.intents()
     assert_no_forbidden_register(tts.said)
+
+
+async def test_the_recap_carries_the_exact_figures_it_was_given() -> None:
+    """CLAUDE.md rule 3 seen from this side.
+
+    The driver hands over the amount and the date verbatim; the model may
+    repeat them and nothing else. Anything it invents is caught on the way
+    back by `chiffresInventes`.
+    """
+    conv, _, phrasing = build()
+    await conv.announce()
+    await conv.record_promise(amount_eur="1 200 €", date_label="15 septembre")
+
+    recap = next(a for a in phrasing.asked if a.intent is Intent.RECAP_PROMISE)
+    assert recap.facts == {"montant": "1 200 €", "date": "15 septembre"}
 
 
 # ── The three instalment branches, as the driver sees them ─────────────────
 
 
-async def test_instalment_granted_is_stated_precisely() -> None:
+async def test_instalment_granted_hands_over_the_granted_figures() -> None:
     gateway = StubGateway(
         instalment=InstalmentDecision(granted=True, instalments=3, first_payment_in_days=10)
     )
-    conv, tts = build(gateway)
+    conv, _, phrasing = build(gateway)
     await conv.announce()
 
     decision = await conv.request_instalments(
@@ -179,13 +256,24 @@ async def test_instalment_granted_is_stated_precisely() -> None:
     )
 
     assert decision.granted
-    assert "3 versements" in tts.said
-    assert "10 jours" in tts.said
+    offer = next(a for a in phrasing.asked if a.intent is Intent.OFFER_INSTALMENTS)
+    # What the core granted, not what the debtor asked for.
+    assert offer.facts == {
+        "nombre_de_versements": "3",
+        "jours_avant_le_premier_versement": "10",
+    }
     assert conv.state.escalations == []
 
 
-async def test_instalment_refused_is_escalated_without_voicing_the_reason() -> None:
-    conv, tts = build(StubGateway(instalment=InstalmentDecision(granted=False)))
+async def test_the_refusal_reason_never_reaches_the_model() -> None:
+    """The strongest form of "don't voice the internal reason".
+
+    Previously the driver held a neutral sentence and one had to trust it. Now
+    the refusal is worded by a model — so the guarantee is that the model is
+    handed **no facts at all**. It cannot say what it never saw, whatever the
+    prompt does.
+    """
+    conv, tts, phrasing = build(StubGateway(instalment=InstalmentDecision(granted=False)))
     await conv.announce()
 
     decision = await conv.request_instalments(
@@ -194,12 +282,9 @@ async def test_instalment_refused_is_escalated_without_voicing_the_reason() -> N
 
     assert not decision.granted
     assert "echelonnement_a_decider" in conv.state.escalations
-    # The debtor hears a neutral hand-off. Telling them "my owner disabled this
-    # for your campaign" exposes an internal setting and invites an argument
-    # the agent is forbidden to have.
-    assert "transmets" in tts.said
-    for leak in ("campagne", "règle", "mandat", "paramètre"):
-        assert leak not in tts.said, f"internal wording leaked to the debtor: {leak}"
+
+    refusal = next(a for a in phrasing.asked if a.intent is Intent.DECLINE_AND_FORWARD)
+    assert refusal.facts == {}, "an internal reason was handed to the model"
     assert_no_forbidden_register(tts.said)
 
 
@@ -207,47 +292,48 @@ async def test_instalment_refused_is_escalated_without_voicing_the_reason() -> N
 
 
 async def test_dispute_is_recorded_never_argued() -> None:
-    conv, tts = build()
+    conv, tts, phrasing = build()
     outcome = await conv.run(turns("je conteste cette facture"))
 
     assert outcome is Outcome.DISPUTE
     assert "contestation" in conv.state.escalations
+    assert Intent.CLOSE_DISPUTE in phrasing.intents()
     assert_no_forbidden_register(tts.said)
 
 
 async def test_human_request_closes_politely_and_escalates() -> None:
-    conv, tts = build()
+    conv, _, phrasing = build()
     outcome = await conv.run(turns("je veux parler à quelqu'un"))
 
     assert outcome is Outcome.CALLBACK_REQUESTED
     assert "rappel_humain" in conv.state.escalations
-    assert "rappellera" in tts.said
+    assert Intent.CLOSE_HUMAN_REQUESTED in phrasing.intents()
 
 
 async def test_opt_out_closes_immediately() -> None:
-    conv, tts = build()
+    conv, tts, phrasing = build()
     outcome = await conv.run(turns("ne me rappelez plus"))
 
     assert outcome is Outcome.REFUSED
     assert conv.state.closure_requested
-    assert "plus appelé" in tts.said
+    assert Intent.CLOSE_OPT_OUT in phrasing.intents()
     assert_no_forbidden_register(tts.said)
 
 
 async def test_claimed_payment_is_taken_at_face_value_and_checked() -> None:
-    conv, tts = build()
+    conv, tts, phrasing = build()
     outcome = await conv.run(turns("j'ai déjà payé la semaine dernière"))
 
     assert outcome is Outcome.PAID_CLAIMED
+    assert Intent.CLOSE_PAID_CLAIMED in phrasing.intents()
     # No arguing, no demanding proof on the phone.
     assert_no_forbidden_register(tts.said)
-    assert "vérifier" in tts.said
 
 
 async def test_a_stop_request_lets_the_agent_close_despite_an_open_promise() -> None:
     # US-4: someone who asks to stop is not held for a recap. Requiring one
     # here would be exactly the harassment the story forbids.
-    conv, _ = build()
+    conv, _, _ = build()
     await conv.announce()
     await conv.record_promise(amount_eur="900 €", date_label="1er octobre")
     await conv.handle("ne me rappelez plus")
@@ -255,22 +341,33 @@ async def test_a_stop_request_lets_the_agent_close_despite_an_open_promise() -> 
     assert conv.state.outcome is Outcome.REFUSED
 
 
-# ── Nothing the agent ever says may threaten ──────────────────────────────
+# ── The model is given something to react to ──────────────────────────────
 
 
-async def test_no_scripted_line_uses_a_forbidden_register() -> None:
-    """Sweeps every branch, rather than the ones I happened to think of."""
-    scenarios = (
-        ("je conteste cette facture",),
-        ("je veux parler à quelqu'un",),
-        ("ne me rappelez plus",),
-        ("j'ai déjà payé",),
-        ("bonjour",),
-    )
-    for scenario in scenarios:
-        conv, tts = build()
-        await conv.run(turns(*scenario))
-        assert_no_forbidden_register(tts.said)
+async def test_the_model_sees_what_the_debtor_just_said() -> None:
+    """This is what separates conversing from reciting.
+
+    Without the history, the model would produce the same sentence on every
+    call for a given move — which is what the scripted lines did, with a
+    network round-trip added.
+    """
+    conv, _, phrasing = build()
+    await conv.run(turns("je conteste cette facture"))
+
+    close = next(a for a in phrasing.asked if a.intent is Intent.CLOSE_DISPUTE)
+    assert Turn(speaker="debiteur", text="je conteste cette facture") in close.history
+    # And the announcement it already made, so it does not introduce itself twice.
+    assert any(t.speaker == "agent" for t in close.history)
+
+
+async def test_history_keeps_both_sides_in_order() -> None:
+    conv, _, _ = build()
+    await conv.announce()
+    conv.hear("bonjour")
+    await conv.nudge_for_date()
+
+    speakers = [t.speaker for t in conv.state.history]
+    assert speakers == ["agent", "debiteur", "agent"]
 
 
 # ── A doNotCall is never dialled ──────────────────────────────────────────
@@ -288,6 +385,7 @@ async def test_no_dial_attempt_is_recorded_by_the_conversation_itself() -> None:
         tts=SimulatedTextToSpeech(),
         telephony=phone,
         gateway=StubGateway(),
+        phrasing=RecordingPhrasing(),
     )
     await conv.run(turns("bonjour"))
     assert phone.attempts == []

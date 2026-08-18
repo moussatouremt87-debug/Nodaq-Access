@@ -56,6 +56,7 @@ import souveraineteRouter from "./souverainete";
 import { modulesReadRouter, modulesWriteRouter } from "./modules";
 import { reglesRelanceReadRouter, reglesRelanceWriteRouter } from "./regles-relance";
 import { campagnesRelanceReadRouter, campagnesRelanceWriteRouter } from "./campagnes-relance";
+import relanceFormulationRouter from "./relance-formulation";
 import membresRouter, { membresPublicRouter } from "./membres";
 import mfaRouter from "./mfa";
 
@@ -133,6 +134,11 @@ router.use(biz, modulesReadRouter);
 // il doit donc pouvoir la lire. L'écriture est plus bas, au propriétaire.
 router.use(biz, reglesRelanceReadRouter);
 router.use(biz, campagnesRelanceReadRouter);
+// Formulation des répliques de l'agent vocal (4.18) : lecture seule, elle
+// n'écrit rien et ne décide rien — le noyau a déjà tranché quand elle est
+// appelée. Sur session pour l'instant ; l'authentification de service du
+// worker se tranche au lot 6, avec celle de la passerelle de mandat.
+router.use(biz, relanceFormulationRouter);
 
 // ── Business routes (OWNER ou ACCOUNTANT seulement) ───────────────────────
 router.use(financierOnly, echeancesRouter);

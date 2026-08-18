@@ -195,4 +195,6 @@ export * from "./habilitations.js";
 export * from "./souverainete.js";
 export * from "./mandatNegociation.js";
 export * from "./decisionAppel.js";
+export * from "./oralite.js";
+export * from "./formulation.js";
 export * from "./fenetreAppel.js";
