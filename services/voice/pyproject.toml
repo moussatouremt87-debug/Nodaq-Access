@@ -1,0 +1,46 @@
+[project]
+name = "nodaq-voice"
+version = "0.1.0"
+description = "Outbound voice agent runtime — dunning calls (ticket 4.18)."
+requires-python = ">=3.12"
+# No provider SDK yet, and that is deliberate: lot 0 ships the seams, not the
+# implementations. Telnyx, LiveKit, Gladia/Voxtral land in `voice.adapters`
+# once the accounts exist — never in `voice.core`, which the layering guard
+# enforces (see tests/test_layering.py).
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "mypy>=1.14",
+    "pytest>=8.3",
+    "pytest-asyncio>=0.25",
+    "ruff>=0.9",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/voice"]
+
+[tool.ruff]
+line-length = 96
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "A", "C4", "PT", "RUF"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src", "tests"]
+strict = true
+# Same doctrine as the TypeScript side: silencing the checker hides a cause
+# instead of treating it. `Any` needs a reason, and the reason has to be
+# written down.
+disallow_any_explicit = true
+warn_unreachable = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
