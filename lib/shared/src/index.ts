@@ -177,6 +177,7 @@ export * from "./affaireMargin.js";
 export * from "./coutMainOeuvre.js";
 export * from "./rapprochementCatalogue.js";
 export * from "./intentionVocale.js";
+export * from "./tempsGagne.js";
 export * from "./reglagesObjectifs.js";
 export * from "./envoiDomaine.js";
 export * from "./objectifsCockpit.js";

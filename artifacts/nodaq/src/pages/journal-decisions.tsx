@@ -19,6 +19,7 @@ import {
   Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription,
 } from '@/components/ui/empty';
 import { apiFetch } from '@/lib/auth';
+import { tempsGagneSecondes, formaterTempsGagne } from '@nodaq/shared';
 import { containerVariants, itemVariants } from '@/lib/motion-variants';
 
 const API = '/api';
@@ -80,6 +81,24 @@ export default function JournalDecisions() {
 
   const compte = (d: Decision) => lignes.filter((l) => l.decision === d).length;
 
+  /**
+   * US-A6.5 (AC2) — le cumul sur la période sélectionnée.
+   *
+   * Seules les décisions APPROUVÉES comptent : une action rejetée ou expirée
+   * n'a rien fait gagner, l'inclure gonflerait le chiffre exactement comme la
+   * story demande de ne pas le faire.
+   */
+  const secondesGagnees = lignes
+    .filter((l) => l.decision === 'APPROUVEE')
+    .reduce((total, l) => {
+      const ops = (l.actionPayload as { operations?: unknown } | null)?.operations;
+      return total + (Array.isArray(ops)
+        ? tempsGagneSecondes(ops.filter((o): o is { type: string } =>
+            typeof o === 'object' && o !== null && typeof (o as { type?: unknown }).type === 'string'))
+        : 0);
+    }, 0);
+  const gagneLisible = formaterTempsGagne(secondesGagnees);
+
   const dateLisible = (iso: string) =>
     new Intl.DateTimeFormat('fr-FR', {
       day: '2-digit', month: 'long', year: 'numeric',
@@ -134,6 +153,22 @@ export default function JournalDecisions() {
             </motion.div>
           ))}
         </motion.div>
+
+        {/* US-A6.5 — affiché seulement s'il y a quelque chose à annoncer :
+            « 0 min gagnées » dirait à l'utilisateur que l'outil ne sert à rien. */}
+        {gagneLisible && (
+          <div className="rounded-xl border border-card-border bg-card p-4">
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-2">
+              Temps de saisie évité — estimation
+            </div>
+            <div className="text-xl font-semibold font-mono-nums">{gagneLisible}</div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Estimation, pas une mesure : elle multiplie le nombre d'actions approuvées
+              par une durée de référence pour la saisie manuelle équivalente (navigation
+              vers l'écran, puis remplissage de chaque champ). Volontairement prudente.
+            </p>
+          </div>
+        )}
 
         {isLoading ? (
           <div className="space-y-3">
