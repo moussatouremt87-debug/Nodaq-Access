@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ObjectifsParametres } from '@/components/objectifs-parametres';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Building2, Bell, Puzzle, Save, UserCog, Mail, Trash2, Clock } from 'lucide-react';
+import { Building2, Bell, Puzzle, Save, UserCog, Mail, Trash2, Clock, ShieldCheck } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   useListMembres,
@@ -519,6 +519,62 @@ function MembresTab() {
   );
 }
 
+/**
+ * Attestation de souveraineté (US-A7.4) — téléchargement en un geste.
+ *
+ * Pourquoi un `fetch` + blob et non un `window.open` comme l'export du compte
+ * de résultat : cette route REFUSE d'émettre quand la configuration ne
+ * correspond plus à ce que le registre déclare, et le message de refus est
+ * l'essentiel du dispositif. Ouvert dans un onglet, il s'afficherait en JSON
+ * brut — la seule fois où l'utilisateur a vraiment besoin de comprendre.
+ */
+function SouveraineteCard() {
+  const { toast } = useToast();
+  const [enCours, setEnCours] = useState(false);
+
+  const telecharger = async () => {
+    setEnCours(true);
+    try {
+      const res = await apiFetch(`${API}/souverainete/attestation`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        toast({
+          title: "Attestation non produite",
+          description: (err as { error?: string }).error ?? 'Téléchargement impossible.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'attestation-souverainete.pdf';
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setEnCours(false);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-card-border bg-card p-5">
+      <h3 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-2">
+        <ShieldCheck className="h-4 w-4 text-muted-foreground" /> Souveraineté des données
+      </h3>
+      <p className="text-sm text-muted-foreground mb-4">
+        Le document à joindre à une réponse de marché public comportant une clause de
+        souveraineté : où sont hébergées vos données, quels sous-traitants interviennent, et
+        ce qui a été vérifié au moment de l'émission. Généré à la demande, daté du jour.
+      </p>
+      <Button variant="outline" onClick={telecharger} disabled={enCours} className="gap-1.5">
+        <ShieldCheck className="h-4 w-4" />
+        {enCours ? 'Génération…' : "Télécharger l'attestation"}
+      </Button>
+    </div>
+  );
+}
+
 export default function ParametresPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -601,6 +657,13 @@ export default function ParametresPage() {
             objectif non renseigné ne s'affiche nulle part ailleurs. */}
         <div className="mb-6 max-w-2xl">
           <ObjectifsParametres />
+        </div>
+
+        {/* Souveraineté — hors onglets pour la même raison que le seuil de
+            rentabilité : c'est une action ponctuelle, cherchée le jour où un
+            donneur d'ordre la réclame, pas un réglage qu'on visite. */}
+        <div className="mb-6 max-w-2xl">
+          <SouveraineteCard />
         </div>
 
         {/* Tab bar */}

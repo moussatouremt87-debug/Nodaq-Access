@@ -52,6 +52,7 @@ import { requireMfaVerified } from "../middleware/requireMfaVerified";
 import { lectureSeuleMethode, lectureSeulePerimetre } from "../middleware/lectureSeule";
 import { FINANCIAL_ROLES } from "@nodaq/shared";
 import journalDecisionsRouter from "./journal-decisions";
+import souveraineteRouter from "./souverainete";
 import membresRouter, { membresPublicRouter } from "./membres";
 import mfaRouter from "./mfa";
 
@@ -151,5 +152,8 @@ router.use(ownerOnly, onboardingWriteRouter);
 router.use(ownerOnly, journalDecisionsRouter);
 router.use(ownerOnly, membresRouter);
 router.use(ownerOnly, facturationElectroniqueRouter);
+// US-A7.4 — l'attestation engage l'entreprise devant un donneur d'ordre :
+// elle se produit depuis le compte du dirigeant.
+router.use(ownerOnly, souveraineteRouter);
 
 export default router;
