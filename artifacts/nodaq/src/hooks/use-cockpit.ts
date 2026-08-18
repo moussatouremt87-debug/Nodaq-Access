@@ -10,6 +10,25 @@ import {
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
+import { tempsGagneSecondes, formaterTempsGagne } from '@nodaq/shared';
+
+/**
+ * Les opérations que l'action validée portait, lues depuis son `payload`.
+ *
+ * Le typage généré ne décrit pas la forme du plan (c'est un `jsonb` libre
+ * côté base) : on la sonde défensivement plutôt que d'imposer un cast — une
+ * réponse inattendue doit donner « aucun gain affiché », jamais une erreur
+ * dans un toast de confirmation.
+ */
+function operationsDe(reponse: unknown): { type: string }[] {
+  const payload = (reponse as { payload?: unknown } | undefined)?.payload;
+  const ops = (payload as { operations?: unknown } | undefined)?.operations;
+  if (!Array.isArray(ops)) return [];
+  return ops.filter(
+    (o): o is { type: string } =>
+      typeof o === 'object' && o !== null && typeof (o as { type?: unknown }).type === 'string',
+  );
+}
 
 export function useCockpitKpis() {
   return useGetCockpitKpis();
@@ -44,7 +63,7 @@ export function useApproveAction() {
       mutation.mutate(
         { id, data: { note } },
         {
-          onSuccess: () => {
+          onSuccess: (reponse) => {
             queryClient.invalidateQueries({
               queryKey: getListPendingActionsQueryKey(),
             });
@@ -54,7 +73,18 @@ export function useApproveAction() {
             queryClient.invalidateQueries({
               queryKey: getGetCockpitActivityQueryKey(),
             });
-            toast({ title: 'Action approuvée' });
+            // US-A6.5 — le gain va en DESCRIPTION du toast existant, pas dans
+            // une modale ni une animation : le point d'attention de la story
+            // interdit de détourner l'attention du panneau de validation
+            // lui-même (US-A6.2). `formaterTempsGagne` rend `null` pour zéro,
+            // et on n'affiche alors rien plutôt que « 0 min gagnées ».
+            const gagne = formaterTempsGagne(
+              tempsGagneSecondes(operationsDe(reponse)),
+            );
+            toast({
+              title: 'Action approuvée',
+              ...(gagne ? { description: `≈ ${gagne} de saisie évitée` } : {}),
+            });
           },
           onError: () => {
             toast({

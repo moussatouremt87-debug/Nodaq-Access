@@ -37,6 +37,7 @@ import VotreMetier from '@/pages/votre-metier';
 import Onboarding from '@/pages/onboarding';
 import Reprise from '@/pages/reprise';
 import FacturationElectronique from '@/pages/facturation-electronique';
+import JournalDecisions from '@/pages/journal-decisions';
 import Login from '@/pages/login';
 import Register from '@/pages/register';
 import DevisAccepter from '@/pages/devis-accepter';
@@ -251,6 +252,7 @@ function ApplicationInterne() {
               <Route path="/onboarding" component={RoleRoute(Onboarding, ['OWNER'])} />
               <Route path="/reprise" component={RoleRoute(Reprise, ['OWNER'])} />
               <Route path="/facturation-electronique" component={RoleRoute(FacturationElectronique, ['OWNER'])} />
+              <Route path="/journal-decisions" component={RoleRoute(JournalDecisions, ['OWNER'])} />
               <Route component={NotFound} />
             </Switch>
           </motion.div>
