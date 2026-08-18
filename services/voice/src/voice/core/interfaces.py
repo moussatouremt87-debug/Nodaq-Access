@@ -40,9 +40,15 @@ class TranscriptSegment:
 
 
 class SpeechToText(Protocol):
-    """Streaming recognition. French, telephone-band audio."""
+    """Streaming recognition. French, telephone-band audio.
 
-    async def transcribe(
+    Declared `def … -> AsyncIterator`, not `async def`: an async *generator*
+    function is not a coroutine returning an iterator, and writing it the other
+    way describes a shape no real implementation has. mypy caught the mismatch
+    the first time a caller actually iterated the result.
+    """
+
+    def transcribe(
         self, audio: AsyncIterator[bytes], *, language: str = "fr"
     ) -> AsyncIterator[TranscriptSegment]: ...
 
@@ -55,7 +61,7 @@ class TextToSpeech(Protocol):
     unbearable, and the ticket lists it as non-negotiable (§1, VAD).
     """
 
-    async def synthesize(self, text: str, *, language: str = "fr") -> AsyncIterator[bytes]: ...
+    def synthesize(self, text: str, *, language: str = "fr") -> AsyncIterator[bytes]: ...
 
 
 class CallOutcome(StrEnum):
