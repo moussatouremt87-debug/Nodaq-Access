@@ -151,7 +151,7 @@ describe("d — la formulation ne décide rien", () => {
     // le jour où les deux divergent.
     const r = await formuler({
       intention: "offrir_echelonnement",
-      faits: { versements: "3", premier_versement_jours: "10" },
+      faits: { nombre_de_versements: "3", jours_avant_le_premier_versement: "10" },
       historique: cas("formulation-test-panne"),
     }).expect(200);
 

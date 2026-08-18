@@ -37,7 +37,7 @@ describe("a — le modèle ne peut prononcer que les chiffres qu'on lui donne", 
 
   test("un délai inventé est refusé", () => {
     // Le cas qui engage vraiment : le modèle « arrondit » un délai accordé.
-    const faits = { versements: "3", premier_versement_jours: "10" };
+    const faits = { nombre_de_versements: "3", jours_avant_le_premier_versement: "10" };
     const anomalies = verifierReplique(
       "Du coup on peut faire 3 fois, le premier sous 30 jours. Ça vous va ?",
       faits,
@@ -46,7 +46,7 @@ describe("a — le modèle ne peut prononcer que les chiffres qu'on lui donne", 
   });
 
   test("les chiffres fidèlement repris passent", () => {
-    const faits = { versements: "3", premier_versement_jours: "10" };
+    const faits = { nombre_de_versements: "3", jours_avant_le_premier_versement: "10" };
     expect(
       verifierReplique("Du coup on peut faire 3 fois, le premier sous 10 jours.", faits),
     ).toEqual([]);
@@ -107,6 +107,36 @@ describe("b — registre, oralité, longueur", () => {
     ).toBe(true);
   });
 
+  test("le tutoiement est refusé", () => {
+    // La consigne demande un registre FAMILIER. Un modèle à qui l'on demande
+    // de se détendre glisse volontiers de « familier » à « familier avec la
+    // personne » — et tutoyer quelqu'un à qui l'on réclame de l'argent se
+    // retourne aussitôt contre l'entreprise qui appelle.
+    for (const texte of [
+      "Alors, tu peux régler quand ?",
+      "D'accord, je note ton virement.",
+      "Ça te va comme ça ?",
+      "Bon, t'as reçu la facture ?",
+    ]) {
+      const anomalies = verifierReplique(texte, AUCUN_FAIT);
+      expect(anomalies.some((a) => a.nature === "tutoiement"), texte).toBe(true);
+    }
+  });
+
+  test("le vouvoiement familier n'est PAS pris pour du tutoiement", () => {
+    // La garde doit laisser passer exactement le registre qu'on vient de
+    // demander, sinon elle refuse ce qu'elle protège et finit désactivée.
+    for (const texte of [
+      "Alors, vous pouvez régler quand ?",
+      "On peut faire ça, ça vous va ?",
+      "Je peux pas vous le dire là, je transmets.",
+      "Très bien, on vous rappellera plus.",
+      "Votre facture, on la vérifie de notre côté.",
+    ]) {
+      expect(verifierReplique(texte, AUCUN_FAIT), texte).toEqual([]);
+    }
+  });
+
   test("une réplique vide est refusée", () => {
     expect(verifierReplique("   ", AUCUN_FAIT)).toEqual([
       { nature: "vide", detail: "réplique vide" },
@@ -151,7 +181,7 @@ describe("c — l'annonce d'ouverture reste hors de portée du modèle", () => {
 describe("d — les répliques de secours respectent les règles qu'elles sauvent", () => {
   const FAITS_PAR_INTENTION: Readonly<Record<IntentionReplique, Record<string, string>>> = {
     demander_date: {},
-    offrir_echelonnement: { versements: "3", premier_versement_jours: "10" },
+    offrir_echelonnement: { nombre_de_versements: "3", jours_avant_le_premier_versement: "10" },
     refuser_et_transmettre: {},
     recapituler_promesse: { montant: "1200 €", date: "15 septembre" },
     clore_contestation: {},
@@ -192,6 +222,26 @@ describe("e — ce qu'on envoie au modèle", () => {
     const c = consigneFormulation();
     expect(c).toMatch(/n'en inventes aucun/i);
     expect(c).toMatch(/parlé/i);
+  });
+
+  test("la consigne exige les nombres en chiffres — c'est ce qui rend la garde efficace", () => {
+    // Observé sur une vraie sortie : « trois versements », « dix jours ». Deux
+    // nombres corrects, mais écrits en lettres — donc invisibles pour
+    // `chiffresInventes`, qui compare des groupes de chiffres. La garde était
+    // contournable sans le vouloir, simplement en changeant d'orthographe.
+    expect(consigneFormulation()).toMatch(/en CHIFFRES/);
+    expect(consigneFormulation()).toMatch(/toutes lettres/i);
+  });
+
+  test("la consigne demande le registre familier en règles applicables", () => {
+    // « Sois familier » ne produit rien de mesurable ; « supprime le ne de
+    // négation » change une réplique sur deux. Ce test épingle le fait que la
+    // consigne donne des RÈGLES et pas un adjectif.
+    const c = consigneFormulation();
+    expect(c).toMatch(/négation sans le « ne »/i);
+    expect(c).toMatch(/« on » plutôt que « nous »/i);
+    // Et la borne qui va avec : familier, mais pas avec la personne.
+    expect(c).toMatch(/tutoiement/i);
   });
 
   test("le message de tour porte les faits et l'historique", () => {

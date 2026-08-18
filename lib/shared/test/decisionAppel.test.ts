@@ -243,10 +243,15 @@ describe("f — US-2 : l'agent s'annonce, et dit la vérité sur la transcriptio
     // qui n'a pas lieu serait faux dans l'autre sens.
     const annonce = annonceOuverture("Dubois");
     expect(annonce).toMatch(/retranscrit/i);
-    // Formulé à l'oral (« on n'enregistre pas ») plutôt qu'en registre écrit
+    // Formulé à l'oral (« on enregistre pas ») plutôt qu'en registre écrit
     // (« sans enregistrement »). C'est le fond qui compte : dire qu'aucun
     // audio n'est conservé.
-    expect(annonce).toMatch(/n'enregistre pas/i);
+    //
+    // Le motif porte sur « enregistre pas » et non sur « n'enregistre pas » :
+    // la négation sans « ne » est précisément le marqueur de familier qu'on a
+    // demandé, et un test qui épingle la LETTRE au lieu du FOND casse au
+    // premier ajustement de registre — ce qui est arrivé ici.
+    expect(annonce).toMatch(/enregistre pas/i);
   });
 
   test("elle propose la sortie — humain ou rappel", () => {

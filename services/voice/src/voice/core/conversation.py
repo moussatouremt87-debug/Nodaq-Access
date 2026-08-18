@@ -296,8 +296,8 @@ class DunningConversation:
             await self._say(
                 Intent.OFFER_INSTALMENTS,
                 {
-                    "versements": str(decision.instalments),
-                    "premier_versement_jours": str(decision.first_payment_in_days),
+                    "nombre_de_versements": str(decision.instalments),
+                    "jours_avant_le_premier_versement": str(decision.first_payment_in_days),
                 },
             )
         else:

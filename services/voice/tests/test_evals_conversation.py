@@ -258,7 +258,10 @@ async def test_instalment_granted_hands_over_the_granted_figures() -> None:
     assert decision.granted
     offer = next(a for a in phrasing.asked if a.intent is Intent.OFFER_INSTALMENTS)
     # What the core granted, not what the debtor asked for.
-    assert offer.facts == {"versements": "3", "premier_versement_jours": "10"}
+    assert offer.facts == {
+        "nombre_de_versements": "3",
+        "jours_avant_le_premier_versement": "10",
+    }
     assert conv.state.escalations == []
 
 

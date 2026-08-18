@@ -96,10 +96,18 @@ export function consigneFormulation(): string {
     "Tu parles. Tu n'écris pas. C'est une conversation, pas un courrier.",
     "",
     "STYLE — non négociable :",
-    "- Français PARLÉ. Phrases courtes, quinze mots maximum.",
+    "- Français PARLÉ et FAMILIER. Phrases courtes, quinze mots maximum.",
     `- ${PHRASES_MAX_PAR_REPLIQUE} phrases maximum par réplique. Souvent une ou deux suffisent.`,
     "- Marqueurs d'oral quand c'est naturel : « du coup », « en fait », « alors », « voilà ».",
     "- Tu RÉAGIS à ce que la personne vient de dire avant d'enchaîner.",
+    // Registre familier, dit en règles applicables plutôt qu'en adjectif. « Sois
+    // familier » ne produit rien de mesurable ; « supprime le ne de négation »
+    // change une réplique sur deux. Ce sont les marqueurs qui SÉPARENT le
+    // français parlé du français écrit lu à voix haute.
+    "- Négation SANS le « ne » : « je peux pas », « on va pas », jamais « je ne peux pas ».",
+    "- « on » plutôt que « nous » : « on peut faire », jamais « nous pouvons ».",
+    "- Formules courtes du quotidien : « ça marche », « pas de souci », « très bien », « d'accord ».",
+    "- Va droit au but : « vous pouvez régler quand ? », pas « pensez-vous pouvoir régler ».",
     // L'hésitation a été validée à l'oreille en conditions téléphoniques : la
     // même réplique hésitante sonne nettement plus humaine. Elle est demandée
     // ICI plutôt qu'écrite en dur dans une phrase, mais elle reste bornée aux
@@ -109,12 +117,23 @@ export function consigneFormulation(): string {
     "- N'hésite PAS en te présentant, ni en prenant congé : ça sonne fuyant.",
     "",
     "INTERDIT :",
+    "- Le TUTOIEMENT. Familier ne veut pas dire familier avec la personne : c'est « vous ».",
+    "- L'argot et le relâché : pas de « ouais », pas de « nickel », pas de « ça craint ».",
     "- Tournures administratives : « nous vous prions », « veuillez », « dans les meilleurs délais ».",
     "- Subjonctif soutenu.",
     "- Toute menace, allusion au contentieux, à un huissier, à une saisie, à un fichage.",
     "- Toute culpabilisation. Tu facilites le paiement, tu ne fais pas honte.",
     "",
     "CHIFFRES :",
+    // Demandé en CHIFFRES, et c'est une exigence de sécurité, pas de style.
+    // `chiffresInventes` compare des groupes de chiffres : un modèle qui écrit
+    // « trente jours » au lieu de « 30 jours » passe la garde sans être vu.
+    // L'alternative — reconnaître les nombres en toutes lettres — se heurte à
+    // « un »/« une », articles bien plus souvent que numéraux, et produirait
+    // des refus sur du français correct. On ferme donc le trou en amont.
+    // La synthèse vocale lit « 3 » comme « trois » : rien ne change à l'oreille.
+    "- Écris les nombres en CHIFFRES : « 3 fois », « 10 jours », « 400 euros ».",
+    "- Jamais en toutes lettres : ni « trois fois », ni « dix jours ».",
     "- Tu ne dis QUE les chiffres qui te sont fournis dans les faits.",
     "- Tu n'en calcules aucun, tu n'en arrondis aucun, tu n'en inventes aucun.",
     "- Aucun montant, aucune date, aucun délai qui ne soit pas dans les faits.",
@@ -126,8 +145,18 @@ export function consigneFormulation(): string {
 /** Ce que l'intention demande, en une phrase, pour le message utilisateur. */
 const OBJECTIF: Readonly<Record<IntentionReplique, string>> = {
   demander_date: "Demande une date de règlement précise. Une seule question, simple.",
+  // Le libellé insiste sur la RELATION entre les deux nombres, pas seulement
+  // sur leur valeur. Observé sur une vraie sortie de modèle : avec des faits
+  // nommés « versements » et « premier_versement_jours », il a produit « trois
+  // versements en 10 jours » — c'est-à-dire tout payer sous dix jours au lieu
+  // d'étaler. Les deux chiffres étaient pourtant exacts, donc la garde des
+  // chiffres inventés n'avait rien à redire : elle vérifie la PROVENANCE d'un
+  // nombre, jamais le sens de la phrase qui l'entoure.
   offrir_echelonnement:
-    "Propose l'échéancier accordé, en reprenant EXACTEMENT les chiffres des faits. Demande si ça convient.",
+    "Propose un paiement en plusieurs fois. Le nombre de versements et le délai " +
+    "avant le PREMIER versement sont dans les faits. Le délai ne concerne QUE le " +
+    "premier versement — ne dis jamais que tout doit être payé dans ce délai. " +
+    "Demande si ça convient.",
   refuser_et_transmettre:
     "Tu n'accordes rien. Dis que tu notes la demande et que tu la transmets, sans dire pourquoi tu ne peux pas.",
   recapituler_promesse:
@@ -175,7 +204,31 @@ export type NatureAnomalieReplique =
   | "registre_interdit"
   | "chiffre_invente"
   | "trop_de_phrases"
+  | "tutoiement"
   | "vide";
+
+/**
+ * Le tutoiement, et la raison pour laquelle il a sa propre garde.
+ *
+ * La consigne demande un registre FAMILIER — négation sans « ne », « on » pour
+ * « nous », phrases courtes. C'est ce qu'il faut pour ne pas sonner comme un
+ * courrier. Mais « familier » et « familier AVEC la personne » sont deux choses
+ * différentes, et un modèle à qui l'on demande de se détendre glisse volontiers
+ * de l'un à l'autre.
+ *
+ * Dans un appel de recouvrement, tutoyer quelqu'un à qui l'on réclame de
+ * l'argent n'est pas une maladresse de ton : c'est une familiarité imposée à
+ * une personne en position basse, et ça se retourne immédiatement contre
+ * l'entreprise qui appelle.
+ *
+ * D'où une garde plutôt qu'une ligne de consigne de plus. Assouplir le registre
+ * sans borner l'écart aurait été assouplir une assertion pour obtenir le ton
+ * voulu.
+ */
+// `te` a été ajouté après coup : la première version laissait passer « Ça te
+// va comme ça ? », attrapé par son propre test. Une garde qui ne couvre que
+// les formes auxquelles on a pensé donne surtout l'illusion d'être couvert.
+const TUTOIEMENT = /(^|[^a-zà-ÿ])(tu|te|toi|ton|ta|tes|t'as|t'es)([^a-zà-ÿ]|$)/i;
 
 export interface AnomalieReplique {
   readonly nature: NatureAnomalieReplique;
@@ -249,6 +302,11 @@ export function verifierReplique(replique: string, faits: FaitsReplique): Anomal
     anomalies.push({ nature: "chiffre_invente", detail: `« ${c} » ne vient d'aucun fait` });
   }
 
+  const tutoie = TUTOIEMENT.exec(texte);
+  if (tutoie) {
+    anomalies.push({ nature: "tutoiement", detail: `« ${tutoie[2]} »` });
+  }
+
   const phrases = compterPhrases(texte);
   if (phrases > PHRASES_MAX_PAR_REPLIQUE) {
     anomalies.push({
@@ -276,27 +334,30 @@ export function verifierReplique(replique: string, faits: FaitsReplique): Anomal
 export const REPLIQUES_DE_SECOURS: Readonly<
   Record<IntentionReplique, (faits: FaitsReplique) => string>
 > = {
-  demander_date: () => "Alors, quel jour exactement je peux noter ?",
+  demander_date: () => "Alors, vous pouvez régler quel jour ?",
 
   offrir_echelonnement: (f) =>
-    `Alors, on peut faire ${f["versements"] ?? ""} fois. ` +
-    `Le premier sous ${f["premier_versement_jours"] ?? ""} jours. Ça vous irait ?`,
+    `Alors, on peut faire ${f["nombre_de_versements"] ?? ""} fois. ` +
+    `Le premier dans ${f["jours_avant_le_premier_versement"] ?? ""} jours. Ça vous va ?`,
 
   refuser_et_transmettre: () =>
-    "Écoutez, je note votre demande et je la transmets. On revient vers vous là-dessus.",
+    "Écoutez, je note et je transmets. On revient vers vous là-dessus.",
 
   recapituler_promesse: (f) =>
     `Alors je résume. Vous réglez ${f["montant"] ?? ""} le ${f["date"] ?? ""}. C'est bien ça ?`,
 
   clore_contestation: () =>
-    "Ah, d'accord. Écoutez, je note, et je transmets. Quelqu'un revient vers vous. Bonne journée.",
+    "Ah d'accord. Écoutez, je note et je transmets. Quelqu'un revient vers vous. Bonne journée.",
 
   clore_paiement_annonce: () =>
-    "Ah, très bien. Du coup je note, et on vérifie de notre côté. Merci, bonne journée.",
+    "Ah très bien. Du coup je note, et on vérifie de notre côté. Merci, bonne journée.",
 
   clore_rappel_humain: () =>
     "Bien sûr. Alors je note, et quelqu'un vous rappelle. Merci, bonne journée.",
 
+  // « on ne vous rappellera plus » → « on vous rappellera plus » : c'est la
+  // négation sans « ne », le marqueur qui sépare vraiment le parlé de l'écrit
+  // lu à voix haute. Le sens de l'engagement ne bouge pas d'un iota.
   clore_opposition: () =>
-    "D'accord, c'est noté. On ne vous rappellera plus. Merci, et bonne journée.",
+    "D'accord, c'est noté. On vous rappellera plus. Merci, et bonne journée.",
 };

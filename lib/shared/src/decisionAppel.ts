@@ -243,10 +243,14 @@ export function annonceOuverture(nomEntreprise: string): string {
   //
   // Le contenu légal reste entier : assistant automatique (AI Act),
   // transcription, porte de sortie. C'est la FORME qui change, pas le fond.
+  // Registre familier, comme le reste des répliques (voir `formulation.ts`) :
+  // négation sans « ne », « on » plutôt que « nous ». L'annonce est la première
+  // chose entendue — si elle sonne écrite, tout ce qui suit sonne écrit avec
+  // elle, quel que soit le soin mis à la suite.
   return (
     `Bonjour ! Je suis l'assistant automatique de ${nomEntreprise}. ` +
     `Alors, je vous préviens tout de suite : notre échange est retranscrit. ` +
-    `Par contre on n'enregistre pas l'audio. ` +
+    `Par contre on enregistre pas l'audio. ` +
     `Et si vous préférez parler à quelqu'un, vous me le dites.`
   );
 }
