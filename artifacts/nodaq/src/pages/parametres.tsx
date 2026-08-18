@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ObjectifsParametres } from '@/components/objectifs-parametres';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Building2, Bell, Puzzle, Save, UserCog, Mail, Trash2, Clock, ShieldCheck } from 'lucide-react';
+import { Building2, Bell, Save, UserCog, Mail, Trash2, Clock, ShieldCheck } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   useListMembres,
@@ -37,9 +37,17 @@ type Settings = Record<string, string>;
 
 const TABS = [
   { id: 'notifications', label: 'Notifications', icon: Bell },
-  { id: 'modules',       label: 'Modules',       icon: Puzzle },
   { id: 'membres',       label: 'Membres & accès', icon: UserCog },
 ];
+
+type RoleInvitable = 'OWNER' | 'MEMBER' | 'ACCOUNTANT' | 'VIEWER';
+
+const ROLE_LABELS: Record<string, string> = {
+  OWNER: 'Propriétaire',
+  MEMBER: 'Membre',
+  ACCOUNTANT: 'Comptable',
+  VIEWER: 'Tiers — lecture seule',
+};
 
 function useSettings() {
   return useQuery<Settings>({
@@ -86,62 +94,6 @@ function Toggle({ checked, onChange, label, description }: {
   );
 }
 
-function ModuleCard({ icon: Icon, label, description, enabled, onChange }: {
-  icon: React.ElementType; label: string; description: string;
-  enabled: boolean; onChange: (v: boolean) => void;
-}) {
-  return (
-    <div className={cn(
-      'rounded-xl border p-4 flex items-start gap-4 transition-colors',
-      enabled ? 'border-primary/25 bg-primary/5' : 'border-card-border bg-card',
-    )}>
-      <div className={cn(
-        'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg',
-        enabled ? 'bg-primary text-primary-foreground' : 'bg-sidebar-accent text-sidebar-foreground',
-      )}>
-        <Icon className="h-5 w-5" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="font-medium text-foreground text-sm">{label}</div>
-        <div className="text-xs text-muted-foreground mt-0.5">{description}</div>
-      </div>
-      <button
-        onClick={() => onChange(!enabled)}
-        className={cn(
-          'relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 mt-0.5',
-          enabled ? 'bg-primary' : 'bg-muted',
-        )}
-      >
-        <span className={cn(
-          'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
-          enabled ? 'translate-x-6' : 'translate-x-1',
-        )} />
-      </button>
-    </div>
-  );
-}
-
-/** Les rôles qu'une invitation peut accorder — miroir de l'enum du serveur. */
-type RoleInvitable = 'OWNER' | 'MEMBER' | 'ACCOUNTANT' | 'VIEWER';
-
-const ROLE_LABELS: Record<string, string> = {
-  OWNER: 'Propriétaire',
-  MEMBER: 'Membre',
-  ACCOUNTANT: 'Comptable',
-  VIEWER: 'Tiers — lecture seule',
-};
-
-/**
- * US-A7.3 — l'échéance d'un membre, modifiable sur place.
- *
- * Un contrat qui se prolonge se corrige ici : sans cela il faudrait révoquer
- * puis réinviter, ce qui casse l'historique et fait retraverser tout
- * l'enrôlement à quelqu'un qui n'est jamais parti.
- *
- * `null` retire l'échéance (le salarié devient permanent) — le serveur refuse
- * ce retrait pour un tiers de confiance, dont l'accès doit toujours en porter
- * une.
- */
 function EcheanceEditable({
   membreId,
   expiresAt,
@@ -596,9 +548,6 @@ export default function ParametresPage() {
   const [notifAction, setNotifAction] = useState(true);
   const [notifProspect, setNotifProspect] = useState(false);
   const [notifEcheance, setNotifEcheance] = useState(true);
-  const [modClasseur, setModClasseur] = useState(true);
-  const [modMarge, setModMarge] = useState(true);
-  const [modRapport, setModRapport] = useState(true);
 
   // Populate form from server
   useEffect(() => {
@@ -607,9 +556,6 @@ export default function ParametresPage() {
       setNotifAction(data['notif.actionAvalider'] !== 'false');
       setNotifProspect(data['notif.prospectQualifie'] === 'true');
       setNotifEcheance(data['notif.echeanceFiscale'] !== 'false');
-      setModClasseur(data['modules.classeur'] !== 'false');
-      setModMarge(data['modules.marge'] !== 'false');
-      setModRapport(data['modules.rapport'] !== 'false');
     }
   }, [data]);
 
@@ -639,9 +585,6 @@ export default function ParametresPage() {
       'notif.actionAvalider': String(notifAction),
       'notif.prospectQualifie': String(notifProspect),
       'notif.echeanceFiscale': String(notifEcheance),
-      'modules.classeur': String(modClasseur),
-      'modules.marge': String(modMarge),
-      'modules.rapport': String(modRapport),
     };
     saveMut.mutate(payload);
   };
@@ -732,35 +675,6 @@ export default function ParametresPage() {
                     description="Rappel 30 jours avant chaque échéance fiscale"
                   />
                 </div>
-              </div>
-            )}
-
-            {activeTab === 'modules' && (
-              <div className="max-w-2xl space-y-4">
-                <p className="text-sm text-muted-foreground mb-2">
-                  Activez ou désactivez les modules de votre plateforme. Les modules désactivés restent disponibles dans la navigation mais leurs données sont masquées.
-                </p>
-                <ModuleCard
-                  icon={Building2}
-                  label="Classeur"
-                  description="Gestion et organisation des documents par catégorie"
-                  enabled={modClasseur}
-                  onChange={setModClasseur}
-                />
-                <ModuleCard
-                  icon={Building2}
-                  label="Marge"
-                  description={`Analyse de la rentabilité par ${words.singular} et par période`}
-                  enabled={modMarge}
-                  onChange={setModMarge}
-                />
-                <ModuleCard
-                  icon={Building2}
-                  label="Rapport mensuel"
-                  description="Vue d'ensemble mensuelle de l'activité commerciale et financière"
-                  enabled={modRapport}
-                  onChange={setModRapport}
-                />
               </div>
             )}
 

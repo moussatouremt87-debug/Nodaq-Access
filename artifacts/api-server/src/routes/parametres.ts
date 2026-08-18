@@ -14,9 +14,12 @@ const DEFAULTS: Record<string, string> = {
   "notif.actionAvalider": "true",
   "notif.prospectQualifie": "false",
   "notif.echeanceFiscale": "true",
-  "modules.classeur": "true",
-  "modules.marge": "true",
-  "modules.rapport": "true",
+  // Les trois bascules « modules.* » ont été retirées : elles étaient
+  // écrites en base et LUES PAR PERSONNE, alors que l'écran Paramètres
+  // promettait que « les modules désactivés restent disponibles dans la
+  // navigation mais leurs données sont masquées ». Le produit modélise déjà
+  // les modules dans `moduleCatalog.ts` — autrement, et mieux. Une seule
+  // vérité, et pas de promesse qui ne soit tenue par personne.
 };
 
 const SetSettingsBody = z.record(z.string(), z.string());
