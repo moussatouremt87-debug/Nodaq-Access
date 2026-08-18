@@ -1178,6 +1178,43 @@ paths:
         "404":
           description: Not found
 
+  /membres/{id}/echeance:
+    patch:
+      operationId: programmerEcheanceMembre
+      tags: [membres]
+      summary: >-
+        Programme (ou retire) la fin d'accès d'un membre (OWNER only) — US-A7.3.
+        Distincte d'une révocation immédiate : la date est connue à l'avance et
+        s'applique toute seule le moment venu.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EcheanceMembreBody"
+      responses:
+        "200":
+          description: Échéance mise à jour
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Membre"
+        "400":
+          description: Date absente, illisible ou déjà passée
+        "403":
+          description: >-
+            Cible = dernier OWNER du tenant (une révocation programmée est une
+            révocation différée, la même protection s'applique), ou tentative de
+            retirer l'échéance d'un VIEWER.
+        "404":
+          description: Not found
+
   /membres/{id}:
     delete:
       operationId: revoquerMembre
@@ -2572,8 +2609,22 @@ components:
           format: date-time
           description: >-
             Échéance de l'accès accordé. OBLIGATOIRE pour le rôle VIEWER (400
-            sinon), ignorée pour les autres rôles — un accès ouvert à quelqu'un
-            d'extérieur à l'entreprise ne doit pas pouvoir rester ouvert par oubli.
+            sinon) — un accès ouvert à quelqu'un d'extérieur à l'entreprise ne
+            doit pas pouvoir rester ouvert par oubli. FACULTATIVE pour les autres
+            rôles depuis US-A7.3 : une fin de contrat saisonnier se connaît à
+            l'avance et se programme dès l'invitation.
+
+    EcheanceMembreBody:
+      type: object
+      required: [expiresAt]
+      properties:
+        expiresAt:
+          type: ["string", "null"]
+          format: date-time
+          description: >-
+            Date de fin d'accès, dans le futur. `null` retire l'échéance (accès
+            permanent) — refusé pour un VIEWER, dont l'accès doit toujours en
+            porter une (US-A5.4).
 
     RoleMembreBody:
       type: object

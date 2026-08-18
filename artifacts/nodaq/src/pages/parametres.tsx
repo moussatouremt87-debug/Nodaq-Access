@@ -8,6 +8,7 @@ import {
   useInviterMembre,
   useChangerRoleMembre,
   useRevoquerMembre,
+  useProgrammerEcheanceMembre,
   getListMembresQueryKey,
 } from '@workspace/api-client-react';
 import type { Membre } from '@workspace/api-client-react';
@@ -122,21 +123,57 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 /**
- * Échéance d'un accès tiers (US-A5.4). Un accès déjà expiré est signalé
- * explicitement plutôt que masqué : l'adhésion existe toujours en base, et
- * l'artisan doit comprendre pourquoi la personne ne peut plus entrer.
+ * US-A7.3 — l'échéance d'un membre, modifiable sur place.
+ *
+ * Un contrat qui se prolonge se corrige ici : sans cela il faudrait révoquer
+ * puis réinviter, ce qui casse l'historique et fait retraverser tout
+ * l'enrôlement à quelqu'un qui n'est jamais parti.
+ *
+ * `null` retire l'échéance (le salarié devient permanent) — le serveur refuse
+ * ce retrait pour un tiers de confiance, dont l'accès doit toujours en porter
+ * une.
  */
-function EcheanceTiers({ expiresAt }: { expiresAt: string | null }) {
-  if (!expiresAt) return null;
-  const date = new Date(expiresAt);
-  const expire = date.getTime() <= Date.now();
+function EcheanceEditable({
+  membreId,
+  expiresAt,
+  onErreur,
+}: {
+  membreId: string;
+  expiresAt: string | null;
+  onErreur: (message: string) => void;
+}) {
+  const qc = useQueryClient();
+  const programmer = useProgrammerEcheanceMembre({
+    mutation: {
+      onSuccess: () => qc.invalidateQueries({ queryKey: getListMembresQueryKey() }),
+      onError: (err: Error) => onErreur(err.message),
+    },
+  });
+
+  // Un `input[type=date]` veut « AAAA-MM-JJ » en composantes LOCALES : passer
+  // par `toISOString()` décalerait d'un jour le soir en France.
+  const valeur = expiresAt ? toDateString(new Date(expiresAt)) : '';
+  const expire = expiresAt !== null && new Date(expiresAt).getTime() <= Date.now();
+
   return (
-    <span
-      className={`text-[11px] shrink-0 whitespace-nowrap ${expire ? 'text-destructive' : 'text-muted-foreground'}`}
-    >
-      {expire ? 'Expiré le ' : "Jusqu'au "}
-      {date.toLocaleDateString('fr-FR')}
-    </span>
+    <div className="flex items-center gap-1 shrink-0">
+      <Input
+        type="date"
+        value={valeur}
+        min={toDateString(new Date(Date.now() + 86_400_000))}
+        disabled={programmer.isPending}
+        className={`h-8 w-36 text-xs ${expire ? 'border-destructive text-destructive' : ''}`}
+        title={expire ? 'Accès expiré' : "Fin d'accès programmée"}
+        onChange={e => {
+          const v = e.target.value;
+          programmer.mutate({
+            id: membreId,
+            // Fin de JOURNÉE : « jusqu'au 31 » doit inclure le 31.
+            data: { expiresAt: v ? new Date(`${v}T23:59:59`).toISOString() : null },
+          });
+        }}
+      />
+    </div>
   );
 }
 
@@ -186,7 +223,7 @@ function InviteForm() {
         email: trimmed,
         role,
         ...(libelle.trim() ? { libelle: libelle.trim() } : {}),
-        ...(estTiers && echeanceIso ? { accesExpireAt: echeanceIso } : {}),
+        ...(echeanceIso ? { accesExpireAt: echeanceIso } : {}),
       },
     });
   };
@@ -241,10 +278,16 @@ function InviteForm() {
             placeholder="ex. Conjoint collaborateur, Associé fondateur"
           />
         </div>
-        {estTiers && (
-          <div className="space-y-1.5 sm:w-56">
-            <Label htmlFor="invite-echeance">Accès jusqu'au</Label>
-            <Input
+        {/* US-A7.3 — proposé pour TOUS les rôles : une fin de contrat
+            saisonnier se connaît d'avance et se programme dès l'invitation.
+            Obligatoire pour le seul tiers de confiance (US-A5.4) ; ailleurs le
+            libellé dit « facultatif », pour ne pas donner l'impression d'une
+            étape de plus (AC1). */}
+        <div className="space-y-1.5 sm:w-56">
+          <Label htmlFor="invite-echeance">
+            Accès jusqu'au{estTiers ? '' : ' (facultatif)'}
+          </Label>
+          <Input
               id="invite-echeance"
               type="date"
               value={accesExpireAt}
@@ -256,8 +299,7 @@ function InviteForm() {
               min={toDateString(new Date(Date.now() + 86_400_000))}
               onChange={e => setAccesExpireAt(e.target.value)}
             />
-          </div>
-        )}
+        </div>
       </div>
       <p className="text-xs text-muted-foreground mt-3">
         Un membre voit les {words.plural}, devis et contrats sans les montants. Un comptable voit également les données financières (factures, marge, échéancier fiscal). Un copropriétaire a l'accès complet, à égalité — jamais de hiérarchie entre propriétaires.
@@ -355,6 +397,17 @@ function MembresTab() {
               />
               {m.role === 'OWNER' ? (
                 <>
+                  {/* Le dernier propriétaire ne se voit proposer ni révocation
+                      ni programmation : le serveur refuse les deux, et offrir
+                      un contrôle qui échouera n'aide personne. Même condition
+                      que le bouton de révocation, déjà en place. */}
+                  {nbOwners > 1 && (
+                    <EcheanceEditable
+                      membreId={m.id}
+                      expiresAt={m.expiresAt ?? null}
+                      onErreur={msg => toast({ title: "Échéance refusée", description: msg, variant: 'destructive' })}
+                    />
+                  )}
                   <RoleBadge role={m.role} />
                   {nbOwners > 1 && (
                     <Button
@@ -374,7 +427,11 @@ function MembresTab() {
                    l'essentiel : jusqu'à quand court l'accès, et de quoi le
                    fermer tout de suite. */
                 <>
-                  <EcheanceTiers expiresAt={m.expiresAt ?? null} />
+                  <EcheanceEditable
+                    membreId={m.id}
+                    expiresAt={m.expiresAt ?? null}
+                    onErreur={msg => toast({ title: "Échéance refusée", description: msg, variant: 'destructive' })}
+                  />
                   <RoleBadge role={m.role} />
                   <Button
                     variant="ghost"
@@ -387,6 +444,13 @@ function MembresTab() {
                 </>
               ) : (
                 <>
+                  {/* US-A7.3 — LE cas de cette story : un saisonnier dont la
+                      fin de contrat est connue d'avance. */}
+                  <EcheanceEditable
+                    membreId={m.id}
+                    expiresAt={m.expiresAt ?? null}
+                    onErreur={msg => toast({ title: "Échéance refusée", description: msg, variant: 'destructive' })}
+                  />
                   <Select
                     value={m.role}
                     onValueChange={v => changerRole.mutate({ id: m.id, data: { role: v as 'MEMBER' | 'ACCOUNTANT' } })}

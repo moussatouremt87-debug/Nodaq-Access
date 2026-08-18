@@ -13,6 +13,6 @@ export interface InviteMembreBody {
   role: InviteMembreBodyRole;
   /** Qualificatif libre facultatif (ex. "Conjoint collaborateur", "Associé fondateur"). */
   libelle?: string;
-  /** Échéance de l'accès accordé. OBLIGATOIRE pour le rôle VIEWER (400 sinon), ignorée pour les autres rôles — un accès ouvert à quelqu'un d'extérieur à l'entreprise ne doit pas pouvoir rester ouvert par oubli. */
+  /** Échéance de l'accès accordé. OBLIGATOIRE pour le rôle VIEWER (400 sinon) — un accès ouvert à quelqu'un d'extérieur à l'entreprise ne doit pas pouvoir rester ouvert par oubli. FACULTATIVE pour les autres rôles depuis US-A7.3 : une fin de contrat saisonnier se connaît à l'avance et se programme dès l'invitation. */
   accesExpireAt?: Date;
 }

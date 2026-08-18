@@ -51,6 +51,7 @@ import type {
   DevisUpdate,
   Echeance,
   EcheanceInput,
+  EcheanceMembreBody,
   EcheanceUpdate,
   Facture,
   FactureInput,
@@ -4611,6 +4612,78 @@ export const useChangerRoleMembre = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getChangerRoleMembreMutationOptions(options));
+    }
+
+export const getProgrammerEcheanceMembreUrl = (id: string,) => {
+
+
+
+
+  return `/api/membres/${id}/echeance`
+}
+
+/**
+ * @summary Programme (ou retire) la fin d'accès d'un membre (OWNER only) — US-A7.3. Distincte d'une révocation immédiate : la date est connue à l'avance et s'applique toute seule le moment venu.
+ */
+export const programmerEcheanceMembre = async (id: string,
+    echeanceMembreBody: EcheanceMembreBody, options?: Parameters<typeof customFetch>[1]): Promise<Membre> => {
+
+  return customFetch<Membre>(getProgrammerEcheanceMembreUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(echeanceMembreBody)
+  }
+);}
+
+
+
+
+
+export const getProgrammerEcheanceMembreMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof programmerEcheanceMembre>>, TError,{id: string;data: BodyType<EcheanceMembreBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof programmerEcheanceMembre>>, TError,{id: string;data: BodyType<EcheanceMembreBody>}, TContext> => {
+
+const mutationKey = ['programmerEcheanceMembre'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof programmerEcheanceMembre>>, {id: string;data: BodyType<EcheanceMembreBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  programmerEcheanceMembre(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ProgrammerEcheanceMembreMutationResult = NonNullable<Awaited<ReturnType<typeof programmerEcheanceMembre>>>
+    export type ProgrammerEcheanceMembreMutationBody = BodyType<EcheanceMembreBody>
+    export type ProgrammerEcheanceMembreMutationError = ErrorType<void>
+
+    /**
+ * @summary Programme (ou retire) la fin d'accès d'un membre (OWNER only) — US-A7.3. Distincte d'une révocation immédiate : la date est connue à l'avance et s'applique toute seule le moment venu.
+ */
+export const useProgrammerEcheanceMembre = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof programmerEcheanceMembre>>, TError,{id: string;data: BodyType<EcheanceMembreBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof programmerEcheanceMembre>>,
+        TError,
+        {id: string;data: BodyType<EcheanceMembreBody>},
+        TContext
+      > => {
+      return useMutation(getProgrammerEcheanceMembreMutationOptions(options));
     }
 
 export const getRevoquerMembreUrl = (id: string,) => {
