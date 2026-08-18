@@ -393,7 +393,14 @@ export function texteBrut(pdf: Buffer): string {
     } catch {
       // Flux non compressé ou binaire — polices, images : rien à en tirer.
     }
-    i = fin + 1;
+    // Après « endstream », et pas `fin + 1` : le mot « endstream » CONTIENT
+    // « stream ». Reprendre la recherche un octet après son début la faisait
+    // re-tomber dedans, puis encadrer le flux suivant à partir d'un mauvais
+    // décalage — l'inflate échouait, le `catch` l'avalait, et seul le PREMIER
+    // flux du document était réellement lu. Un PDF de deux pages ne rendait
+    // donc que la première, en silence : une assertion `not.toContain` sur la
+    // page 2 passait sans rien vérifier.
+    i = fin + "endstream".length;
   }
 
   const decodeHex = (hex: string): string => {

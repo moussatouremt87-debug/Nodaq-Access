@@ -192,3 +192,4 @@ export * from "./companyProfile.js";
 export * from "./retardPaiement.js";
 export * from "./capaciteEquipe.js";
 export * from "./habilitations.js";
+export * from "./souverainete.js";

@@ -57,3 +57,7 @@ attached_assets/
 .env
 .env.*
 !.env.example
+
+# Front bundlé recopié dans le paquet API par `build.mjs` — sortie de build,
+# au même titre que `dist`.
+artifacts/api-server/public
