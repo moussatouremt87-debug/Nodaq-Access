@@ -1364,49 +1364,53 @@ export const ListMembresResponse = zod.object({
   "id": zod.string(),
   "email": zod.string(),
   "nom": zod.string(),
-  "role": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT']),
+  "role": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT', 'VIEWER']),
   "libelle": zod.string().nullish().describe('Qualificatif libre affiché à côté du rôle (ex. \"Conjoint collaborateur\"). N\'affecte jamais les droits.'),
+  "expiresAt": zod.coerce.date().nullish().describe('Échéance de l\'accès (US-A5.4). null = permanent, ce que sont toutes les adhésions sauf celle d\'un tiers de confiance (VIEWER).'),
   "createdAt": zod.coerce.date()
 })),
   "invitationsEnAttente": zod.array(zod.object({
   "id": zod.string(),
   "email": zod.string(),
-  "role": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT']),
+  "role": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT', 'VIEWER']),
   "libelle": zod.string().nullish(),
-  "expiresAt": zod.coerce.date(),
+  "expiresAt": zod.coerce.date().describe('Validité du LIEN d\'invitation (7 jours) — à ne pas confondre avec accesExpireAt.'),
+  "accesExpireAt": zod.coerce.date().nullish().describe('Échéance de l\'ACCÈS une fois l\'invitation acceptée (US-A5.4), reportée sur le membership. Obligatoire pour un VIEWER.'),
   "createdAt": zod.coerce.date()
 }))
 })
 
 
 /**
- * @summary Invite a collaborator (OWNER only) — role restricted to MEMBER/ACCOUNTANT
+ * @summary Invite a collaborator (OWNER only) — OWNER role allowed, grants equal authority
  */
 export const InviterMembreBody = zod.object({
   "email": zod.string(),
-  "role": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT']).describe('OWNER crée un co-propriétaire à égalité — réservé aux OWNER existants (route ownerOnly).'),
-  "libelle": zod.string().optional().describe('Qualificatif libre facultatif (ex. \"Conjoint collaborateur\", \"Associé fondateur\").')
+  "role": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT', 'VIEWER']).describe('OWNER crée un co-propriétaire à égalité — réservé aux OWNER existants (route ownerOnly). VIEWER crée un tiers de confiance en lecture seule (US-A5.4) et exige alors accesExpireAt.'),
+  "libelle": zod.string().optional().describe('Qualificatif libre facultatif (ex. \"Conjoint collaborateur\", \"Associé fondateur\").'),
+  "accesExpireAt": zod.coerce.date().optional().describe('Échéance de l\'accès accordé. OBLIGATOIRE pour le rôle VIEWER (400 sinon), ignorée pour les autres rôles — un accès ouvert à quelqu\'un d\'extérieur à l\'entreprise ne doit pas pouvoir rester ouvert par oubli.')
 })
 
 export const InviterMembreResponse = zod.object({
   "id": zod.string(),
   "email": zod.string(),
-  "role": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT']),
+  "role": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT', 'VIEWER']),
   "libelle": zod.string().nullish(),
-  "expiresAt": zod.coerce.date(),
+  "expiresAt": zod.coerce.date().describe('Validité du LIEN d\'invitation (7 jours) — à ne pas confondre avec accesExpireAt.'),
+  "accesExpireAt": zod.coerce.date().nullish().describe('Échéance de l\'ACCÈS une fois l\'invitation acceptée (US-A5.4), reportée sur le membership. Obligatoire pour un VIEWER.'),
   "createdAt": zod.coerce.date()
 })
 
 
 /**
- * @summary Change a member's role (OWNER only) — cannot target or grant OWNER
+ * @summary Change a member's role or libelle (OWNER only) — cannot promote to or demote from OWNER
  */
 export const ChangerRoleMembreParams = zod.object({
   "id": zod.coerce.string()
 })
 
 export const ChangerRoleMembreBody = zod.object({
-  "role": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT']).describe('OWNER n\'est accepté ici que pour un membre déjà OWNER (mise à jour du libellé sans changement de rôle) — la promotion d\'un MEMBER\/ACCOUNTANT en OWNER via cette route est toujours refusée par le serveur.'),
+  "role": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT', 'VIEWER']).describe('OWNER n\'est accepté ici que pour un membre déjà OWNER (mise à jour du libellé sans changement de rôle) — la promotion d\'un MEMBER\/ACCOUNTANT en OWNER via cette route est toujours refusée par le serveur.'),
   "libelle": zod.string().nullish().describe('Qualificatif libre facultatif ; absent = inchangé, null = effacé.')
 })
 
@@ -1414,14 +1418,15 @@ export const ChangerRoleMembreResponse = zod.object({
   "id": zod.string(),
   "email": zod.string(),
   "nom": zod.string(),
-  "role": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT']),
+  "role": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT', 'VIEWER']),
   "libelle": zod.string().nullish().describe('Qualificatif libre affiché à côté du rôle (ex. \"Conjoint collaborateur\"). N\'affecte jamais les droits.'),
+  "expiresAt": zod.coerce.date().nullish().describe('Échéance de l\'accès (US-A5.4). null = permanent, ce que sont toutes les adhésions sauf celle d\'un tiers de confiance (VIEWER).'),
   "createdAt": zod.coerce.date()
 })
 
 
 /**
- * @summary Revoke a member's access (OWNER only) — cannot target OWNER
+ * @summary Revoke a member's access (OWNER only) — cannot revoke the last remaining OWNER
  */
 export const RevoquerMembreParams = zod.object({
   "id": zod.coerce.string()
@@ -1439,7 +1444,8 @@ export const ApercuInvitationParams = zod.object({
 
 export const ApercuInvitationResponse = zod.object({
   "tenantNom": zod.string(),
-  "roleOffert": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT']),
+  "roleOffert": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT', 'VIEWER']),
+  "accesExpireAt": zod.coerce.date().nullish().describe('Échéance de l\'accès proposé — affichée avant acceptation (US-A5.4).'),
   "email": zod.string(),
   "compteExistant": zod.boolean(),
   "expire": zod.boolean(),
@@ -1466,7 +1472,7 @@ export const AccepterInvitationBody = zod.object({
 export const AccepterInvitationResponse = zod.object({
   "userId": zod.string(),
   "tenantId": zod.string(),
-  "role": zod.enum(['MEMBER', 'ACCOUNTANT'])
+  "role": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT', 'VIEWER'])
 })
 
 

@@ -49,6 +49,7 @@ import { resolveTenant } from "../middleware/resolveTenant";
 import { requireMembership } from "../middleware/requireMembership";
 import { requireRole } from "../middleware/requireRole";
 import { requireMfaVerified } from "../middleware/requireMfaVerified";
+import { lectureSeuleMethode, lectureSeulePerimetre } from "../middleware/lectureSeule";
 import { FINANCIAL_ROLES } from "@nodaq/shared";
 import membresRouter, { membresPublicRouter } from "./membres";
 import mfaRouter from "./mfa";
@@ -79,7 +80,15 @@ router.use([requireAuth], mfaRouter);
 // requireMfaVerified en dernier : bloque toute session OWNER/ACCOUNTANT sans
 // second facteur prouvé CETTE session, avant qu'elle n'atteigne quoi que ce
 // soit — ownerOnly et financierOnly en héritent en composant `biz`.
-const biz: RequestHandler[] = [requireAuth, resolveTenant, requireMembership, requireMfaVerified];
+// US-A5.4 — les deux gardes du tiers de confiance viennent APRÈS
+// requireMembership (qui vient de relire le rôle en base) et sont posées ici,
+// dans `biz`, plutôt que sur un sous-ensemble de routeurs : c'est ce qui les
+// rend valables pour les 97 routes mutantes actuelles ET pour celles qui
+// n'existent pas encore. Voir middleware/lectureSeule.ts.
+const biz: RequestHandler[] = [
+  requireAuth, resolveTenant, requireMembership, requireMfaVerified,
+  lectureSeuleMethode, lectureSeulePerimetre,
+];
 const ownerOnly: RequestHandler[] = [...biz, requireRole(["OWNER"])];
 // Routeurs EXCLUSIVEMENT financiers — bloqués en entier pour un MEMBER, pas
 // seulement masqués : contrairement à affaires/contrats (voir plus bas), ils

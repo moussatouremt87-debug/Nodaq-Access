@@ -13,4 +13,5 @@ export const InvitationEnAttenteRole = {
   OWNER: 'OWNER',
   MEMBER: 'MEMBER',
   ACCOUNTANT: 'ACCOUNTANT',
+  VIEWER: 'VIEWER',
 } as const;

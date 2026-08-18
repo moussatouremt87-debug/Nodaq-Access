@@ -13,6 +13,12 @@ export interface InvitationEnAttente {
   role: InvitationEnAttenteRole;
   /** @nullable */
   libelle?: string | null;
+  /** Validité du LIEN d'invitation (7 jours) — à ne pas confondre avec accesExpireAt. */
   expiresAt: Date;
+  /**
+     * Échéance de l'ACCÈS une fois l'invitation acceptée (US-A5.4), reportée sur le membership. Obligatoire pour un VIEWER.
+     * @nullable
+     */
+  accesExpireAt?: Date | null;
   createdAt: Date;
 }

@@ -10,6 +10,11 @@ import type { InvitationApercuRoleOffert } from './invitationApercuRoleOffert';
 export interface InvitationApercu {
   tenantNom: string;
   roleOffert: InvitationApercuRoleOffert;
+  /**
+     * Échéance de l'accès proposé — affichée avant acceptation (US-A5.4).
+     * @nullable
+     */
+  accesExpireAt?: Date | null;
   email: string;
   compteExistant: boolean;
   expire: boolean;
