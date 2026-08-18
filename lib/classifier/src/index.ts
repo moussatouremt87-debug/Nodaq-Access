@@ -18,6 +18,20 @@ export const ClassifyInput = z.object({
       public: z.boolean().optional(),
       /** Caller cannot tell — allow the sovereign LLM fallback to decide. */
       ambiguous: z.boolean().optional(),
+      /**
+       * Le tenant exerce une profession à secret professionnel (US-A7.2).
+       *
+       * Renverse le DÉFAUT : sans autre signal, la catégorie devient
+       * `confidentiel` au lieu d'`interne`. Les marqueurs ci-dessous sont un
+       * filet à trous — aucune liste de mots n'attrapera « M. Martin,
+       * lombalgie, arrêt 15 jours ». La seule garantie qui tienne pour ces
+       * professions est d'inverser la charge : rien ne sort à moins d'être
+       * manifestement non sensible.
+       *
+       * Résolu par l'APPELANT depuis le secteur du tenant : ce paquet reste
+       * pur, il ne lit aucune base.
+       */
+      secretProfessionnel: z.boolean().optional(),
     })
     .optional(),
 });
@@ -66,6 +80,43 @@ const CONTRACT_KEYWORDS = [
 
 const BANK_KEYWORDS = ["relevé d'identité bancaire", "rib "];
 
+/**
+ * Marqueurs de SECRET PROFESSIONNEL — santé et droit (US-A7.2).
+ *
+ * Volontairement SPÉCIFIQUES, et c'est le point délicat de cette liste. Le
+ * mot « diagnostic » n'y est PAS : un garagiste qui écrit « diagnostic
+ * moteur », un dépanneur qui écrit « diagnostic panne », verraient leur
+ * assistant se fermer sans raison. Une liste de mots trop large ne protège
+ * personne, elle casse l'outil pour les autres — et un utilisateur dont
+ * l'assistant refuse tout finit par contourner l'outil, ce qui protège moins
+ * que rien.
+ *
+ * Ces marqueurs valent pour TOUS les secteurs : une entreprise du bâtiment
+ * qui reçoit le certificat médical d'un salarié détient de la donnée de santé
+ * au même titre qu'un cabinet.
+ */
+const SECRET_PROFESSIONNEL_KEYWORDS = [
+  // Santé
+  "secret médical",
+  "dossier médical",
+  "certificat médical",
+  "ordonnance médicale",
+  "prescription médicale",
+  "compte rendu opératoire",
+  "antécédents médicaux",
+  "arrêt maladie",
+  "médecin traitant",
+  "médecine du travail",
+  "rpps",
+  "adeli",
+  // Droit et secret professionnel en général
+  "secret professionnel",
+  "secret de l'instruction",
+  "couvert par le secret",
+  "confidentiel avocat",
+  "consultation juridique",
+];
+
 const PUBLIC_MARKERS = [
   "communiqué de presse",
   "article de blog",
@@ -87,6 +138,7 @@ function confidentialSignals(text: string): string[] {
   if (BANK_KEYWORDS.some((k) => lower.includes(k))) signals.push("rib");
   if (PAYROLL_KEYWORDS.some((k) => lower.includes(k))) signals.push("paie");
   if (CONTRACT_KEYWORDS.some((k) => lower.includes(k))) signals.push("contrat");
+  if (SECRET_PROFESSIONNEL_KEYWORDS.some((k) => lower.includes(k))) signals.push("secret-professionnel");
 
   // Dense nominative PII: several distinct identifier kinds in one payload.
   const piiKinds = [EMAIL.test(text), FR_PHONE.test(text), BIRTH_DATE.test(text)].filter(
@@ -143,6 +195,19 @@ export async function classify(
     } catch {
       return { category: "confidentiel", decidedBy: "llm", signals: ["fallback-error", "fail-safe"] };
     }
+  }
+
+  // US-A7.2 — pour une profession à secret professionnel, le défaut n'est pas
+  // « interne » mais « confidentiel ». C'est le cœur de la garantie demandée :
+  // « ne transitent JAMAIS vers un traitement qui ne serait pas strictement
+  // nécessaire ». Un praticien dont l'assistant refuse un message peut le
+  // reformuler ; un dossier patient parti chez un modèle ne revient pas.
+  if (hints?.secretProfessionnel) {
+    return {
+      category: "confidentiel",
+      decidedBy: "rules",
+      signals: ["secteur-secret-professionnel", "defaut-restrictif"],
+    };
   }
 
   return { category: "interne", decidedBy: "rules", signals: ["default"] };
