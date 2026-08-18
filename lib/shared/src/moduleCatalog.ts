@@ -33,7 +33,7 @@ import type { Vertical } from "./verticalPacks.js";
  * hide the second change; dating it tomorrow would claim a snapshot that does
  * not exist yet. The suffix keeps the value sortable and honest.
  */
-export const MODULE_CATALOG_VERSION = "2026-08-18";
+export const MODULE_CATALOG_VERSION = "2026-08-18.2";
 
 export interface ModuleDefinition {
   id: string;
@@ -109,18 +109,33 @@ export const MODULES: readonly ModuleDefinition[] = [
     id: "facturation_electronique",
     title: "Facturation électronique",
     description:
-      "Factur-X, dépôt en plateforme agréée (PDP) et e-reporting — obligation " +
-      "de septembre 2027 pour les TPE/PME (voir US-A2.6).",
+      "Factur-X, dépôt en plateforme agréée (PDP) et e-reporting. RECEVOIR une " +
+      "facture électronique est obligatoire pour TOUTES les entreprises depuis " +
+      "le 1er septembre 2026 ; l'obligation d'ÉMETTRE arrive au 1er septembre " +
+      "2027 pour les TPE et PME.",
     // `/factures` était FAUX, et dangereusement : ce module éteint par défaut
     // aurait fait disparaître l'écran Factures — le socle du produit — chez
     // tous les tenants le jour où quelqu'un aurait branché le filtrage. La
     // page de ce module est `/facturation-electronique`, et elle existe.
     href: "/facturation-electronique",
     tools: [],
-    // Reste « aucun » : l'obligation n'entre en vigueur qu'en septembre 2027,
-    // et `auditEmissionElectronique` ne bloque rien avant cette date. Un
-    // owner qui s'y prépare l'allume. C'est une décision, pas un oubli.
-    defaultOn: "aucun",
+    /*
+     * « tous », et le raisonnement inverse mérite d'être écrit puisqu'il a
+     * été tenu ici même.
+     *
+     * J'avais laissé « aucun » en m'appuyant sur l'échéance de septembre
+     * 2027. Cette date est celle de l'ÉMISSION pour les TPE/PME — celle
+     * qu'encode `OBLIGATION_EMISSION_ELECTRONIQUE_DATE`. Mais la RÉCEPTION
+     * s'impose à toutes les entreprises, sans exception de taille, depuis le
+     * 1er septembre 2026 ; `lib/facturx` le dit depuis toujours
+     * (« extraction = réception, obligation 09/2026 »).
+     *
+     * Éteindre ce module par défaut retirait donc de la navigation l'écran
+     * où l'artisan raccorde sa plateforme — précisément l'écran dont il a
+     * besoin pour une obligation déjà en vigueur. Un module optionnel ne
+     * peut pas porter une obligation légale en cours.
+     */
+    defaultOn: "tous",
   },
 
   // ── Ce qui a été RETIRÉ de ce catalogue, et pourquoi ───────────────────

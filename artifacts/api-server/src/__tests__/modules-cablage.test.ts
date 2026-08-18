@@ -41,9 +41,15 @@ let tenantId: string;
 let ownerCookie: string;
 let membreCookie: string;
 
-/** Un module allumé par défaut, et un éteint par défaut — pris au catalogue. */
+/**
+ * Deux modules pris au catalogue. Le second n'est plus « hors socle » : il
+ * n'en existe plus depuis que `facturation_electronique` est repassé au socle
+ * (l'obligation de RÉCEPTION vaut pour tous depuis le 01/09/2026). Les tests
+ * qui suivent portent donc sur le mécanisme de choix, qui est ce qu'ils
+ * vérifiaient réellement.
+ */
 const MODULE_SOCLE = MODULES.find((m) => m.defaultOn === "tous")!;
-const MODULE_HORS_SOCLE = MODULES.find((m) => m.defaultOn === "aucun")!;
+const AUTRE_MODULE = MODULES.filter((m) => m.id !== MODULE_SOCLE.id)[0]!;
 
 async function poserVertical(vertical: string): Promise<void> {
   await adminPool.query(
@@ -108,7 +114,7 @@ describe("b — seul le propriétaire décide", () => {
     const r = await request(app)
       .patch("/api/modules")
       .set("Cookie", membreCookie)
-      .send({ choix: { [MODULE_HORS_SOCLE.id]: true } });
+      .send({ choix: { [AUTRE_MODULE.id]: true } });
     expect(r.status).toBe(403);
   });
 
@@ -156,22 +162,18 @@ describe("c — un choix explicite survit et prime sur le défaut", () => {
       .expect(200);
   });
 
-  test("allumer un module hors socle", async () => {
+  test("un choix « allumé » est enregistré comme choix, pas confondu avec le défaut", async () => {
+    // C'est ce qui permet à l'écran d'annoncer d'où vient l'état. Un module
+    // allumé par défaut ET allumé par choix doit se distinguer, sinon
+    // l'utilisateur ne sait jamais si son clic a été retenu.
     const r = await request(app)
       .patch("/api/modules")
       .set("Cookie", ownerCookie)
-      .send({ choix: { [MODULE_HORS_SOCLE.id]: true } })
+      .send({ choix: { [AUTRE_MODULE.id]: true } })
       .expect(200);
-    const m = r.body.modules.find((x: { id: string }) => x.id === MODULE_HORS_SOCLE.id);
+    const m = r.body.modules.find((x: { id: string }) => x.id === AUTRE_MODULE.id);
     expect(m.active).toBe(true);
     expect(m.source).toBe("choix");
-
-    // Remis dans son état de départ pour les tests suivants.
-    await request(app)
-      .patch("/api/modules")
-      .set("Cookie", ownerCookie)
-      .send({ choix: { [MODULE_HORS_SOCLE.id]: false } })
-      .expect(200);
   });
 });
 

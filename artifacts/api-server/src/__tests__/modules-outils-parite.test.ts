@@ -85,15 +85,39 @@ describe("b — l'extinction d'un module reste une opération honnête", () => {
   });
 
   test("un choix explicite l'emporte sur le défaut, dans les deux sens", () => {
-    const horsSocle = MODULES.find((m) => m.defaultOn === "aucun");
     const socle = MODULES.find((m) => m.defaultOn === "tous");
-    expect(horsSocle, "plus aucun module hors socle — le test ne prouve plus rien").toBeTruthy();
-    expect(socle, "plus aucun module de socle").toBeTruthy();
+    expect(socle, "plus aucun module de socle — le test ne prouve plus rien").toBeTruthy();
 
-    const allume = resolveModules("batiment", { [horsSocle!.id]: true });
-    expect(allume.find((r) => r.id === horsSocle!.id)?.active).toBe(true);
-
+    // Sens 1 : allumé par défaut, éteint par choix.
     const eteint = resolveModules("batiment", { [socle!.id]: false });
     expect(eteint.find((r) => r.id === socle!.id)?.active).toBe(false);
+    expect(eteint.find((r) => r.id === socle!.id)?.source).toBe("choix");
+
+    // Sens 2 : le choix « allumé » est enregistré comme tel, et non confondu
+    // avec le défaut — c'est ce qui permet à l'écran de dire d'où vient
+    // l'état.
+    const allume = resolveModules("batiment", { [socle!.id]: true });
+    expect(allume.find((r) => r.id === socle!.id)?.active).toBe(true);
+    expect(allume.find((r) => r.id === socle!.id)?.source).toBe("choix");
+  });
+
+  test("la source `hors_socle` reste correcte s'il existe un module éteint par défaut", () => {
+    // Il n'y en a plus aucun depuis que `facturation_electronique` est repassé
+    // au socle : recevoir une facture électronique est obligatoire pour toutes
+    // les entreprises depuis le 01/09/2026, et un module optionnel ne peut pas
+    // porter une obligation en cours. Le test le CONSTATE plutôt que de
+    // disparaître — le jour où un module hors socle réapparaîtra, sa source
+    // sera vérifiée.
+    const horsSocle = MODULES.filter((m) => m.defaultOn === "aucun");
+    if (horsSocle.length === 0) {
+      expect(MODULES.every((m) => m.defaultOn !== "aucun")).toBe(true);
+      return;
+    }
+    const resolus = resolveModules("batiment", {});
+    for (const m of horsSocle) {
+      const r = resolus.find((x) => x.id === m.id)!;
+      expect(r.active).toBe(false);
+      expect(r.source).toBe("hors_socle");
+    }
   });
 });
