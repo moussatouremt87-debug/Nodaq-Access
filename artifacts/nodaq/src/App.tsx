@@ -3,6 +3,7 @@ import { routeOuverteEnLectureSeule } from '@nodaq/shared';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from '@/contexts/theme-context';
+import { ModeInterfaceProvider } from '@/contexts/mode-interface';
 import { AppShell } from '@/components/app-shell';
 import { NavProgressBar } from '@/components/nav-progress-bar';
 import { Toaster } from '@/components/ui/toaster';
@@ -265,10 +266,12 @@ function ApplicationInterne() {
 export default function App() {
   return (
     <ThemeProvider>
-      <QueryClientProvider client={queryClient}>
-        <AppRouter />
-        <Toaster />
-      </QueryClientProvider>
+      <ModeInterfaceProvider>
+        <QueryClientProvider client={queryClient}>
+          <AppRouter />
+          <Toaster />
+        </QueryClientProvider>
+      </ModeInterfaceProvider>
     </ThemeProvider>
   );
 }
