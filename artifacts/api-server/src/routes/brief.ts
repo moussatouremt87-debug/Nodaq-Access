@@ -3,12 +3,10 @@ import { withTenant, affairesTable, facturesTable, prospectsTable, pendingAction
 import { eq, sql } from "drizzle-orm";
 import { toDateString, verticalPack, estRetardSignificatif, statutHabilitation, type Vertical } from "@nodaq/shared";
 import { conditionFactureEnRetardSql } from "../lib/facturesEnRetard.js";
+import { verticalDepuisTx } from "../lib/vertical-tenant.js";
 
 const router: IRouter = Router();
 
-// Même clé et même défaut que routes/votre-metier.ts (US-A1.1)/cockpit.ts.
-const VERTICAL_SETTING_KEY = "votre-metier.metier";
-const DEFAULT_VERTICAL: Vertical = "industrie_btp";
 
 router.get("/brief", async (req, res): Promise<void> => {
   const today = new Date();
@@ -26,10 +24,7 @@ router.get("/brief", async (req, res): Promise<void> => {
       .from(facturesTable)
       .where(conditionFactureEnRetardSql(todayStr));
 
-    const [verticalRow] = await tx.select({ value: settingsTable.value }).from(settingsTable).where(
-      sql`${settingsTable.key} = ${VERTICAL_SETTING_KEY}`,
-    );
-    const vertical = (verticalRow?.value as Vertical | undefined) ?? DEFAULT_VERTICAL;
+    const vertical = await verticalDepuisTx(tx);
     const delaiPaiementUsuelJours = verticalPack(vertical).delaiPaiementUsuelJours;
 
     // US-A3.1 : les factures en retard SIGNIFICATIF (au-delà du délai usuel

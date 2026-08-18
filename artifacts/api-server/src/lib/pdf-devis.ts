@@ -36,10 +36,8 @@ import {
   type SellerInfo,
 } from "./pdf-generation.js";
 import { loadSellerInfo } from "./seller-info.js";
+import { verticalDuTenant } from "./vertical-tenant.js";
 
-// Même clé et même défaut que routes/votre-metier.ts (US-A1.1).
-const VERTICAL_SETTING_KEY = "votre-metier.metier";
-const DEFAULT_VERTICAL: Vertical = "industrie_btp";
 
 /**
  * Mot du document pour ce tenant (US-A2.1) — "Devis" ou "Proposition
@@ -50,13 +48,7 @@ const DEFAULT_VERTICAL: Vertical = "industrie_btp";
  * concerne que le rendu du PDF.
  */
 async function chargerLibelleDocument(tenantId: string): Promise<string> {
-  const rows = await withTenant(tenantId, (tx) =>
-    tx.select({ value: settingsTable.value }).from(settingsTable).where(
-      sql`${settingsTable.key} = ${VERTICAL_SETTING_KEY}`,
-    ),
-  );
-  const vertical = (rows[0]?.value as Vertical | undefined) ?? DEFAULT_VERTICAL;
-  return verticalPack(vertical).proposalWord;
+  return verticalPack(await verticalDuTenant(tenantId)).proposalWord;
 }
 
 /**

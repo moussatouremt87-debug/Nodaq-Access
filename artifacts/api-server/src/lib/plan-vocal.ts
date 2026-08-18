@@ -61,10 +61,13 @@ import {
   type Intention,
   type Candidat,
   type Resolution,
+  type AffaireWords,
+  affaireWords,
   resoudreMention,
   interpreterDate,
   toDateString,
 } from "@nodaq/shared";
+import { verticalDepuisTx } from "./vertical-tenant.js";
 
 type Tx = Parameters<Parameters<typeof withTenant>[1]>[0];
 
@@ -104,20 +107,30 @@ export interface Plan {
 export interface ContexteResolution {
   readonly affaires: readonly Candidat[];
   readonly membres: readonly Candidat[];
+  /** US-A6.1 — le mot du secteur, pour que les libellés soumis à validation
+   *  parlent la langue de l'utilisateur (« Créer la mission … » plutôt que
+   *  « Créer l'affaire … » chez un consultant). Porté par le contexte, déjà
+   *  chargé par tenant, plutôt qu'ajouté en paramètre à `construirePlan` :
+   *  c'est une donnée du tenant, comme les affaires et les membres. */
+  readonly words: AffaireWords;
 }
 
 export async function chargerContexte(tenantId: string): Promise<ContexteResolution> {
   return withTenant(tenantId, async (tx) => {
     const affaires = await tx.select({ id: affairesTable.id, libelle: affairesTable.label }).from(affairesTable);
     const membres = await tx.select({ id: teamMembersTable.id, libelle: teamMembersTable.name }).from(teamMembersTable);
-    return { affaires, membres };
+    const words = affaireWords(await verticalDepuisTx(tx));
+    return { affaires, membres, words };
   });
 }
 
-function libelleOperation(intention: Intention): string {
+function libelleOperation(intention: Intention, words: AffaireWords): string {
   switch (intention.type) {
     case "creer_affaire":
-      return `Créer l'affaire « ${intention.label} »`;
+      // `definite` porte l'article ACCORDÉ (« l'affaire », « la mission ») :
+      // le genre appartient au vocabulaire, pas à une règle de langue
+      // recalculée ici — voir AffaireWords dans verticalPacks.ts.
+      return `Créer ${words.definite} « ${intention.label} »`;
     case "creer_prospect":
       return `Créer le prospect « ${intention.nom} »`;
     case "maj_statut_affaire":
@@ -154,13 +167,20 @@ export function construirePlan(
   const operations: OperationPlanifiee[] = [];
   const questions: QuestionPlan[] = [];
   const incompris = [...nonCompris];
+  const { words } = contexte;
 
   for (const intention of intentions) {
     if (intention.type === "maj_statut_affaire") {
       const r: Resolution = resoudreMention(intention.affaireMentionnee, contexte.affaires);
       if (r.etat === "ambigu") {
         questions.push({
-          question: `Quelle affaire « ${intention.affaireMentionnee} » ?`,
+          // « Quelle correspondance pour LE chantier / LA mission … » :
+          // l'interrogatif porte sur « correspondance », toujours féminin,
+          // et le nom du secteur arrive déjà accordé via `definite`. Déduire
+          // le genre du mot ici (tester un « la » en tête, par exemple)
+          // réintroduirait une règle de langue dans le code — c'est
+          // précisément ce que `AffaireWords` existe pour éviter.
+          question: `Quelle correspondance pour ${words.definite} « ${intention.affaireMentionnee} » ?`,
           candidats: r.candidats,
           mention: intention.affaireMentionnee,
         });
@@ -201,7 +221,7 @@ export function construirePlan(
       }
       operations.push({
         type: intention.type,
-        libelle: `${libelleOperation(intention)} au ${date}`,
+        libelle: `${libelleOperation(intention, words)} au ${date}`,
         champs: { libelle: intention.libelle, date },
         certitude: "aucune_resolution",
       });
@@ -217,7 +237,7 @@ export function construirePlan(
       }
       operations.push({
         type: intention.type,
-        libelle: libelleOperation(intention),
+        libelle: libelleOperation(intention, words),
         champs: {
           label: intention.label,
           clientNom: intention.clientMentionne ?? null,
@@ -232,7 +252,7 @@ export function construirePlan(
     if (intention.type === "creer_prospect") {
       operations.push({
         type: intention.type,
-        libelle: libelleOperation(intention),
+        libelle: libelleOperation(intention, words),
         champs: {
           nom: intention.nom,
           telephone: intention.telephoneMentionne ?? null,
@@ -246,7 +266,7 @@ export function construirePlan(
     if (intention.type === "creer_entree_classeur") {
       operations.push({
         type: intention.type,
-        libelle: libelleOperation(intention),
+        libelle: libelleOperation(intention, words),
         champs: { titre: intention.titre, categorie: intention.categorieMentionnee ?? null },
         certitude: "aucune_resolution",
       });
@@ -364,7 +384,7 @@ export function construirePlan(
 
     operations.push({
       type: intention.type,
-      libelle: libelleOperation(intention),
+      libelle: libelleOperation(intention, words),
       champs: { libelle: intention.libelle },
       certitude: "aucune_resolution",
     });

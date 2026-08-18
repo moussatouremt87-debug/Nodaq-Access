@@ -24,9 +24,13 @@ import { getConfig, chatCompletion, LlmConfigError } from "@nodaq/llm";
 import {
   rapprocherDictee,
   totalProposition,
+  affaireWords,
+  verticalPack,
   type CatalogueEntree,
   type IntentionDictee,
+  type Vertical,
 } from "@nodaq/shared";
+import { verticalDuTenant } from "../lib/vertical-tenant.js";
 
 const router: IRouter = Router();
 
@@ -48,42 +52,57 @@ const SortieModeleSchema = z.object({
   intentions: z.array(IntentionSchema).max(50),
 });
 
-const SYSTEM_PROMPT = `Tu découpes la dictée d'un artisan du bâtiment en lignes de devis.
+/**
+ * La consigne donnée au modèle, dans le vocabulaire du secteur (US-A6.1).
+ *
+ * Elle était écrite en dur pour le bâtiment — « un artisan du bâtiment »,
+ * « ouvriers sur le chantier », et un exemple de toiture et de gouttière. Un
+ * consultant qui dictait une proposition se faisait donc découper sa phrase
+ * par un modèle amorcé sur du gros œuvre.
+ *
+ * L'EXEMPLE, lui, est délibérément neutre : il enseigne la FORME de la sortie
+ * (ce qui devient une ligne, ce qui n'en devient pas), pas un métier. Un
+ * exemple par secteur ferait dix-sept textes à inventer puis à maintenir, pour
+ * une leçon identique.
+ */
+function systemPrompt(vertical: Vertical): string {
+  const words = affaireWords(vertical);
+  return `Tu découpes une dictée professionnelle en lignes de ${verticalPack(vertical).proposalWord.toLowerCase()}.
 
 Pour chaque OUVRAGE OU PRESTATION FACTURABLE mentionné — un matériau posé, un
 travail réalisé, un service rendu — rends :
-- "libelle" : l'ouvrage, en quelques mots, tel que l'artisan le nomme
-- "quantite" : le nombre dicté POUR CET OUVRAGE (surface, longueur, nombre
-  d'unités posées), ou null s'il n'en donne pas
+- "libelle" : la prestation, en quelques mots, telle qu'elle est nommée
+- "quantite" : le nombre dicté POUR CETTE PRESTATION (surface, longueur, nombre
+  d'unités, durée facturée), ou null s'il n'en donne pas
 - "unite" : l'unité dictée (m2, ml, u, h, forfait…), ou null
 
-CE QUI N'EST JAMAIS UNE LIGNE DE DEVIS, même accompagné d'un nombre — ignore
+CE QUI N'EST JAMAIS UNE LIGNE FACTURABLE, même accompagné d'un nombre — ignore
 ces éléments, ne les rends PAS comme intentions :
-- le nombre d'OUVRIERS ou de personnes sur le chantier ("trois ouvriers",
-  "on sera deux") : une information d'organisation, pas un ouvrage facturé ;
-- une DURÉE de chantier ("dix jours", "sur deux semaines") : sauf si
-  l'artisan facture explicitement du temps de main d'œuvre ("dix heures de
-  pose"), auquel cas c'est l'ouvrage facturé, pas une durée de planning ;
-- le nom du client, son adresse, la ville du chantier, une date de début :
-  des informations du dossier, pas des lignes de devis.
+- le nombre de PERSONNES mobilisées ("trois ouvriers", "on sera deux") : une
+  information d'organisation, pas une prestation facturée ;
+- une DURÉE ${words.definite} ("dix jours", "sur deux semaines") : sauf si le
+  temps de travail est explicitement facturé ("dix heures de pose"), auquel cas
+  c'est la prestation facturée, pas une durée de planning ;
+- le nom du client, son adresse, le lieu, une date de début : des informations
+  du dossier, pas des lignes facturables.
 
 RÈGLE ABSOLUE : tu ne donnes JAMAIS de prix, de tarif, de montant, ni de total.
-Les prix viennent du catalogue de l'entreprise, pas de toi. Si l'artisan cite un
-montant, ignore-le : il sera repris depuis le catalogue.
+Les prix viennent du catalogue de l'entreprise, pas de toi. Si un montant est
+cité, ignore-le : il sera repris depuis le catalogue.
 
 Exemple :
-Dicté : « Madame Martin veut refaire sa toiture, la couverture et la
-gouttière à Lyon. On sera trois sur le chantier pendant une semaine. »
+Dicté : « Madame Martin veut trois heures de diagnostic et la remise en état
+du poste principal, à Lyon. On sera deux sur place pendant une semaine. »
 Réponse : {"intentions":[
-  {"libelle":"réfection toiture","quantite":null,"unite":null},
-  {"libelle":"couverture","quantite":null,"unite":null},
-  {"libelle":"gouttière","quantite":null,"unite":null}
+  {"libelle":"diagnostic","quantite":3,"unite":"h"},
+  {"libelle":"remise en état du poste principal","quantite":null,"unite":null}
 ]}
-(« Madame Martin », « à Lyon », « trois », « une semaine » : absents de la
-réponse — ce sont des informations de dossier, pas des ouvrages.)
+(« Madame Martin », « à Lyon », « deux », « une semaine » : absents de la
+réponse — ce sont des informations de dossier, pas des prestations.)
 
 Réponds UNIQUEMENT par un objet JSON de la forme :
 {"intentions":[{"libelle":"...","quantite":12,"unite":"m2"}]}`;
+}
 
 /** Extrait le premier objet JSON d'une réponse, tolérant aux blocs ```json. */
 function extraireJson(contenu: string): unknown {
@@ -120,9 +139,13 @@ router.post("/devis/dictee/proposer", async (req, res): Promise<void> => {
     throw err;
   }
 
+  // US-A6.1 — relu à chaque dictée : changement de secteur appliqué dès la
+  // dictée suivante, sans redémarrage (AC3).
+  const vertical = await verticalDuTenant(tenantId);
+
   // 1. Découpage par le modèle — aucun prix ne circule dans ce prompt.
   const reponse = await chatCompletion(config, [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: systemPrompt(vertical) },
     { role: "user", content: parsed.data.texte },
   ]);
 

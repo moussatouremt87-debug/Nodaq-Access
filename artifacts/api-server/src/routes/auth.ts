@@ -22,6 +22,7 @@ import {
   listUserMemberships,
   basculerEspace,
 } from "../lib/authService";
+import { verticalDepuisTx } from "../lib/vertical-tenant.js";
 
 const router: IRouter = Router();
 
@@ -198,8 +199,6 @@ router.get("/auth/me", async (req, res): Promise<void> => {
 // l'indicateur) se juge par tenant, jamais d'après le rôle de la session
 // d'origine.
 
-const VERTICAL_SETTING_KEY = "votre-metier.metier";
-const DEFAULT_VERTICAL: Vertical = "industrie_btp";
 // Même définition du "vendu" que revenusAcquis.ts (non exportée de là,
 // dupliquée ici à l'identique plutôt que de réorganiser ce module existant
 // pour un seul appelant).
@@ -219,11 +218,7 @@ router.get("/auth/mes-espaces", async (req, res): Promise<void> => {
     memberships.map(async (m) => {
       const financier = hasFinancialAccess(m.role);
       const { secteurLabel, affairesEnCours } = await withTenant(m.tenantId, async (tx) => {
-        const [verticalRow] = await tx
-          .select({ value: settingsTable.value })
-          .from(settingsTable)
-          .where(sql`${settingsTable.key} = ${VERTICAL_SETTING_KEY}`);
-        const vertical = (verticalRow?.value as Vertical | undefined) ?? DEFAULT_VERTICAL;
+    const vertical = await verticalDepuisTx(tx);
         const secteurLabel = verticalLabel(vertical);
 
         // Pas de MEMBER simple ici : zéro donnée financière, y compris un
