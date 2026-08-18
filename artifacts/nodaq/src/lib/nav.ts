@@ -26,6 +26,7 @@ import {
   ScrollText,
   Landmark,
   LineChart,
+  FileClock,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { decennaleApplicable, type AffaireWords, type Vertical } from '@nodaq/shared';
@@ -118,6 +119,9 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: '/onboarding',   label: 'Profil entreprise',   icon: Building2,   testId: 'nav-onboarding',  requiredRoles: ['OWNER'] },
       { href: '/reprise',      label: 'Reprise des données', icon: DatabaseZap, testId: 'nav-reprise',     requiredRoles: ['OWNER'] },
       { href: '/facturation-electronique', label: 'Facturation électronique', icon: ScrollText, testId: 'nav-facturation-electronique', requiredRoles: ['OWNER'] },
+      // US-A6.4 — pièce à produire en cas de contrôle : c'est l'OWNER qui la
+      // produit, pas un collaborateur. Même gating que le routeur serveur.
+      { href: '/journal-decisions', label: 'Journal des décisions', icon: FileClock, testId: 'nav-journal-decisions', requiredRoles: ['OWNER'] },
     ],
   },
 ];
