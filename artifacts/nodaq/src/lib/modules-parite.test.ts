@@ -71,8 +71,19 @@ describe('b — le catalogue reste utilisable', () => {
     // défaut, pointait sur `/factures`. Éteindre un module optionnel ne doit
     // jamais emporter une page que tout le monde utilise.
     const SOCLE = ['/', '/factures', '/devis', '/affaires', '/pointages'];
-    for (const m of MODULES) {
-      if (m.defaultOn !== 'aucun' || m.href === undefined) continue;
+    const horsSocle = MODULES.filter((m) => m.defaultOn === 'aucun' && m.href !== undefined);
+
+    // Aucun module n'est éteint par défaut aujourd'hui — `facturation_electronique`
+    // est repassé au socle, l'obligation de RECEVOIR une facture électronique
+    // valant pour toutes les entreprises depuis le 01/09/2026. La boucle
+    // ci-dessous ne s'exécuterait donc pas, et un test qui ne vérifie rien en
+    // silence ne protège personne : on le CONSTATE.
+    if (horsSocle.length === 0) {
+      expect(MODULES.some((m) => m.defaultOn === 'aucun' && m.href !== undefined)).toBe(false);
+      return;
+    }
+
+    for (const m of horsSocle) {
       expect(
         SOCLE,
         `« ${m.id} » est éteint par défaut et masquerait « ${m.href} », un écran du socle`,
