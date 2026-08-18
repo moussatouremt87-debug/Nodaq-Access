@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ObjectifsParametres } from '@/components/objectifs-parametres';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Building2, Bell, Save, UserCog, Mail, Trash2, Clock, ShieldCheck } from 'lucide-react';
+import { Building2, Bell, Puzzle, Save, UserCog, Mail, Trash2, Clock, ShieldCheck } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   useListMembres,
@@ -31,12 +31,14 @@ import { useVertical } from '@/hooks/use-vertical';
 import { cn } from '@/lib/utils';
 
 import { apiFetch } from '@/lib/auth';
+import { useModules, useBasculerModule, type ModuleResolu } from '@/hooks/use-modules';
 const API = '/api';
 
 type Settings = Record<string, string>;
 
 const TABS = [
   { id: 'notifications', label: 'Notifications', icon: Bell },
+  { id: 'modules',       label: 'Modules',       icon: Puzzle },
   { id: 'membres',       label: 'Membres & accès', icon: UserCog },
 ];
 
@@ -536,6 +538,90 @@ function SouveraineteCard() {
   );
 }
 
+/**
+ * Modules du compte (registre 3.11) — la liste vient du SERVEUR, résolue pour
+ * le secteur du tenant.
+ *
+ * Cet onglet remplace trois bascules `modules.classeur` / `modules.marge` /
+ * `modules.rapport` qui étaient écrites en base et lues par personne, sous une
+ * phrase qui promettait le contraire. Ici, éteindre un module retire sa page
+ * du menu et ses outils de l'agent — et l'écran le DIT, plutôt que de laisser
+ * croire à un masquage de données qui n'a jamais existé.
+ */
+function ModulesTab() {
+  const { toast } = useToast();
+  const { data: modules, isLoading } = useModules();
+  const basculer = useBasculerModule();
+
+  const onChange = (m: ModuleResolu, actif: boolean) => {
+    basculer.mutate(
+      { [m.id]: actif },
+      {
+        onSuccess: () =>
+          toast({ title: actif ? `${m.title} activé` : `${m.title} désactivé` }),
+        onError: (e: Error) =>
+          toast({ title: 'Erreur', description: e.message, variant: 'destructive' }),
+      },
+    );
+  };
+
+  if (isLoading) {
+    return (
+      <div className="max-w-2xl space-y-3">
+        {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 w-full" />)}
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-2xl space-y-4">
+      <p className="text-sm text-muted-foreground">
+        Un module désactivé disparaît de la navigation et ses outils sont retirés de
+        l'assistant. Aucune donnée n'est supprimée : le réactiver rétablit tout à
+        l'identique.
+      </p>
+      {(modules ?? []).map(m => (
+        <div
+          key={m.id}
+          className="rounded-xl border border-card-border bg-card p-4 flex items-start gap-4"
+          data-testid={`module-${m.id}`}
+        >
+          <div className="flex-1 min-w-0">
+            <div className="font-medium text-foreground text-sm">{m.title}</div>
+            <div className="text-xs text-muted-foreground mt-0.5">{m.description}</div>
+            {/* La SOURCE de l'état, comme l'impose la doctrine du registre :
+                un module ne doit jamais paraître allumé ou éteint sans qu'on
+                puisse dire pourquoi. */}
+            <div className="text-[11px] text-muted-foreground/70 mt-1.5">
+              {m.source === 'choix'
+                ? 'Choix enregistré pour ce compte'
+                : m.source === 'hors_socle'
+                  ? 'Désactivé par défaut — activable à tout moment'
+                  : 'Activé par défaut pour votre secteur'}
+            </div>
+          </div>
+          <button
+            role="switch"
+            aria-checked={m.active}
+            aria-label={m.title}
+            disabled={basculer.isPending}
+            onClick={() => onChange(m, !m.active)}
+            className={cn(
+              'relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 mt-0.5',
+              m.active ? 'bg-primary' : 'bg-muted',
+            )}
+          >
+            <span className={cn(
+              'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
+              m.active ? 'translate-x-6' : 'translate-x-1',
+            )} />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function ParametresPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -677,6 +763,8 @@ export default function ParametresPage() {
                 </div>
               </div>
             )}
+
+            {activeTab === 'modules' && <ModulesTab />}
 
             {activeTab === 'membres' && <MembresTab />}
           </motion.div>

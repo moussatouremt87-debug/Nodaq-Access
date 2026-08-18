@@ -34,7 +34,8 @@ import {
 } from "../routes/analytics.js";
 import { parsePeriode, toDateString } from "./analytics-periods.js";
 import type { OperationPlanifiee } from "./plan-vocal.js";
-import { affaireWords, estSecretProfessionnel } from "@nodaq/shared";
+import { affaireWords, estSecretProfessionnel, inactiveModuleTools } from "@nodaq/shared";
+import { modulesDuTenant } from "./modules-tenant.js";
 import { verticalDepuisTx, verticalDuTenant, vocabulaireAssistant } from "./vertical-tenant.js";
 import { montantsNonSources, MESSAGE_REFUS_CHIFFRAGE } from "./garde-montants.js";
 import { logger } from "./logger.js";
@@ -903,10 +904,26 @@ export async function runAgent(
   const operations: OperationPlanifiee[] = [];
 
   // Apply server-side tool policy
-  const allowedTools =
+  const parPolitique =
     options.toolAllowList === undefined
       ? TOOLS
       : TOOLS.filter((t) => options.toolAllowList!.includes(t.function.name));
+
+  /*
+   * Modules éteints — leurs outils sortent de la boîte (registre 3.11).
+   *
+   * Le catalogue promettait depuis toujours qu'« éteindre un module retire
+   * ses outils du toolset » ; `inactiveModuleTools` existait, écrit et
+   * commenté, et n'était appelé nulle part. C'est ici que la promesse
+   * devient vraie.
+   *
+   * L'outil DISPARAÎT, il n'est pas refusé : le modèle ne peut pas proposer
+   * ce qu'il ne voit pas, et l'utilisateur n'a donc jamais à lire un refus
+   * pour une capacité qu'on ne lui a pas ouverte. Les routes HTTP adossées,
+   * elles, ne bougent pas — ce n'est pas une frontière de sécurité.
+   */
+  const eteints = inactiveModuleTools(await modulesDuTenant(tenantId));
+  const allowedTools = parPolitique.filter((t) => !eteints.has(t.function.name));
 
   const authorizedNames: Set<string> | null =
     options.toolAllowList === undefined
