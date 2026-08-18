@@ -157,7 +157,7 @@ export default function Affaires() {
             />
           </div>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="sm:w-56" data-testid="select-filter-status">
+            <SelectTrigger className="sm:w-56" aria-label="Filtrer par statut" data-testid="select-filter-status">
               <SelectValue placeholder="Tous les statuts" />
             </SelectTrigger>
             <SelectContent>

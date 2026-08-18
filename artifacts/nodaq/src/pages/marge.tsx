@@ -90,7 +90,7 @@ export default function MargePage() {
         description={`Analysez votre rentabilité par ${words.singular} et par période.`}
         actions={
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-48 gap-1.5">
+            <SelectTrigger className="w-48 gap-1.5" aria-label="Filtrer par statut">
               <Filter className="h-3.5 w-3.5" />
               <SelectValue />
             </SelectTrigger>

@@ -30,7 +30,7 @@ export function PeriodSelector({ periode, comparaison, onPeriodeChange, onCompar
   return (
     <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
       <Select value={periode} onValueChange={(v) => onPeriodeChange(v as PeriodeMode)}>
-        <SelectTrigger className="h-8 w-[160px] sm:w-[180px] text-sm">
+        <SelectTrigger className="h-8 w-[160px] sm:w-[180px] text-sm" aria-label="Période analysée">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -45,7 +45,7 @@ export function PeriodSelector({ periode, comparaison, onPeriodeChange, onCompar
       <span className="text-muted-foreground text-xs hidden sm:inline">comparé à</span>
 
       <Select value={comparaison} onValueChange={(v) => onComparaisonChange(v as ComparaisonMode)}>
-        <SelectTrigger className="h-8 w-[185px] sm:w-[205px] text-sm">
+        <SelectTrigger className="h-8 w-[185px] sm:w-[205px] text-sm" aria-label="Période de comparaison">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

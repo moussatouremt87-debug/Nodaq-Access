@@ -371,6 +371,7 @@ export default function Chat() {
               accept="image/*"
               capture="environment"
               className="hidden"
+              aria-label="Joindre une photo"
               onChange={handleFileSelected}
               data-testid="input-image-file"
             />
@@ -435,6 +436,7 @@ export default function Chat() {
                 isSending ||
                 (!imagePreview && !input.trim())
               }
+              aria-label="Envoyer le message"
               data-testid="button-send-chat"
             >
               <Send className="h-4 w-4" />

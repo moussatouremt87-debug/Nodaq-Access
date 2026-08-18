@@ -172,7 +172,7 @@ function LineEditor({ lines, onChange, tvaFranchise = false }: {
                           update(l.id, 'vatRate', rate);
                           update(l.id, 'vatCategory', rate === 0 ? 'Z' : 'S');
                         }}>
-                        <SelectTrigger className="h-7 text-xs border-0 bg-transparent focus:ring-0">
+                        <SelectTrigger className="h-7 text-xs border-0 bg-transparent focus:ring-0" aria-label="Taux de TVA de la ligne">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -533,7 +533,7 @@ export default function FacturesPage() {
         {/* Filter */}
         <div className="flex gap-3">
           <Select value={statutFilter} onValueChange={setStatutFilter}>
-            <SelectTrigger className="w-48">
+            <SelectTrigger className="w-48" aria-label="Filtrer par statut">
               <SelectValue placeholder="Tous les statuts" />
             </SelectTrigger>
             <SelectContent>
