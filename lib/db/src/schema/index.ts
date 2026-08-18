@@ -44,3 +44,4 @@ export * from "./bank_accounts";
 export * from "./charges_recurrentes";
 export * from "./team_member_habilitations";
 export * from "./regles_relance";
+export * from "./campagnes_relance";

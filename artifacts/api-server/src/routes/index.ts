@@ -55,6 +55,7 @@ import journalDecisionsRouter from "./journal-decisions";
 import souveraineteRouter from "./souverainete";
 import { modulesReadRouter, modulesWriteRouter } from "./modules";
 import { reglesRelanceReadRouter, reglesRelanceWriteRouter } from "./regles-relance";
+import { campagnesRelanceReadRouter, campagnesRelanceWriteRouter } from "./campagnes-relance";
 import membresRouter, { membresPublicRouter } from "./membres";
 import mfaRouter from "./mfa";
 
@@ -131,6 +132,7 @@ router.use(biz, modulesReadRouter);
 // Règle de relance : un MEMBER valide des campagnes DANS SON CADRE (4.18 US-9),
 // il doit donc pouvoir la lire. L'écriture est plus bas, au propriétaire.
 router.use(biz, reglesRelanceReadRouter);
+router.use(biz, campagnesRelanceReadRouter);
 
 // ── Business routes (OWNER ou ACCOUNTANT seulement) ───────────────────────
 router.use(financierOnly, echeancesRouter);
@@ -167,5 +169,7 @@ router.use(ownerOnly, souveraineteRouter);
 // clique : c'est une décision de propriétaire.
 router.use(ownerOnly, modulesWriteRouter);
 router.use(ownerOnly, reglesRelanceWriteRouter);
+// Proposer une campagne engage le compte : c'est une décision de propriétaire.
+router.use(ownerOnly, campagnesRelanceWriteRouter);
 
 export default router;
