@@ -54,6 +54,7 @@ import { FINANCIAL_ROLES } from "@nodaq/shared";
 import journalDecisionsRouter from "./journal-decisions";
 import souveraineteRouter from "./souverainete";
 import { modulesReadRouter, modulesWriteRouter } from "./modules";
+import { reglesRelanceReadRouter, reglesRelanceWriteRouter } from "./regles-relance";
 import membresRouter, { membresPublicRouter } from "./membres";
 import mfaRouter from "./mfa";
 
@@ -127,6 +128,9 @@ router.use(biz, affectationsRouter);
 // Lecture des modules : la NAVIGATION en dépend, donc tout rôle doit pouvoir
 // la lire. L'écriture est plus bas, réservée au propriétaire.
 router.use(biz, modulesReadRouter);
+// Règle de relance : un MEMBER valide des campagnes DANS SON CADRE (4.18 US-9),
+// il doit donc pouvoir la lire. L'écriture est plus bas, au propriétaire.
+router.use(biz, reglesRelanceReadRouter);
 
 // ── Business routes (OWNER ou ACCOUNTANT seulement) ───────────────────────
 router.use(financierOnly, echeancesRouter);
@@ -162,5 +166,6 @@ router.use(ownerOnly, souveraineteRouter);
 // Allumer ou éteindre un module engage le compte, pas l'écran de celui qui
 // clique : c'est une décision de propriétaire.
 router.use(ownerOnly, modulesWriteRouter);
+router.use(ownerOnly, reglesRelanceWriteRouter);
 
 export default router;
