@@ -300,3 +300,87 @@ describe("e — un rejet ferme la campagne", () => {
     expect(rows[0].regle_version, "un rejet ne gèle aucun mandat").toBeNull();
   });
 });
+
+// ── f. Le panneau de validation : lire et resserrer (US-1) ─────────────────
+
+describe("f — le mandat se lit et se resserre depuis l'écran de validation", () => {
+  test("la campagne se retrouve par son action, avec la règle du tenant", async () => {
+    const propose = await proposer().expect(201);
+
+    const r = await request(app)
+      .get(`/api/relance/campagnes/par-action/${propose.body.pendingActionId}`)
+      .set("Cookie", ownerCookie)
+      .expect(200);
+
+    expect(r.body.campagne.id).toBe(propose.body.campagne.id);
+    // La règle accompagne la campagne : le panneau doit savoir ce qu'il PEUT
+    // proposer, sinon il offrirait des gestes qui seraient ramenés en silence.
+    expect(r.body.regle.remiseAutorisee).toBe(REGLE_OUVERTE.remiseAutorisee);
+    expect(r.body.regleVersion).toBeGreaterThan(0);
+  });
+
+  test("une action sans campagne rend 404, pas une campagne vide", async () => {
+    const r = await request(app)
+      .get("/api/relance/campagnes/par-action/action-qui-nexiste-pas")
+      .set("Cookie", ownerCookie);
+    expect(r.status).toBe(404);
+  });
+
+  test("resserrer le mandat fonctionne, et met la file à jour", async () => {
+    const propose = await proposer().expect(201);
+
+    const r = await request(app)
+      .patch(`/api/relance/campagnes/${propose.body.campagne.id}/mandat`)
+      .set("Cookie", ownerCookie)
+      .send({ echelonnementAutorise: false })
+      .expect(200);
+
+    expect(r.body.mandat.echelonnementAutorise).toBe(false);
+    expect(r.body.restreintLaRegle).toBe(true);
+
+    const { rows } = await adminPool.query(
+      `SELECT payload FROM pending_actions WHERE id = $1`,
+      [propose.body.pendingActionId],
+    );
+    // La file montre le mandat qu'on est en train d'approuver.
+    expect(rows[0].payload.mandat.echelonnementAutorise).toBe(false);
+  });
+
+  test("resserrer NE PEUT PAS élargir, même en le demandant", async () => {
+    // La règle ferme la remise ; l'écran ne le propose pas, mais un appel
+    // direct pourrait essayer. L'invariant tient au serveur, pas à l'écran.
+    const propose = await proposer().expect(201);
+
+    const r = await request(app)
+      .patch(`/api/relance/campagnes/${propose.body.campagne.id}/mandat`)
+      .set("Cookie", ownerCookie)
+      .send({ remiseAutorisee: true, retardMaxJours: 999 })
+      .expect(200);
+
+    expect(r.body.mandat.remiseAutorisee).toBe(false);
+    expect(r.body.mandat.retardMaxJours).toBe(REGLE_OUVERTE.retardMaxJours);
+    expect(r.body.depassements.length).toBeGreaterThan(0);
+
+    const { rows } = await adminPool.query(
+      `SELECT mandat FROM campagnes_relance WHERE id = $1`,
+      [propose.body.campagne.id],
+    );
+    expect(rows[0].mandat.remiseAutorisee).toBe(false);
+  });
+
+  test("après validation, le mandat est figé et ne se resserre plus", async () => {
+    const propose = await proposer().expect(201);
+    await request(app)
+      .post(`/api/pending-actions/${propose.body.pendingActionId}/approve`)
+      .set("Cookie", ownerCookie)
+      .expect(200);
+
+    const r = await request(app)
+      .patch(`/api/relance/campagnes/${propose.body.campagne.id}/mandat`)
+      .set("Cookie", ownerCookie)
+      .send({ echelonnementAutorise: false });
+
+    expect(r.status).toBe(409);
+    expect(r.body.error).toMatch(/fig/i);
+  });
+});

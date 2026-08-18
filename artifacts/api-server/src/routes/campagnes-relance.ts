@@ -186,4 +186,109 @@ campagnesRelanceWriteRouter.delete(
   },
 );
 
+/** La campagne portée par une action de la file — ce que l'écran de validation lit. */
+campagnesRelanceReadRouter.get(
+  "/relance/campagnes/par-action/:pendingActionId",
+  async (req, res): Promise<void> => {
+    const id = String(req.params["pendingActionId"] ?? "");
+    if (!id) {
+      res.status(400).json({ error: "Identifiant d'action manquant." });
+      return;
+    }
+    const tenantId = req.tenantId!;
+
+    const resultat = await withTenant(tenantId, async (tx) => {
+      const [campagne] = await tx
+        .select()
+        .from(campagnesRelanceTable)
+        .where(eq(campagnesRelanceTable.pendingActionId, id));
+      if (!campagne) return null;
+      const { regle, version } = await regleEnVigueur(tx, tenantId);
+      return { campagne, regle, version };
+    });
+
+    if (!resultat) {
+      res.status(404).json({ error: "Aucune campagne pour cette action." });
+      return;
+    }
+
+    res.json({
+      campagne: resultat.campagne,
+      /* La règle sert au panneau à dire ce qu'il PEUT proposer : un curseur qui
+         irait au-delà serait une invitation à demander l'impossible. */
+      regle: resultat.regle,
+      regleVersion: resultat.version,
+      restreintLaRegle: mandatEstRestreint(resultat.regle, resultat.campagne.mandat),
+    });
+  },
+);
+
+/**
+ * Resserrer le mandat d'une campagne avant validation (US-1).
+ *
+ * Ne peut que RESTREINDRE : la demande passe par `restreindreMandat` contre la
+ * règle en vigueur, exactement comme à la création. Il n'existe donc aucun
+ * chemin — écran, appel direct, corps forgé — par lequel une campagne
+ * obtiendrait plus que ce que le dirigeant a autorisé à froid.
+ */
+campagnesRelanceWriteRouter.patch(
+  "/relance/campagnes/:id/mandat",
+  async (req, res): Promise<void> => {
+    const parsed = DemandeMandat.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.message });
+      return;
+    }
+    const id = String(req.params["id"] ?? "");
+    const tenantId = req.tenantId!;
+
+    const resultat = await withTenant(tenantId, async (tx) => {
+      const [campagne] = await tx
+        .select()
+        .from(campagnesRelanceTable)
+        .where(eq(campagnesRelanceTable.id, id));
+      if (!campagne) return { kind: "introuvable" as const };
+      // Après validation, le mandat est GELÉ : le modifier exige une nouvelle
+      // validation, c'est le texte même de l'US-1.
+      if (campagne.statut !== "PROPOSEE") return { kind: "gele" as const };
+
+      const { regle } = await regleEnVigueur(tx, tenantId);
+      const mandat = restreindreMandat(regle, parsed.data);
+      const depassements = depassementsMandat(regle, parsed.data);
+
+      await tx
+        .update(campagnesRelanceTable)
+        .set({ mandat })
+        .where(eq(campagnesRelanceTable.id, campagne.id));
+
+      // La file montre le mandat que le dirigeant est en train d'approuver.
+      await tx
+        .update(pendingActionsTable)
+        .set({ payload: { appels: campagne.appels, mandat } })
+        .where(eq(pendingActionsTable.id, campagne.pendingActionId));
+
+      return { kind: "ok" as const, mandat, depassements, regle };
+    });
+
+    switch (resultat.kind) {
+      case "introuvable":
+        res.status(404).json({ error: "Campagne introuvable." });
+        return;
+      case "gele":
+        res.status(409).json({
+          error:
+            "Le mandat de cette campagne est figé depuis sa validation. Créez une nouvelle campagne pour le changer.",
+        });
+        return;
+      case "ok":
+        res.json({
+          mandat: resultat.mandat,
+          depassements: resultat.depassements,
+          restreintLaRegle: mandatEstRestreint(resultat.regle, resultat.mandat),
+        });
+        return;
+    }
+  },
+);
+
 export default campagnesRelanceReadRouter;
