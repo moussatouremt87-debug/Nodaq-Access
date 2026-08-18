@@ -12,6 +12,7 @@ export * from "./facture_sequences";
 export * from "./avoirs";
 export * from "./prospects";
 export * from "./pending_actions";
+export * from "./journal_decisions";
 export * from "./chat";
 export * from "./activity";
 export * from "./devis";

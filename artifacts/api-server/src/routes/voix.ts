@@ -158,7 +158,10 @@ router.post("/voix/executer", async (req, res): Promise<void> => {
 
   let resultat;
   try {
-    resultat = await executerPlan(tenantId, parsed.data.planId);
+    resultat = await executerPlan(tenantId, parsed.data.planId, {
+      userId: req.session!.userId,
+      email: req.session!.email,
+    });
   } catch (err) {
     // Une opération a échoué : la transaction a tout annulé, y compris le
     // marquage. Le plan reste applicable une fois la cause corrigée.
