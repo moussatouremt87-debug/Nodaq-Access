@@ -36,6 +36,8 @@ import { parsePeriode, toDateString } from "./analytics-periods.js";
 import type { OperationPlanifiee } from "./plan-vocal.js";
 import { affaireWords } from "@nodaq/shared";
 import { verticalDepuisTx, vocabulaireAssistant } from "./vertical-tenant.js";
+import { montantsNonSources, MESSAGE_REFUS_CHIFFRAGE } from "./garde-montants.js";
+import { logger } from "./logger.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -488,6 +490,34 @@ d) Ne JAMAIS comparer à d'autres entreprises, à un secteur ou à une moyenne n
    même si l'utilisateur le demande explicitement.
    Réponse type : « Je ne compare qu'à votre propre historique. »
 
+═══ CE QUE TU REFUSES, ET COMMENT ═══
+Trois refus, sans exception. Dans les trois cas : dis NON clairement,
+explique POURQUOI en français simple, et indique quoi faire à la place.
+Jamais un message d'erreur technique, jamais un refus sec sans raison.
+
+1. CHIFFRER DE TOI-MÊME. Tu ne calcules aucun montant, tu n'estimes aucun prix,
+   tu n'additionnes aucun total. Les chiffres viennent du catalogue de
+   l'entreprise, de ses documents ou de get_indicateur — jamais de toi. Sans
+   source, dis que tu ne peux pas chiffrer et explique ce qui manque. Ni
+   « environ », ni « autour de », ni fourchette.
+   (Une garde côté serveur bloque de toute façon un montant sans source : tu ne
+   gagnes rien à essayer, l'utilisateur recevrait un refus à la place de ta
+   réponse entière.)
+
+2. UN AVIS PROFESSIONNEL RÉGLEMENTÉ. Médical, juridique, ou fiscal au-delà de la
+   simple gestion courante. Tu n'es ni médecin, ni avocat, ni expert-comptable.
+   Oriente vers un professionnel qualifié.
+   ATTENTION — le refus n'est pas une formule de politesse à placer AVANT de
+   répondre quand même. Si tu commences par « je ne peux pas donner de conseil
+   juridique » et que tu enchaînes sur ce que dit la loi, les conditions de
+   reconnaissance ou la marche à suivre, tu as donné ce conseil : l'utilisateur
+   retiendra le contenu, pas la réserve. Dans ce cas tu dis vers QUI se tourner
+   (médecin du travail, avocat, expert-comptable) et tu t'arrêtes là. Pas de
+   liste d'étapes, pas de critères, pas de « en France, la règle est… ».
+
+3. ENGAGER L'ENTREPRISE. Tu ne prends aucun engagement au nom de l'entreprise
+   envers un client ou un tiers. Tu prépares, l'humain valide.
+
 ═══ INSTRUCTIONS ═══
 - Utilise tes outils pour lire les données avant de répondre si besoin.
 - Quand l'utilisateur mentionne une action (une affaire achevée, un nouveau contact, etc.), utilise les outils appropriés pour mettre à jour l'app.
@@ -885,7 +915,7 @@ export async function runAgent(
 
     // No tool calls → final text response
     if (!toolCalls || toolCalls.length === 0) {
-      const content = msg.content ?? "";
+      const content = filtrerMontantsInventes(msg.content ?? "", messages);
       return { content, actions, operations };
     }
 
@@ -927,6 +957,36 @@ export async function runAgent(
     actions,
     operations,
   };
+}
+
+/**
+ * US-A6.3 — dernier rempart avant l'utilisateur.
+ *
+ * Le prompt DEMANDE au modèle de ne jamais chiffrer de lui-même ; cette
+ * fonction le VÉRIFIE. Un montant que rien ne justifie ne sort pas : la
+ * réponse entière est remplacée par une explication (voir garde-montants.ts
+ * pour le pourquoi du remplacement total plutôt que du retrait du chiffre).
+ *
+ * Les sources légitimes sont exactement les trois qui figurent déjà dans la
+ * conversation envoyée au modèle : le prompt système (état de l'entreprise),
+ * les résultats d'outils, et les messages de l'utilisateur — répéter un
+ * chiffre que l'utilisateur vient de donner n'est pas l'inventer.
+ */
+function filtrerMontantsInventes(contenu: string, messages: readonly LlmMessage[]): string {
+  if (!contenu) return contenu;
+
+  const sources = messages
+    .filter((m) => m.role === "system" || m.role === "tool" || m.role === "user")
+    .map((m) => (typeof m.content === "string" ? m.content : ""));
+
+  const inventes = montantsNonSources(contenu, sources);
+  if (inventes.length === 0) return contenu;
+
+  // NI le montant, NI la réponse, NI la question : la doctrine de
+  // journalisation du dépôt interdit de consigner un contenu de message ou une
+  // valeur. Seul le FAIT est utile — il dit qu'un garde-fou a servi.
+  logger.warn({ nbMontants: inventes.length }, "[agent] montant sans source intercepté");
+  return MESSAGE_REFUS_CHIFFRAGE;
 }
 
 // ─── Contextual suggestions ───────────────────────────────────────────────────
