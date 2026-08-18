@@ -386,3 +386,64 @@ async def test_un_echange_contient_des_marqueurs_d_oral() -> None:
         "du coup", "en fait", "alors", "voilà", "hein", "écoutez", "d'accord", "euh",
     )
     assert any(m in tts.said for m in marqueurs), tts.said
+
+
+# ── L'hésitation : présente là où on réfléchit, absente ailleurs ───────────
+
+
+async def test_hesitation_at_the_thinking_moments() -> None:
+    """Validé à l'oreille : la même réplique hésitante sonne nettement plus humaine."""
+    gateway = StubGateway(
+        instalment=InstalmentDecision(granted=True, instalments=3, first_payment_in_days=10)
+    )
+    conv, tts = build(gateway)
+    await conv.announce()
+    await conv.request_instalments(
+        instalments=3, first_payment_in_days=10, last_payment_late_days=25
+    )
+    assert "euh" in tts.said, "l'agent accorde sans marquer le temps d'y réfléchir"
+
+
+async def test_no_hesitation_in_the_opening() -> None:
+    """Les premières secondes décident si l'appel est pris pour une arnaque.
+
+    Quelqu'un qui hésite en se présentant sonne fuyant — exactement l'inverse
+    de ce que l'annonce doit produire.
+    """
+    conv, tts = build()
+    await conv.announce()
+    assert "euh" not in tts.utterances[0].lower()
+
+
+async def test_hesitation_is_not_sprinkled_everywhere() -> None:
+    """Un agent qui hésite à chaque phrase est une caricature.
+
+    Elle sonne plus faux qu'un agent neutre — d'où cette borne, qui empêche la
+    tournure de se répandre au fil des retouches.
+    """
+    gateway = StubGateway(
+        instalment=InstalmentDecision(granted=True, instalments=3, first_payment_in_days=10)
+    )
+    conv, tts = build(gateway)
+    await conv.announce()
+    await conv.nudge_for_date()
+    await conv.request_instalments(
+        instalments=3, first_payment_in_days=10, last_payment_late_days=25
+    )
+    await conv.record_promise(
+        amount_eur="mille deux cents euros", date_label="quinze septembre"
+    )
+    await conv.confirm_promise()
+    await conv.handle("ne me rappelez plus")
+
+    avec = [u for u in tts.utterances if "euh" in u.lower()]
+    assert len(avec) <= len(tts.utterances) / 2, (
+        f"{len(avec)} répliques hésitantes sur {len(tts.utterances)} — c'est une caricature"
+    )
+
+
+async def test_no_hesitation_when_saying_goodbye() -> None:
+    # Hésiter sur « merci, bonne journée » s'entend comme de la réticence.
+    conv, tts = build()
+    await conv.run(turns("ne me rappelez plus"))
+    assert "euh" not in tts.utterances[-1].lower()

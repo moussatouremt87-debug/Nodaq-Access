@@ -96,6 +96,24 @@ def _contains(text: str, needles: tuple[str, ...]) -> bool:
     return any(n in lowered for n in needles)
 
 
+#: Light hesitation, used **only at thinking moments**.
+#:
+#: Validated by ear in telephone conditions: the same line with a hesitation
+#: sounds markedly more human than without. But it belongs where a person would
+#: actually pause — before granting something that had to be checked, before
+#: reading back a figure — and nowhere else.
+#:
+#: Not in the opening: the first seconds are where the callee decides whether
+#: this is a scam, and someone who hesitates while introducing themselves
+#: sounds evasive. Not in closings either: hesitating on "thank you, goodbye"
+#: reads as reluctance.
+#:
+#: `test_hesitation_is_not_sprinkled_everywhere` keeps it from spreading. An
+#: agent that hesitates in every sentence is a caricature, which sounds worse
+#: than a neutral one.
+HESITATION = "Alors… euh,"
+
+
 class DunningConversation:
     """Runs one call. Knows how to behave, not what to allow."""
 
@@ -213,8 +231,10 @@ class DunningConversation:
         )
 
         if decision.granted:
+            # Thinking moment: the agent has just consulted what it may grant.
             await self._say(
-                f"Alors, on peut faire {decision.instalments} fois. "
+                f"{HESITATION} laissez-moi regarder. Voilà. "
+                f"Du coup, on peut faire {decision.instalments} fois. "
                 f"Le premier sous {decision.first_payment_in_days} jours. Ça vous irait ?"
             )
         else:
@@ -230,8 +250,12 @@ class DunningConversation:
     async def record_promise(self, *, amount_eur: str, date_label: str) -> None:
         """Take a promise and lock it by recap (US-3)."""
         self.state.promise_obtained = True
+        # Thinking moment: the agent is gathering what was just agreed before
+        # reading it back. The recap is the one line that must be heard clearly,
+        # so the hesitation sits before it, never inside it.
         await self._say(
-            f"Alors je résume. Vous réglez {amount_eur} le {date_label}. C'est bien ça ?"
+            f"{HESITATION} je résume. "
+            f"Vous réglez {amount_eur} le {date_label}. C'est bien ça ?"
         )
 
     async def confirm_promise(self) -> None:
