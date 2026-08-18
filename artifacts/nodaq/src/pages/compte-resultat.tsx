@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
+import { useLectureSeule } from '@/hooks/use-auth';
 import { fmtEUR } from '@/lib/format';
 
 const API = '/api';
@@ -170,12 +171,18 @@ function LineRow({
     storedCents === 0 ? '' : fmtAmountInput(storedCents),
   );
   const [focused, setFocused] = useState(false);
+  // US-A5.4 — lu ICI plutôt que passé en prop à travers Section : le hook
+  // évite de faire traverser un drapeau à trois niveaux de composants qui
+  // n'en ont aucun autre usage.
+  const lectureSeule = useLectureSeule();
 
   const currentCents = editMap.has(line.lineCode)
     ? (editMap.get(line.lineCode) ?? 0)
     : (line.manualAmountCents !== null ? line.manualAmountCents : line.autoAmountCents);
 
-  if (line.isAutoComputed) {
+  // Un tiers de confiance lit le compte de résultat, il ne le corrige pas :
+  // la ligne se rend comme une ligne auto-calculée, sans champ de saisie.
+  if (line.isAutoComputed || lectureSeule) {
     return (
       <div className="flex items-center gap-2 px-4 py-2 border-b border-border/50 last:border-0 bg-muted/20">
         <div className="flex-1 min-w-0">
@@ -192,7 +199,11 @@ function LineRow({
           )}
         </div>
         <div className="shrink-0 w-40 text-right">
-          <AmountCell cents={line.autoAmountCents} muted={line.autoAmountCents === 0} />
+          {/* `currentCents`, pas `autoAmountCents` : sur une ligne SAISIE
+              rendue en lecture seule, le montant à montrer est celui qui a
+              été saisi. Les deux coïncident sur une ligne auto-calculée,
+              qui n'accepte aucune surcharge (le serveur la refuse). */}
+          <AmountCell cents={currentCents} muted={currentCents === 0} />
         </div>
       </div>
     );

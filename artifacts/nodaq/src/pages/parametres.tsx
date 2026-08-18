@@ -25,6 +25,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
+import { toDateString } from '@/lib/format';
 import { useVertical } from '@/hooks/use-vertical';
 import { cn } from '@/lib/utils';
 
@@ -110,11 +111,34 @@ function ModuleCard({ icon: Icon, label, description, enabled, onChange }: {
   );
 }
 
+/** Les rôles qu'une invitation peut accorder — miroir de l'enum du serveur. */
+type RoleInvitable = 'OWNER' | 'MEMBER' | 'ACCOUNTANT' | 'VIEWER';
+
 const ROLE_LABELS: Record<string, string> = {
   OWNER: 'Propriétaire',
   MEMBER: 'Membre',
   ACCOUNTANT: 'Comptable',
+  VIEWER: 'Tiers — lecture seule',
 };
+
+/**
+ * Échéance d'un accès tiers (US-A5.4). Un accès déjà expiré est signalé
+ * explicitement plutôt que masqué : l'adhésion existe toujours en base, et
+ * l'artisan doit comprendre pourquoi la personne ne peut plus entrer.
+ */
+function EcheanceTiers({ expiresAt }: { expiresAt: string | null }) {
+  if (!expiresAt) return null;
+  const date = new Date(expiresAt);
+  const expire = date.getTime() <= Date.now();
+  return (
+    <span
+      className={`text-[11px] shrink-0 whitespace-nowrap ${expire ? 'text-destructive' : 'text-muted-foreground'}`}
+    >
+      {expire ? 'Expiré le ' : "Jusqu'au "}
+      {date.toLocaleDateString('fr-FR')}
+    </span>
+  );
+}
 
 function RoleBadge({ role }: { role: string }) {
   return (
@@ -129,24 +153,42 @@ function InviteForm() {
   const { words } = useVertical();
   const qc = useQueryClient();
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState<'OWNER' | 'MEMBER' | 'ACCOUNTANT'>('MEMBER');
+  const [role, setRole] = useState<RoleInvitable>('MEMBER');
   const [libelle, setLibelle] = useState('');
+  // US-A5.4 — obligatoire pour un tiers de confiance, refusée pour les
+  // autres rôles (le serveur rejette les deux écarts).
+  const [accesExpireAt, setAccesExpireAt] = useState('');
   const inviter = useInviterMembre({
     mutation: {
       onSuccess: () => {
         qc.invalidateQueries({ queryKey: getListMembresQueryKey() });
         setEmail('');
         setLibelle('');
+        setAccesExpireAt('');
         toast({ title: 'Invitation envoyée', description: `Un e-mail a été envoyé à ${email.trim()}.` });
       },
       onError: (err: Error) => toast({ title: 'Erreur', description: err.message, variant: 'destructive' }),
     },
   });
 
+  const estTiers = role === 'VIEWER';
+  // Une date seule (`YYYY-MM-DD`) désigne minuit : l'accès se fermerait au
+  // début du jour choisi, pas à sa fin. On vise la fin de journée, qui est ce
+  // que « jusqu'au 31 » veut dire pour la personne qui le saisit.
+  const echeanceIso = accesExpireAt ? new Date(`${accesExpireAt}T23:59:59`).toISOString() : null;
+
   const handleInvite = () => {
     const trimmed = email.trim();
     if (!trimmed) return;
-    inviter.mutate({ data: { email: trimmed, role, ...(libelle.trim() ? { libelle: libelle.trim() } : {}) } });
+    if (estTiers && !echeanceIso) return;
+    inviter.mutate({
+      data: {
+        email: trimmed,
+        role,
+        ...(libelle.trim() ? { libelle: libelle.trim() } : {}),
+        ...(estTiers && echeanceIso ? { accesExpireAt: echeanceIso } : {}),
+      },
+    });
   };
 
   return (
@@ -168,19 +210,20 @@ function InviteForm() {
         </div>
         <div className="space-y-1.5 sm:w-48">
           <Label>Rôle</Label>
-          <Select value={role} onValueChange={v => setRole(v as 'OWNER' | 'MEMBER' | 'ACCOUNTANT')}>
+          <Select value={role} onValueChange={v => setRole(v as RoleInvitable)}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="MEMBER">Membre</SelectItem>
               <SelectItem value="ACCOUNTANT">Comptable — accès financier</SelectItem>
               <SelectItem value="OWNER">Copropriétaire — même autorité que vous</SelectItem>
+              <SelectItem value="VIEWER">Tiers de confiance — lecture seule, daté</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <div className="sm:self-end">
           <Button
             onClick={handleInvite}
-            disabled={!email.trim() || inviter.isPending}
+            disabled={!email.trim() || inviter.isPending || (estTiers && !accesExpireAt)}
             className="w-full sm:w-auto gap-1.5"
           >
             <Mail className="h-3.5 w-3.5" />
@@ -188,18 +231,45 @@ function InviteForm() {
           </Button>
         </div>
       </div>
-      <div className="mt-3 space-y-1.5 sm:max-w-xs">
-        <Label htmlFor="invite-libelle">Fonction (facultatif)</Label>
-        <Input
-          id="invite-libelle"
-          value={libelle}
-          onChange={e => setLibelle(e.target.value)}
-          placeholder="ex. Conjoint collaborateur, Associé fondateur"
-        />
+      <div className="mt-3 flex flex-col sm:flex-row gap-3">
+        <div className="space-y-1.5 sm:max-w-xs flex-1">
+          <Label htmlFor="invite-libelle">Fonction (facultatif)</Label>
+          <Input
+            id="invite-libelle"
+            value={libelle}
+            onChange={e => setLibelle(e.target.value)}
+            placeholder="ex. Conjoint collaborateur, Associé fondateur"
+          />
+        </div>
+        {estTiers && (
+          <div className="space-y-1.5 sm:w-56">
+            <Label htmlFor="invite-echeance">Accès jusqu'au</Label>
+            <Input
+              id="invite-echeance"
+              type="date"
+              value={accesExpireAt}
+              /* `toDateString` (composantes LOCALES), pas `toISOString()` :
+                 « demain » est un jour du calendrier de l'utilisateur. Passé
+                 minuit en France, l'heure UTC est encore la veille — le
+                 plancher aurait autorisé une date déjà refusée par le
+                 serveur. Une garde de la suite attrape ce cas. */
+              min={toDateString(new Date(Date.now() + 86_400_000))}
+              onChange={e => setAccesExpireAt(e.target.value)}
+            />
+          </div>
+        )}
       </div>
       <p className="text-xs text-muted-foreground mt-3">
         Un membre voit les {words.plural}, devis et contrats sans les montants. Un comptable voit également les données financières (factures, marge, échéancier fiscal). Un copropriétaire a l'accès complet, à égalité — jamais de hiérarchie entre propriétaires.
       </p>
+      {estTiers && (
+        <p className="text-xs text-muted-foreground mt-2">
+          Un tiers de confiance — votre banquier pour un dossier de prêt, par exemple —
+          consulte le dossier financier et rien d'autre : cockpit, compte de résultat,
+          factures, marge, rapports, échéancier, prévisionnel. Il ne peut rien modifier,
+          et son accès se ferme tout seul à la date choisie.
+        </p>
+      )}
     </div>
   );
 }
@@ -296,6 +366,24 @@ function MembresTab() {
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   )}
+                </>
+              ) : m.role === 'VIEWER' ? (
+                /* US-A5.4 — pas de liste déroulante de rôle : le serveur
+                   refuse de transformer un tiers en membre, et proposer le
+                   geste ici ne ferait qu'offrir une erreur. Reste
+                   l'essentiel : jusqu'à quand court l'accès, et de quoi le
+                   fermer tout de suite. */
+                <>
+                  <EcheanceTiers expiresAt={m.expiresAt ?? null} />
+                  <RoleBadge role={m.role} />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 shrink-0 text-destructive"
+                    onClick={() => setToRevoke(m)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
                 </>
               ) : (
                 <>

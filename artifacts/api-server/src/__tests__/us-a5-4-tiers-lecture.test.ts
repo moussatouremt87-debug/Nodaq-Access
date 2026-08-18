@@ -174,6 +174,7 @@ describe("c — périmètre : liste blanche, refus par défaut", () => {
       "/rapports": "/rapports/mensuel",
       "/echeances": "/echeances",
       "/previsionnel-tresorerie": "/previsionnel-tresorerie",
+      "/votre-metier": "/votre-metier",
     };
 
     const v = await creerUtilisateur("VIEWER", "prefixes");

@@ -5,6 +5,7 @@ import {
   Pencil, Trash2, MoreVertical,
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useLectureSeule } from '@/hooks/use-auth';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -79,6 +80,10 @@ function useEcheances(statut?: string) {
 type FilterTab = 'ALL' | 'A_VENIR' | 'EN_RETARD' | 'PAYEE';
 
 export default function EcheancierPage() {
+  // US-A5.4 — un tiers de confiance consulte l'échéancier fiscal, il ne le
+  // tient pas à jour. Le serveur refuse toute écriture ; on retire ici les
+  // commandes correspondantes.
+  const lectureSeule = useLectureSeule();
   const qc = useQueryClient();
   const { toast } = useToast();
   const [tab, setTab] = useState<FilterTab>('ALL');
@@ -133,9 +138,11 @@ export default function EcheancierPage() {
         title="Échéancier fiscal"
         description="Suivez vos obligations fiscales et sociales pour ne jamais être en retard."
         actions={
-          <Button onClick={openCreate} className="gap-1.5">
-            <Plus className="h-4 w-4" /> Ajouter une échéance
-          </Button>
+          lectureSeule ? null : (
+            <Button onClick={openCreate} className="gap-1.5">
+              <Plus className="h-4 w-4" /> Ajouter une échéance
+            </Button>
+          )
         }
       />
 
@@ -183,7 +190,9 @@ export default function EcheancierPage() {
               <EmptyDescription>Ajoutez vos premières échéances fiscales pour les suivre.</EmptyDescription>
             </EmptyHeader>
             <EmptyContent>
-              <Button onClick={openCreate}><Plus className="h-4 w-4" /> Ajouter une échéance</Button>
+              {!lectureSeule && (
+                <Button onClick={openCreate}><Plus className="h-4 w-4" /> Ajouter une échéance</Button>
+              )}
             </EmptyContent>
           </Empty>
         ) : (
@@ -245,13 +254,14 @@ export default function EcheancierPage() {
                       </div>
 
                       <div className="flex items-center gap-1 shrink-0">
-                        {e.status !== 'PAYEE' && (
+                        {!lectureSeule && e.status !== 'PAYEE' && (
                           <Button size="sm" variant="outline" className="h-7 gap-1 text-xs"
                             disabled={payMut.isPending}
                             onClick={() => payMut.mutate(e.id)}>
                             <CheckCircle2 className="h-3 w-3" /> Marquer payée
                           </Button>
                         )}
+                        {!lectureSeule && (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-7 w-7">
@@ -268,6 +278,7 @@ export default function EcheancierPage() {
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
+                        )}
                       </div>
                     </div>
                   </motion.div>
