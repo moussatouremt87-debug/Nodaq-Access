@@ -53,6 +53,7 @@ import { lectureSeuleMethode, lectureSeulePerimetre } from "../middleware/lectur
 import { FINANCIAL_ROLES } from "@nodaq/shared";
 import journalDecisionsRouter from "./journal-decisions";
 import souveraineteRouter from "./souverainete";
+import { modulesReadRouter, modulesWriteRouter } from "./modules";
 import membresRouter, { membresPublicRouter } from "./membres";
 import mfaRouter from "./mfa";
 
@@ -123,6 +124,9 @@ router.use(biz, voixRouter);
 router.use(biz, prospectionRouter);
 router.use(biz, clientsRouter);
 router.use(biz, affectationsRouter);
+// Lecture des modules : la NAVIGATION en dépend, donc tout rôle doit pouvoir
+// la lire. L'écriture est plus bas, réservée au propriétaire.
+router.use(biz, modulesReadRouter);
 
 // ── Business routes (OWNER ou ACCOUNTANT seulement) ───────────────────────
 router.use(financierOnly, echeancesRouter);
@@ -155,5 +159,8 @@ router.use(ownerOnly, facturationElectroniqueRouter);
 // US-A7.4 — l'attestation engage l'entreprise devant un donneur d'ordre :
 // elle se produit depuis le compte du dirigeant.
 router.use(ownerOnly, souveraineteRouter);
+// Allumer ou éteindre un module engage le compte, pas l'écran de celui qui
+// clique : c'est une décision de propriétaire.
+router.use(ownerOnly, modulesWriteRouter);
 
 export default router;
