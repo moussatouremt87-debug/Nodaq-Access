@@ -2,7 +2,13 @@
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <!-- PAS de `maximum-scale` ni de `user-scalable=no` : ils empêchent
+         d'agrandir la page. WCAG 1.4.4 (AA) exige le contraire, et c'est
+         l'utilisateur malvoyant qui en paie le prix — sur TOUS les écrans à
+         la fois. Trouvé par axe dans un vrai navigateur (US-A8.2) : l'audit
+         jsdom ne voit que des composants, jamais cet en-tête. Gardé par
+         `src/lib/accessibilite-parite.test.ts`. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>NODAQ — Cockpit de pilotage</title>
     <meta name="description" content="NODAQ — le cockpit de pilotage pour dirigeants de TPE/PME. Trésorerie, affaires, factures et prospects, en temps réel." />
     <meta name="robots" content="index, follow" />

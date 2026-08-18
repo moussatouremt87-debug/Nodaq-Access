@@ -61,7 +61,16 @@ function Toggle({ checked, onChange, label, description }: {
         <div className="text-sm font-medium text-foreground">{label}</div>
         {description && <div className="text-xs text-muted-foreground mt-0.5">{description}</div>}
       </div>
+      {/* `role="switch"` + `aria-checked` + nom accessible : l'interrupteur
+          n'était qu'un `<button>` contenant une pastille. Un lecteur d'écran
+          annonçait « bouton », sans dire de quel réglage il s'agissait ni s'il
+          était activé — donc un réglage impossible à lire comme à modifier
+          (US-A8.2, WCAG 4.1.2). Le libellé affiché sert de nom : il est déjà
+          exact, il n'y a pas de raison d'en écrire un second. */}
       <button
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
         onClick={() => onChange(!checked)}
         className={cn(
           'relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0',

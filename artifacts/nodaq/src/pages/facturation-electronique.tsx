@@ -359,12 +359,15 @@ function EReportingCard({ paConfiguree }: { paConfiguree: boolean }) {
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">Début de période</Label>
-          <Input type="date" value={periodeDebut} onChange={(e) => setPeriodeDebut(e.target.value)} />
+          {/* `htmlFor`/`id` : le libellé était visuellement présent mais
+              rattaché à rien — un lecteur d'écran annonçait « champ date »
+              sans dire laquelle (US-A8.2). */}
+          <Label htmlFor="periode-debut" className="text-xs text-muted-foreground">Début de période</Label>
+          <Input id="periode-debut" type="date" value={periodeDebut} onChange={(e) => setPeriodeDebut(e.target.value)} />
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">Fin de période</Label>
-          <Input type="date" value={periodeFin} onChange={(e) => setPeriodeFin(e.target.value)} />
+          <Label htmlFor="periode-fin" className="text-xs text-muted-foreground">Fin de période</Label>
+          <Input id="periode-fin" type="date" value={periodeFin} onChange={(e) => setPeriodeFin(e.target.value)} />
         </div>
       </div>
 

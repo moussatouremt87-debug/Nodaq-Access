@@ -179,13 +179,13 @@ function BlocChantiers({ onValidate }: { onValidate: (data: Record<string, unkno
                     placeholder="0" className="h-8 text-sm text-right border-0 bg-transparent px-0 focus-visible:ring-0" min={0} max={100} />
                 </td>
                 <td className="py-1.5 px-2">
-                  <Input type="date" value={row.dateFinPrevue}
+                  <Input type="date" aria-label="Date de fin prévue" value={row.dateFinPrevue}
                     onChange={e => update(row.id, 'dateFinPrevue', e.target.value)}
                     className="h-8 text-sm border-0 bg-transparent px-0 focus-visible:ring-0" />
                 </td>
                 <td className="py-1.5">
                   {rows.length > 1 && (
-                    <button onClick={() => removeRow(row.id)} className="text-muted-foreground hover:text-destructive">
+                    <button onClick={() => removeRow(row.id)} aria-label="Supprimer la ligne" className="text-muted-foreground hover:text-destructive">
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   )}
@@ -238,10 +238,10 @@ function BlocImpayés({ onValidate }: { onValidate: (data: Record<string, unknow
               <Input type="number" value={row.montant}
                 onChange={e => update(row.id, 'montant', e.target.value)}
                 placeholder="Montant (€)" className="h-8 text-sm text-right" min={0} />
-              <Input type="date" value={row.dateFacture}
+              <Input type="date" aria-label="Date de la facture" value={row.dateFacture}
                 onChange={e => update(row.id, 'dateFacture', e.target.value)}
                 className="h-8 text-sm" />
-              <button onClick={() => removeRow(row.id)} className="text-muted-foreground hover:text-destructive shrink-0">
+              <button onClick={() => removeRow(row.id)} aria-label="Supprimer la ligne" className="text-muted-foreground hover:text-destructive shrink-0">
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
               {jours !== null && row.montant && (
@@ -288,7 +288,7 @@ function BlocDevis({ onValidate }: { onValidate: (data: Record<string, unknown>)
           <Input type="number" value={row.montant}
             onChange={e => update(row.id, 'montant', e.target.value)}
             placeholder="Montant HT (€)" className="h-8 text-sm text-right" min={0} />
-          <Input type="date" value={row.dateEnvoi}
+          <Input type="date" aria-label="Date d'envoi" value={row.dateEnvoi}
             onChange={e => update(row.id, 'dateEnvoi', e.target.value)}
             className="h-8 text-sm" />
         </div>
@@ -323,8 +323,8 @@ function BlocCaYtd({ onValidate }: { onValidate: (data: Record<string, unknown>)
             placeholder="ex. 72000" min={0} />
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">Début de l'exercice</Label>
-          <Input type="date" value={dateDebut} onChange={e => setDateDebut(e.target.value)} />
+          <Label htmlFor="reprise-debut-exercice" className="text-xs">Début de l'exercice</Label>
+          <Input id="reprise-debut-exercice" type="date" value={dateDebut} onChange={e => setDateDebut(e.target.value)} />
         </div>
       </div>
       <Button size="sm" onClick={() => onValidate({
@@ -364,7 +364,7 @@ function BlocEquipe({ onValidate }: { onValidate: (data: Record<string, unknown>
           <div key={row.id} className="grid grid-cols-[1fr_130px_80px_120px] gap-2 items-center">
             <Input value={row.name} onChange={e => update(row.id, 'name', e.target.value)}
               placeholder="Prénom" className="h-8 text-sm" />
-            <select value={row.typeLien} onChange={e => update(row.id, 'typeLien', e.target.value)}
+            <select aria-label="Type de lien" value={row.typeLien} onChange={e => update(row.id, 'typeLien', e.target.value)}
               className="h-8 rounded-md border border-input bg-background px-2 text-sm">
               <option value="SALARIE">Salarié</option>
               <option value="SOUS_TRAITANT">
