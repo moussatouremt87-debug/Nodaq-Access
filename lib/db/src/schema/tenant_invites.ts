@@ -21,11 +21,18 @@ export const tenantInvitesTable = pgTable("tenant_invites", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   tenantId: uuid("tenant_id").notNull().references(() => tenantsTable.id),
   email: text("email").notNull(),
-  /** 'MEMBER' | 'ACCOUNTANT' | 'OWNER' — contrainte CHECK en base. */
+  /** 'MEMBER' | 'ACCOUNTANT' | 'OWNER' | 'VIEWER' — contrainte CHECK en base
+   *  (élargie par 039 pour le tiers de confiance, US-A5.4). */
   role: text("role").notNull(),
   /** Qualificatif libre, reporté sur le membership à l'acceptation
    *  (US-A5.1) — voir memberships.libelle. */
   libelle: text("libelle"),
+  /** Échéance de l'ACCÈS accordé, reportée sur `memberships.expires_at` à
+   *  l'acceptation (US-A5.4). À ne pas confondre avec `expiresAt` ci-dessous,
+   *  qui est la validité du LIEN d'invitation : deux horloges distinctes —
+   *  le délai pour accepter, et la durée de l'accès une fois accepté.
+   *  Obligatoire pour un `VIEWER`, refusée sinon (routes/membres.ts). */
+  accesExpireAt: timestamp("acces_expire_at", { withTimezone: true }),
   tokenSha256: text("token_sha256").notNull(),
   invitedBy: uuid("invited_by").notNull().references(() => usersTable.id),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),

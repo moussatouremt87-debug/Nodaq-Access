@@ -10,6 +10,8 @@ export type InvitationAcceptationResponseRole = typeof InvitationAcceptationResp
 
 
 export const InvitationAcceptationResponseRole = {
+  OWNER: 'OWNER',
   MEMBER: 'MEMBER',
   ACCOUNTANT: 'ACCOUNTANT',
+  VIEWER: 'VIEWER',
 } as const;

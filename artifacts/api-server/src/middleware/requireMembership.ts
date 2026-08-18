@@ -29,6 +29,23 @@ export async function requireMembership(
     return;
   }
 
+  // US-A5.4 — échéance de l'accès. `null` = permanent, ce que sont toutes les
+  // adhésions sauf celle d'un tiers de confiance : le chemin existant n'est
+  // pas touché. Contrôlée ICI et pas à la connexion, pour la même raison que
+  // l'adhésion elle-même l'est : ce middleware tourne à CHAQUE requête, donc
+  // l'accès se referme dès la requête suivant l'échéance, sans attendre
+  // l'expiration du cookie ni une reconnexion.
+  //
+  // Message distinct de « vous n'êtes pas membre » : le tiers doit comprendre
+  // que son accès a simplement pris fin, et l'artisan doit pouvoir le
+  // rouvrir sans croire à une erreur.
+  if (membership.expiresAt && membership.expiresAt.getTime() <= Date.now()) {
+    res
+      .status(403)
+      .json({ error: "Votre accès à cet espace a expiré." });
+    return;
+  }
+
   // Refresh role from DB (in case it changed since login)
   req.session!.role = membership.role;
   next();

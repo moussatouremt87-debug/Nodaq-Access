@@ -4479,7 +4479,7 @@ export const getInviterMembreUrl = () => {
 }
 
 /**
- * @summary Invite a collaborator (OWNER only) — role restricted to MEMBER/ACCOUNTANT
+ * @summary Invite a collaborator (OWNER only) — OWNER role allowed, grants equal authority
  */
 export const inviterMembre = async (inviteMembreBody: InviteMembreBody, options?: Parameters<typeof customFetch>[1]): Promise<InvitationEnAttente> => {
 
@@ -4528,7 +4528,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type InviterMembreMutationError = ErrorType<void>
 
     /**
- * @summary Invite a collaborator (OWNER only) — role restricted to MEMBER/ACCOUNTANT
+ * @summary Invite a collaborator (OWNER only) — OWNER role allowed, grants equal authority
  */
 export const useInviterMembre = <TError = ErrorType<void>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof inviterMembre>>, TError,{data: BodyType<InviteMembreBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -4550,7 +4550,7 @@ export const getChangerRoleMembreUrl = (id: string,) => {
 }
 
 /**
- * @summary Change a member's role (OWNER only) — cannot target or grant OWNER
+ * @summary Change a member's role or libelle (OWNER only) — cannot promote to or demote from OWNER
  */
 export const changerRoleMembre = async (id: string,
     roleMembreBody: RoleMembreBody, options?: Parameters<typeof customFetch>[1]): Promise<Membre> => {
@@ -4600,7 +4600,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type ChangerRoleMembreMutationError = ErrorType<void>
 
     /**
- * @summary Change a member's role (OWNER only) — cannot target or grant OWNER
+ * @summary Change a member's role or libelle (OWNER only) — cannot promote to or demote from OWNER
  */
 export const useChangerRoleMembre = <TError = ErrorType<void>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof changerRoleMembre>>, TError,{id: string;data: BodyType<RoleMembreBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -4622,7 +4622,7 @@ export const getRevoquerMembreUrl = (id: string,) => {
 }
 
 /**
- * @summary Revoke a member's access (OWNER only) — cannot target OWNER
+ * @summary Revoke a member's access (OWNER only) — cannot revoke the last remaining OWNER
  */
 export const revoquerMembre = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
 
@@ -4671,7 +4671,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type RevoquerMembreMutationError = ErrorType<void>
 
     /**
- * @summary Revoke a member's access (OWNER only) — cannot target OWNER
+ * @summary Revoke a member's access (OWNER only) — cannot revoke the last remaining OWNER
  */
 export const useRevoquerMembre = <TError = ErrorType<void>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revoquerMembre>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}

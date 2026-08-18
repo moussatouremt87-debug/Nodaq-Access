@@ -17,5 +17,10 @@ export interface Membre {
      * @nullable
      */
   libelle?: string | null;
+  /**
+     * Échéance de l'accès (US-A5.4). null = permanent, ce que sont toutes les adhésions sauf celle d'un tiers de confiance (VIEWER).
+     * @nullable
+     */
+  expiresAt?: Date | null;
   createdAt: Date;
 }

@@ -22,19 +22,68 @@ export type TenantId = z.infer<typeof TenantId>;
  * hook) — this file previously declared a lowercase variant that nothing
  * imported. One casing, read from here, not two hand-maintained lists.
  */
-export const MembershipRole = z.enum(["OWNER", "MEMBER", "ACCOUNTANT"]);
+export const MembershipRole = z.enum(["OWNER", "MEMBER", "ACCOUNTANT", "VIEWER"]);
 export type MembershipRole = z.infer<typeof MembershipRole>;
 
 /**
- * Qui voit les données financières. `OWNER` et `ACCOUNTANT` — pas `MEMBER`.
+ * Qui voit les données financières — `MEMBER` excepté.
  * Source unique : le backend (composition des routeurs) et le frontend (HOC
  * de route, filtre de nav) lisent tous les deux CETTE liste, jamais une
  * copie maintenue à la main de chaque côté.
+ *
+ * `VIEWER` (US-A5.4) y figure DÉLIBÉRÉMENT, et c'est le point le moins
+ * évident du dessin : ce qu'il montre au tiers de confiance, ce sont les
+ * MONTANTS EN CLAIR (`hasFinancialAccess` pilote `maskFinancialFields`) et
+ * l'exigence du second facteur (`requireMfaVerified` lit le même prédicat).
+ * Ce n'est PAS ce qui décide des écrans qu'il atteint — deux dimensions
+ * distinctes : cette liste dit « voit les montants », `ECRANS_TIERS_LECTURE`
+ * ci-dessous dit « atteint cet écran », et rétrécit ensuite ce que celle-ci
+ * ouvrirait.
  */
-export const FINANCIAL_ROLES = ["OWNER", "ACCOUNTANT"] as const satisfies readonly MembershipRole[];
+export const FINANCIAL_ROLES = ["OWNER", "ACCOUNTANT", "VIEWER"] as const satisfies readonly MembershipRole[];
 
 export function hasFinancialAccess(role: string | null | undefined): boolean {
   return (FINANCIAL_ROLES as readonly string[]).includes(role ?? "");
+}
+
+/**
+ * Tiers de confiance en lecture seule (US-A5.4) — un banquier qui instruit un
+ * dossier de prêt, un repreneur en cours d'audit. Il ne peut RIEN écrire, et
+ * son accès porte une échéance (`memberships.expires_at`).
+ */
+export function estLectureSeule(role: string | null | undefined): boolean {
+  return role === "VIEWER";
+}
+
+/**
+ * Les SEULS écrans qu'un `VIEWER` atteint — préfixes de chemin d'API, et par
+ * ricochet entrées de navigation côté frontend (source unique, lue des deux
+ * côtés comme `FINANCIAL_ROLES`).
+ *
+ * LISTE BLANCHE, jamais liste noire : un routeur ajouté demain est refusé par
+ * défaut. Une liste noire fuirait au premier oubli — et l'oubli est
+ * silencieux, ce qui est exactement le mode de défaillance qu'on ne peut pas
+ * se permettre sur un accès accordé à quelqu'un d'extérieur à l'entreprise.
+ *
+ * Le dossier financier, donc : pas le pipeline de prospects, pas les échanges
+ * avec l'assistant, pas le classeur. Un banquier instruit des comptes, il
+ * n'audite pas l'activité commerciale.
+ */
+export const ECRANS_TIERS_LECTURE = [
+  "/cockpit",
+  "/compte-resultat",
+  "/factures",
+  "/marge",
+  "/rapports",
+  "/echeances",
+  "/previsionnel-tresorerie",
+] as const;
+
+/** Vrai si ce chemin d'API est ouvert au tiers de confiance en lecture seule. */
+export function cheminOuvertEnLectureSeule(chemin: string): boolean {
+  return ECRANS_TIERS_LECTURE.some(
+    (prefixe) => chemin === prefixe || chemin.startsWith(`${prefixe}/`),
+  );
 }
 
 /** Payload de création d'une note (démo du pattern « table métier scellée par RLS »). */

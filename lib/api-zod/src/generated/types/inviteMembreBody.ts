@@ -9,8 +9,10 @@ import type { InviteMembreBodyRole } from './inviteMembreBodyRole';
 
 export interface InviteMembreBody {
   email: string;
-  /** OWNER crée un co-propriétaire à égalité — réservé aux OWNER existants (route ownerOnly). */
+  /** OWNER crée un co-propriétaire à égalité — réservé aux OWNER existants (route ownerOnly). VIEWER crée un tiers de confiance en lecture seule (US-A5.4) et exige alors accesExpireAt. */
   role: InviteMembreBodyRole;
   /** Qualificatif libre facultatif (ex. "Conjoint collaborateur", "Associé fondateur"). */
   libelle?: string;
+  /** Échéance de l'accès accordé. OBLIGATOIRE pour le rôle VIEWER (400 sinon), ignorée pour les autres rôles — un accès ouvert à quelqu'un d'extérieur à l'entreprise ne doit pas pouvoir rester ouvert par oubli. */
+  accesExpireAt?: Date;
 }
