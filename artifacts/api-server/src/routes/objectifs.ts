@@ -49,10 +49,9 @@ import {
   type ConversionChantiers,
   type TonObjectif,
 } from "@nodaq/shared";
+import { verticalDepuisTx } from "../lib/vertical-tenant.js";
 
 // Même clé et même défaut que routes/votre-metier.ts (US-A1.1).
-const VERTICAL_SETTING_KEY = "votre-metier.metier";
-const DEFAULT_VERTICAL = "industrie_btp";
 
 const router: IRouter = Router();
 
@@ -223,7 +222,7 @@ router.get("/cockpit/objectifs", async (req, res): Promise<void> => {
       ...(brutTauxMarge !== null ? { [CLE_TAUX_MARGE]: brutTauxMarge } : {}),
       ...(brutRepartition !== null ? { [CLE_REPARTITION_MARGE]: brutRepartition } : {}),
     });
-    const metier = (await reglage(tx, VERTICAL_SETTING_KEY)) ?? DEFAULT_VERTICAL;
+    const metier = await verticalDepuisTx(tx);
 
     return {
       caN: caN?.total ?? 0,

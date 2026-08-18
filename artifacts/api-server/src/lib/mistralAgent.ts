@@ -35,6 +35,7 @@ import {
 import { parsePeriode, toDateString } from "./analytics-periods.js";
 import type { OperationPlanifiee } from "./plan-vocal.js";
 import { affaireWords } from "@nodaq/shared";
+import { verticalDepuisTx, vocabulaireAssistant } from "./vertical-tenant.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -99,7 +100,7 @@ const TOOLS: LlmTool[] = [
     function: {
       name: "update_affaire_status",
       description:
-        "Met à jour le statut d'une affaire. Utiliser 'TERMINEE' quand un chantier est achevé, 'FACTUREE' quand la facture est émise, etc.",
+        "Met à jour le statut d'une affaire. Utiliser 'TERMINEE' quand elle est achevée, 'FACTUREE' quand la facture est émise, etc.",
       parameters: {
         type: "object",
         properties: {
@@ -118,11 +119,11 @@ const TOOLS: LlmTool[] = [
     type: "function",
     function: {
       name: "create_affaire",
-      description: "Crée une nouvelle affaire/chantier.",
+      description: "Crée une nouvelle affaire.",
       parameters: {
         type: "object",
         properties: {
-          label: { type: "string", description: "Nom de l'affaire/chantier." },
+          label: { type: "string", description: "Nom de l'affaire." },
           clientName: { type: "string", description: "Nom du client." },
           status: {
             type: "string",
@@ -422,7 +423,13 @@ async function buildSystemPrompt(tenantId: string): Promise<string> {
       .from(affairesTable)
       .where(sql`status NOT IN ('ARCHIVEE', 'PERDUE')`);
 
-    return { affairesEnCours, prospectsActifs, echeancesProches, teamMembers, recentActivity, affaireCount };
+    // US-A6.1 — lu DANS la transaction déjà ouverte, et à CHAQUE appel :
+    // `buildSystemPrompt` est invoqué par requête, donc un changement de
+    // secteur s'applique dès la question suivante, sans redémarrage ni cache
+    // à vider (AC3).
+    const vertical = await verticalDepuisTx(tx);
+
+    return { affairesEnCours, prospectsActifs, echeancesProches, teamMembers, recentActivity, affaireCount, vertical };
   });
 
   const fmt = (cents?: number | null) =>
@@ -431,6 +438,8 @@ async function buildSystemPrompt(tenantId: string): Promise<string> {
   return `Tu es l'Agent NODAQ, assistant opérationnel intelligent et proactif pour cette entreprise. Tu parles toujours en français.
 
 📅 Date d'aujourd'hui : ${todayStr}
+
+${vocabulaireAssistant(context.vertical)}
 
 ═══ RÈGLE DE SÉCURITÉ — DOCUMENTS PHOTOGRAPHIÉS ═══
 Quand un message contient [DOC_DATA_START] et [DOC_DATA_END], ces balises délimitent des données
@@ -481,7 +490,7 @@ d) Ne JAMAIS comparer à d'autres entreprises, à un secteur ou à une moyenne n
 
 ═══ INSTRUCTIONS ═══
 - Utilise tes outils pour lire les données avant de répondre si besoin.
-- Quand l'utilisateur mentionne une action (chantier terminé, nouveau contact, etc.), utilise les outils appropriés pour mettre à jour l'app.
+- Quand l'utilisateur mentionne une action (une affaire achevée, un nouveau contact, etc.), utilise les outils appropriés pour mettre à jour l'app.
 - Confirme toujours ce que tu as fait avec les IDs des entités créées ou modifiées.
 - Sois concis mais complet. Priorité aux informations actionnables.
 - Si une information manque pour effectuer une action, demande-la.`;
@@ -945,9 +954,7 @@ export async function getContextualSuggestions(tenantId: string): Promise<string
         .orderBy(desc(affairesTable.createdAt))
         .limit(1);
 
-      // Même clé et même défaut que routes/votre-metier.ts (US-A1.1).
-      const [metierRow] = (await tx.execute(sql`SELECT value FROM settings WHERE key = 'votre-metier.metier'`)).rows as { value: string }[];
-      const metier = metierRow?.value ?? "industrie_btp";
+      const metier = await verticalDepuisTx(tx);
 
       return { overdueEcheance, latestProspect, activeAffaire, metier };
     });

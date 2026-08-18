@@ -12,6 +12,7 @@ import { sql } from "drizzle-orm";
 import { hasFinancialAccess, verticalLabel, type Vertical } from "@nodaq/shared";
 import { listUserMemberships } from "../lib/authService";
 import { buildLineResults, computeTotals, buildCompteResultatCsvRows } from "./compte-resultat";
+import { verticalDepuisTx } from "../lib/vertical-tenant.js";
 
 const router: IRouter = Router();
 
@@ -20,8 +21,6 @@ const PeriodQuery = z.object({
   to:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
 
-const VERTICAL_SETTING_KEY = "votre-metier.metier";
-const DEFAULT_VERTICAL: Vertical = "industrie_btp";
 
 router.get("/cabinet/export", async (req, res): Promise<void> => {
   const parsed = PeriodQuery.safeParse(req.query);
@@ -34,11 +33,7 @@ router.get("/cabinet/export", async (req, res): Promise<void> => {
   const blocks: string[] = [];
   for (const m of memberships) {
     const { secteurLabel, rows } = await withTenant(m.tenantId, async (tx) => {
-      const [verticalRow] = await tx
-        .select({ value: settingsTable.value })
-        .from(settingsTable)
-        .where(sql`${settingsTable.key} = ${VERTICAL_SETTING_KEY}`);
-      const vertical = (verticalRow?.value as Vertical | undefined) ?? DEFAULT_VERTICAL;
+    const vertical = await verticalDepuisTx(tx);
       const secteurLabel = verticalLabel(vertical);
 
       const lines = await buildLineResults(tx, from, to);

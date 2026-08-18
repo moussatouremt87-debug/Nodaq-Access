@@ -15,7 +15,8 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { getConfig, chatCompletion, LlmConfigError } from "@nodaq/llm";
-import { SortieModele, TYPES_INTENTION, STATUTS_AFFAIRE_DICTABLES, TYPES_ABSENCE_DICTABLES } from "@nodaq/shared";
+import { SortieModele, TYPES_INTENTION, STATUTS_AFFAIRE_DICTABLES, TYPES_ABSENCE_DICTABLES, affaireWords, type Vertical } from "@nodaq/shared";
+import { verticalDuTenant } from "../lib/vertical-tenant.js";
 import {
   chargerContexte,
   construirePlan,
@@ -52,9 +53,12 @@ const ExecuterBody = z.object({
  * protège. Un modèle qui renverrait un identifiant ou un prix verrait sa
  * sortie refusée, pas corrigée.
  */
-function consigne(): string {
+function consigne(vertical: Vertical): string {
+  const words = affaireWords(vertical);
   return [
-    "Tu transformes une phrase dictée par un artisan du bâtiment en INTENTIONS.",
+    // US-A6.1 — « un artisan du bâtiment » était écrit en dur : le modèle
+    // interprétait la dictée d'un consultant à travers le prisme du BTP.
+    "Tu transformes une phrase dictée par un professionnel en INTENTIONS.",
     "",
     "Tu ne calcules rien, tu ne fixes aucun prix, tu n'inventes aucun identifiant.",
     "Tu rends UNIQUEMENT les faits dictés, tels qu'ils ont été dits.",
@@ -63,7 +67,8 @@ function consigne(): string {
     `Statuts d'affaire : ${STATUTS_AFFAIRE_DICTABLES.join(", ")}.`,
     `Types d'absence : ${TYPES_ABSENCE_DICTABLES.join(", ")}.`,
     "",
-    "Les noms de personnes, de chantiers et de villes sont rendus TELS QUELS.",
+    `Dans cette entreprise, une affaire se dit « ${words.singular} ».`,
+    `Les noms de personnes, de ${words.plural} et de villes sont rendus TELS QUELS.`,
     "Ne cherche pas à deviner à qui ils correspondent : ce n'est pas ton travail.",
     "Les dates sont rendues telles que dictées (« le 27 août », « lundi prochain »).",
     "",
@@ -92,12 +97,16 @@ router.post("/voix/interpreter", async (req, res): Promise<void> => {
     throw err;
   }
 
+  // US-A6.1 — relu à CHAQUE dictée : un changement de secteur s'applique dès
+  // la phrase suivante, sans redémarrage (AC3).
+  const vertical = await verticalDuTenant(tenantId);
+
   let brut: string;
   try {
     const reponse = await chatCompletion(
       config,
       [
-        { role: "system", content: consigne() },
+        { role: "system", content: consigne(vertical) },
         { role: "user", content: parsed.data.texte },
       ],
       undefined,

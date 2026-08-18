@@ -32,6 +32,7 @@ import { logger } from "../lib/logger.js";
 import { champsErreur } from "../lib/erreur-pg.js";
 import { secretExiste } from "../lib/tenant-secrets.js";
 import { estFactureEnRetard, residuelFactureCents } from "../lib/facturesEnRetard.js";
+import { VERTICAL_SETTING_KEY, DEFAULT_VERTICAL } from "../lib/vertical-tenant.js";
 
 const router: IRouter = Router();
 
@@ -112,9 +113,6 @@ function computeTotals(lines: FactureLine[], autoliquidation: boolean) {
   return { totalHTCents, totalTVACents, amountCents };
 }
 
-// Même clé et même défaut que routes/votre-metier.ts (US-A1.1).
-const VERTICAL_SETTING_KEY = "votre-metier.metier";
-const DEFAULT_VERTICAL: Vertical = "industrie_btp";
 
 /**
  * Charge les réglages entreprise d'un tenant, et son vertical (US-A2.5 :

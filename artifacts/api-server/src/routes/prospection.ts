@@ -84,6 +84,7 @@ import {
   PermisError,
   type TransportPermis,
 } from "../lib/permis-construire.js";
+import { VERTICAL_SETTING_KEY } from "../lib/vertical-tenant.js";
 
 const router: IRouter = Router();
 
@@ -489,7 +490,7 @@ router.get("/prospection/axes", async (req, res): Promise<void> => {
   // ici, contrairement à `secteurMarchesPublicsPour` plus bas qui vise un
   // référentiel différent (CPV, marchés publics).
   const contexte = {
-    secteur: await reglage(tenantId, "votre-metier.metier"),
+    secteur: await reglage(tenantId, VERTICAL_SETTING_KEY),
     zone: (await reglage(tenantId, "company.commune")) ?? (await reglage(tenantId, "company.code_postal")),
     sources,
   };
@@ -710,7 +711,7 @@ export function creerRouteAppelsOffres(transport?: TransportBoamp): RequestHandl
     // « Votre métier » pose réellement. `metier.secteur` n'est écrite par
     // aucun écran de ce dépôt (vérifié) ; s'y fier rendrait ce filtre
     // silencieux pour tout le monde.
-    const metier = await reglage(tenantId, "votre-metier.metier");
+    const metier = await reglage(tenantId, VERTICAL_SETTING_KEY);
     const secteur = secteurMarchesPublicsPour(metier);
 
     let raison: RaisonSilenceMarche = null;
@@ -769,7 +770,7 @@ export function creerRouteSousTraitance(transport?: TransportDecp): RequestHandl
     const tenantId = req.tenantId!;
     const ville = await reglage(tenantId, "company.commune");
     const codePostal = await reglage(tenantId, "company.code_postal");
-    const metier = await reglage(tenantId, "votre-metier.metier");
+    const metier = await reglage(tenantId, VERTICAL_SETTING_KEY);
     const secteur = secteurMarchesPublicsPour(metier);
 
     let raison: RaisonSilenceMarche = null;

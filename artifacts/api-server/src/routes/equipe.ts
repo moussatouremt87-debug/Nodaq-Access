@@ -14,6 +14,7 @@ import {
   type AbsenceRecord,
   type AffaireRecord,
 } from "../services/planning-service";
+import { verticalDepuisTx } from "../lib/vertical-tenant.js";
 
 /**
  * planning-service.ts does all of its internal calendar arithmetic in UTC
@@ -241,8 +242,6 @@ router.delete("/equipe/:id", async (req, res): Promise<void> => {
 
 // Même clé et même défaut que routes/votre-metier.ts (US-A1.1) : un tenant
 // qui n'a jamais répondu garde le vocabulaire BTP historique.
-const VERTICAL_SETTING_KEY = "votre-metier.metier";
-const DEFAULT_VERTICAL = "industrie_btp";
 
 async function fetchPlanningData(tenantId: string) {
   return withTenant(tenantId, async (tx) => {
@@ -250,7 +249,7 @@ async function fetchPlanningData(tenantId: string) {
     const coutRaw = await getSetting(tx, "equipe.coutJourCharge");
     const tauxJourFacture = tauxRaw !== null ? Number(tauxRaw) : null;
     const coutJourCharge  = coutRaw !== null ? Number(coutRaw) : null;
-    const metier = (await getSetting(tx, VERTICAL_SETTING_KEY)) ?? DEFAULT_VERTICAL;
+    const metier = await verticalDepuisTx(tx);
 
     const rawMembers = await tx.select().from(teamMembersTable).orderBy(asc(teamMembersTable.createdAt));
 
