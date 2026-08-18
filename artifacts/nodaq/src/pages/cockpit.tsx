@@ -36,6 +36,7 @@ import {
   getListPendingActionsQueryKey,
 } from '@workspace/api-client-react';
 import { PageHeader } from '@/components/page-header';
+import { PanneauMandat } from '@/components/panneau-mandat';
 import { AnimatedKpi } from '@/components/animated-kpi';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
@@ -582,6 +583,13 @@ export default function Cockpit() {
                             </div>
                           )}
                         </div>
+                        {/* 4.18 US-1 — la liste des appels ET le mandat, sous
+                            les yeux du dirigeant au moment où il approuve.
+                            Uniquement pour une campagne vocale : les autres
+                            actions de la file n'en ont pas. */}
+                        {action.type === 'call_dunning' && (
+                          <PanneauMandat pendingActionId={action.id} />
+                        )}
                         <div className="flex items-center gap-2 pt-1">
                           <motion.div whileTap={{ scale: 0.94 }}>
                             <Button
