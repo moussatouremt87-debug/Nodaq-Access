@@ -131,3 +131,126 @@ export function resumerRegleRelance(regle: RegleRelance): string {
   }
   return `${base}, et proposer ${concessions.join(", ")}.`;
 }
+
+// ── Étage 2 : le mandat de campagne (US-1) ─────────────────────────────────
+
+/**
+ * Ce que l'agent peut accorder POUR UNE CAMPAGNE donnée.
+ *
+ * Même forme que la règle du tenant, et ce n'est pas une commodité : c'est ce
+ * qui rend la comparaison possible champ à champ, donc l'invariant vérifiable.
+ */
+export type MandatCampagne = RegleRelance;
+
+/** Une demande de restriction. Tout champ absent = « on garde la règle ». */
+export type DemandeMandat = Partial<RegleRelance>;
+
+export interface DepassementMandat {
+  readonly champ: keyof RegleRelance;
+  readonly message: string;
+}
+
+/**
+ * L'INVARIANT CENTRAL du ticket : une campagne RESTREINT la règle du tenant,
+ * jamais elle ne l'élargit (US-1, US-3).
+ *
+ * C'est le mécanisme qui rend l'autonomie de l'agent acceptable. Le dirigeant a
+ * posé un plafond à froid (US-9) ; au moment de valider une campagne il peut
+ * serrer davantage — désactiver l'échelonnement pour un débiteur récidiviste,
+ * par exemple — mais aucun chemin ne doit lui permettre de desserrer sans
+ * repasser par l'écran de règle, à froid.
+ *
+ * Rendu par CLAMPING plutôt que par refus : une demande trop large est ramenée
+ * à la règle au lieu d'être rejetée. Deux raisons. D'abord un formulaire
+ * pré-rempli depuis la règle renverra naturellement des valeurs égales à la
+ * règle — les refuser transformerait le cas nominal en erreur. Ensuite le
+ * clamping est SÛR par construction : quoi qu'on lui passe, y compris un corps
+ * forgé, il ne peut pas rendre un mandat plus large que la règle.
+ *
+ * `depassementsMandat` sert à DIRE ce qui a été ramené, pour que l'écran ne
+ * fasse pas silencieusement autre chose que ce qui a été demandé.
+ */
+export function restreindreMandat(
+  regle: RegleRelance,
+  demande: DemandeMandat = {},
+): MandatCampagne {
+  // Un booléen ne peut passer de `false` (règle) à `true` (demande) : l'ET
+  // logique porte l'invariant à lui seul.
+  const et = (cleRegle: boolean, cleDemande: boolean | undefined): boolean =>
+    cleRegle && (cleDemande ?? true);
+
+  // Un nombre ne peut que DIMINUER — il borne ce que l'agent peut concéder.
+  const plusPetit = (valeurRegle: number, valeurDemande: number | undefined): number =>
+    valeurDemande === undefined || !Number.isFinite(valeurDemande)
+      ? valeurRegle
+      : Math.max(0, Math.min(valeurRegle, Math.trunc(valeurDemande)));
+
+  return {
+    echelonnementAutorise: et(regle.echelonnementAutorise, demande.echelonnementAutorise),
+    maxVersements: plusPetit(regle.maxVersements, demande.maxVersements),
+    delaiMaxPremierVersementJours: plusPetit(
+      regle.delaiMaxPremierVersementJours,
+      demande.delaiMaxPremierVersementJours,
+    ),
+    retardMaxJours: plusPetit(regle.retardMaxJours, demande.retardMaxJours),
+    lienPaiementAutorise: et(regle.lienPaiementAutorise, demande.lienPaiementAutorise),
+    remiseAutorisee: et(regle.remiseAutorisee, demande.remiseAutorisee),
+  };
+}
+
+/**
+ * Ce qu'une demande tentait d'élargir au-delà de la règle.
+ *
+ * Vide dans le cas nominal. Non vide, c'est soit une interface qui propose plus
+ * que la règle — un défaut à corriger —, soit un corps forgé. Dans les deux cas
+ * `restreindreMandat` a déjà protégé le résultat ; ceci sert à le dire.
+ */
+export function depassementsMandat(
+  regle: RegleRelance,
+  demande: DemandeMandat,
+): DepassementMandat[] {
+  const depassements: DepassementMandat[] = [];
+
+  const drapeau = (champ: "echelonnementAutorise" | "lienPaiementAutorise" | "remiseAutorisee", libelle: string) => {
+    if (demande[champ] === true && !regle[champ]) {
+      depassements.push({
+        champ,
+        message: `${libelle} n'est pas autorisé par la règle de l'entreprise. Modifiez la règle dans les paramètres pour l'ouvrir.`,
+      });
+    }
+  };
+
+  const borne = (
+    champ: "maxVersements" | "delaiMaxPremierVersementJours" | "retardMaxJours",
+    libelle: string,
+  ) => {
+    const valeur = demande[champ];
+    if (valeur !== undefined && Number.isFinite(valeur) && valeur > regle[champ]) {
+      depassements.push({
+        champ,
+        message: `${libelle} ne peut pas dépasser ${regle[champ]}, fixé par la règle de l'entreprise.`,
+      });
+    }
+  };
+
+  drapeau("echelonnementAutorise", "L'échelonnement");
+  drapeau("lienPaiementAutorise", "Le lien de paiement");
+  drapeau("remiseAutorisee", "La remise");
+  borne("maxVersements", "Le nombre de versements");
+  borne("delaiMaxPremierVersementJours", "Le délai du premier versement");
+  borne("retardMaxJours", "Le retard accepté");
+
+  return depassements;
+}
+
+/** Vrai si le mandat est strictement plus serré que la règle, sur au moins un point. */
+export function mandatEstRestreint(regle: RegleRelance, mandat: MandatCampagne): boolean {
+  return (
+    regle.echelonnementAutorise !== mandat.echelonnementAutorise ||
+    regle.lienPaiementAutorise !== mandat.lienPaiementAutorise ||
+    regle.remiseAutorisee !== mandat.remiseAutorisee ||
+    regle.maxVersements !== mandat.maxVersements ||
+    regle.delaiMaxPremierVersementJours !== mandat.delaiMaxPremierVersementJours ||
+    regle.retardMaxJours !== mandat.retardMaxJours
+  );
+}
