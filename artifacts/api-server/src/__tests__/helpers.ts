@@ -178,7 +178,7 @@ const BUSINESS_TABLES = [
   "avoirs", "facture_sequences",
   // incidents_facturation référence factures (facture_id) : avant elle.
   "incidents_facturation", "factures",
-  "pending_actions", "journal_decisions", "regles_relance", "prospects", "settings", "team_members",
+  "campagnes_relance", "pending_actions", "journal_decisions", "regles_relance", "prospects", "settings", "team_members",
   "clients", "tenant_invites",
   "pa_documents_recus", "pa_transmissions",
   // bank_accounts référence bank_connections (connection_id) : avant elle.
@@ -244,6 +244,7 @@ export function tableInsertSql(table: string, tenantId: string, memberAId?: stri
     // regles_relance est APPEND-ONLY comme journal_decisions : même remarque
     // sur le nettoyage, qui tourne sous adminPool.
     regles_relance:     [`INSERT INTO regles_relance (id, tenant_id, version) VALUES ($1, $2, 1)`, [id, tenantId]],
+    campagnes_relance:  [`INSERT INTO campagnes_relance (id, tenant_id, pending_action_id, mandat) VALUES ($1, $2, 'pa-rls-test', '{}'::jsonb)`, [id, tenantId]],
     prospects:          [`INSERT INTO prospects (id, name, tenant_id) VALUES ($1, 'RLS Prospect', $2)`, [id, tenantId]],
     settings:           [`INSERT INTO settings (key, value, tenant_id) VALUES ('rls_test_key', 'v', $1) ON CONFLICT DO NOTHING`, [tenantId]],
     team_members:       [`INSERT INTO team_members (id, name, tenant_id) VALUES ($1, 'RLS Member', $2)`, [id, tenantId]],

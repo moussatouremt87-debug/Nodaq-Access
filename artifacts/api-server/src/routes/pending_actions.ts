@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { withTenant, pendingActionsTable, activityTable, journalDecisionsTable } from "@workspace/db";
+import { TYPE_CAMPAGNE_RELANCE, validerCampagne, rejeterCampagne } from "../lib/campagnes-relance.js";
 import { eq, desc } from "drizzle-orm";
 import {
   ApprovePendingActionParams,
@@ -102,6 +103,13 @@ router.post("/pending-actions/:id/approve", async (req, res): Promise<void> => {
       decideePar: req.session!.userId,
       decideeParEmail: req.session!.email,
     });
+    // Ticket 4.18 US-1 — le mandat de la campagne est GELÉ ici, contre la
+    // règle en vigueur, dans la MÊME transaction que la décision : une
+    // campagne approuvée dont le mandat n'aurait pas été figé serait un agent
+    // sans limites écrites.
+    if (action.type === TYPE_CAMPAGNE_RELANCE) {
+      await validerCampagne(tx, tenantId, action.id, req.session!.email);
+    }
     return action;
   });
 
@@ -133,6 +141,11 @@ router.post("/pending-actions/:id/reject", async (req, res): Promise<void> => {
         decideePar: req.session!.userId,
         decideeParEmail: req.session!.email,
       });
+      // La campagne suit le sort de son action : laissée « PROPOSEE », elle
+      // resterait éligible à une exécution alors que le dirigeant a dit non.
+      if (rejetee.type === TYPE_CAMPAGNE_RELANCE) {
+        await rejeterCampagne(tx, tenantId, rejetee.id);
+      }
     }
     return lignes;
   });
