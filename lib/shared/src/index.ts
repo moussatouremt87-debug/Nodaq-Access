@@ -194,3 +194,4 @@ export * from "./capaciteEquipe.js";
 export * from "./habilitations.js";
 export * from "./souverainete.js";
 export * from "./mandatNegociation.js";
+export * from "./decisionAppel.js";
