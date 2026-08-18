@@ -83,6 +83,30 @@ export const REGULATORY_ITEMS: readonly RegulatoryItem[] = [
     },
   },
   {
+    // US-A7.2 (AC2). Le délai de 72 h est celui de l'art. 33 §1 RGPD, vérifié
+    // contre le texte cité — c'est le SOCLE, applicable à tous.
+    //
+    // La story demande d'aller au-delà « si la réglementation sectorielle est
+    // plus stricte » (santé notamment). Ces délais sectoriels ne figurent pas
+    // ici et ne doivent pas y être ajoutés au jugé : le point d'attention de la
+    // story impose une revue juridique dédiée avant toute ouverture d'un
+    // secteur à secret professionnel renforcé. Une échéance inventée dans un
+    // module de veille réglementaire serait pire qu'une absence d'entrée.
+    id: "violation-donnees",
+    title: "RGPD — notification d'une violation de données",
+    category: "rgpd",
+    obligation:
+      "Notifier à la CNIL toute violation de données personnelles dans les 72 heures " +
+      "après en avoir pris connaissance, sauf si elle n'est pas susceptible d'engendrer " +
+      "un risque pour les personnes. Informer les personnes concernées sans délai " +
+      "lorsque le risque est élevé. Les traitements portant sur des données de santé ou " +
+      "couvertes par un secret professionnel appellent une vigilance renforcée.",
+    source: {
+      label: "RGPD, art. 33 et 34",
+      url: "https://www.cnil.fr/fr/notifier-une-violation-de-donnees-personnelles",
+    },
+  },
+  {
     id: "duerp",
     title: "Document unique d'évaluation des risques (DUERP)",
     category: "social",

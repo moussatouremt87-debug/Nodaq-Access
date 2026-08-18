@@ -480,6 +480,29 @@ export function delaiPaiementUsuelJours(vertical: string | null | undefined): nu
 /** Pack d'un tenant, avec repli neutre. Seule porte d'accès aux données métier
  *  d'un vertical : une feature qui indexerait `VERTICAL_PACKS` à la main
  *  planterait sur une valeur inconnue venue de la base. */
+/**
+ * Secteurs dont l'exercice est couvert par un SECRET PROFESSIONNEL légal
+ * (US-A7.2). Le praticien engage sa responsabilité propre sur ce que l'outil
+ * fait de la donnée de ses patients ou de ses clients — pas seulement celle de
+ * NODAQ.
+ *
+ * Ces deux secteurs sont proposés à l'onboarding aujourd'hui : la question
+ * n'est pas théorique.
+ *
+ * Le point d'attention de la story est explicite et vaut d'être répété ici :
+ * ouvrir réellement un secteur à secret professionnel renforcé demande une
+ * revue juridique dédiée. Cette liste sert le classement technique, elle ne
+ * vaut pas validation légale.
+ */
+export const SECRET_PROFESSIONNEL_VERTICALS = [
+  "sante_liberale",
+  "professions_liberales",
+] as const satisfies readonly Vertical[];
+
+export function estSecretProfessionnel(vertical: string | null | undefined): boolean {
+  return (SECRET_PROFESSIONNEL_VERTICALS as readonly string[]).includes(vertical ?? "");
+}
+
 export function verticalPack(vertical: string | null | undefined): VerticalPack {
   if (!vertical) return VERTICAL_PACKS.autre;
   return (VERTICALS as readonly string[]).includes(vertical)

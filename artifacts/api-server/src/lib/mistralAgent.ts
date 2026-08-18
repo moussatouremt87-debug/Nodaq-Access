@@ -34,8 +34,8 @@ import {
 } from "../routes/analytics.js";
 import { parsePeriode, toDateString } from "./analytics-periods.js";
 import type { OperationPlanifiee } from "./plan-vocal.js";
-import { affaireWords } from "@nodaq/shared";
-import { verticalDepuisTx, vocabulaireAssistant } from "./vertical-tenant.js";
+import { affaireWords, estSecretProfessionnel } from "@nodaq/shared";
+import { verticalDepuisTx, verticalDuTenant, vocabulaireAssistant } from "./vertical-tenant.js";
 import { montantsNonSources, MESSAGE_REFUS_CHIFFRAGE } from "./garde-montants.js";
 import { logger } from "./logger.js";
 
@@ -864,13 +864,34 @@ export async function runAgent(
   //    confidentiel → sovereign-only response; never reaches external model.
   const lastUserMessage = [...history].reverse().find(m => m.role === "user");
   if (lastUserMessage) {
-    const classification = await classify({ text: lastUserMessage.content });
+    // US-A7.2 — le secteur décide du DÉFAUT de classification. Pour une
+    // profession à secret professionnel, l'absence de signal ne vaut pas
+    // « interne » mais « confidentiel » : les marqueurs ne rattraperont
+    // jamais « M. Martin, lombalgie », et c'est précisément ce contenu-là
+    // qui ne doit pas partir.
+    const verticalTenant = await verticalDuTenant(tenantId);
+    const classification = await classify({
+      text: lastUserMessage.content,
+      hints: { secretProfessionnel: estSecretProfessionnel(verticalTenant) },
+    });
     if (classification.category === "confidentiel") {
+      // US-A7.2 — le motif du refus doit correspondre à ce qui l'a déclenché.
+      // Le message d'origine parlait de « coordonnées bancaires » : dit à un
+      // praticien dont on vient de retenir un élément de dossier patient, il
+      // décrit la mauvaise raison et donne l'impression d'un filtre au hasard.
+      const secretPro = classification.signals.some(
+        (s) => s === "secret-professionnel" || s === "secteur-secret-professionnel",
+      );
       return {
-        content:
-          "Je détecte des informations sensibles (coordonnées bancaires, données personnelles…) dans votre message. " +
-          "Par mesure de sécurité, ce contenu n'est pas transmis à un modèle externe. " +
-          "Pouvez-vous reformuler votre demande sans inclure ces informations ?",
+        content: secretPro
+          ? "Ce message paraît contenir des éléments couverts par le secret professionnel. " +
+            "Par mesure de sécurité, il n'est pas transmis à un modèle externe. " +
+            "Reformulez votre demande sans élément identifiant ni donnée de dossier — " +
+            "je peux vous aider sur la gestion (devis, facture, planning) sans avoir " +
+            "besoin du contenu du dossier."
+          : "Je détecte des informations sensibles (coordonnées bancaires, données personnelles…) dans votre message. " +
+            "Par mesure de sécurité, ce contenu n'est pas transmis à un modèle externe. " +
+            "Pouvez-vous reformuler votre demande sans inclure ces informations ?",
         actions: [],
         operations: [],
       };
