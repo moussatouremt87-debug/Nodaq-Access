@@ -30,6 +30,7 @@ import {
   Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent,
 } from '@/components/ui/empty';
 import { useToast } from '@/hooks/use-toast';
+import { useLectureSeule } from '@/hooks/use-auth';
 import { fmtEUR, fmtDate, toDateString } from '@/lib/format';
 import { containerVariants, itemVariants } from '@/lib/motion-variants';
 import { useCompanyProfile } from '@/hooks/use-company-profile';
@@ -443,6 +444,7 @@ function EmettreDialog({ open, onOpenChange, facture, onEmit }: {
 export default function FacturesPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const lectureSeule = useLectureSeule();
   const [statutFilter, setStatutFilter] = useState('ALL');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [emettreOpen, setEmettreOpen] = useState(false);
@@ -499,9 +501,14 @@ export default function FacturesPage() {
         title="Factures"
         description="Émettez des factures conformes avec numérotation séquentielle et Factur-X intégré."
         actions={
-          <Button onClick={() => setDialogOpen(true)} className="gap-1.5">
-            <Plus className="h-4 w-4" /> Nouvelle facture
-          </Button>
+          // US-A5.4 — un tiers de confiance consulte les factures, il n'en
+          // émet pas. Le serveur refuse de toute façon ; on évite juste de
+          // proposer un bouton qui mènerait à une erreur.
+          lectureSeule ? null : (
+            <Button onClick={() => setDialogOpen(true)} className="gap-1.5">
+              <Plus className="h-4 w-4" /> Nouvelle facture
+            </Button>
+          )
         }
       />
 
@@ -563,9 +570,11 @@ export default function FacturesPage() {
                 <EmptyTitle>Aucune facture</EmptyTitle>
                 <EmptyDescription>Créez votre première facture conforme avec numérotation légale et Factur-X.</EmptyDescription>
               </EmptyHeader>
-              <EmptyContent>
-                <Button onClick={() => setDialogOpen(true)}><Plus className="h-4 w-4" /> Nouvelle facture</Button>
-              </EmptyContent>
+              {!lectureSeule && (
+                <EmptyContent>
+                  <Button onClick={() => setDialogOpen(true)}><Plus className="h-4 w-4" /> Nouvelle facture</Button>
+                </EmptyContent>
+              )}
             </Empty>
           ) : (
             <table className="w-full text-sm">
@@ -640,8 +649,12 @@ function FactureRowMenu({ facture, onEmettre, onPayer, onDelete }: {
   onDelete: () => void;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const isBrouillon = facture.statut === 'BROUILLON';
-  const isEmise = facture.statut === 'EMISE';
+  const lectureSeule = useLectureSeule();
+  // US-A5.4 — pour un tiers de confiance, il ne reste dans ce menu que la
+  // consultation du PDF. Les trois actions mutantes (émettre, marquer payée,
+  // supprimer) disparaissent ; le serveur les refuserait de toute façon.
+  const isBrouillon = facture.statut === 'BROUILLON' && !lectureSeule;
+  const isEmise = facture.statut === 'EMISE' && !lectureSeule;
 
   return (
     <>

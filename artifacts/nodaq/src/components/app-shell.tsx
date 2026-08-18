@@ -4,8 +4,9 @@ import { cn } from '@/lib/utils';
 import { NAV_SECTIONS, MOBILE_NAV, navIsActive, verticalizeNavLabel } from '@/lib/nav';
 import { TopRibbon } from './top-ribbon';
 import { ThemeToggle } from './theme-toggle';
-import { useAuth } from '@/hooks/use-auth';
+import { useAuth, useLectureSeule } from '@/hooks/use-auth';
 import { useVertical } from '@/hooks/use-vertical';
+import { routeOuverteEnLectureSeule } from '@nodaq/shared';
 import { useMesEspaces, useBasculerEspace, type Espace } from '@/hooks/use-cabinet';
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
@@ -19,10 +20,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { data } = useAuth();
   const { vertical, words, proposalWord } = useVertical();
   const { estMultiEspaces } = useMesEspaces();
+  const lectureSeule = useLectureSeule();
   const role = data?.authenticated === true && 'role' in data ? data.role : undefined;
   const peutVoir = (item: Pick<NavItem, 'href' | 'requiredRoles' | 'visibleForVertical'>) =>
     (!item.requiredRoles || (role !== undefined && item.requiredRoles.includes(role)))
     && (!item.visibleForVertical || item.visibleForVertical(vertical as Vertical | undefined))
+    // US-A5.4 — un tiers de confiance ne voit que le dossier financier.
+    // Liste lue depuis @nodaq/shared, jamais recopiée ici : c'est la même
+    // décision que celle appliquée par le serveur, pas une seconde à tenir
+    // à jour.
+    && (!lectureSeule || routeOuverteEnLectureSeule(item.href))
     // US-A5.2 — `/cabinet` n'a de sens que pour un utilisateur qui a
     // PLUSIEURS espaces. Filtre local plutôt qu'un nouveau prédicat générique
     // dans `NavItem` : un seul cas, et il ne dépend ni du rôle ni du secteur.

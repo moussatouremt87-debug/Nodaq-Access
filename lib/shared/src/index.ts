@@ -77,12 +77,53 @@ export const ECRANS_TIERS_LECTURE = [
   "/rapports",
   "/echeances",
   "/previsionnel-tresorerie",
+  // Le SECTEUR du tenant, rien d'autre — aucune donnée financière ni
+  // opérationnelle. Sans lui, `useVertical()` retombe sur le vocabulaire par
+  // défaut et le tiers lit « affaires » là où l'artisan lit « chantiers » :
+  // deux libellés pour un même écran, sur un dossier qu'ils regardent
+  // ensemble. L'écriture reste fermée par la garde de méthode.
+  "/votre-metier",
 ] as const;
 
 /** Vrai si ce chemin d'API est ouvert au tiers de confiance en lecture seule. */
 export function cheminOuvertEnLectureSeule(chemin: string): boolean {
   return ECRANS_TIERS_LECTURE.some(
     (prefixe) => chemin === prefixe || chemin.startsWith(`${prefixe}/`),
+  );
+}
+
+/**
+ * Le PENDANT de `ECRANS_TIERS_LECTURE` côté navigation : les routes du SPA
+ * qu'un `VIEWER` peut ouvrir. Deux listes et pas une, parce que les deux
+ * espaces de nommage ne coïncident pas — le cockpit est servi par
+ * `/cockpit/*` mais affiché à `/`, l'échéancier lit `/echeances` mais vit à
+ * `/echeancier`. Les dériver l'une de l'autre demanderait une table de
+ * correspondance qui serait, elle aussi, à tenir à jour.
+ *
+ * Déclarées CÔTE À CÔTE, dans ce fichier, précisément pour qu'on ne puisse
+ * pas en modifier une en oubliant l'autre. Ajouter un écran au dossier
+ * financier, c'est toucher aux deux, ici, en même temps.
+ *
+ * Ce n'est PAS ce qui protège les données : le serveur refuse tout ce qui
+ * sort de `ECRANS_TIERS_LECTURE`, indépendamment de cette liste-ci. Celle-ci
+ * évite seulement d'afficher au tiers des entrées de menu qui le mèneraient
+ * à un écran vide.
+ */
+export const ROUTES_TIERS_LECTURE = [
+  "/",
+  "/compte-resultat",
+  "/factures",
+  "/marge",
+  "/rapports",
+  "/echeancier",
+  "/previsionnel-tresorerie",
+] as const;
+
+/** Vrai si cette route du SPA est ouverte au tiers de confiance. */
+export function routeOuverteEnLectureSeule(route: string): boolean {
+  if (route === "/") return true;
+  return ROUTES_TIERS_LECTURE.some(
+    (prefixe) => prefixe !== "/" && (route === prefixe || route.startsWith(`${prefixe}/`)),
   );
 }
 
