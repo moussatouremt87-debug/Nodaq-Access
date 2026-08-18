@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ObjectifsParametres } from '@/components/objectifs-parametres';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Building2, Bell, Puzzle, Save, UserCog, Mail, Trash2, Clock, ShieldCheck } from 'lucide-react';
+import { Building2, Bell, Puzzle, PhoneCall, Save, UserCog, Mail, Trash2, Clock, ShieldCheck } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   useListMembres,
@@ -32,6 +32,8 @@ import { cn } from '@/lib/utils';
 
 import { apiFetch } from '@/lib/auth';
 import { useModules, useBasculerModule, type ModuleResolu } from '@/hooks/use-modules';
+import { useRegleRelance, useEnregistrerRegleRelance } from '@/hooks/use-regles-relance';
+import { BORNES_REGLE_RELANCE, type RegleRelance } from '@nodaq/shared';
 const API = '/api';
 
 type Settings = Record<string, string>;
@@ -39,6 +41,7 @@ type Settings = Record<string, string>;
 const TABS = [
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'modules',       label: 'Modules',       icon: Puzzle },
+  { id: 'relance',       label: 'Règles de relance', icon: PhoneCall },
   { id: 'membres',       label: 'Membres & accès', icon: UserCog },
 ];
 
@@ -622,6 +625,122 @@ function ModulesTab() {
   );
 }
 
+/**
+ * Règles de relance (ticket 4.18, US-9) — ce que l'agent vocal a le droit
+ * d'accorder pendant un appel, décidé UNE FOIS et à froid.
+ *
+ * L'écran dit deux choses que le dirigeant doit savoir avant de cliquer :
+ * la règle est VERSIONNÉE (une campagne déjà validée garde la version sous
+ * laquelle elle l'a été), et le résumé rendu par le serveur décrit exactement
+ * ce que l'agent pourra concéder — une seule formulation, partagée avec le
+ * futur panneau de validation de campagne.
+ */
+function RelanceTab() {
+  const { toast } = useToast();
+  const { data: courante, isLoading } = useRegleRelance();
+  const enregistrer = useEnregistrerRegleRelance();
+  const [brouillon, setBrouillon] = useState<RegleRelance | null>(null);
+
+  useEffect(() => {
+    if (courante && brouillon === null) {
+      const { version, poseeParEmail, poseeLe, resume, ...regle } = courante;
+      setBrouillon(regle);
+    }
+  }, [courante, brouillon]);
+
+  if (isLoading || !brouillon || !courante) {
+    return (
+      <div className="max-w-2xl space-y-3">
+        {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}
+      </div>
+    );
+  }
+
+  const maj = <K extends keyof RegleRelance>(champ: K, valeur: RegleRelance[K]) =>
+    setBrouillon(prec => (prec ? { ...prec, [champ]: valeur } : prec));
+
+  const nombre = (
+    champ: 'maxVersements' | 'delaiMaxPremierVersementJours' | 'retardMaxJours',
+    label: string,
+    aide: string,
+    desactive = false,
+  ) => {
+    const bornes = BORNES_REGLE_RELANCE[champ];
+    return (
+      <div className={cn('space-y-1.5', desactive && 'opacity-45')}>
+        <Label htmlFor={`relance-${champ}`} className="text-xs">{label}</Label>
+        <Input
+          id={`relance-${champ}`}
+          type="number"
+          min={bornes.min}
+          max={bornes.max}
+          disabled={desactive}
+          value={brouillon[champ]}
+          onChange={e => maj(champ, Number(e.target.value))}
+          className="h-9 w-28"
+        />
+        <div className="text-[11px] text-muted-foreground">{aide}</div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="max-w-2xl space-y-5">
+      <div className="rounded-xl border border-card-border bg-card p-4">
+        <div className="text-sm text-foreground">{courante.resume}</div>
+        <div className="text-[11px] text-muted-foreground mt-2">
+          {courante.version === 0
+            ? "Aucune règle enregistrée : ce sont les valeurs prudentes par défaut."
+            : `Version ${courante.version}${courante.poseeParEmail ? ` — enregistrée par ${courante.poseeParEmail}` : ''}. Les campagnes déjà validées gardent la version sous laquelle elles l'ont été.`}
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-card-border bg-card p-5 space-y-5">
+        <Toggle
+          checked={brouillon.echelonnementAutorise}
+          onChange={v => maj('echelonnementAutorise', v)}
+          label="Autoriser un échelonnement"
+          description="L'agent peut proposer de lui-même un paiement en plusieurs fois, dans les limites ci-dessous."
+        />
+        <div className="grid grid-cols-2 gap-4">
+          {nombre('maxVersements', 'Versements maximum', 'Au moins 2 pour un échelonnement.', !brouillon.echelonnementAutorise)}
+          {nombre('delaiMaxPremierVersementJours', 'Premier versement sous', 'En jours.', !brouillon.echelonnementAutorise)}
+        </div>
+
+        {nombre('retardMaxJours', 'Retard maximal accepté', "En jours après l'échéance de la facture. S'applique toujours.")}
+
+        <Toggle
+          checked={brouillon.lienPaiementAutorise}
+          onChange={v => maj('lienPaiementAutorise', v)}
+          label="Autoriser l'envoi d'un lien de paiement"
+          description="Par SMS, pendant l'appel, si cela débloque la conversation."
+        />
+        <Toggle
+          checked={brouillon.remiseAutorisee}
+          onChange={v => maj('remiseAutorisee', v)}
+          label="Autoriser une remise"
+          description="Désactivé par défaut. L'agent ne peut jamais accorder de remise tant que ce réglage est fermé."
+        />
+      </div>
+
+      <Button
+        onClick={() =>
+          enregistrer.mutate(brouillon, {
+            onSuccess: r => toast({ title: `Règle enregistrée (version ${r.version})` }),
+            onError: (e: Error) =>
+              toast({ title: 'Règle refusée', description: e.message, variant: 'destructive' }),
+          })
+        }
+        disabled={enregistrer.isPending}
+        className="gap-1.5"
+      >
+        <Save className="h-4 w-4" />
+        {enregistrer.isPending ? 'Enregistrement…' : 'Enregistrer une nouvelle version'}
+      </Button>
+    </div>
+  );
+}
+
 export default function ParametresPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -765,6 +884,8 @@ export default function ParametresPage() {
             )}
 
             {activeTab === 'modules' && <ModulesTab />}
+
+            {activeTab === 'relance' && <RelanceTab />}
 
             {activeTab === 'membres' && <MembresTab />}
           </motion.div>
