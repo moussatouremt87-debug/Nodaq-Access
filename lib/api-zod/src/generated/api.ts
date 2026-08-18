@@ -1388,7 +1388,7 @@ export const InviterMembreBody = zod.object({
   "email": zod.string(),
   "role": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT', 'VIEWER']).describe('OWNER crée un co-propriétaire à égalité — réservé aux OWNER existants (route ownerOnly). VIEWER crée un tiers de confiance en lecture seule (US-A5.4) et exige alors accesExpireAt.'),
   "libelle": zod.string().optional().describe('Qualificatif libre facultatif (ex. \"Conjoint collaborateur\", \"Associé fondateur\").'),
-  "accesExpireAt": zod.coerce.date().optional().describe('Échéance de l\'accès accordé. OBLIGATOIRE pour le rôle VIEWER (400 sinon), ignorée pour les autres rôles — un accès ouvert à quelqu\'un d\'extérieur à l\'entreprise ne doit pas pouvoir rester ouvert par oubli.')
+  "accesExpireAt": zod.coerce.date().optional().describe('Échéance de l\'accès accordé. OBLIGATOIRE pour le rôle VIEWER (400 sinon) — un accès ouvert à quelqu\'un d\'extérieur à l\'entreprise ne doit pas pouvoir rester ouvert par oubli. FACULTATIVE pour les autres rôles depuis US-A7.3 : une fin de contrat saisonnier se connaît à l\'avance et se programme dès l\'invitation.')
 })
 
 export const InviterMembreResponse = zod.object({
@@ -1415,6 +1415,28 @@ export const ChangerRoleMembreBody = zod.object({
 })
 
 export const ChangerRoleMembreResponse = zod.object({
+  "id": zod.string(),
+  "email": zod.string(),
+  "nom": zod.string(),
+  "role": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT', 'VIEWER']),
+  "libelle": zod.string().nullish().describe('Qualificatif libre affiché à côté du rôle (ex. \"Conjoint collaborateur\"). N\'affecte jamais les droits.'),
+  "expiresAt": zod.coerce.date().nullish().describe('Échéance de l\'accès (US-A5.4). null = permanent, ce que sont toutes les adhésions sauf celle d\'un tiers de confiance (VIEWER).'),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Programme (ou retire) la fin d'accès d'un membre (OWNER only) — US-A7.3. Distincte d'une révocation immédiate : la date est connue à l'avance et s'applique toute seule le moment venu.
+ */
+export const ProgrammerEcheanceMembreParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ProgrammerEcheanceMembreBody = zod.object({
+  "expiresAt": zod.coerce.date().nullable().describe('Date de fin d\'accès, dans le futur. `null` retire l\'échéance (accès permanent) — refusé pour un VIEWER, dont l\'accès doit toujours en porter une (US-A5.4).')
+})
+
+export const ProgrammerEcheanceMembreResponse = zod.object({
   "id": zod.string(),
   "email": zod.string(),
   "nom": zod.string(),

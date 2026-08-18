@@ -251,17 +251,33 @@ describe("f, g — accorder l'accès passe par l'invitation, avec une date", () 
     expect(new Date(ok.body.accesExpireAt).getTime()).toBe(echeance.getTime());
   });
 
-  test("une échéance sur un rôle qui n'en porte pas est refusée plutôt que silencieusement perdue", async () => {
+  /**
+   * MIS À JOUR PAR US-A7.3 — ce test asseyait le contraire.
+   *
+   * Il vérifiait qu'une échéance sur un rôle autre que VIEWER était REFUSÉE.
+   * Le motif d'alors, écrit dans `membres.ts` : « rien dans le produit ne la
+   * propose ni ne la montre », donc mieux valait la rejeter que la perdre en
+   * silence. US-A7.3 est précisément la story qui la propose et la montre
+   * (révocation programmée pour les contrats saisonniers) : la condition du
+   * refus a disparu.
+   *
+   * Ce qu'US-A5.4 garantissait vraiment reste vérifié, juste au-dessus et
+   * au-dessous : un VIEWER doit TOUJOURS porter une échéance, à l'invitation
+   * comme après.
+   */
+  test("une échéance sur un rôle autre que VIEWER est désormais acceptée (US-A7.3)", async () => {
     const o = await creerUtilisateur("OWNER", "inviteur-accountant");
+    const echeance = new Date(Date.now() + 86_400_000);
     const res = await request(app)
       .post("/api/membres/inviter")
       .set("Cookie", o.cookie)
       .send({
         email: `comptable-avec-date-${Date.now()}@test.nodaq`,
         role: "ACCOUNTANT",
-        accesExpireAt: new Date(Date.now() + 86_400_000).toISOString(),
+        accesExpireAt: echeance.toISOString(),
       });
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(201);
+    expect(new Date(res.body.accesExpireAt).getTime()).toBe(echeance.getTime());
   });
 
   test("PATCH /membres/:id/role ne fabrique pas de tiers permanent, ni ne rend l'écriture à un tiers", async () => {

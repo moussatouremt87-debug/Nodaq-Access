@@ -51,6 +51,7 @@ import {
   ApercuInvitationParams,
   AccepterInvitationParams,
   AccepterInvitationBody,
+  ProgrammerEcheanceMembreBody,
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -111,27 +112,25 @@ router.post("/membres/inviter", async (req, res): Promise<void> => {
   const role = parsed.data.role;
   const libelle = parsed.data.libelle?.trim() || null;
 
-  // US-A5.4 — l'échéance est OBLIGATOIRE pour un tiers de confiance, et
-  // refusée pour les autres rôles. Le refus n'est pas du zèle : accepter
-  // silencieusement une échéance sur un ACCOUNTANT laisserait croire qu'elle
-  // sera appliquée alors que rien dans le produit ne la propose ni ne la
-  // montre — mieux vaut la rejeter que la perdre.
+  // Échéance d'accès : OBLIGATOIRE pour un tiers de confiance (US-A5.4 — un
+  // accès ouvert à quelqu'un d'extérieur ne doit pas pouvoir rester ouvert par
+  // oubli), FACULTATIVE pour les autres depuis US-A7.3.
+  //
+  // A5.4 la refusait hors VIEWER, et son commentaire disait pourquoi : « rien
+  // dans le produit ne la propose ni ne la montre ». A7.3 est la story qui la
+  // propose et la montre — la condition du refus a disparu, pas la prudence
+  // qui l'avait motivé. Une fin de contrat saisonnier se connaît d'avance ;
+  // la programmer vaut mieux qu'un geste manuel qu'on oublie.
   let accesExpireAt: Date | null = null;
-  if (role === "VIEWER") {
-    if (!parsed.data.accesExpireAt) {
-      res.status(400).json({
-        error: "Un accès en lecture seule doit porter une date de fin.",
-      });
-      return;
-    }
+  if (parsed.data.accesExpireAt) {
     accesExpireAt = new Date(parsed.data.accesExpireAt);
     if (Number.isNaN(accesExpireAt.getTime()) || accesExpireAt.getTime() <= Date.now()) {
       res.status(400).json({ error: "La date de fin d'accès doit être dans le futur." });
       return;
     }
-  } else if (parsed.data.accesExpireAt) {
+  } else if (role === "VIEWER") {
     res.status(400).json({
-      error: "Seul un accès en lecture seule peut porter une date de fin.",
+      error: "Un accès en lecture seule doit porter une date de fin.",
     });
     return;
   }
@@ -256,6 +255,91 @@ router.patch("/membres/:id/role", async (req, res): Promise<void> => {
   const [updated] = await db
     .update(membershipsTable)
     .set(updateData)
+    .where(eq(membershipsTable.id, params.data.id))
+    .returning();
+  const [user] = await db
+    .select({ email: usersTable.email, nom: usersTable.nom })
+    .from(usersTable)
+    .where(eq(usersTable.id, updated!.userId));
+
+  res.json({
+    id: updated!.id,
+    email: user?.email ?? "",
+    nom: user?.nom ?? "",
+    role: updated!.role,
+    libelle: updated!.libelle,
+    expiresAt: updated!.expiresAt,
+    createdAt: updated!.createdAt,
+  });
+});
+
+/**
+ * US-A7.3 — programmer (ou retirer) la fin d'accès d'un membre.
+ *
+ * Distincte de `DELETE /membres/:id`, qui révoque SUR-LE-CHAMP. Ici la date est
+ * connue à l'avance — une fin de contrat saisonnier — et s'applique toute
+ * seule le moment venu : `requireMembership` relit l'adhésion à chaque requête
+ * et refuse dès l'échéance passée (US-A5.4). Aucun travail périodique, aucun
+ * geste manuel le jour J, donc aucun oubli possible.
+ *
+ * Route SÉPARÉE de `PATCH /membres/:id/role` volontairement : celle-là porte
+ * les gardes des transitions de rôle, celle-ci porte les règles de la
+ * planification. Les mêler rendrait les deux plus difficiles à relire.
+ */
+router.patch("/membres/:id/echeance", async (req, res): Promise<void> => {
+  const params = ChangerRoleMembreParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const parsed = ProgrammerEcheanceMembreBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const tenantId = req.tenantId!;
+
+  const [cible] = await db
+    .select()
+    .from(membershipsTable)
+    .where(and(eq(membershipsTable.id, params.data.id), eq(membershipsTable.tenantId, tenantId)));
+  if (!cible) { res.status(404).json({ error: "Membre introuvable" }); return; }
+
+  let echeance: Date | null = null;
+  if (parsed.data.expiresAt) {
+    echeance = new Date(parsed.data.expiresAt);
+    if (Number.isNaN(echeance.getTime()) || echeance.getTime() <= Date.now()) {
+      res.status(400).json({ error: "La date de fin d'accès doit être dans le futur." });
+      return;
+    }
+  }
+
+  // Un tiers de confiance porte TOUJOURS une fin d'accès (US-A5.4). Lui retirer
+  // son échéance fabriquerait l'accès externe permanent que cette story-là
+  // existait pour empêcher.
+  if (!echeance && cible.role === "VIEWER") {
+    res.status(403).json({
+      error: "Un accès en lecture seule doit garder une date de fin. Révoquez-le si vous voulez le fermer.",
+    });
+    return;
+  }
+
+  // ── La garde qui n'est écrite dans aucun critère d'acceptation ───────────
+  // `DELETE` refuse de révoquer le dernier propriétaire. Une révocation
+  // PROGRAMMÉE est une révocation différée : sans le même comptage ici, elle
+  // deviendrait la porte dérobée qui contourne l'autre — le tenant se
+  // retrouverait un jour sans aucun accès propriétaire, à une date que plus
+  // personne ne surveille.
+  if (echeance && cible.role === "OWNER") {
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(membershipsTable)
+      .where(and(eq(membershipsTable.tenantId, tenantId), eq(membershipsTable.role, "OWNER")));
+    if (count <= 1) {
+      res.status(403).json({
+        error: "Le dernier propriétaire de cet espace ne peut pas voir son accès programmé pour se fermer.",
+      });
+      return;
+    }
+  }
+
+  const [updated] = await db
+    .update(membershipsTable)
+    .set({ expiresAt: echeance })
     .where(eq(membershipsTable.id, params.data.id))
     .returning();
   const [user] = await db

@@ -58,6 +58,7 @@ export * from './devisStatus';
 export * from './devisUpdate';
 export * from './echeance';
 export * from './echeanceInput';
+export * from './echeanceMembreBody';
 export * from './echeanceStatus';
 export * from './echeanceType';
 export * from './echeanceUpdate';
