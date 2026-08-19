@@ -26,6 +26,7 @@ import asyncio
 import contextlib
 import logging
 import os
+import socket
 import sys
 
 import websockets
@@ -50,6 +51,21 @@ log = logging.getLogger("voice.appel")
 #: PAS 8080 : l'API de développement y tourne déjà, et Twilio se connecterait
 #: alors au mauvais processus.
 PORT_DEFAUT = 8090
+
+
+def _port_occupe(port: int) -> bool:
+    """Le port est-il déjà pris ? Vérifié AVANT de composer.
+
+    Sans ça, l'échec arrive sous forme de trace de pile, après avoir payé la
+    synthèse de l'amorce — et sans dire quoi faire.
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            s.bind(("0.0.0.0", port))
+        except OSError:
+            return True
+    return False
 
 
 def port_ecoute() -> int:
@@ -100,6 +116,16 @@ async def main(numero: str, jeton: str) -> int:
     await amorce.warm_up()
     log.info("amorce prête (%.2f s)", amorce.duree_secondes)
 
+    port = port_ecoute()
+    if _port_occupe(port):
+        # Un worker précédent qui traîne, et la trace de pile ne le dit pas.
+        log.error(
+            "le port %d est déjà pris — un appel précédent tourne encore. "
+            "Libère-le avec : pkill -f voice.appel",
+            port,
+        )
+        return 2
+
     boucle = asyncio.get_running_loop()
     connectee: asyncio.Future[SessionMedia] = boucle.create_future()
     terminee: asyncio.Future[Outcome] = boucle.create_future()
@@ -144,7 +170,6 @@ async def main(numero: str, jeton: str) -> int:
 
     # Le serveur AVANT l'appel : Twilio se connecte dès le décroché, et une
     # connexion refusée fait échouer l'appel sans message clair.
-    port = port_ecoute()
     async with websockets.serve(accueillir, "0.0.0.0", port):
         log.info("écoute sur le port %d", port)
         session_tel = await tel.dial(numero, caller_id=os.environ["TELEPHONY_CALLER_ID"])
@@ -174,6 +199,12 @@ async def main(numero: str, jeton: str) -> int:
             # TOUJOURS : une ligne laissée ouverte est facturée et occupe le
             # numéro, même quand la conversation a levé.
             await tel.hang_up(session_tel.id)
+            # Et on FERME la WebSocket. Sans ça, le gestionnaire de connexion
+            # reste suspendu, `serve` l'attend en quittant son contexte, et le
+            # processus survit à l'appel en gardant le port — l'essai suivant
+            # se heurte à « address already in use ». Constaté deux fois.
+            with contextlib.suppress(Exception):
+                await connectee.result().ws.close()
 
     await tel.aclose()
     await passerelle.aclose()
