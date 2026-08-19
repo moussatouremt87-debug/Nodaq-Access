@@ -16,7 +16,9 @@ import pytest
 
 from voice.adapters.elevenlabs_tts import (
     FORMAT_TELEPHONE,
+    MODEL_EXPRESSIF,
     MODEL_TEMPS_REEL,
+    OPTIMISATION_LATENCE,
     ElevenLabsConfig,
     ElevenLabsConfigError,
     ElevenLabsTextToSpeech,
@@ -56,6 +58,38 @@ async def test_uses_the_realtime_model_and_telephone_format() -> None:
     # would put a resampling step in the live path and degrade twice.
     assert req.url.params["output_format"] == FORMAT_TELEPHONE
     assert "voix-123" in str(req.url)
+
+
+async def test_streaming_latency_is_optimised_on_the_realtime_model() -> None:
+    """160 ms de moins pour un paramètre d'URL, mesurés le 19 août 2026.
+
+    Le temps au premier octet passe de ~676 ms à ~505 ms. Sur un appel
+    téléphonique, ces 160 ms sont prises directement sur le blanc qui suit la
+    phrase du débiteur.
+    """
+    vues, client = capture()
+    tts = ElevenLabsTextToSpeech(config(), client=client)
+
+    async for _ in tts.synthesize("Bonjour."):
+        pass
+
+    assert vues[0].url.params["optimize_streaming_latency"] == str(OPTIMISATION_LATENCE)
+
+
+async def test_the_expressive_model_is_never_sent_the_latency_parameter() -> None:
+    """`eleven_v3` répond 400 s'il le reçoit — vérifié à la mesure, pas supposé.
+
+    Envoyer le paramètre à tous les modèles ferait échouer la requête au lieu
+    de l'accélérer, et l'échec arriverait EN APPEL.
+    """
+    vues, client = capture()
+    cfg = ElevenLabsConfig(api_key="cle-de-test", voice_id="voix-123", model_id=MODEL_EXPRESSIF)
+    tts = ElevenLabsTextToSpeech(cfg, client=client)
+
+    async for _ in tts.synthesize("Bonjour."):
+        pass
+
+    assert "optimize_streaming_latency" not in vues[0].url.params
 
 
 async def test_language_is_sent_explicitly() -> None:

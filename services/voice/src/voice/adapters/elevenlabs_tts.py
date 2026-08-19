@@ -38,6 +38,24 @@ MODEL_TEMPS_REEL = "eleven_flash_v2_5"
 #: G.711 μ-law, 8 kHz — what a phone line carries and what Twilio ingests.
 FORMAT_TELEPHONE = "ulaw_8000"
 
+#: Le modèle expressif. Il ne tient PAS le temps réel — voir `OPTIMISATION_LATENCE`.
+MODEL_EXPRESSIF = "eleven_v3"
+
+#: Optimisation du démarrage de flux, mesurée le 19 août 2026 sur `ulaw_8000` :
+#: Flash passe de ~676 ms à ~505 ms de temps au premier octet. Cent soixante
+#: millisecondes gagnées pour un paramètre d'URL.
+#:
+#: Les valeurs 0 à 4 se sont révélées équivalentes à la mesure (505 à 531 ms) :
+#: on prend 3 plutôt que 4, le maximum désactivant en plus la normalisation du
+#: texte — ce qui ferait lire « 400 » autrement qu'en euros.
+OPTIMISATION_LATENCE = 3
+
+#: `eleven_v3` REFUSE ce paramètre : l'API rend 400, vérifié à la mesure. On ne
+#: l'envoie donc pas à ce modèle plutôt que de laisser la requête échouer — et
+#: c'est une raison de plus de ne pas mettre v3 dans le chemin temps réel : il
+#: rend son premier octet en ~1 139 ms, et rien ne permet de l'accélérer.
+MODELES_SANS_OPTIMISATION = frozenset({MODEL_EXPRESSIF})
+
 
 class ElevenLabsConfigError(RuntimeError):
     """Configuration missing or incoherent. Never carries a key value."""
@@ -119,6 +137,8 @@ class ElevenLabsTextToSpeech:
         params: dict[str, str] = {"output_format": cfg.output_format}
         if cfg.zero_retention:
             params["enable_logging"] = "false"
+        if cfg.model_id not in MODELES_SANS_OPTIMISATION:
+            params["optimize_streaming_latency"] = str(OPTIMISATION_LATENCE)
 
         payload = {
             "text": texte_sans_identite(text),
