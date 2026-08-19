@@ -57,6 +57,8 @@ import { modulesReadRouter, modulesWriteRouter } from "./modules";
 import { reglesRelanceReadRouter, reglesRelanceWriteRouter } from "./regles-relance";
 import { campagnesRelanceReadRouter, campagnesRelanceWriteRouter } from "./campagnes-relance";
 import relanceFormulationRouter from "./relance-formulation";
+import relanceMandatRouter from "./relance-mandat";
+import { requireAppelVocal } from "../middleware/requireAppelVocal";
 import membresRouter, { membresPublicRouter } from "./membres";
 import mfaRouter from "./mfa";
 
@@ -75,6 +77,29 @@ router.use(facturationElectroniqueWebhookRouter);
 // signature HMAC — voir webhooks-banque.ts. Un seul webhook applicatif,
 // tenant résolu via la policy RLS étroite bank_connections_webhook_lookup.
 router.use(banqueWebhookRouter);
+
+// ── Le worker vocal (4.18, lot 6) ────────────────────────────────────────
+//
+// AVANT le bloc `biz`, et BORNÉ AU CHEMIN. Deux contraintes qui se sont
+// rappelées à moi l'une après l'autre :
+//
+//   * `router.use(mw, sous)` exécute `mw` pour TOUTE requête qui atteint la
+//     ligne, pas seulement pour celles que le sous-routeur sait traiter. Sans
+//     préfixe, `requireAppelVocal` exigeait un jeton d'appel pour tout ce qui
+//     est déclaré plus bas — factures, avoirs, paramètres ;
+//   * les routeurs `biz` sont eux aussi montés sans préfixe : placé après eux,
+//     ce montage n'était jamais atteint, `requireAuth` ayant déjà refusé la
+//     requête faute de cookie.
+//
+// Le worker est une MACHINE : il n'a pas de session. Le jeton qu'il présente
+// désigne UN appel, et `req.tenantId` est posé depuis la ligne trouvée en base
+// — jamais depuis le corps. La règle 1 est ainsi tenue par construction : le
+// worker n'a aucun moyen de nommer un tenant.
+//
+// Ces routes ne sont exposées à aucune interface : rien dans `artifacts/nodaq`
+// ne les appelle, et un humain n'a pas de jeton d'appel.
+router.use("/relance/appel", requireAppelVocal, relanceMandatRouter);
+router.use("/relance/formulation", requireAppelVocal, relanceFormulationRouter);
 
 // ── MFA (ticket 4.15) — requireAuth SEUL, pas la chaîne biz ────────────────
 // Une session bloquée par requireMfaVerified doit pouvoir atteindre ces
@@ -134,11 +159,15 @@ router.use(biz, modulesReadRouter);
 // il doit donc pouvoir la lire. L'écriture est plus bas, au propriétaire.
 router.use(biz, reglesRelanceReadRouter);
 router.use(biz, campagnesRelanceReadRouter);
-// Formulation des répliques de l'agent vocal (4.18) : lecture seule, elle
-// n'écrit rien et ne décide rien — le noyau a déjà tranché quand elle est
-// appelée. Sur session pour l'instant ; l'authentification de service du
-// worker se tranche au lot 6, avec celle de la passerelle de mandat.
-router.use(biz, relanceFormulationRouter);
+// ── Le worker vocal (4.18, lot 6) ────────────────────────────────────────
+//
+// PAS `biz` : le worker est une machine, il n'a pas de session. Le jeton
+// qu'il présente désigne UN appel, et `req.tenantId` est posé depuis la ligne
+// trouvée en base — jamais depuis le corps. La règle 1 est ainsi tenue par
+// construction : le worker n'a aucun moyen de nommer un tenant.
+//
+// Ces routes ne sont exposées à aucune interface : rien dans `artifacts/nodaq`
+// ne les appelle, et un humain n'a pas de jeton d'appel.
 
 // ── Business routes (OWNER ou ACCOUNTANT seulement) ───────────────────────
 router.use(financierOnly, echeancesRouter);

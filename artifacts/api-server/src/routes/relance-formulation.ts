@@ -18,11 +18,13 @@
  * une garde qui dérive.
  *
  * ── Authentification ───────────────────────────────────────────────────────
- * Montée sous `biz`, donc sur une session. Le worker vocal, lui, est une
- * machine : il lui faudra une authentification de service, qui est la MÊME
- * décision que celle qu'appelle la passerelle de mandat (`may_nudge`,
- * `decide_instalment`), encore sans route elle non plus. Cette couture se
- * tranche une fois pour les deux au lot 6, pas deux fois différemment ici.
+ * Montée derrière `requireAppelVocal`, comme la passerelle de mandat : le
+ * worker présente le jeton frappé pour l'appel en cours, et `req.tenantId` est
+ * posé depuis la ligne trouvée en base. Le corps ne porte aucun tenant, donc
+ * aucun tenant ne peut être forgé.
+ *
+ * Elle n'est exposée à aucune interface : rien dans `artifacts/nodaq` ne
+ * l'appelle, et un humain n'a pas de jeton d'appel.
  */
 import { Router, type IRouter } from "express";
 import { z } from "zod";
@@ -95,7 +97,7 @@ function nettoyer(brut: string): string {
   return brut.trim().replace(/^["«»\s]+|["«»\s]+$/g, "");
 }
 
-router.post("/relance/formulation", async (req, res): Promise<void> => {
+router.post("/", async (req, res): Promise<void> => {
   const parsed = CorpsFormulation.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
