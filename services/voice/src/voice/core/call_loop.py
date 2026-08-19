@@ -29,6 +29,12 @@ from voice.core.conversation import DunningConversation, Outcome
 from voice.core.interfaces import SpeechToText, TranscriptSegment
 
 
+#: En deçà, ce n'est pas quelqu'un qui parle : c'est de l'écho ou du bruit.
+#: Deux mots, parce qu'un « allô » isolé doit encore pouvoir couper l'agent —
+#: mais pas un souffle transcrit en « euh ».
+MOTS_POUR_COUPER = 2
+
+
 async def conduire_appel(
     conversation: DunningConversation,
     stt: SpeechToText,
@@ -52,9 +58,15 @@ async def conduire_appel(
     async def ecouter() -> None:
         try:
             async for segment in stt.transcribe(audio_entrant):
-                # Un fragment ne dit pas QUOI répondre, mais son arrivée prouve
-                # que la personne parle. C'est tout ce qu'il faut pour se taire.
-                await conversation.barge_in()
+                # « L'arrivée d'un fragment prouve que la personne parle » : je
+                # l'ai écrit, et c'est FAUX au téléphone. La voix de l'agent
+                # revient en écho, un souffle suffit à produire un fragment, et
+                # l'agent se coupait lui-même — constaté au premier appel réel.
+                #
+                # Il faut donc de la PAROLE, pas du signal : un tour terminé, ou
+                # un fragment déjà assez fourni pour ne pas être un bruit.
+                if segment.is_final or len(segment.text.split()) >= MOTS_POUR_COUPER:
+                    await conversation.barge_in()
 
                 if segment.is_final and segment.text.strip():
                     await tours.put(segment.text.strip())

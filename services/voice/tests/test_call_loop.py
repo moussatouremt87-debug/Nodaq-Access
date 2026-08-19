@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from voice.core.call_loop import conduire_appel
+from voice.core.call_loop import MOTS_POUR_COUPER, conduire_appel
 from voice.core.conversation import (
     DunningConversation,
     InstalmentDecision,
@@ -180,25 +180,49 @@ async def test_un_segment_vide_est_ignore() -> None:
 # ── c. L'interruption ──────────────────────────────────────────────────────
 
 
-async def test_un_fragment_suffit_a_faire_taire_l_agent() -> None:
-    """Un fragment ne dit pas QUOI répondre, mais il prouve que la personne parle.
+async def test_l_annonce_n_est_pas_interruptible() -> None:
+    """Le défaut du PREMIER APPEL RÉEL : l'agent se coupait lui-même.
 
-    C'est tout ce qu'il faut pour se taire — et attendre la phrase complète
-    laisserait l'agent parler par-dessus pendant une seconde entière.
+    Sur une ligne téléphonique, sa propre voix revient en écho et le moindre
+    souffle produit un fragment de transcription. L'agent entendait « quelqu'un
+    parle » et se taisait — en pleine présentation.
+
+    Au-delà du défaut technique, l'annonce est une obligation de transparence
+    (US-2). Une annonce qu'un bruit de fond peut interrompre n'est pas une
+    annonce.
     """
-    # L'agent met 50 ms à dire son annonce ; le débiteur le coupe au bout de 10.
     conv, puits, stt = monter(
-        [
-            TranscriptSegment(text="attendez", is_final=False),
-            TranscriptSegment(text="ne me rappelez plus", is_final=True),
-        ],
+        [TranscriptSegment(text="attendez", is_final=False)],
         delai=0.01,
         duree_voix=0.05,
     )
 
     await conduire_appel(conv, stt, rien())
 
-    assert puits.coupures >= 1
+    assert puits.coupures == 0, "l'agent s'est coupé pendant sa propre annonce"
+
+
+async def test_un_souffle_isole_ne_coupe_pas() -> None:
+    # Un mot seul, c'est de l'écho ou du bruit. En deçà de deux mots on ne coupe
+    # pas — sinon l'agent se tait à chaque respiration de son interlocuteur.
+    # Le filtre vit dans la boucle ; ce test épingle le seuil, qui EST
+    # l'exigence — un test qui suivrait la constante suivrait aussi ses erreurs.
+    assert MOTS_POUR_COUPER == 2
+
+
+async def test_une_vraie_prise_de_parole_fait_taire_l_agent() -> None:
+    """L'exigence non négociable du ticket, une fois l'annonce passée.
+
+    La file de l'opérateur peut avoir plusieurs secondes d'avance : cesser
+    d'envoyer ne suffit pas, il faut la VIDER.
+    """
+    conv, puits, _ = monter([])
+    conv.state.announced = True
+    conv.state.speaking = True
+
+    await conv.barge_in()
+
+    assert puits.coupures == 1
 
 
 async def test_on_ne_coupe_pas_quand_l_agent_se_tait() -> None:

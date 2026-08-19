@@ -277,7 +277,20 @@ class DunningConversation:
         qui sépare un appel supportable d'un appel qu'on raccroche. La file de
         l'opérateur peut avoir plusieurs secondes d'avance : il faut la VIDER,
         pas seulement arrêter d'y écrire.
+
+        ── L'ANNONCE N'EST PAS INTERRUPTIBLE ────────────────────────────────
+        Constaté au premier appel réel : l'agent se coupait lui-même en pleine
+        présentation. Sur une ligne téléphonique, sa propre voix revient en
+        écho et le moindre souffle produit un fragment de transcription — il
+        entendait donc « quelqu'un parle » et se taisait.
+
+        Au-delà du défaut technique, l'annonce est une obligation de
+        transparence (US-2, AI Act). Une annonce qu'un bruit de fond peut
+        interrompre n'est pas une annonce. Elle va donc au bout, et la
+        conversation ne commence qu'après.
         """
+        if not self.state.announced:
+            return
         if self._sink is not None and self.state.speaking:
             await self._sink.cut()
 
