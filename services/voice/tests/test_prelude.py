@@ -135,6 +135,40 @@ async def test_une_synthese_vide_est_refusee() -> None:
         await CachedPrelude(TtsMuet()).warm_up()
 
 
+async def test_une_amorce_plus_longue_que_le_blanc_est_refusee_au_demarrage() -> None:
+    """Le piège du dispositif, et il a failli être adopté.
+
+    Une amorce en `eleven_v3` sonne mieux mais dure 1,60 s pour 1,15 s de blanc.
+    La réplique serait prête avant la fin de l'amorce et devrait l'attendre :
+    +450 ms, c'est-à-dire un agent RALENTI par son correctif de latence.
+
+    Refusé au démarrage, seul moment où l'on peut corriger sans que personne ne
+    l'entende — une amorce trop longue ne casse rien de visible.
+    """
+
+    @dataclass
+    class TtsTropLong:
+        async def synthesize(self, text: str, *, language: str = "fr") -> AsyncIterator[bytes]:
+            # 1,60 s : la durée réellement mesurée de l'amorce v3.
+            yield b"\x00" * int(1.60 * 8000)
+
+    with pytest.raises(PreludeNotReadyError, match="attendre la réplique"):
+        await CachedPrelude(TtsTropLong()).warm_up()
+
+
+async def test_l_amorce_du_modele_temps_reel_passe() -> None:
+    # 0,93 s mesurées en Flash, sous la borne. La garde doit laisser passer
+    # exactement ce qu'on a retenu, sinon elle refuse ce qu'elle protège.
+    @dataclass
+    class TtsFlash:
+        async def synthesize(self, text: str, *, language: str = "fr") -> AsyncIterator[bytes]:
+            yield b"\x00" * int(0.93 * 8000)
+
+    amorce = CachedPrelude(TtsFlash())
+    await amorce.warm_up()
+    assert amorce.duree_secondes == pytest.approx(0.93, abs=0.01)
+
+
 async def test_la_duree_est_connue_car_c_est_ce_qu_elle_masque() -> None:
     amorce = CachedPrelude(TtsCompteur())
     await amorce.warm_up()

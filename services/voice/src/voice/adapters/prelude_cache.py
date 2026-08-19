@@ -49,6 +49,19 @@ class CachedPrelude:
     voulait rendre naturel.
     """
 
+    #: Au-delà, l'amorce dure plus longtemps que le blanc qu'elle couvre.
+    #:
+    #: C'est le piège de ce dispositif, et il a failli être adopté : une amorce
+    #: en `eleven_v3` sonne mieux mais dure 1,60 s pour 1,15 s de blanc. Quand le
+    #: modèle répond normalement, la réplique est prête avant la fin de l'amorce
+    #: et doit l'attendre — le remède devient le goulot, et l'agent finit plus
+    #: lent qu'avant le correctif.
+    #:
+    #: La borne est haute (1,15 s, le blanc mesuré) : elle n'existe pas pour
+    #: régler finement, mais pour empêcher la faute grossière. Voir
+    #: `docs/adr/003-latence-agent-vocal.md`.
+    DUREE_MAX_SECONDES = 1.15
+
     def __init__(self, tts: TextToSpeech, *, texte: str = TEXTE_AMORCE) -> None:
         self._tts = tts
         self._texte = texte
@@ -59,6 +72,19 @@ class CachedPrelude:
         morceaux = [m async for m in self._tts.synthesize(self._texte) if m]
         if not morceaux:
             raise PreludeNotReadyError("la synthèse de l'amorce n'a rendu aucun octet")
+
+        duree = sum(len(m) for m in morceaux) / 8000
+        if duree > self.DUREE_MAX_SECONDES:
+            # Refusé AU DÉMARRAGE, pas en appel : c'est le seul moment où l'on
+            # peut encore corriger sans que quelqu'un l'entende. Une amorce trop
+            # longue ne casse rien de visible — elle rend juste l'agent plus
+            # lent, silencieusement, ce qui est exactement le genre de
+            # régression que personne ne remarque avant six mois.
+            raise PreludeNotReadyError(
+                f"l'amorce dure {duree:.2f} s pour un blanc de "
+                f"{self.DUREE_MAX_SECONDES:.2f} s : elle ferait attendre la réplique "
+                f"au lieu de la couvrir (voir docs/adr/003-latence-agent-vocal.md)"
+            )
         self._morceaux = morceaux
 
     @property
