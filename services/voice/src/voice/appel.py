@@ -74,6 +74,15 @@ async def main(numero: str, jeton: str) -> int:
         if not connectee.done():
             connectee.set_result(session)
 
+        # La lecture du transport démarre AVANT tout le reste. L'annonce attend
+        # le `stream_sid`, qui n'arrive que dans l'événement `start` : si
+        # personne ne lit la WebSocket pour lui-même, l'agent attend un
+        # identifiant que rien ne va chercher. Interblocage observé sur le
+        # premier appel réel — le téléphone sonnait, personne ne parlait.
+        lecture = asyncio.create_task(session.run())
+        await session.await_start()
+        log.info("flux média établi")
+
         conversation = DunningConversation(
             stt=stt,
             tts=tts,
@@ -95,6 +104,8 @@ async def main(numero: str, jeton: str) -> int:
             log.error("la conversation a échoué : %s", type(err).__name__)
             if not terminee.done():
                 terminee.set_exception(err)
+        finally:
+            lecture.cancel()
 
     # Le serveur AVANT l'appel : Twilio se connecte dès le décroché, et une
     # connexion refusée fait échouer l'appel sans message clair.

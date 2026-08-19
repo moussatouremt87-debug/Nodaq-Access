@@ -42,46 +42,69 @@ OCTETS_PAR_TRAME = 160
 class SessionMedia:
     """Une conversation en cours, vue du transport.
 
-    `stream_sid` est exigé par Twilio sur tout ce qu'on lui renvoie. Il n'est
-    connu qu'après l'événement `start` — d'où l'attente explicite plutôt qu'une
-    valeur vide qui échouerait silencieusement au premier envoi.
+    ── Le plan de CONTRÔLE est lu séparément, et c'est essentiel ─────────────
+    `stream_sid` est exigé par Twilio sur tout ce qu'on lui renvoie, et il
+    n'arrive que dans l'événement `start`. Faire lire cet événement par la
+    boucle de transcription créait un interblocage observé sur le premier appel
+    réel : l'agent attendait le `stream_sid` pour prononcer son annonce, et le
+    `stream_sid` attendait que la transcription démarre pour être lu. Le
+    téléphone sonnait, on décrochait, personne ne parlait.
+
+    D'où `run()` : une tâche qui lit la WebSocket en continu, renseigne les
+    identifiants dès le `start`, et dépose l'audio dans une file. Le transport
+    ne dépend plus de ce qui le consomme.
     """
 
     ws: websockets.ServerConnection
     stream_sid: str = ""
     call_sid: str = ""
     _pret: asyncio.Event = field(default_factory=asyncio.Event)
+    _entrant: asyncio.Queue[bytes | None] = field(default_factory=asyncio.Queue)
 
     async def await_start(self) -> None:
         await self._pret.wait()
 
     # ── Ce qui arrive du débiteur ─────────────────────────────────────────
 
-    async def inbound_audio(self) -> AsyncIterator[bytes]:
-        """Les trames du débiteur, prêtes pour la transcription.
+    async def run(self) -> None:
+        """Lit la WebSocket de bout en bout. À lancer comme tâche, une fois.
 
-        Seule la piste `inbound` est rendue : `outbound` est notre propre voix
+        Seule la piste `inbound` est retenue : `outbound` est notre propre voix
         renvoyée en écho. La transcrire ferait entendre l'agent à l'agent, qui
         se répondrait à lui-même.
         """
-        async for brut in self.ws:
-            e = json.loads(brut)
-            evenement = e.get("event")
+        try:
+            async for brut in self.ws:
+                e = json.loads(brut)
+                evenement = e.get("event")
 
-            if evenement == "start":
-                depart = e.get("start", {})
-                self.stream_sid = str(e.get("streamSid", ""))
-                self.call_sid = str(depart.get("callSid", ""))
-                self._pret.set()
-            elif evenement == "media":
-                media = e.get("media", {})
-                if media.get("track") == "outbound":
-                    continue
-                charge = media.get("payload")
-                if charge:
-                    yield base64.b64decode(charge)
-            elif evenement == "stop":
+                if evenement == "start":
+                    depart = e.get("start", {})
+                    self.stream_sid = str(e.get("streamSid", ""))
+                    self.call_sid = str(depart.get("callSid", ""))
+                    self._pret.set()
+                elif evenement == "media":
+                    media = e.get("media", {})
+                    if media.get("track") == "outbound":
+                        continue
+                    charge = media.get("payload")
+                    if charge:
+                        await self._entrant.put(base64.b64decode(charge))
+                elif evenement == "stop":
+                    break
+        finally:
+            # Débloque toute attente en cours : sans ça, l'annonce resterait
+            # suspendue à un `start` qui n'arrivera jamais si l'appel tombe.
+            self._pret.set()
+            await self._entrant.put(None)
+
+    async def inbound_audio(self) -> AsyncIterator[bytes]:
+        """Les trames du débiteur, prêtes pour la transcription."""
+        while True:
+            morceau = await self._entrant.get()
+            if morceau is None:
                 return
+            yield morceau
 
     # ── Ce qu'on renvoie ──────────────────────────────────────────────────
 

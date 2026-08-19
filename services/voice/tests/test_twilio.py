@@ -214,11 +214,45 @@ async def test_seule_la_piste_du_debiteur_est_transcrite() -> None:
     ]
     session = SessionMedia(ws=FausseWs(script))  # type: ignore[arg-type]
 
+    # `run()` lit le transport et DÉPOSE l'audio ; `inbound_audio()` le draine.
+    # Les deux sont séparés depuis l'interblocage du premier appel réel :
+    # l'annonce attendait le `stream_sid`, que seule la boucle de transcription
+    # allait lire — le téléphone sonnait et personne ne parlait.
+    await session.run()
     recus = [m async for m in session.inbound_audio()]
 
     assert recus == [b"\x11" * 160]
     assert session.call_sid == "CA-1"
     assert session.stream_sid == "MZ-1"
+
+
+async def test_parler_ne_depend_pas_de_qui_ecoute() -> None:
+    """L'interblocage du premier appel réel, gardé.
+
+    Pour parler, la session doit connaître le `stream_sid`, qui n'arrive que
+    dans l'événement `start`. Tant que cet événement n'était lu que par la
+    boucle de transcription, l'agent attendait un identifiant que personne
+    n'allait chercher : le téléphone sonnait, on décrochait, et rien ne se
+    passait.
+
+    Ici PERSONNE ne consomme `inbound_audio()` — et l'agent doit quand même
+    pouvoir prononcer son annonce.
+    """
+    script: list[dict[str, object]] = [
+        {"event": "start", "streamSid": "MZ-9", "start": {"callSid": "CA-9"}},
+        {"event": "media", "media": {"track": "inbound",
+                                     "payload": base64.b64encode(b"\x33" * 160).decode()}},
+    ]
+    ws = FausseWs(script)
+    session = SessionMedia(ws=ws)  # type: ignore[arg-type]
+
+    lecture = asyncio.create_task(session.run())
+    await asyncio.wait_for(session.await_start(), timeout=1)
+    await asyncio.wait_for(session.play(flux(b"\x00" * OCTETS_PAR_TRAME)), timeout=1)
+
+    assert session.stream_sid == "MZ-9"
+    assert [e for e in ws.envoyes if e.get("event") == "media"], "l'agent n'a pas pu parler"
+    lecture.cancel()
 
 
 async def test_jouer_attend_de_connaitre_le_flux() -> None:
