@@ -2,7 +2,8 @@
 #
 # Monte le décor minimal d'un appel supervisé et rend son jeton.
 #
-#   ./scripts/preparer-appel-test.sh +971XXXXXXXXX
+#   ./scripts/preparer-appel-test.sh +971XXXXXXXXX            (jeton seulement)
+#   ./scripts/preparer-appel-test.sh +971XXXXXXXXX --appeler   (et on appelle)
 #
 # Ce que ça crée : un tenant jetable, sa règle de relance, sa raison sociale,
 # une campagne d'un appel, la validation de cette campagne, puis l'appel
@@ -21,6 +22,7 @@ set -euo pipefail
 
 RACINE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 NUMERO="${1:-}"
+APPELER="${2:-}"
 if [ -z "$NUMERO" ]; then
   echo "usage : $0 +NUMERO_E164" >&2
   exit 2
@@ -99,9 +101,22 @@ APPEL=$(curl -s -X POST "$API/relance/campagnes/$CAMPAGNE_ID/appels" -H "Cookie:
 JETON=$(printf '%s' "$APPEL" | json jeton)
 
 echo
+
+if [ "$APPELER" = "--appeler" ]; then
+  # On enchaîne dans la foulée. Recopier un jeton à la main s'est révélé être
+  # la marche la plus glissante de toute la mise au point : deux essais perdus
+  # sur un libellé d'exemple pris pour une valeur.
+  echo "→ appel en cours vers $NUMERO"
+  echo
+  cd "$RACINE/services/voice"
+  exec uv run python -m voice.appel "$NUMERO" "$JETON"
+fi
+
 echo "════════════════════════════════════════════════════════════════"
-echo "  Lance l'appel avec :"
+echo "  Jeton obtenu. Pour appeler :"
 echo
-echo "  cd $RACINE/services/voice"
-echo "  uv run python -m voice.appel $NUMERO $JETON"
+echo "  ./scripts/preparer-appel-test.sh $NUMERO --appeler"
+echo
+echo "  (ou, si tu tiens à lancer le worker toi-même, le jeton est"
+echo "   ci-dessus — mais --appeler évite de le recopier.)"
 echo "════════════════════════════════════════════════════════════════"
