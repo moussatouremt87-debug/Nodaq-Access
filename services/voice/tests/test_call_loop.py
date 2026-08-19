@@ -263,6 +263,44 @@ async def test_un_silence_ne_casse_pas_la_transcription() -> None:
     )
 
 
+async def test_une_phrase_hors_cloture_obtient_quand_meme_une_reponse() -> None:
+    """Le défaut du SIXIÈME appel réel : la transcription marchait, l'agent se taisait.
+
+    `handle` ne sait répondre qu'aux quatre phrases de clôture. « Je peux pas
+    tout payer d'un coup » n'en est pas une : l'agent enregistrait le tour et
+    ne disait rien. Une conversation où l'un des deux se tait n'est pas une
+    conversation.
+    """
+    conv, puits, stt = monter(
+        [TranscriptSegment(text="je peux pas tout payer d'un coup", is_final=True)],
+    )
+
+    await conduire_appel(conv, stt, rien())
+
+    dits = [t for t in conv.state.history if t.speaker == "agent"]
+    # L'annonce, PUIS une relance : l'agent a repris la parole.
+    assert len(dits) >= 2, "l'agent est resté muet devant une phrase inattendue"
+
+
+async def test_le_repli_respecte_le_plafond_d_insistance() -> None:
+    # Le quota vient du noyau, pas de cette boucle. Une fois épuisé, on
+    # n'invente pas une relance de plus : le recouvrement amiable sanctionne
+    # l'appel oppressant.
+    conv, _, stt = monter(
+        [
+            TranscriptSegment(text="je sais pas encore", is_final=True),
+            TranscriptSegment(text="je vous rappelle", is_final=True),
+            TranscriptSegment(text="peut-être la semaine prochaine", is_final=True),
+        ],
+        delai=0.01,
+    )
+
+    issue = await conduire_appel(conv, stt, rien())
+
+    assert conv.state.nudges == 2, "l'agent a insisté au-delà du plafond"
+    assert issue is Outcome.UNREACHABLE
+
+
 # ── c. L'interruption ──────────────────────────────────────────────────────
 
 

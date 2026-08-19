@@ -156,9 +156,34 @@ async def conduire_appel(
             propos = await tours.get()
             if propos is None:
                 return None
+
+            avant = len(conversation.state.history)
             await conversation.handle(propos)
             if conversation.state.outcome is not None:
                 return conversation.state.outcome
+
+            # `handle` ne sait répondre qu'aux quatre phrases de CLÔTURE. Tout
+            # le reste — « je peux pas tout payer », « rappelez-moi demain »,
+            # une question — le laissait muet : il enregistrait et se taisait.
+            # Constaté au sixième appel réel, où la transcription marchait
+            # parfaitement et où l'agent n'a pourtant rien dit.
+            #
+            # Faute de savoir ce que la personne VEUT, on fait ce qu'un
+            # chargé de relance fait par défaut : on redemande une date. Le
+            # noyau borne cette insistance à deux, et refuse au-delà — c'est
+            # lui qui décide, pas cette boucle.
+            #
+            # C'est un REPLI, pas une compréhension. Reconnaître une demande
+            # d'échelonnement, une contestation nuancée ou une promesse
+            # demande une classification par le modèle, côté serveur, avec ses
+            # gardes. Tant qu'elle n'existe pas, l'agent tient la
+            # conversation sans jamais prétendre avoir compris.
+            if len(conversation.state.history) == avant + 1:
+                # Rien n'a été dit en réponse : seul le tour du débiteur est
+                # entré dans l'historique.
+                if not await conversation.nudge_for_date():
+                    # Quota d'insistance épuisé : on ne harcèle pas.
+                    return Outcome.UNREACHABLE
 
     try:
         issue = await asyncio.wait_for(conduire(), timeout=duree_max_s)
