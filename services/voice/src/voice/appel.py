@@ -79,6 +79,22 @@ async def main(numero: str, jeton: str) -> int:
     passerelle = HttpMandateGateway(MandateConfig.from_env(jeton))
     formulation = HttpPhrasing(FormulationConfig.from_env())
 
+    # Le jeton est éprouvé AVANT de composer. Faire sonner quelqu'un pour
+    # découvrir ensuite que la passerelle refuse, c'est déranger une personne
+    # pour rien — et c'est arrivé : un libellé d'exemple passé tel quel en
+    # ligne de commande. Le coût est d'une requête, la ligne n'est pas encore
+    # ouverte.
+    try:
+        annonce = await passerelle.opening_line()
+    except Exception as err:
+        log.error(
+            "le jeton d'appel est refusé (%s) — personne n'a été appelé. "
+            "Reprends-en un avec scripts/preparer-appel-test.sh",
+            type(err).__name__,
+        )
+        return 2
+    log.info("jeton valide, annonce prête (%d caractères)", len(annonce))
+
     # Payée maintenant, hors appel : c'est tout l'intérêt de l'amorce.
     amorce = CachedPrelude(tts)
     await amorce.warm_up()
