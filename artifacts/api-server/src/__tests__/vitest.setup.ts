@@ -259,6 +259,11 @@ globalThis.fetch = async function patchedFetch(
         // 9999 ne figure dans aucun fait : la garde de la règle 3 doit mordre.
         return repondre("Alors, vous réglez 9999 euros. C'est bien ça ?");
       }
+      if (userText.includes("formulation-test-nom")) {
+        // Le cas que la minimisation doit attraper : le modèle reprend le nom
+        // que le débiteur vient de donner.
+        return repondre("Ah d'accord monsieur Delacroix. Je note et je transmets.");
+      }
       if (userText.includes("formulation-test-courrier")) {
         return repondre("Nous vous prions de bien vouloir procéder au règlement.");
       }

@@ -55,7 +55,7 @@ beforeAll(async () => {
     .post("/api/relance/campagnes")
     .set("Cookie", cookie)
     .send({
-      appels: [{ clientId: null, factureId: "F-1", montantCents: 1000, numero: "+33600000009", clientNom: "X" }],
+      appels: [{ clientId: null, factureId: "F-1", montantCents: 1000, numero: "+33600000009", clientNom: "Menuiserie Delacroix" }],
     })
     .expect(201);
   await request(app)
@@ -65,8 +65,8 @@ beforeAll(async () => {
 
   jeton = crypto.randomBytes(32).toString("base64url");
   await adminPool.query(
-    `INSERT INTO appels_relance (id, tenant_id, campagne_id, empreinte_numero, statut, jeton_sha256)
-     VALUES ($1, $2::uuid, $3, $4, 'PLANIFIE', $5)`,
+    `INSERT INTO appels_relance (id, tenant_id, campagne_id, facture_id, empreinte_numero, statut, jeton_sha256)
+     VALUES ($1, $2::uuid, $3, 'F-1', $4, 'PLANIFIE', $5)`,
     [crypto.randomUUID(), tenantId, body.campagne.id, "emp-formul",
      crypto.createHash("sha256").update(jeton).digest("hex")],
   );
@@ -185,6 +185,19 @@ describe("d — la formulation ne décide rien", () => {
 
     expect(r.body.replique).toContain("3");
     expect(r.body.replique).toContain("10");
+  });
+
+  test("l'agent ne prononce JAMAIS le nom du débiteur", async () => {
+    // Le texte des répliques part chez un sous-traitant américain (ADR 002).
+    // Sans Zero Retention, il y est conservé — d'où la minimisation par
+    // construction : le serveur connaît le nom appelé et refuse toute réplique
+    // qui le contient, quitte à prononcer le filet.
+    const r = await formuler({
+      intention: "clore_contestation",
+      historique: cas("formulation-test-nom"),
+    }).expect(200);
+
+    expect(r.body.replique).not.toMatch(/delacroix/i);
   });
 
   test("un jeton d'appel est exigé — une session ne suffit pas", async () => {

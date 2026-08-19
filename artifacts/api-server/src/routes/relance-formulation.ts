@@ -40,6 +40,8 @@ import {
   type IntentionReplique,
   type TourParole,
 } from "@nodaq/shared";
+import { eq } from "drizzle-orm";
+import { withTenant, appelsRelanceTable, campagnesRelanceTable } from "@workspace/db";
 import { logger } from "../lib/logger.js";
 
 const router: IRouter = Router();
@@ -97,6 +99,39 @@ function nettoyer(brut: string): string {
   return brut.trim().replace(/^["«»\s]+|["«»\s]+$/g, "");
 }
 
+/**
+ * Le nom du débiteur appelé — ce que l'agent ne doit JAMAIS prononcer.
+ *
+ * Le texte des répliques part vers la synthèse vocale, chez un sous-traitant
+ * américain (ADR 002). Sans Zero Retention Mode — offre entreprise seulement —
+ * ce texte y est conservé. L'ADR laissait deux voies : souscrire l'offre, ou
+ * minimiser par construction. Ceci est la seconde.
+ *
+ * Le nom est LU côté serveur, à partir de l'appel que le jeton désigne : il
+ * n'est jamais demandé au worker, qui pourrait se tromper ou mentir.
+ */
+async function nomDuDebiteur(
+  tenantId: string,
+  campagneId: string,
+  appelId: string,
+): Promise<string[]> {
+  return withTenant(tenantId, async (tx) => {
+    const [appel] = await tx
+      .select({ factureId: appelsRelanceTable.factureId })
+      .from(appelsRelanceTable)
+      .where(eq(appelsRelanceTable.id, appelId));
+
+    const [campagne] = await tx
+      .select({ appels: campagnesRelanceTable.appels })
+      .from(campagnesRelanceTable)
+      .where(eq(campagnesRelanceTable.id, campagneId));
+
+    const entrees = (campagne?.appels ?? []) as { factureId?: string; clientNom?: string }[];
+    const entree = entrees.find((e) => e.factureId === appel?.factureId);
+    return entree?.clientNom ? [entree.clientNom] : [];
+  });
+}
+
 router.post("/", async (req, res): Promise<void> => {
   const parsed = CorpsFormulation.safeParse(req.body);
   if (!parsed.success) {
@@ -104,6 +139,9 @@ router.post("/", async (req, res): Promise<void> => {
     return;
   }
   const { intention, faits, historique } = parsed.data;
+
+  const { appelId, campagneId } = req.appelVocal!;
+  const identites = await nomDuDebiteur(req.tenantId!, campagneId, appelId);
 
   const secours = (raison: string): void => {
     // Journal : l'intention et la raison, jamais la réplique ni l'historique.
@@ -161,7 +199,7 @@ router.post("/", async (req, res): Promise<void> => {
       return;
     }
 
-    const anomalies = verifierReplique(replique, faits as FaitsReplique);
+    const anomalies = verifierReplique(replique, faits as FaitsReplique, identites);
     if (anomalies.length === 0) {
       res.json({ replique, source: "modele", essais: essai });
       return;

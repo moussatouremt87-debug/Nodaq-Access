@@ -15,6 +15,7 @@ import {
   PHRASES_MAX_PAR_REPLIQUE,
   REPLIQUES_DE_SECOURS,
   chiffresInventes,
+  identitesDivulguees,
   consigneFormulation,
   messageFormulation,
   verifierReplique,
@@ -135,6 +136,49 @@ describe("b — registre, oralité, longueur", () => {
     ]) {
       expect(verifierReplique(texte, AUCUN_FAIT), texte).toEqual([]);
     }
+  });
+
+  test("nommer le débiteur est refusé — le texte part chez un tiers américain", () => {
+    // ADR 002 : sans Zero Retention Mode, le texte des répliques est conservé
+    // chez le fournisseur de synthèse. La minimisation par construction est la
+    // seconde voie que l'ADR laissait ouverte ; c'est celle-ci.
+    for (const texte of [
+      "Alors, monsieur Delacroix, vous réglez quand ?",
+      "D'accord. Je note pour Delacroix.",
+      "Très bien, DELACROIX, c'est noté.",
+    ]) {
+      const anomalies = verifierReplique(texte, AUCUN_FAIT, ["Menuiserie Delacroix"]);
+      expect(anomalies.some((a) => a.nature === "identite_divulguee"), texte).toBe(true);
+    }
+  });
+
+  test("le détail de l'anomalie ne REPREND pas le nom", () => {
+    // Il finirait dans le journal du repli — c'est-à-dire exactement la donnée
+    // personnelle qu'on est en train de protéger.
+    const anomalies = verifierReplique("Bonjour Delacroix.", AUCUN_FAIT, ["Delacroix"]);
+    const detail = anomalies.find((a) => a.nature === "identite_divulguee")?.detail ?? "";
+    expect(detail).not.toMatch(/delacroix/i);
+  });
+
+  test("la forme juridique et les mots courts ne déclenchent rien", () => {
+    // Une garde qui refuse « SARL » refuserait une réplique sur deux, et
+    // finirait désactivée dans la semaine.
+    for (const texte of [
+      "Alors, on peut faire comme ça. Ça vous va ?",
+      "Très bien, je note. Merci, bonne journée.",
+      "D'accord, votre entreprise a bien reçu la facture ?",
+    ]) {
+      expect(
+        verifierReplique(texte, AUCUN_FAIT, ["SARL Menuiserie Delacroix", "Monsieur Li"]),
+        texte,
+      ).toEqual([]);
+    }
+  });
+
+  test("sans identité fournie, la garde ne fait rien", () => {
+    // Elle est une DÉCISION de l'appelant : lui seul sait qui il appelle.
+    expect(identitesDivulguees("Bonjour Delacroix.", [])).toEqual([]);
+    expect(verifierReplique("Bonjour Delacroix.", AUCUN_FAIT)).toEqual([]);
   });
 
   test("une réplique vide est refusée", () => {
