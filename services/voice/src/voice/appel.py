@@ -93,7 +93,7 @@ async def main(numero: str, jeton: str) -> int:
     tts = ElevenLabsTextToSpeech(ElevenLabsConfig.from_env())
     stt = RealtimeSpeechToText(RealtimeSttConfig.from_env())
     passerelle = HttpMandateGateway(MandateConfig.from_env(jeton))
-    formulation = HttpPhrasing(FormulationConfig.from_env())
+    formulation = HttpPhrasing(FormulationConfig.from_env(jeton))
 
     # Le jeton est éprouvé AVANT de composer. Faire sonner quelqu'un pour
     # découvrir ensuite que la passerelle refuse, c'est déranger une personne

@@ -30,20 +30,24 @@ class FormulationConfigError(RuntimeError):
 @dataclass(frozen=True, slots=True)
 class FormulationConfig:
     base_url: str
-    #: Service credential. The seam exists; the scheme is decided at lot 6,
-    #: together with the mandate gateway's — both are the same machine calling
-    #: the same server, and two different answers would be one too many.
-    token: str | None = None
+    #: Le jeton de CET appel, exactement comme la passerelle de mandat.
+    #:
+    #: Écrit au lot 5b, ce module cherchait une variable d'environnement
+    #: `VOICE_DECISION_API_TOKEN` — la couture d'alors, quand le schéma
+    #: d'authentification restait à trancher. Le lot 6a a choisi le jeton par
+    #: APPEL, et cette variable n'a jamais existé : la requête partait sans
+    #: en-tête et se faisait refuser. Constaté au septième appel réel, où tout
+    #: le reste fonctionnait — la passerelle répondait, la formulation non.
+    call_token: str
 
     @staticmethod
-    def from_env() -> FormulationConfig:
+    def from_env(call_token: str) -> FormulationConfig:
         base = os.environ.get("VOICE_DECISION_API_URL") or ""
         if not base:
             raise FormulationConfigError("VOICE_DECISION_API_URL is not set")
-        return FormulationConfig(
-            base_url=base.rstrip("/"),
-            token=os.environ.get("VOICE_DECISION_API_TOKEN") or None,
-        )
+        if not call_token:
+            raise FormulationConfigError("call token is empty")
+        return FormulationConfig(base_url=base.rstrip("/"), call_token=call_token)
 
 
 class HttpPhrasing:
@@ -67,9 +71,10 @@ class HttpPhrasing:
         facts: Mapping[str, str],
         history: Sequence[Turn],
     ) -> str:
-        headers = {"Content-Type": "application/json"}
-        if self._config.token:
-            headers["Authorization"] = f"Bearer {self._config.token}"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self._config.call_token}",
+        }
 
         reponse = await self._client.post(
             f"{self._config.base_url}/relance/formulation",

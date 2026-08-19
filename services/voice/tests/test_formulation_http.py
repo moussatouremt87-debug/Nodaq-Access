@@ -36,7 +36,7 @@ def capture(
 
 
 def config() -> FormulationConfig:
-    return FormulationConfig(base_url="https://api.test.nodaq", token="jeton-de-test")
+    return FormulationConfig(base_url="https://api.test.nodaq", call_token="jeton-de-cet-appel")
 
 
 # ── What goes over the wire ────────────────────────────────────────────────
@@ -118,7 +118,7 @@ def test_missing_url_raises_rather_than_defaulting(
 ) -> None:
     monkeypatch.delenv("VOICE_DECISION_API_URL", raising=False)
     with pytest.raises(FormulationConfigError, match="VOICE_DECISION_API_URL"):
-        FormulationConfig.from_env()
+        FormulationConfig.from_env("un-jeton")
 
 
 def test_a_present_but_empty_url_is_treated_as_missing(
@@ -128,9 +128,24 @@ def test_a_present_but_empty_url_is_treated_as_missing(
     # return "" and build requests against a bare path.
     monkeypatch.setenv("VOICE_DECISION_API_URL", "")
     with pytest.raises(FormulationConfigError):
-        FormulationConfig.from_env()
+        FormulationConfig.from_env("un-jeton")
 
 
 def test_a_trailing_slash_does_not_double_up(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("VOICE_DECISION_API_URL", "https://api.test.nodaq/")
-    assert FormulationConfig.from_env().base_url == "https://api.test.nodaq"
+    assert FormulationConfig.from_env("un-jeton").base_url == "https://api.test.nodaq"
+
+
+def test_le_jeton_d_appel_est_toujours_exige(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Le défaut du septième appel réel.
+
+    Ce module cherchait une variable d'environnement qui n'a jamais existé : la
+    requête partait donc SANS en-tête d'authentification et se faisait refuser,
+    alors que la passerelle de mandat — qui reçoit le même jeton — répondait.
+    """
+    monkeypatch.setenv("VOICE_DECISION_API_URL", "https://api.test.nodaq")
+    cfg = FormulationConfig.from_env("le-jeton-de-cet-appel")
+    assert cfg.call_token == "le-jeton-de-cet-appel"
+
+    with pytest.raises(FormulationConfigError):
+        FormulationConfig.from_env("")
