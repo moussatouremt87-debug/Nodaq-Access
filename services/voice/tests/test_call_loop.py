@@ -177,6 +177,47 @@ async def test_un_segment_vide_est_ignore() -> None:
     assert await conduire_appel(conv, stt, rien()) is Outcome.REFUSED
 
 
+async def test_un_flux_sans_fin_de_tour_est_quand_meme_traite() -> None:
+    """Le défaut du TROISIÈME appel réel : l'agent n'a jamais répondu.
+
+    Le modèle de transcription en continu n'émet jamais d'événement
+    « terminé » — mesuré au banc : « partiel 154 ms | final — » sur les trois
+    tours. Il refuse toute segmentation côté serveur.
+
+    Ma boucle n'agissait que sur un tour terminé : elle attendait donc un
+    signal qui n'existe pas. L'annonce passait, la personne parlait, et rien ne
+    se produisait. La fin de tour se décide ICI, par le silence.
+    """
+    conv, _, stt = monter(
+        [
+            TranscriptSegment(text="ne me", is_final=False),
+            TranscriptSegment(text=" rappelez plus", is_final=False),
+        ],
+        delai=0.01,
+    )
+
+    issue = await conduire_appel(conv, stt, rien())
+
+    # Aucun segment n'était `is_final` : sans détection de silence, l'appel se
+    # serait terminé en `unreachable` sans que l'agent ait rien fait.
+    assert issue is Outcome.REFUSED
+
+
+async def test_les_fragments_sont_recolles_en_une_phrase() -> None:
+    # Recoller compte autant que clore : « je conteste » puis « cette facture »
+    # traités séparément ne déclencheraient pas la même chose que la phrase
+    # entière — et l'un des deux morceaux peut suffire à mal classer l'appel.
+    conv, _, stt = monter(
+        [
+            TranscriptSegment(text="j'ai", is_final=False),
+            TranscriptSegment(text=" déjà payé", is_final=False),
+        ],
+        delai=0.01,
+    )
+
+    assert await conduire_appel(conv, stt, rien()) is Outcome.PAID_CLAIMED
+
+
 # ── c. L'interruption ──────────────────────────────────────────────────────
 
 

@@ -23,6 +23,7 @@ parle, ce qui suffit à faire taire l'agent.
 from __future__ import annotations
 
 import asyncio
+import re
 from collections.abc import AsyncIterator
 
 from voice.core.conversation import DunningConversation, Outcome
@@ -32,6 +33,21 @@ from voice.core.interfaces import SpeechToText, TranscriptSegment
 #: Deux mots, parce qu'un « allô » isolé doit encore pouvoir couper l'agent —
 #: mais pas un souffle transcrit en « euh ».
 MOTS_POUR_COUPER = 2
+
+#: Combien de silence fait la fin d'une phrase.
+#:
+#: Le modèle de transcription en continu n'émet JAMAIS d'événement « terminé » —
+#: mesuré au banc du 19 août : « partiel 154 ms | final — » sur les trois tours.
+#: Il transcrit au fil de l'eau et refuse toute segmentation côté serveur. La
+#: fin de tour se décide donc ici.
+#:
+#: Constaté au troisième appel réel : l'annonce passait, la personne parlait, et
+#: l'agent ne répondait jamais — il attendait un signal qui n'existe pas.
+#:
+#: 600 ms : au-dessous on coupe les gens qui réfléchissent au milieu d'une
+#: phrase, au-dessus l'agent paraît lent à réagir. Un fournisseur qui sait clore
+#: ses tours reste prioritaire — `is_final` court-circuite cette attente.
+SILENCE_FIN_DE_TOUR_S = 0.6
 
 
 async def conduire_appel(
@@ -57,20 +73,47 @@ async def conduire_appel(
     echec: list[BaseException] = []
 
     async def ecouter() -> None:
+        tampon = ""
+        flux = stt.transcribe(audio_entrant).__aiter__()
         try:
-            async for segment in stt.transcribe(audio_entrant):
+            while True:
+                try:
+                    segment = await asyncio.wait_for(
+                        flux.__anext__(), timeout=SILENCE_FIN_DE_TOUR_S
+                    )
+                except StopAsyncIteration:
+                    break
+                except TimeoutError:
+                    # Plus rien depuis un moment : la personne a fini sa phrase.
+                    # C'est NOUS qui le décidons, et c'est le point de ce bloc —
+                    # voir `SILENCE_FIN_DE_TOUR_S`.
+                    if tampon.strip():
+                        await tours.put(tampon.strip())
+                        tampon = ""
+                    continue
+
                 # « L'arrivée d'un fragment prouve que la personne parle » : je
                 # l'ai écrit, et c'est FAUX au téléphone. La voix de l'agent
                 # revient en écho, un souffle suffit à produire un fragment, et
                 # l'agent se coupait lui-même — constaté au premier appel réel.
                 #
-                # Il faut donc de la PAROLE, pas du signal : un tour terminé, ou
-                # un fragment déjà assez fourni pour ne pas être un bruit.
-                if segment.is_final or len(segment.text.split()) >= MOTS_POUR_COUPER:
+                # Il faut donc de la PAROLE, pas du signal : on juge sur ce qui
+                # s'est accumulé, pas sur le fragment isolé qui vient d'arriver.
+                # Les espaces sont NORMALISÉS : un fragment arrive déjà avec le
+                # sien (« ne me » puis « rappelez plus »), et en ajouter un
+                # second donnait « ne me  rappelez plus », qui ne correspond
+                # plus à rien. Attrapé par les tests de recollage.
+                accumule = re.sub(r"\s+", " ", f"{tampon} {segment.text}").strip()
+                if segment.is_final or len(accumule.split()) >= MOTS_POUR_COUPER:
                     await conversation.barge_in()
 
-                if segment.is_final and segment.text.strip():
-                    await tours.put(segment.text.strip())
+                if segment.is_final:
+                    # Le fournisseur sait clore un tour : on lui fait confiance.
+                    tampon = ""
+                    if accumule:
+                        await tours.put(accumule)
+                else:
+                    tampon = accumule
         except Exception as err:
             # Une transcription qui meurt ressemble EXACTEMENT à un débiteur
             # qui se tait : le flux se tarit, la boucle conclut `unreachable`,
@@ -81,6 +124,8 @@ async def conduire_appel(
             # personne n'attend.
             echec.append(err)
         finally:
+            if tampon.strip():
+                await tours.put(tampon.strip())
             await tours.put(None)
 
     # L'écoute démarre AVANT l'annonce, et pas après : c'est justement pendant
