@@ -30,6 +30,7 @@ Two things stay deliberately out of the model's hands:
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -117,6 +118,48 @@ class MandateGateway(Protocol):
     async def opening_line(self) -> str: ...
 
 
+#: Les mouvements devant lesquels quelqu'un marquerait un temps.
+#:
+#: Mesuré, pas supposé : entre la fin de la phrase du débiteur et le premier son
+#: de l'agent, il s'écoule ~650 ms pour que le modèle formule, plus ~505 ms
+#: (Flash) ou ~1 139 ms (v3) pour que la synthèse rende son premier octet. Soit
+#: 1,15 s à 1,79 s de silence — là où une conversation humaine tolère 200 à
+#: 500 ms. Passé ce délai l'autre relance (« allô ? ») ou se demande à qui il
+#: parle.
+#:
+#: On ne peut pas raccourcir la chaîne : les gardes de `formulation.ts` exigent
+#: la réplique ENTIÈRE avant de la prononcer, donc streamer le modèle vers la
+#: synthèse est exclu par construction. Une garde qui s'applique après que la
+#: moitié de la phrase est déjà sortie n'est pas une garde.
+#:
+#: Ce qu'on peut faire, c'est REMPLIR ce silence — et le remplir par exactement
+#: ce qu'un humain y met : une hésitation. L'amorce est déjà synthétisée, donc
+#: elle démarre en zéro milliseconde.
+#:
+#: Restreint à ces deux moments, et c'est le fond de l'affaire. L'agent hésite
+#: quand il va chercher quelque chose : ce qu'il a le droit d'accorder, ce qui
+#: vient d'être convenu. Il n'hésite pas en se présentant — les premières
+#: secondes décident si l'appel passe pour une arnaque — ni en prenant congé,
+#: où l'hésitation s'entend comme de la réticence. Et pas à chaque tour : un
+#: agent qui hésite tout le temps est une caricature, qui sonne plus faux qu'un
+#: agent neutre.
+INTENTS_AVEC_AMORCE = frozenset({Intent.OFFER_INSTALMENTS, Intent.RECAP_PROMISE})
+
+
+class Prelude(Protocol):
+    """Une amorce déjà synthétisée, jouable instantanément.
+
+    Elle est produite UNE fois puis gardée en mémoire — jamais sur le disque :
+    celui d'un conteneur est éphémère, et rien de durable ne s'y écrit.
+
+    `play` rend le texte prononcé, pour que l'historique envoyé au modèle sache
+    que l'agent vient de dire « alors, euh… ». Sans ça il reformulerait par
+    dessus, et on entendrait deux hésitations d'affilée.
+    """
+
+    async def play(self) -> str: ...
+
+
 class Phrasing(Protocol):
     """Turns a decided move into spoken French.
 
@@ -175,12 +218,17 @@ class DunningConversation:
         telephony: TelephonyProvider,
         gateway: MandateGateway,
         phrasing: Phrasing,
+        prelude: Prelude | None = None,
     ) -> None:
         self._stt = stt
         self._tts = tts
         self._telephony = telephony
         self._gateway = gateway
         self._phrasing = phrasing
+        # Optionnelle : sans amorce le pilote fonctionne à l'identique, en
+        # acceptant le silence. C'est ce que font les évals qui ne portent pas
+        # sur la latence.
+        self._prelude = prelude
         self.state = CallState()
 
     async def _speak(self, line: str) -> None:
@@ -196,10 +244,36 @@ class DunningConversation:
         that no string literal is ever handed to the synthesiser directly —
         without that guard, one hurried fix would quietly put a scripted phrase
         back into the call.
+
+        The request is fired **before** the prelude plays, not after: the whole
+        point is that the model thinks while the agent is already speaking. See
+        `INTENTS_AVEC_AMORCE` for why only some moves get one.
         """
-        line = await self._phrasing.line(
-            intent, facts=facts or {}, history=tuple(self.state.history)
+        demande = asyncio.ensure_future(
+            self._phrasing.line(intent, facts=facts or {}, history=tuple(self.state.history))
         )
+        # `ensure_future` PLANIFIE la requête, il ne la démarre pas : la coroutine
+        # ne s'exécute qu'au prochain passage de la boucle. Sans cette main
+        # rendue, elle ne partirait qu'une fois l'amorce terminée — les deux
+        # délais s'additionneraient au lieu de se superposer, et on aurait rendu
+        # l'agent plus lent en croyant l'accélérer.
+        #
+        # Trouvé par `test_la_demande_part_avant_que_l_amorce_joue`, qui observe
+        # l'ORDRE réel plutôt que l'intention du code.
+        await asyncio.sleep(0)
+        try:
+            if self._prelude is not None and intent in INTENTS_AVEC_AMORCE:
+                # The prelude is audio that already exists, so it starts now —
+                # no synthesis, no round-trip. What it costs is what it plays.
+                self.state.history.append(
+                    Turn(speaker="agent", text=await self._prelude.play())
+                )
+            line = await demande
+        except BaseException:
+            # Never leave the request dangling: an orphan task would resolve
+            # into a line nobody speaks, and on a real call it would be billed.
+            demande.cancel()
+            raise
         await self._speak(line)
         return line
 
