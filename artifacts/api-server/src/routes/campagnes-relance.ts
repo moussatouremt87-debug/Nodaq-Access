@@ -20,6 +20,8 @@ import {
   regleEnVigueur,
   listerCampagnes,
 } from "../lib/campagnes-relance.js";
+import { planifierAppel, estOpposeAuxAppels } from "../lib/appels-relance.js";
+import { empreinte } from "../lib/prospection.js";
 
 export const campagnesRelanceReadRouter: IRouter = Router();
 export const campagnesRelanceWriteRouter: IRouter = Router();
@@ -292,3 +294,79 @@ campagnesRelanceWriteRouter.patch(
 );
 
 export default campagnesRelanceReadRouter;
+
+/**
+ * Planifie UN appel d'une campagne validée, et rend son jeton de service.
+ *
+ * C'est le maillon qui manquait : le worker vocal s'authentifie avec le jeton
+ * d'un appel (voir `requireAppelVocal`), mais rien ne permettait d'en frapper
+ * un. Sans cette route, aucun appel ne pouvait être passé.
+ *
+ * ── Le jeton n'est rendu QU'UNE FOIS ──────────────────────────────────────
+ * Seul son condensat entre en base. Le relire est impossible par construction :
+ * s'il est perdu, on replanifie plutôt que de le retrouver. C'est la même
+ * doctrine que le jeton d'acceptation de devis.
+ *
+ * ── Pourquoi la campagne doit être VALIDÉE ────────────────────────────────
+ * La règle 4 du CLAUDE.md n'admet pas d'exception : aucun appel n'est composé
+ * sans `pending_action` approuvée, « y compris juste pour tester ». Une
+ * campagne encore PROPOSEE n'a pas de mandat gelé — l'agent ne saurait pas ce
+ * qu'il a le droit d'accorder.
+ */
+campagnesRelanceWriteRouter.post(
+  "/relance/campagnes/:id/appels",
+  async (req, res): Promise<void> => {
+    const parsed = z
+      .object({ factureId: z.string().min(1), numero: z.string().min(1) })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.message });
+      return;
+    }
+    const campagneId = String(req.params["id"] ?? "");
+    const tenantId = req.tenantId!;
+
+    if (await estOpposeAuxAppels(tenantId, parsed.data.numero)) {
+      // US-7 : l'opposition prime sur tout, y compris sur une campagne validée.
+      // Vérifiée ICI et pas seulement à la composition : un appel planifié est
+      // un appel qui partira.
+      res.status(409).json({ error: "Ce numéro s'est opposé aux appels." });
+      return;
+    }
+
+    const resultat = await withTenant(tenantId, async (tx) => {
+      const [campagne] = await tx
+        .select({ statut: campagnesRelanceTable.statut })
+        .from(campagnesRelanceTable)
+        .where(eq(campagnesRelanceTable.id, campagneId));
+
+      if (!campagne) return { kind: "introuvable" as const };
+      if (campagne.statut !== "VALIDEE") return { kind: "non_validee" as const };
+
+      const { appelId, jeton } = await planifierAppel(tx, tenantId, {
+        campagneId,
+        numero: parsed.data.numero,
+        empreinteNumero: await empreinte(tenantId, "telephone", parsed.data.numero),
+        factureId: parsed.data.factureId,
+        tentative: 1,
+        statut: "PLANIFIE",
+      });
+      return { kind: "ok" as const, appelId, jeton };
+    });
+
+    switch (resultat.kind) {
+      case "introuvable":
+        res.status(404).json({ error: "Campagne introuvable." });
+        return;
+      case "non_validee":
+        res.status(409).json({
+          error: "Cette campagne n'est pas validée : aucun appel ne peut être planifié.",
+        });
+        return;
+      case "ok":
+        // Le jeton en clair ne repassera jamais par ici.
+        res.status(201).json({ appelId: resultat.appelId, jeton: resultat.jeton });
+        return;
+    }
+  },
+);
