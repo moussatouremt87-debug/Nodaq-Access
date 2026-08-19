@@ -237,9 +237,14 @@ async def test_l_amorce_entre_dans_l_historique_envoye_au_modele() -> None:
 async def test_l_amorce_est_bornee_aux_moments_de_recherche() -> None:
     # Épinglé littéralement : élargir la liste doit obliger quelqu'un à venir
     # ici, donc à décider. Un agent qui hésite à chaque tour est une caricature.
-    assert INTENTS_AVEC_AMORCE == frozenset(
-        {Intent.OFFER_INSTALMENTS, Intent.RECAP_PROMISE}
-    )
+    assert INTENTS_AVEC_AMORCE == frozenset({
+        Intent.ASK_DATE,
+        Intent.OFFER_INSTALMENTS,
+        Intent.RECAP_PROMISE,
+        Intent.DECLINE_AND_FORWARD,
+    })
+    # Bornée à la moitié des mouvements : au-delà, c'est une caricature.
+    assert len(INTENTS_AVEC_AMORCE) * 2 <= len(list(Intent))
 
 
 async def test_pas_d_amorce_en_prenant_conge() -> None:
@@ -249,8 +254,6 @@ async def test_pas_d_amorce_en_prenant_conge() -> None:
         Intent.CLOSE_DISPUTE,
         Intent.CLOSE_PAID_CLAIMED,
         Intent.CLOSE_HUMAN_REQUESTED,
-        Intent.ASK_DATE,
-        Intent.DECLINE_AND_FORWARD,
     ):
         assert intention not in INTENTS_AVEC_AMORCE, intention
 
@@ -274,8 +277,13 @@ async def test_l_annonce_n_a_jamais_d_amorce() -> None:
     assert amorce.jouees == 0
 
 
-async def test_une_demande_de_date_ne_declenche_pas_d_amorce() -> None:
-    # L'agent ne cherche rien : il demande. Hésiter ici n'aurait aucun sens.
+async def test_une_demande_de_date_declenche_l_amorce() -> None:
+    """Le mouvement le PLUS fréquent de l'appel, et il n'était pas couvert.
+
+    L'agent relance sur la date dès qu'il ne comprend pas ce qu'on lui dit —
+    c'est donc là que le blanc s'entend le plus souvent. Au huitième appel réel,
+    le dispositif anti-latence n'a jamais tourné pour cette raison.
+    """
     amorce = AmorceCompteur()
     conv = DunningConversation(
         stt=SimulatedSpeechToText([]),
@@ -286,7 +294,7 @@ async def test_une_demande_de_date_ne_declenche_pas_d_amorce() -> None:
         prelude=amorce,
     )
     await conv.nudge_for_date()
-    assert amorce.jouees == 0
+    assert amorce.jouees == 1
 
 
 # ── d. Sans amorce, rien ne change ─────────────────────────────────────────

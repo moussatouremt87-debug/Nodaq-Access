@@ -48,10 +48,21 @@ log = logging.getLogger("voice.boucle")
 #: Constaté au troisième appel réel : l'annonce passait, la personne parlait, et
 #: l'agent ne répondait jamais — il attendait un signal qui n'existe pas.
 #:
-#: 600 ms : au-dessous on coupe les gens qui réfléchissent au milieu d'une
-#: phrase, au-dessus l'agent paraît lent à réagir. Un fournisseur qui sait clore
-#: ses tours reste prioritaire — `is_final` court-circuite cette attente.
-SILENCE_FIN_DE_TOUR_S = 0.6
+#: 400 ms, revu à la baisse après le huitième appel réel.
+#:
+#: Ce seuil ne retarde pas seulement la réponse : il retarde l'AMORCE, qui ne
+#: peut se déclencher qu'une fois le tour clos. Six cents millisecondes de
+#: silence s'ajoutaient donc au blanc AVANT que le dispositif censé le masquer
+#: n'entre en jeu. C'est le premier morceau du délai, et le seul que rien ne
+#: couvre.
+#:
+#: En dessous de 400 ms on coupe les gens qui marquent un temps au milieu d'une
+#: phrase — et depuis que l'amorce suit immédiatement, une coupure prématurée
+#: fait parler l'agent PAR-DESSUS eux. Le compromis se paie donc des deux côtés.
+#:
+#: Un fournisseur qui sait clore ses tours reste prioritaire : `is_final`
+#: court-circuite cette attente.
+SILENCE_FIN_DE_TOUR_S = 0.4
 
 
 async def conduire_appel(

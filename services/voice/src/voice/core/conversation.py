@@ -136,14 +136,27 @@ class MandateGateway(Protocol):
 #: ce qu'un humain y met : une hésitation. L'amorce est déjà synthétisée, donc
 #: elle démarre en zéro milliseconde.
 #:
-#: Restreint à ces deux moments, et c'est le fond de l'affaire. L'agent hésite
-#: quand il va chercher quelque chose : ce qu'il a le droit d'accorder, ce qui
-#: vient d'être convenu. Il n'hésite pas en se présentant — les premières
-#: secondes décident si l'appel passe pour une arnaque — ni en prenant congé,
-#: où l'hésitation s'entend comme de la réticence. Et pas à chaque tour : un
-#: agent qui hésite tout le temps est une caricature, qui sonne plus faux qu'un
-#: agent neutre.
-INTENTS_AVEC_AMORCE = frozenset({Intent.OFFER_INSTALMENTS, Intent.RECAP_PROMISE})
+#: L'agent hésite quand il va CHERCHER quelque chose : ce qu'il a le droit
+#: d'accorder, ce qui vient d'être convenu, la date qu'il doit noter. Ces
+#: moments-là passent tous par le serveur, et c'est exactement le temps que
+#: l'amorce couvre.
+#:
+#: Il n'hésite pas en se présentant — les premières secondes décident si l'appel
+#: passe pour une arnaque — ni en prenant congé, où l'hésitation s'entend comme
+#: de la réticence. Les quatre clôtures en sont donc exclues, ce qui borne
+#: l'amorce à la moitié des mouvements : un agent qui hésite tout le temps est
+#: une caricature, qui sonne plus faux qu'un agent neutre.
+#:
+#: `ASK_DATE` manquait, et c'était un oubli coûteux : c'est le mouvement le plus
+#: fréquent de l'appel — celui que l'agent joue dès qu'il ne comprend pas — et
+#: donc précisément celui où le blanc s'entendait. Constaté au huitième appel
+#: réel, où le dispositif anti-latence n'a jamais tourné pour cette raison.
+INTENTS_AVEC_AMORCE = frozenset({
+    Intent.ASK_DATE,
+    Intent.OFFER_INSTALMENTS,
+    Intent.RECAP_PROMISE,
+    Intent.DECLINE_AND_FORWARD,
+})
 
 
 class AudioSink(Protocol):
