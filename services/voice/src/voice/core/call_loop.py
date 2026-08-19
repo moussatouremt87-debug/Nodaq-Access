@@ -28,7 +28,6 @@ from collections.abc import AsyncIterator
 from voice.core.conversation import DunningConversation, Outcome
 from voice.core.interfaces import SpeechToText, TranscriptSegment
 
-
 #: En deçà, ce n'est pas quelqu'un qui parle : c'est de l'écho ou du bruit.
 #: Deux mots, parce qu'un « allô » isolé doit encore pouvoir couper l'agent —
 #: mais pas un souffle transcrit en « euh ».
