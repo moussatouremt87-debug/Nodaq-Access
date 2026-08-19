@@ -37,6 +37,7 @@ from voice.adapters.prelude_cache import CachedPrelude
 from voice.adapters.realtime_stt import RealtimeSpeechToText, RealtimeSttConfig
 from voice.adapters.twilio_media import SessionMedia
 from voice.adapters.twilio_telephony import TwilioConfig, TwilioTelephony
+from voice.config_env import charger_env
 from voice.core.call_loop import conduire_appel
 from voice.core.conversation import DunningConversation, Outcome
 from voice.core.interfaces import CallOutcome
@@ -54,6 +55,12 @@ DUREE_MAX_APPEL_S = 360.0
 
 
 async def main(numero: str, jeton: str) -> int:
+    # Chargé ICI et pas dans le shell : oublier le préfixe faisait mourir le
+    # worker sur « TELEPHONY_ACCOUNT_SID is not set », trois essais d'affilée.
+    # L'environnement réel garde la priorité — voir `config_env`.
+    fichier = charger_env()
+    log.info("configuration : %s", fichier or "environnement seul")
+
     tel = TwilioTelephony(TwilioConfig.from_env())
     tts = ElevenLabsTextToSpeech(ElevenLabsConfig.from_env())
     stt = RealtimeSpeechToText(RealtimeSttConfig.from_env())
