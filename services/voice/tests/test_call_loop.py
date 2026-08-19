@@ -271,7 +271,7 @@ async def test_une_phrase_hors_cloture_obtient_quand_meme_une_reponse() -> None:
     ne disait rien. Une conversation où l'un des deux se tait n'est pas une
     conversation.
     """
-    conv, puits, stt = monter(
+    conv, _, stt = monter(
         [TranscriptSegment(text="je peux pas tout payer d'un coup", is_final=True)],
     )
 
