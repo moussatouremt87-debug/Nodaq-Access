@@ -24,12 +24,13 @@
  * POST /public/devis/:token/accept       — enregistre le « bon pour accord »
  */
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
-import { db, devisTable, withTenant, settingsTable, contactsProspectionTable } from "@workspace/db";
+import { db, devisTable, withTenant, contactsProspectionTable } from "@workspace/db";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { toDateString } from "@nodaq/shared";
 import { genererPdfDevis, chargerEmetteur, nomFichierDevis } from "../lib/pdf-devis.js";
+import { loadCompanySettings } from "../lib/seller-info.js";
 import { enregistrerOpposition } from "../lib/prospection.js";
 
 const router: IRouter = Router();
@@ -163,12 +164,29 @@ function estPerime(validUntil: string | null): boolean {
  * jeton. La route publique ne voit jamais un autre tenant.
  */
 async function emetteur(tenantId: string): Promise<{ nom: string | null; siret: string | null }> {
-  const rows = await withTenant(tenantId, (tx) =>
-    tx.select({ key: settingsTable.key, value: settingsTable.value }).from(settingsTable),
-  );
-  const parCle = new Map(rows.map((r) => [r.key, r.value]));
+  // Lecture des réglages par `loadCompanySettings`, comme tout le reste du
+  // produit. Une requête locale de plus était exactement la configuration qui a
+  // produit le défaut du profil entreprise : trois copies de la lecture avaient
+  // dérivé, et deux d'entre elles cherchaient des clés que rien n'écrivait —
+  // chaque facture émise portait alors le nom de repli au lieu de la raison
+  // sociale. La correction avait été de fusionner les copies ; celle-ci en
+  // restait dehors.
+  const parCle = await loadCompanySettings(tenantId);
+
+  // La MISE EN FORME, elle, reste locale, et l'écart avec `sellerInfoFromSettings`
+  // est délibéré : ce module rend « Entreprise » en repli, ce qui convient à un
+  // PDF où il faut bien écrire quelque chose. Ici on rend `null`.
+  //
+  // Cette page est la première chose que voit le client de l'artisan après
+  // avoir cliqué dans un e-mail, et son rôle est de dire QUI s'adresse à lui —
+  // c'est ce qui la distingue d'une tentative d'hameçonnage. Lui afficher
+  // « Entreprise » serait pire que de ne rien afficher : ça donnerait un nom
+  // faux là où l'absence de nom est au moins honnête.
+  //
+  // `acceptation-publique.test.ts` garde cette différence, qui n'était couverte
+  // par aucun test avant cette consolidation.
   const lire = (cle: string): string | null => {
-    const v = parCle.get(cle);
+    const v = parCle[cle];
     return typeof v === "string" && v.trim().length > 0 ? v.trim() : null;
   };
   return { nom: lire("company.raison_sociale"), siret: lire("company.siret") };

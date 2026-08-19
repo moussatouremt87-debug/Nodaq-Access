@@ -457,3 +457,58 @@ describe("j — une route publique n'est pas une route sans limite", () => {
     expect(r.status).toBe(404);
   });
 });
+
+// ── k. Qui parle au client ─────────────────────────────────────────────────
+
+describe("k — la page nomme l'émetteur, ou n'invente rien", () => {
+  test("profil renseigné : la page donne la raison sociale et le SIRET", async () => {
+    await request(app)
+      .patch("/api/parametres")
+      .set("Cookie", a.cookie)
+      .send({
+        "company.raison_sociale": "Charpente Dubois SARL",
+        "company.siret": "12345678901234",
+      })
+      .expect(200);
+
+    const d = await devisEnvoye(a);
+    const r = await publicGet(`/api/public/devis/${d.token}/accept-page`).expect(200);
+
+    expect(r.body.entreprise.nom).toBe("Charpente Dubois SARL");
+    expect(r.body.entreprise.siret).toBe("12345678901234");
+  });
+
+  test("profil VIDE : `null`, et surtout jamais le repli « Entreprise »", async () => {
+    // C'est la raison d'être de ce test, et la seule chose qui empêchait de
+    // consolider `emetteur()` sur `sellerInfoFromSettings` sans y penser : ce
+    // module rend « Entreprise » en repli, ce qui convient à un PDF où il faut
+    // bien écrire quelque chose.
+    //
+    // Ici non. Cette page est la première chose que voit le client de l'artisan
+    // après avoir cliqué dans un e-mail, et son rôle est de dire QUI s'adresse
+    // à lui — c'est ce qui la distingue d'un hameçonnage. Lui afficher
+    // « Entreprise » donnerait un nom faux là où l'absence de nom est au moins
+    // honnête.
+    const d = await devisEnvoye(b);
+    const r = await publicGet(`/api/public/devis/${d.token}/accept-page`).expect(200);
+
+    expect(r.body.entreprise.nom).toBeNull();
+    expect(r.body.entreprise.siret).toBeNull();
+    expect(JSON.stringify(r.body)).not.toContain("Entreprise");
+  });
+
+  test("une valeur faite d'espaces vaut une valeur absente", async () => {
+    // Un profil à moitié rempli est le cas courant, et « nom = "   " » afficherait
+    // un cartouche vide sur la page du client sans que rien ne le signale.
+    await request(app)
+      .patch("/api/parametres")
+      .set("Cookie", b.cookie)
+      .send({ "company.raison_sociale": "   " })
+      .expect(200);
+
+    const d = await devisEnvoye(b);
+    const r = await publicGet(`/api/public/devis/${d.token}/accept-page`).expect(200);
+
+    expect(r.body.entreprise.nom).toBeNull();
+  });
+});
