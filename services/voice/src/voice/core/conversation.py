@@ -146,6 +146,22 @@ class MandateGateway(Protocol):
 INTENTS_AVEC_AMORCE = frozenset({Intent.OFFER_INSTALMENTS, Intent.RECAP_PROMISE})
 
 
+class AudioSink(Protocol):
+    """Où la voix de l'agent sort réellement.
+
+    Jusqu'au lot 6, `_speak` parcourait les octets de la synthèse et les jetait :
+    le puits n'existait pas encore. Il est branché ici sur la session média
+    Twilio, et reste optionnel — les évals tournent sans, en simulation.
+
+    `cut` est ce qui rend l'interruption possible. Cesser d'envoyer ne suffit
+    pas : ce qui a déjà été transmis à l'opérateur serait joué quand même.
+    """
+
+    async def play(self, audio: AsyncIterator[bytes]) -> None: ...
+
+    async def cut(self) -> None: ...
+
+
 class Prelude(Protocol):
     """Une amorce déjà synthétisée, jouable instantanément.
 
@@ -191,6 +207,8 @@ class CallState:
     outcome: Outcome | None = None
     escalations: list[str] = field(default_factory=list)
     history: list[Turn] = field(default_factory=list)
+    #: L'agent a-t-il la parole en ce moment ? Sert à ne couper que ce qui sort.
+    speaking: bool = False
 
 
 # Phrases the driver reacts to. Deliberately narrow: this is a fallback for the
@@ -199,6 +217,10 @@ class CallState:
 _HUMAN_REQUESTED = ("parler à quelqu'un", "un humain", "une personne réelle")
 _STOP_REQUESTED = ("ne me rappelez plus", "arrêtez de m'appeler", "rayez-moi")
 _DISPUTE = ("je conteste", "je ne dois rien", "cette facture est fausse")
+#: « je conteste PAS » contient « je conteste ». Sans cette exception, quelqu'un
+#: qui dit exactement l'inverse serait classé en litige et l'appel clos sur une
+#: contestation qu'il n'a pas faite. Trouvé par `test_call_loop.py`.
+_DEMENTIS = ("conteste pas", "conteste rien", "ne conteste")
 _ALREADY_PAID = ("j'ai déjà payé", "c'est déjà réglé", "j'ai fait le virement")
 
 
@@ -219,6 +241,7 @@ class DunningConversation:
         gateway: MandateGateway,
         phrasing: Phrasing,
         prelude: Prelude | None = None,
+        sink: AudioSink | None = None,
     ) -> None:
         self._stt = stt
         self._tts = tts
@@ -229,13 +252,34 @@ class DunningConversation:
         # acceptant le silence. C'est ce que font les évals qui ne portent pas
         # sur la latence.
         self._prelude = prelude
+        # Sans puits, la synthèse est consommée et jetée — c'est ce que font les
+        # évals. Avec, la voix part vraiment sur la ligne.
+        self._sink = sink
         self.state = CallState()
 
     async def _speak(self, line: str) -> None:
-        """Synthesise one line and remember it as a turn."""
+        """Synthesise one line, push it to the sink, remember it as a turn."""
         self.state.history.append(Turn(speaker="agent", text=line))
+        if self._sink is not None:
+            self.state.speaking = True
+            try:
+                await self._sink.play(self._tts.synthesize(line))
+            finally:
+                self.state.speaking = False
+            return
         async for _chunk in self._tts.synthesize(line):
             pass
+
+    async def barge_in(self) -> None:
+        """Le débiteur reprend la parole : l'agent se tait immédiatement.
+
+        Le ticket en fait une exigence non négociable, et c'est le comportement
+        qui sépare un appel supportable d'un appel qu'on raccroche. La file de
+        l'opérateur peut avoir plusieurs secondes d'avance : il faut la VIDER,
+        pas seulement arrêter d'y écrire.
+        """
+        if self._sink is not None and self.state.speaking:
+            await self._sink.cut()
 
     async def _say(self, intent: Intent, facts: Mapping[str, str] | None = None) -> str:
         """Have the model word this move, then speak it.
@@ -328,7 +372,7 @@ class DunningConversation:
             await self.close(Outcome.CALLBACK_REQUESTED)
             return
 
-        if _contains(utterance, _DISPUTE):
+        if _contains(utterance, _DISPUTE) and not _contains(utterance, _DEMENTIS):
             # US-4: never argue. Record, close, hand to a human.
             self.state.closure_requested = True
             self.state.escalations.append("contestation")

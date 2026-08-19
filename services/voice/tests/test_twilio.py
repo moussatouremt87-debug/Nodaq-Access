@@ -161,7 +161,7 @@ async def test_l_audio_sortant_est_decoupe_en_trames_de_20_ms() -> None:
     session.stream_sid = "MZ-1"
     session._pret.set()
 
-    await session.jouer(flux(b"\x00" * (OCTETS_PAR_TRAME * 3)))
+    await session.play(flux(b"\x00" * (OCTETS_PAR_TRAME * 3)))
 
     trames = [e for e in ws.envoyes if e.get("event") == "media"]
     assert len(trames) == 3
@@ -177,7 +177,7 @@ async def test_un_reste_partiel_est_quand_meme_envoye() -> None:
     session.stream_sid = "MZ-1"
     session._pret.set()
 
-    await session.jouer(flux(b"\x00" * (OCTETS_PAR_TRAME + 40)))
+    await session.play(flux(b"\x00" * (OCTETS_PAR_TRAME + 40)))
 
     trames = [e for e in ws.envoyes if e.get("event") == "media"]
     assert len(trames) == 2
@@ -190,7 +190,7 @@ async def test_couper_vide_la_file_de_twilio() -> None:
     session = SessionMedia(ws=ws)  # type: ignore[arg-type]
     session.stream_sid = "MZ-1"
 
-    await session.couper()
+    await session.cut()
 
     assert ws.envoyes == [{"event": "clear", "streamSid": "MZ-1"}]
 
@@ -214,7 +214,7 @@ async def test_seule_la_piste_du_debiteur_est_transcrite() -> None:
     ]
     session = SessionMedia(ws=FausseWs(script))  # type: ignore[arg-type]
 
-    recus = [m async for m in session.audio_entrant()]
+    recus = [m async for m in session.inbound_audio()]
 
     assert recus == [b"\x11" * 160]
     assert session.call_sid == "CA-1"
@@ -227,7 +227,7 @@ async def test_jouer_attend_de_connaitre_le_flux() -> None:
     ws = FausseWs()
     session = SessionMedia(ws=ws)  # type: ignore[arg-type]
 
-    tache = asyncio.create_task(session.jouer(flux(b"\x00" * OCTETS_PAR_TRAME)))
+    tache = asyncio.create_task(session.play(flux(b"\x00" * OCTETS_PAR_TRAME)))
     await asyncio.sleep(0.02)
     assert ws.envoyes == [], "l'audio est parti avant de connaître le flux"
 

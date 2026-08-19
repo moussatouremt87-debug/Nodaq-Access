@@ -52,12 +52,12 @@ class SessionMedia:
     call_sid: str = ""
     _pret: asyncio.Event = field(default_factory=asyncio.Event)
 
-    async def attendre_demarrage(self) -> None:
+    async def await_start(self) -> None:
         await self._pret.wait()
 
     # ── Ce qui arrive du débiteur ─────────────────────────────────────────
 
-    async def audio_entrant(self) -> AsyncIterator[bytes]:
+    async def inbound_audio(self) -> AsyncIterator[bytes]:
         """Les trames du débiteur, prêtes pour la transcription.
 
         Seule la piste `inbound` est rendue : `outbound` est notre propre voix
@@ -85,14 +85,14 @@ class SessionMedia:
 
     # ── Ce qu'on renvoie ──────────────────────────────────────────────────
 
-    async def jouer(self, audio: AsyncIterator[bytes]) -> None:
+    async def play(self, audio: AsyncIterator[bytes]) -> None:
         """Envoie la voix de l'agent, par trames de 20 ms.
 
         Découpé plutôt que poussé d'un bloc : une seule grosse trame arriverait
         entière dans la file de Twilio, et un `clear` ultérieur ne pourrait plus
         rien couper — l'agent finirait sa phrase par-dessus la personne.
         """
-        await self.attendre_demarrage()
+        await self.await_start()
         reste = b""
         async for morceau in audio:
             reste += morceau
@@ -111,7 +111,7 @@ class SessionMedia:
             # on envoie des échantillons bruts, jamais un WAV.
         }))
 
-    async def couper(self) -> None:
+    async def cut(self) -> None:
         """Vide la file audio de Twilio — l'agent se tait immédiatement.
 
         Appelé quand le débiteur reprend la parole. Ce qui a déjà été transmis
@@ -120,7 +120,7 @@ class SessionMedia:
         """
         await self.ws.send(json.dumps({"event": "clear", "streamSid": self.stream_sid}))
 
-    async def reperer(self, nom: str) -> None:
+    async def mark(self, nom: str) -> None:
         """Pose un repère que Twilio renverra quand l'audio aura été JOUÉ.
 
         La file peut avoir plusieurs secondes d'avance sur ce que le débiteur
