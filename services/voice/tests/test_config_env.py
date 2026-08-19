@@ -70,3 +70,21 @@ def test_les_commentaires_et_lignes_vides_sont_ignores(
 def test_aucun_fichier_ne_fait_pas_echouer(tmp_path: Path) -> None:
     # Un déploiement sans `.env` est le cas NORMAL en production.
     assert charger_env(tmp_path / "vide" / "faux.py") is None or True
+
+
+def test_le_port_est_lu_apres_le_chargement(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Le port doit venir de l'environnement CHARGÉ, pas de l'import du module.
+
+    Une constante calculée au chargement du module lisait un environnement
+    encore vide : le worker retombait sur le port de repli et se cognait à
+    l'API de développement. Le défaut est invisible tant qu'on exporte les
+    variables à la main avant de lancer la commande.
+    """
+    from voice.appel import PORT_DEFAUT, port_ecoute
+
+    monkeypatch.delenv("VOICE_WORKER_PORT", raising=False)
+    assert port_ecoute() == PORT_DEFAUT
+    assert PORT_DEFAUT != 8080, "le port de repli ne doit pas être celui de l'API"
+
+    monkeypatch.setenv("VOICE_WORKER_PORT", "9123")
+    assert port_ecoute() == 9123

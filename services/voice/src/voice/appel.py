@@ -47,7 +47,19 @@ from voice.core.interfaces import CallOutcome
 logging.basicConfig(level=logging.INFO, format="[appel] %(message)s")
 log = logging.getLogger("voice.appel")
 
-PORT = int(os.environ.get("VOICE_WORKER_PORT") or 8080)
+#: PAS 8080 : l'API de développement y tourne déjà, et Twilio se connecterait
+#: alors au mauvais processus.
+PORT_DEFAUT = 8090
+
+
+def port_ecoute() -> int:
+    """Lu APRÈS le chargement du `.env`, et pas à l'import du module.
+
+    Une constante calculée au chargement lisait un environnement encore vide :
+    le worker retombait sur 8080 et se cognait à l'API. Ordre de lecture, pas
+    valeur — le défaut est invisible tant qu'on exporte les variables à la main.
+    """
+    return int(os.environ.get("VOICE_WORKER_PORT") or PORT_DEFAUT)
 
 #: Garde-fou, pas un rythme : la boucle a déjà sa propre borne. Celui-ci existe
 #: pour le cas où la conversation ne rendrait jamais la main du tout.
@@ -116,8 +128,9 @@ async def main(numero: str, jeton: str) -> int:
 
     # Le serveur AVANT l'appel : Twilio se connecte dès le décroché, et une
     # connexion refusée fait échouer l'appel sans message clair.
-    async with websockets.serve(accueillir, "0.0.0.0", PORT):
-        log.info("écoute sur le port %d", PORT)
+    port = port_ecoute()
+    async with websockets.serve(accueillir, "0.0.0.0", port):
+        log.info("écoute sur le port %d", port)
         session_tel = await tel.dial(numero, caller_id=os.environ["TELEPHONY_CALLER_ID"])
         log.info("transport : %s", session_tel.outcome.value)
 
