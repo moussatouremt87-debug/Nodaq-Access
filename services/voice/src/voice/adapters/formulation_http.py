@@ -57,11 +57,18 @@ class HttpPhrasing:
         self, config: FormulationConfig, client: httpx.AsyncClient | None = None
     ) -> None:
         self._config = config
-        # Short timeouts on purpose: someone is on the phone. Past a second or
-        # so the silence is worse than a plainer sentence, and the caller is
-        # expected to fall back rather than wait.
+        # Le délai couvre le BUDGET DE LA ROUTE, pas une intuition. Elle
+        # s'autorise deux tentatives auprès du modèle avant de prononcer son
+        # filet : à ~650 ms l'une, avec des pointes mesurées à 1 084 ms, deux
+        # secondes étaient sous le budget qu'elle se donne. La conversation
+        # mourait donc sur un `ReadTimeout` au deuxième tour — constaté au
+        # huitième appel réel, alors que tout le reste fonctionnait.
+        #
+        # Six secondes, et l'attente ne s'entend pas : l'amorce couvre le blanc
+        # (ADR 003). Ce n'est pas la latence qui est bornée ici, c'est
+        # l'obstination.
         self._client = client or httpx.AsyncClient(
-            timeout=httpx.Timeout(2.0, connect=1.0)
+            timeout=httpx.Timeout(6.0, connect=1.0)
         )
 
     async def line(

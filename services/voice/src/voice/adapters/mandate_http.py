@@ -54,10 +54,12 @@ class HttpMandateGateway:
         self, config: MandateConfig, client: httpx.AsyncClient | None = None
     ) -> None:
         self._config = config
-        # Court, comme la formulation : quelqu'un est au téléphone. Passé une
-        # seconde, le silence coûte plus cher que la réponse ne vaut.
+        # Plus court que la formulation, et c'est justifié : ces routes ne
+        # consultent aucun modèle. Elles lisent une règle et appliquent une
+        # décision pure — si elles mettent plus de trois secondes, ce n'est pas
+        # de la lenteur, c'est une panne.
         self._client = client or httpx.AsyncClient(
-            timeout=httpx.Timeout(2.0, connect=1.0)
+            timeout=httpx.Timeout(3.0, connect=1.0)
         )
 
     @property
