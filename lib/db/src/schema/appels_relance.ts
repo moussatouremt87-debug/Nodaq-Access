@@ -43,6 +43,19 @@ export const appelsRelanceTable = pgTable(
     transcription: text("transcription"),
     resume: text("resume"),
 
+    /**
+     * Condensat SHA-256 du jeton de service du worker — jamais le jeton.
+     *
+     * Le worker est une machine : il n'a pas de session. Ce condensat permet à
+     * la policy `appels_relance_worker_lookup` de résoudre le tenant DEPUIS le
+     * jeton, au lieu de le recevoir dans le corps de la requête — ce que la
+     * règle 1 interdit.
+     *
+     * Ne jamais projeter cette colonne dans une réponse : c'est le seul secret
+     * de la table.
+     */
+    jetonSha256: text("jeton_sha256"),
+
     /** Millièmes de centime — arrondir au centime fausserait la somme. */
     coutMillicents: integer("cout_millicents").notNull().default(0),
 

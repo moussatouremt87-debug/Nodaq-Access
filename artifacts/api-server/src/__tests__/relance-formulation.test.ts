@@ -16,14 +16,17 @@ import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import crypto from "node:crypto";
 import app from "../app";
-import { cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner } from "./helpers";
+import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner } from "./helpers";
 
 const tenantIds: string[] = [];
 const emails: string[] = [];
-let cookie: string;
+let jeton: string;
 
 const formuler = (corps: Record<string, unknown>) =>
-  request(app).post("/api/relance/formulation").set("Cookie", cookie).send(corps);
+  request(app)
+    .post("/api/relance/formulation")
+    .set("Authorization", `Bearer ${jeton}`)
+    .send(corps);
 
 /**
  * Le marqueur qui pilote le simulateur voyage dans l'HISTORIQUE, pas dans les
@@ -40,9 +43,34 @@ beforeAll(async () => {
     .send({ email, password: "test-pass-1234", nom: "Patron", tenantNom: "Formulation SARL" })
     .expect(201);
   await completeMfaForRegisteredOwner(reg.body.userId);
-  tenantIds.push(reg.body.tenantId);
-  cookie = reg.headers["set-cookie"][0];
-}, 90_000);
+  const tenantId = reg.body.tenantId;
+  tenantIds.push(tenantId);
+  const cookie = reg.headers["set-cookie"][0];
+
+  // La formulation est une route de WORKER : elle s'atteint avec le jeton d'un
+  // appel en cours, jamais avec une session. On monte donc le décor minimal —
+  // une campagne validée, un appel planifié — plutôt que de contourner
+  // l'authentification qu'on est en train d'éprouver.
+  const { body } = await request(app)
+    .post("/api/relance/campagnes")
+    .set("Cookie", cookie)
+    .send({
+      appels: [{ clientId: null, factureId: "F-1", montantCents: 1000, numero: "+33600000009", clientNom: "Menuiserie Delacroix" }],
+    })
+    .expect(201);
+  await request(app)
+    .post(`/api/pending-actions/${body.pendingActionId}/approve`)
+    .set("Cookie", cookie)
+    .expect(200);
+
+  jeton = crypto.randomBytes(32).toString("base64url");
+  await adminPool.query(
+    `INSERT INTO appels_relance (id, tenant_id, campagne_id, facture_id, empreinte_numero, statut, jeton_sha256)
+     VALUES ($1, $2::uuid, $3, 'F-1', $4, 'PLANIFIE', $5)`,
+    [crypto.randomUUID(), tenantId, body.campagne.id, "emp-formul",
+     crypto.createHash("sha256").update(jeton).digest("hex")],
+  );
+}, 120_000);
 
 afterAll(async () => {
   await cleanupTenants(...tenantIds);
@@ -159,7 +187,20 @@ describe("d — la formulation ne décide rien", () => {
     expect(r.body.replique).toContain("10");
   });
 
-  test("une session est exigée", async () => {
+  test("l'agent ne prononce JAMAIS le nom du débiteur", async () => {
+    // Le texte des répliques part chez un sous-traitant américain (ADR 002).
+    // Sans Zero Retention, il y est conservé — d'où la minimisation par
+    // construction : le serveur connaît le nom appelé et refuse toute réplique
+    // qui le contient, quitte à prononcer le filet.
+    const r = await formuler({
+      intention: "clore_contestation",
+      historique: cas("formulation-test-nom"),
+    }).expect(200);
+
+    expect(r.body.replique).not.toMatch(/delacroix/i);
+  });
+
+  test("un jeton d'appel est exigé — une session ne suffit pas", async () => {
     await request(app)
       .post("/api/relance/formulation")
       .send({ intention: "demander_date" })

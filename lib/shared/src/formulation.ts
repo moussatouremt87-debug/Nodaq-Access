@@ -205,7 +205,58 @@ export type NatureAnomalieReplique =
   | "chiffre_invente"
   | "trop_de_phrases"
   | "tutoiement"
+  | "identite_divulguee"
   | "vide";
+
+/**
+ * Formes juridiques et mots de raison sociale trop communs pour identifier
+ * quelqu'un. Les garder ferait refuser des répliques parfaitement anodines —
+ * et une garde qui refuse ce qu'elle protège finit désactivée.
+ */
+const MOTS_NON_IDENTIFIANTS = new Set([
+  "sarl", "sas", "sasu", "eurl", "sci", "scop", "snc", "eirl",
+  "entreprise", "societe", "société", "etablissements", "établissements",
+  "monsieur", "madame", "maison", "groupe", "compagnie", "atelier",
+]);
+
+/**
+ * Les morceaux d'identité prononcés dans cette réplique.
+ *
+ * ── Pourquoi cette garde existe ────────────────────────────────────────────
+ * Le texte des répliques part vers la synthèse vocale, chez un sous-traitant
+ * AMÉRICAIN (ADR 002). Sans Zero Retention Mode — réservé aux offres
+ * entreprise — ce texte y est conservé. L'ADR laissait deux voies : souscrire
+ * l'offre qui donne la garantie, ou **minimiser par construction** en
+ * garantissant que le nom du débiteur ne sort jamais. Ceci est la seconde voie.
+ *
+ * ── Pourquoi c'est faisable ici et pas ailleurs ────────────────────────────
+ * On ne cherche pas « un nom » dans un texte libre, ce qui serait une devinette.
+ * Le serveur SAIT quel débiteur il appelle : la chaîne à interdire est connue,
+ * exacte, et propre à cet appel. La détection est donc sûre.
+ *
+ * Le modèle, lui, reçoit l'historique complet de la conversation — mais il vit
+ * derrière `LLM_BASE_URL`, dans le périmètre souverain. Ce qui traverse
+ * l'Atlantique, c'est uniquement ce que l'agent PRONONCE.
+ */
+export function identitesDivulguees(
+  replique: string,
+  identites: readonly string[],
+): string[] {
+  const mots = new Set<string>();
+  for (const identite of identites) {
+    for (const mot of identite.toLowerCase().split(/[^a-zà-ÿ]+/)) {
+      // Deux ou trois lettres : trop court pour identifier, et trop susceptible
+      // de tomber dans un mot courant.
+      if (mot.length >= 4 && !MOTS_NON_IDENTIFIANTS.has(mot)) mots.add(mot);
+    }
+  }
+  if (mots.size === 0) return [];
+
+  const bas = replique.toLowerCase();
+  return [...mots].filter((mot) =>
+    new RegExp(`(^|[^a-zà-ÿ])${mot}([^a-zà-ÿ]|$)`, "i").test(bas),
+  );
+}
 
 /**
  * Le tutoiement, et la raison pour laquelle il a sa propre garde.
@@ -284,7 +335,16 @@ function compterPhrases(texte: string): number {
  * texte qui menace laisserait croire que le modèle a compris qu'il ne faut pas
  * menacer.
  */
-export function verifierReplique(replique: string, faits: FaitsReplique): AnomalieReplique[] {
+export function verifierReplique(
+  replique: string,
+  faits: FaitsReplique,
+  /**
+   * Ce que l'agent ne doit pas prononcer parce que ça sortirait du périmètre
+   * souverain : le nom du débiteur appelé. Vide par défaut — la minimisation
+   * est une décision de l'appelant, seul à savoir qui il appelle.
+   */
+  identites: readonly string[] = [],
+): AnomalieReplique[] {
   const texte = replique.trim();
   if (texte.length === 0) return [{ nature: "vide", detail: "réplique vide" }];
 
@@ -305,6 +365,16 @@ export function verifierReplique(replique: string, faits: FaitsReplique): Anomal
   const tutoie = TUTOIEMENT.exec(texte);
   if (tutoie) {
     anomalies.push({ nature: "tutoiement", detail: `« ${tutoie[2]} »` });
+  }
+
+  for (const mot of identitesDivulguees(texte, identites)) {
+    // Le DÉTAIL ne reprend pas le mot trouvé : il finirait dans le journal du
+    // repli, et ce mot est précisément la donnée personnelle qu'on protège.
+    void mot;
+    anomalies.push({
+      nature: "identite_divulguee",
+      detail: "la réplique nomme le débiteur",
+    });
   }
 
   const phrases = compterPhrases(texte);

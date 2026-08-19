@@ -24,6 +24,7 @@ import {
   type DrizzleTx,
 } from "@workspace/db";
 import { empreinte } from "./prospection.js";
+import { frapperJetonAppel } from "./jeton-appel.js";
 
 /** D'où vient l'opposition, pour la distinguer de celles de la prospection. */
 export const ORIGINE_OPPOSITION_APPEL = "appel_vocal";
@@ -229,4 +230,57 @@ export async function enregistrerAppel(
   const { numero: _numero, ...aEcrire } = appel;
   void _numero;
   await tx.insert(appelsRelanceTable).values({ tenantId, ...aEcrire });
+}
+
+/**
+ * Planifie un appel et rend le jeton que le worker devra présenter.
+ *
+ * Le jeton en clair est rendu UNE fois, ici, et n'est plus jamais relisible :
+ * seul son condensat entre en base. C'est ce qui permet au worker de s'annoncer
+ * sans jamais nommer de tenant — la résolution se fait depuis la ligne (voir
+ * `requireAppelVocal`).
+ *
+ * Séparé de `enregistrerAppel` à dessein : cette fonction-là sert aussi à
+ * consigner un appel DÉJÀ passé, qui n'a plus besoin de jeton. Frapper un
+ * jeton dans tous les cas laisserait traîner des accès valides sur des lignes
+ * qui n'en ont pas l'usage.
+ */
+export async function planifierAppel(
+  tx: DrizzleTx,
+  tenantId: string,
+  appel: Parameters<typeof enregistrerAppel>[2],
+): Promise<{ appelId: string; jeton: string }> {
+  const { jeton, sha256 } = frapperJetonAppel();
+  const { numero: _numero, ...aEcrire } = appel;
+  void _numero;
+
+  const [ligne] = await tx
+    .insert(appelsRelanceTable)
+    .values({ tenantId, ...aEcrire, statut: "PLANIFIE", jetonSha256: sha256 })
+    .returning({ id: appelsRelanceTable.id });
+
+  return { appelId: ligne!.id, jeton };
+}
+
+/**
+ * Ferme un appel : plus aucun jeton ne vaut sur cette ligne.
+ *
+ * Le condensat est EFFACÉ en plus du changement de statut. La policy exigeait
+ * déjà `statut IN ('PLANIFIE','EN_COURS')`, donc le statut suffirait — mais un
+ * secret qu'on garde après son usage est un secret qu'on finit par fuiter, et
+ * l'effacer rend la révocation vraie même si quelqu'un élargit la policy un
+ * jour.
+ */
+export async function cloreAppel(
+  tx: DrizzleTx,
+  tenantId: string,
+  appelId: string,
+  statut: "TERMINE" | "ECHEC",
+): Promise<void> {
+  await tx
+    .update(appelsRelanceTable)
+    .set({ statut, jetonSha256: null, endedAt: new Date() })
+    .where(
+      and(eq(appelsRelanceTable.tenantId, tenantId), eq(appelsRelanceTable.id, appelId)),
+    );
 }
