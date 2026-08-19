@@ -18,7 +18,11 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from voice.core.call_loop import MOTS_POUR_COUPER, conduire_appel
+from voice.core.call_loop import (
+    MOTS_POUR_COUPER,
+    SILENCE_FIN_DE_TOUR_S,
+    conduire_appel,
+)
 from voice.core.conversation import (
     DunningConversation,
     InstalmentDecision,
@@ -216,6 +220,47 @@ async def test_les_fragments_sont_recolles_en_une_phrase() -> None:
     )
 
     assert await conduire_appel(conv, stt, rien()) is Outcome.PAID_CLAIMED
+
+
+async def test_un_silence_ne_casse_pas_la_transcription() -> None:
+    """Le défaut du CINQUIÈME appel réel, et le plus retors.
+
+    `asyncio.wait_for` ANNULE ce qu'il attend quand le délai expire. Appliqué
+    directement au générateur de transcription, il le cassait au premier
+    silence : tout appel suivant signalait « flux terminé », et l'appel se
+    concluait `unreachable` six cents millisecondes après l'annonce — avant que
+    la personne ait parlé.
+
+    Aucun des tests existants ne pouvait l'attraper : ils débitaient tous leurs
+    segments plus vite que le seuil de silence. Celui-ci respire, comme une
+    vraie conversation.
+    """
+    silence = SILENCE_FIN_DE_TOUR_S + 0.15
+
+    @dataclass
+    class SttQuiRespire:
+        def transcribe(
+            self, audio: AsyncIterator[bytes], *, language: str = "fr"
+        ) -> AsyncIterator[TranscriptSegment]:
+            async def gen() -> AsyncIterator[TranscriptSegment]:
+                # Un silence AVANT le premier mot : le temps que la personne
+                # écoute l'annonce et réfléchisse.
+                await asyncio.sleep(silence)
+                yield TranscriptSegment(text="ne me rappelez", is_final=False)
+                await asyncio.sleep(0.01)
+                yield TranscriptSegment(text=" plus", is_final=False)
+                # Puis elle se tait, et c'est ce silence qui clôt le tour.
+                await asyncio.sleep(silence)
+
+            return gen()
+
+    conv, _, _ = monter([])
+
+    issue = await conduire_appel(conv, SttQuiRespire(), rien(), duree_max_s=5)
+
+    assert issue is Outcome.REFUSED, (
+        "le silence initial a cassé la transcription au lieu d'être attendu"
+    )
 
 
 # ── c. L'interruption ──────────────────────────────────────────────────────
