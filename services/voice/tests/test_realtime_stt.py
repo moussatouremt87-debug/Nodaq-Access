@@ -187,13 +187,13 @@ async def test_une_erreur_ne_reprend_pas_ce_que_le_debiteur_a_dit() -> None:
 
 
 def test_une_cle_absente_leve(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("VOICE_STT_API_KEY", raising=False)
-    with pytest.raises(RealtimeSttConfigError, match="VOICE_STT_API_KEY"):
+    monkeypatch.delenv("VOICE_REALTIME_API_KEY", raising=False)
+    with pytest.raises(RealtimeSttConfigError, match="VOICE_REALTIME_API_KEY"):
         RealtimeSttConfig.from_env()
 
 
 def test_l_erreur_de_config_ne_contient_jamais_la_cle(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("VOICE_STT_API_KEY", "cle-tres-secrete")
+    monkeypatch.setenv("VOICE_REALTIME_API_KEY", "cle-tres-secrete")
     monkeypatch.setenv("VOICE_STT_MODEL", "")
     # Rien ne doit lever ici, mais si un jour c'est le cas, pas de fuite.
     assert RealtimeSttConfig.from_env().model == MODELE_CONTINU
@@ -204,6 +204,6 @@ def test_une_variable_presente_mais_vide_retombe_sur_le_defaut(
 ) -> None:
     # L'état le plus courant d'un `.env` recopié : présente et vide. Le défaut
     # de `get` rendrait "" et demanderait un modèle sans nom.
-    monkeypatch.setenv("VOICE_STT_API_KEY", "x")
+    monkeypatch.setenv("VOICE_REALTIME_API_KEY", "x")
     monkeypatch.setenv("VOICE_STT_MODEL", "")
     assert RealtimeSttConfig.from_env().model == MODELE_CONTINU

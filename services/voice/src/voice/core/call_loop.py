@@ -54,6 +54,8 @@ async def conduire_appel(
     # l'agent parle. Le défaut est invisible en lecture et évident à l'oreille.
     tours: asyncio.Queue[str | None] = asyncio.Queue()
 
+    echec: list[BaseException] = []
+
     async def ecouter() -> None:
         try:
             async for segment in stt.transcribe(audio_entrant):
@@ -69,6 +71,15 @@ async def conduire_appel(
 
                 if segment.is_final and segment.text.strip():
                     await tours.put(segment.text.strip())
+        except Exception as err:
+            # Une transcription qui meurt ressemble EXACTEMENT à un débiteur
+            # qui se tait : le flux se tarit, la boucle conclut `unreachable`,
+            # et l'appel est classé « injoignable » alors que la personne
+            # parlait. Constaté au deuxième appel réel — la clé envoyée au
+            # fournisseur était celle d'un autre. On garde l'erreur pour la
+            # relever après, plutôt que de la perdre dans une tâche que
+            # personne n'attend.
+            echec.append(err)
         finally:
             await tours.put(None)
 
@@ -96,6 +107,12 @@ async def conduire_appel(
         issue = None
     finally:
         ecoute.cancel()
+
+    if echec:
+        # Levée APRÈS l'annulation de l'écoute : une panne technique n'est pas
+        # une issue métier, et la maquiller en `unreachable` fausserait le
+        # compte-rendu au dirigeant.
+        raise echec[0]
 
     if issue is not None:
         return issue

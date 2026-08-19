@@ -63,9 +63,14 @@ class RealtimeSttConfig:
 
     @staticmethod
     def from_env() -> RealtimeSttConfig:
-        cle = os.environ.get("VOICE_STT_API_KEY", "")
+        # `VOICE_REALTIME_API_KEY` et non `VOICE_STT_API_KEY` : depuis l'ADR
+        # 004 la transcription se fait en continu chez le même fournisseur que
+        # les sessions temps réel. Lire l'ancienne variable envoyait la clé
+        # Gladia à OpenAI — rejet, connexion fermée, et un appel classé
+        # « injoignable » alors que la personne parlait.
+        cle = os.environ.get("VOICE_REALTIME_API_KEY", "")
         if not cle:
-            raise RealtimeSttConfigError("VOICE_STT_API_KEY is not set")
+            raise RealtimeSttConfigError("VOICE_REALTIME_API_KEY is not set")
         return RealtimeSttConfig(
             api_key=cle,
             # `or` et non le défaut de `get` : une variable présente mais VIDE

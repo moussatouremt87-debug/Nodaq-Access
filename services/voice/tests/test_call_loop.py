@@ -261,6 +261,36 @@ async def test_un_appel_sans_fin_est_borne() -> None:
     assert issue is Outcome.UNREACHABLE
 
 
+async def test_une_transcription_qui_meurt_ne_passe_pas_pour_un_silence() -> None:
+    """Le défaut du DEUXIÈME APPEL RÉEL, et le plus sournois des trois.
+
+    La transcription recevait une clé destinée à un autre fournisseur. Elle
+    était rejetée, la connexion se fermait, le flux se tarissait — et la boucle
+    concluait `unreachable`. L'appel était donc classé « injoignable » alors que
+    la personne parlait, et rien dans les journaux ne disait le contraire.
+
+    Une panne technique n'est pas une issue métier. Elle doit remonter.
+    """
+
+    @dataclass
+    class SttQuiMeurt:
+        def transcribe(
+            self, audio: AsyncIterator[bytes], *, language: str = "fr"
+        ) -> AsyncIterator[TranscriptSegment]:
+            async def gen() -> AsyncIterator[TranscriptSegment]:
+                # Un segment d'abord, puis la panne : c'est la forme réelle
+                # d'une connexion qui se ferme en cours de route.
+                yield TranscriptSegment(text="", is_final=False)
+                raise RuntimeError("transcription refusée : invalid_api_key")
+
+            return gen()
+
+    conv, _, _ = monter([])
+
+    with pytest.raises(RuntimeError, match="invalid_api_key"):
+        await conduire_appel(conv, SttQuiMeurt(), rien())
+
+
 async def test_une_promesse_confirmee_survit_a_la_fin_du_flux() -> None:
     conv, _, stt = monter([])
     await conv.record_promise(amount_eur="400 euros", date_label="28 août")
