@@ -145,6 +145,12 @@ class RealtimeSpeechToText:
                     e = json.loads(brut)
                     t = e.get("type", "")
                     evenements[t] = evenements.get(t, 0) + 1
+                    # Les vingt premiers événements sont annoncés AU FIL DE
+                    # L'EAU : un bilan à la fermeture ne sert à rien quand la
+                    # fermeture n'arrive pas. Le TYPE seulement, jamais le
+                    # contenu — c'est la parole du débiteur (règle 6).
+                    if sum(evenements.values()) <= 20:
+                        log.info("[stt] reçu : %s", t)
 
                     if t == "error":
                         # Le CODE seul : le message peut contenir un fragment de
