@@ -29,6 +29,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import logging
 import os
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -49,6 +50,10 @@ FORMAT_TELEPHONE = "audio/pcmu"
 #: « Turn detection is not supported for this transcription model ») et c'est
 #: cohérent — il transcrit au fil de l'eau, la fin de tour se décide ailleurs.
 MODELE_CONTINU = "gpt-live-transcribe"
+
+#: Journal de DIAGNOSTIC : compteurs et codes seulement. Jamais un mot de ce que
+#: le débiteur a dit — c'est la donnée la plus sensible de l'appel (règle 6).
+log = logging.getLogger("voice.stt")
 
 
 class RealtimeSttConfigError(RuntimeError):
@@ -111,8 +116,12 @@ class RealtimeSpeechToText:
             max_size=None,
         ) as ws:
             await ws.send(self._session())
+            log.info("[stt] session ouverte (%s)", cfg.model)
+            trames = 0
+            evenements: dict[str, int] = {}
 
             async def emettre() -> None:
+                nonlocal trames
                 """Pousse l'audio sans attendre les résultats.
 
                 Séparé de la lecture parce que les deux sens sont indépendants :
@@ -122,6 +131,9 @@ class RealtimeSpeechToText:
                 """
                 async for morceau in audio:
                     if morceau:
+                        trames += 1
+                        if trames % 250 == 0:
+                            log.info("[stt] %d trames envoyées", trames)
                         await ws.send(json.dumps({
                             "type": "input_audio_buffer.append",
                             "audio": base64.b64encode(morceau).decode(),
@@ -132,6 +144,7 @@ class RealtimeSpeechToText:
                 async for brut in ws:
                     e = json.loads(brut)
                     t = e.get("type", "")
+                    evenements[t] = evenements.get(t, 0) + 1
 
                     if t == "error":
                         # Le CODE seul : le message peut contenir un fragment de
@@ -150,3 +163,10 @@ class RealtimeSpeechToText:
                         )
             finally:
                 envoi.cancel()
+                # Ce qui a été VU, pas ce qui a été dit : des types d'événements
+                # et des compteurs. C'est ce qui manquait pour comprendre
+                # pourquoi la session se fermait aussitôt.
+                log.info(
+                    "[stt] session close — %d trames envoyées, événements : %s",
+                    trames, evenements or "aucun",
+                )

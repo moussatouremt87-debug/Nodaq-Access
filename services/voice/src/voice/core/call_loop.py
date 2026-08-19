@@ -23,6 +23,7 @@ parle, ce qui suffit à faire taire l'agent.
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 from collections.abc import AsyncIterator
 
@@ -33,6 +34,9 @@ from voice.core.interfaces import SpeechToText, TranscriptSegment
 #: Deux mots, parce qu'un « allô » isolé doit encore pouvoir couper l'agent —
 #: mais pas un souffle transcrit en « euh ».
 MOTS_POUR_COUPER = 2
+
+#: Compteurs seulement — jamais un mot de la conversation (règle 6).
+log = logging.getLogger("voice.boucle")
 
 #: Combien de silence fait la fin d'une phrase.
 #:
@@ -72,66 +76,78 @@ async def conduire_appel(
 
     echec: list[BaseException] = []
 
-    async def ecouter() -> None:
-        tampon = ""
-        flux = stt.transcribe(audio_entrant).__aiter__()
+    # Les fragments passent par une file INTERMÉDIAIRE, et ce n'est pas un
+    # détour gratuit. `asyncio.wait_for` ANNULE ce qu'il attend quand le délai
+    # expire : appliqué directement au générateur de transcription, il le
+    # cassait au premier silence, et tout appel suivant signalait « flux
+    # terminé ». L'appel se concluait donc `unreachable` six cents
+    # millisecondes après l'annonce — avant que la personne ait parlé.
+    # Annuler un `get()` de file, en revanche, ne casse rien.
+    fragments: asyncio.Queue[TranscriptSegment | None] = asyncio.Queue()
+
+    async def pomper() -> None:
+        """Vide la transcription dans la file, sans jamais être annulée."""
         try:
-            while True:
-                try:
-                    segment = await asyncio.wait_for(
-                        flux.__anext__(), timeout=SILENCE_FIN_DE_TOUR_S
-                    )
-                except StopAsyncIteration:
-                    break
-                except TimeoutError:
-                    # Plus rien depuis un moment : la personne a fini sa phrase.
-                    # C'est NOUS qui le décidons, et c'est le point de ce bloc —
-                    # voir `SILENCE_FIN_DE_TOUR_S`.
-                    if tampon.strip():
-                        await tours.put(tampon.strip())
-                        tampon = ""
-                    continue
-
-                # « L'arrivée d'un fragment prouve que la personne parle » : je
-                # l'ai écrit, et c'est FAUX au téléphone. La voix de l'agent
-                # revient en écho, un souffle suffit à produire un fragment, et
-                # l'agent se coupait lui-même — constaté au premier appel réel.
-                #
-                # Il faut donc de la PAROLE, pas du signal : on juge sur ce qui
-                # s'est accumulé, pas sur le fragment isolé qui vient d'arriver.
-                # Les espaces sont NORMALISÉS : un fragment arrive déjà avec le
-                # sien (« ne me » puis « rappelez plus »), et en ajouter un
-                # second donnait « ne me  rappelez plus », qui ne correspond
-                # plus à rien. Attrapé par les tests de recollage.
-                accumule = re.sub(r"\s+", " ", f"{tampon} {segment.text}").strip()
-                if segment.is_final or len(accumule.split()) >= MOTS_POUR_COUPER:
-                    await conversation.barge_in()
-
-                if segment.is_final:
-                    # Le fournisseur sait clore un tour : on lui fait confiance.
-                    tampon = ""
-                    if accumule:
-                        await tours.put(accumule)
-                else:
-                    tampon = accumule
+            async for segment in stt.transcribe(audio_entrant):
+                await fragments.put(segment)
         except Exception as err:
             # Une transcription qui meurt ressemble EXACTEMENT à un débiteur
-            # qui se tait : le flux se tarit, la boucle conclut `unreachable`,
-            # et l'appel est classé « injoignable » alors que la personne
-            # parlait. Constaté au deuxième appel réel — la clé envoyée au
-            # fournisseur était celle d'un autre. On garde l'erreur pour la
-            # relever après, plutôt que de la perdre dans une tâche que
-            # personne n'attend.
+            # qui se tait. On garde l'erreur pour la relever après, plutôt que
+            # de la perdre dans une tâche que personne n'attend.
             echec.append(err)
         finally:
-            if tampon.strip():
-                await tours.put(tampon.strip())
-            await tours.put(None)
+            log.info("[boucle] la transcription s'est terminée")
+            await fragments.put(None)
+
+    async def ecouter() -> None:
+        tampon = ""
+        while True:
+            try:
+                segment = await asyncio.wait_for(
+                    fragments.get(), timeout=SILENCE_FIN_DE_TOUR_S
+                )
+            except TimeoutError:
+                # Plus rien depuis un moment : la personne a fini sa phrase.
+                # C'est NOUS qui le décidons — voir `SILENCE_FIN_DE_TOUR_S`.
+                if tampon.strip():
+                    await tours.put(tampon.strip())
+                    tampon = ""
+                continue
+
+            if segment is None:
+                break
+
+            # « L'arrivée d'un fragment prouve que la personne parle » : je
+            # l'ai écrit, et c'est FAUX au téléphone. La voix de l'agent revient
+            # en écho, un souffle suffit à produire un fragment, et l'agent se
+            # coupait lui-même — constaté au premier appel réel.
+            #
+            # Il faut donc de la PAROLE, pas du signal : on juge sur ce qui
+            # s'est accumulé, pas sur le fragment isolé qui vient d'arriver.
+            #
+            # Les espaces sont NORMALISÉS : un fragment arrive déjà avec le
+            # sien, et en ajouter un second donnait « ne me  rappelez plus »,
+            # qui ne correspond plus à rien.
+            accumule = re.sub(r"\s+", " ", f"{tampon} {segment.text}").strip()
+            if segment.is_final or len(accumule.split()) >= MOTS_POUR_COUPER:
+                await conversation.barge_in()
+
+            if segment.is_final:
+                tampon = ""
+                if accumule:
+                    await tours.put(accumule)
+            else:
+                tampon = accumule
+
+        if tampon.strip():
+            await tours.put(tampon.strip())
+        await tours.put(None)
 
     # L'écoute démarre AVANT l'annonce, et pas après : c'est justement pendant
     # qu'on se présente qu'on se fait couper — « c'est à quel sujet ? ». Une
     # écoute qui ne commence qu'après l'annonce laisse l'agent débiter sa
     # présentation par-dessus quelqu'un qui parle déjà.
+    pompe = asyncio.create_task(pomper())
     ecoute = asyncio.create_task(ecouter())
     await conversation.announce()
 
@@ -152,6 +168,7 @@ async def conduire_appel(
         issue = None
     finally:
         ecoute.cancel()
+        pompe.cancel()
 
     if echec:
         # Levée APRÈS l'annulation de l'écoute : une panne technique n'est pas
