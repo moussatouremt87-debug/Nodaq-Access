@@ -42,6 +42,7 @@ import facturationElectroniqueRouter, {
 import eReportingRouter from "./e-reporting";
 import { banqueWebhookRouter } from "./webhooks-banque";
 import { webhookAgentVocalRouter } from "./webhook-agent-vocal";
+import { paiementWebhookRouter } from "./webhooks-paiement";
 import chargesRecurrentesRouter from "./charges-recurrentes";
 import previsionnelTresorerieRouter from "./previsionnel-tresorerie";
 
@@ -83,6 +84,9 @@ router.use(banqueWebhookRouter);
 // conversation_id — jamais reçu du client. Public par nature, comme le
 // webhook bancaire au-dessus.
 router.use(webhookAgentVocalRouter);
+// Webhook de paiement Bridge (4.19) : public, authentifié par signature sur
+// le corps brut — même famille que les deux précédents.
+router.use(paiementWebhookRouter);
 
 // ── Le worker vocal (4.18, lot 6) ────────────────────────────────────────
 //

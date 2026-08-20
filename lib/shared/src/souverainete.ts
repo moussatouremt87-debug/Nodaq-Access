@@ -29,7 +29,7 @@
  */
 
 /** Version du registre, imprimée sur l'attestation. Bouger le registre = bouger la date. */
-export const SOUVERAINETE_VERSION = "2026-08-18";
+export const SOUVERAINETE_VERSION = "2026-08-20";
 
 export interface SousTraitant {
   /** Identifiant stable, utilisé par la vérification d'émission. */
@@ -114,6 +114,28 @@ export const SOUS_TRAITANTS: readonly SousTraitant[] = [
     // imprimé, comme pour l'envoi d'e-mails.
     source:
       "Décisions d'août 2026 (ADR 002 puis ADR 005). Réversible : la branche d'archive et la route de formulation conservée permettent de revenir à une exécution contrôlée.",
+  },
+  {
+    id: "connecteur-bancaire",
+    // ── Entrée AJOUTÉE au ticket 4.19, et c'était une LACUNE ────────────────
+    // Le connecteur bancaire traitait déjà des données de comptes (soldes,
+    // libellés) sans figurer au registre : une attestation émise avant ce jour
+    // ne le mentionnait donc pas. Le ticket 4.19 rend l'omission intenable —
+    // l'usage passe de la LECTURE des comptes à l'INITIATION de virements,
+    // c'est-à-dire au déclenchement d'un mouvement d'argent sur le compte du
+    // client final. Un donneur d'ordre doit le lire noir sur blanc.
+    role:
+      "Agrégation des comptes bancaires (lecture) et initiation de virements par lien de paiement",
+    nom: "Bridge (Bankin')",
+    pays: "France",
+    region: null,
+    donnees:
+      "Identifiants de comptes bancaires agrégés, soldes et libellés de comptes. Pour un lien de paiement : le montant demandé, la raison sociale et l'IBAN d'encaissement de l'entreprise, le nom du débiteur et notre référence interne. Aucun identifiant bancaire du débiteur ne transite par nous — il s'authentifie chez SA banque.",
+    // Pas de `variableEnv` : les destinations Bridge sont des constantes du
+    // paquet `lib/banque-agreee`, pas une URL d'exploitation. Rien à constater
+    // à l'émission, donc rien à comparer.
+    source:
+      "Prestataire agréé retenu pour le connecteur « Banque » (ADR du connecteur bancaire, août 2026). L'initiation de paiement est une activation distincte, à demander au prestataire — sans elle, aucun lien ne peut être créé.",
   },
   {
     id: "envoi-email",
