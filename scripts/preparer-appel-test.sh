@@ -79,7 +79,7 @@ echo "→ session vérifiée"
 curl -s -X POST "$API/parametres" -H "Cookie: $COOKIE" -H "Content-Type: application/json" \
   -X PATCH -d '{"company.raison_sociale":"Charpente Dubois"}' >/dev/null
 curl -s -X PUT "$API/relance/regles" -H "Cookie: $COOKIE" -H "Content-Type: application/json" \
-  -d '{"echelonnementAutorise":true,"maxVersements":4,"delaiMaxPremierVersementJours":15,"retardMaxJours":45,"lienPaiementAutorise":false,"remiseAutorisee":false}' >/dev/null
+  -d '{"echelonnementAutorise":true,"maxVersements":4,"delaiMaxPremierVersementJours":15,"retardMaxJours":45,"lienPaiementAutorise":true,"remiseAutorisee":false}' >/dev/null
 echo "→ raison sociale et règle de relance posées"
 
 # ── 4. Une campagne, puis sa VALIDATION ───────────────────────────────────
