@@ -70,6 +70,24 @@ les trois portes d'entrée (connexion, inscription, MFA).
 **Lot D — lisibilité et réseau.** Échelle typographique mobile, contrastes,
 états de chargement et d'erreur, sauvegarde des saisies en cours.
 
+## Une erreur de MESURE, à ne pas refaire
+
+Les constats du tableau ci-dessus ont été obtenus en rendant l'application
+dans un cadre de 390 px, **sur un navigateur de bureau**. Or la feuille de
+style porte déjà un bloc `@media (pointer: coarse)` qui impose 44 px à toutes
+les cibles interactives (US-A8.1). Ce bloc ne se déclenche **jamais** avec un
+pointeur de souris : les tailles relevées à l'œil dans cet aperçu sont donc
+plus petites que celles d'un vrai téléphone.
+
+Conséquence pratique : une partie des ajustements de hauteur du lot B était
+déjà couverte. Ce qui restait vrai, en revanche, ne dépend pas du pointeur —
+la DISPOSITION (un bouton pleine largeur sous le pouce plutôt qu'une icône en
+haut à droite), les libellés qui passent à la ligne, et la hauteur de fenêtre.
+
+**Règle pour la suite** : un aperçu à 390 px sur un navigateur de bureau
+mesure la mise en page, pas les cibles tactiles. Pour celles-ci, la vérité est
+dans `index.css` et dans `terrain.test.ts`.
+
 ## Une exception envisagée, puis refusée — le micro global
 
 Le lot B a montré **deux microphones** sur le devis dicté : celui de la

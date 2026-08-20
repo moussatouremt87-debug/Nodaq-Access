@@ -88,7 +88,7 @@ export default function DevisAccepterPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="min-h-[100dvh] flex items-center justify-center bg-background p-4">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
@@ -123,7 +123,7 @@ export default function DevisAccepterPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+    <div className="min-h-[100dvh] bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-2xl space-y-6">
         {/* Header */}
         <div className="text-center space-y-2">
@@ -294,7 +294,7 @@ function StatusScreen({ icon, title, message, pdfUrl }: {
   icon: React.ReactNode; title: string; message: string; pdfUrl?: string | null;
 }) {
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+    <div className="min-h-[100dvh] bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-sm text-center space-y-4">
         <div className="flex justify-center">{icon}</div>
         <h1 className="text-xl font-bold">{title}</h1>
