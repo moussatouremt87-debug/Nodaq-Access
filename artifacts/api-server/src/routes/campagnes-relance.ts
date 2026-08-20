@@ -23,26 +23,9 @@ import {
 import { planifierAppel, estOpposeAuxAppels } from "../lib/appels-relance.js";
 import { declencherAppelVocal } from "../lib/agent-vocal.js";
 
-/**
- * La liste blanche des numéros de test (ticket 4.18-bis).
- *
- * Armée UNIQUEMENT quand le numéro appelant est américain (+1) : c'est le
- * signe qu'on est en phase d'essai. Le jour où un numéro français porte les
- * appels, la liste se désarme d'elle-même — et les protections de droit commun
- * (opposition, campagne validée) restent seules en vigueur.
- *
- * Liste VIDE = aucun appel possible. C'est voulu : une liste blanche qui
- * s'ouvre en grand quand on oublie de la remplir n'est pas une liste blanche.
- */
-function numeroAutoriseEnTest(numero: string): boolean {
-  const appelant = process.env["TELEPHONY_CALLER_ID"] ?? "";
-  if (!appelant.startsWith("+1")) return true;
-  const autorises = (process.env["VOICE_TEST_NUMBERS"] ?? "")
-    .split(",")
-    .map((n) => n.trim())
-    .filter((n) => n.length > 0);
-  return autorises.includes(numero);
-}
+// La liste blanche des numéros de test (4.18-bis) vit dans son propre module
+// depuis le 4.19 : elle protège les appels ET les SMS de lien de paiement.
+import { numeroAutoriseEnTest } from "../lib/numeros-test.js";
 import { empreinte } from "../lib/prospection.js";
 
 export const campagnesRelanceReadRouter: IRouter = Router();
