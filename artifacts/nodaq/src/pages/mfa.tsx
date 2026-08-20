@@ -166,19 +166,19 @@ export default function MfaPage() {
 
   if (authLoading || etape === 'chargement') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="min-h-[100dvh] flex items-center justify-center bg-background p-4">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+    <div className="min-h-[100dvh] bg-background flex items-center justify-center p-4">
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
-        className="w-full max-w-sm rounded-2xl border border-card-border bg-card p-8 shadow-xl"
+        className="w-full max-w-sm rounded-2xl border border-card-border bg-card p-6 sm:p-8 shadow-xl"
       >
         {etape === 'enrolement' && enrolement && (
           <EnrolementEcran

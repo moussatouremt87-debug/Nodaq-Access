@@ -207,3 +207,34 @@ describe('c — AC3 : le contraste des jetons reste lisible', () => {
     });
   }
 });
+
+// ── d. La hauteur d'écran, sur un téléphone (ticket 4.20) ──────────────────
+
+describe('hauteur de fenêtre — `min-h-screen` ment sur un téléphone', () => {
+  /**
+   * `100vh` vaut la hauteur de la fenêtre BARRE D'URL RÉTRACTÉE. Tant qu'elle
+   * est déployée — c'est-à-dire à l'ouverture, donc au moment où l'écran de
+   * connexion s'affiche — le contenu dépasse d'une centaine de pixels : le
+   * bouton « Se connecter » se retrouve sous le pli, sur un écran qui semble
+   * pourtant tenir. `100dvh` suit la hauteur RÉELLEMENT visible.
+   *
+   * La coquille applicative l'utilisait déjà ; les écrans hors coquille —
+   * connexion, inscription, MFA, acceptation de devis — étaient restés en
+   * arrière. Ce sont précisément les portes d'entrée.
+   */
+  const ECRANS = [
+    'login', 'register', 'mfa', 'devis-accepter', 'onboarding', 'membre-accepter',
+  ];
+
+  test.each(ECRANS)('%s n’utilise pas min-h-screen', (nom) => {
+    const source = readFileSync(
+      resolve(import.meta.dirname, `../pages/${nom}.tsx`),
+      'utf8',
+    );
+    expect(
+      source,
+      `${nom}.tsx utilise min-h-screen : sur un téléphone, la barre d'URL ` +
+        `pousse le bas du contenu hors de l'écran. Utiliser min-h-[100dvh].`,
+    ).not.toMatch(/min-h-screen/);
+  });
+});

@@ -58,7 +58,7 @@ export default function MembreAccepterPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="min-h-[100dvh] flex items-center justify-center bg-background p-4">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
@@ -90,8 +90,8 @@ export default function MembreAccepterPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-sm rounded-2xl border border-card-border bg-card p-8 shadow-xl">
+    <div className="min-h-[100dvh] bg-background flex items-center justify-center p-4">
+      <div className="w-full max-w-sm rounded-2xl border border-card-border bg-card p-6 sm:p-8 shadow-xl">
         <div className="flex flex-col items-center gap-3 mb-8 text-center">
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
             <UserPlus className="h-6 w-6" />
@@ -180,7 +180,7 @@ function StatusScreen({ icon, title, message, showLogin }: {
   icon: React.ReactNode; title: string; message: string; showLogin?: boolean;
 }) {
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+    <div className="min-h-[100dvh] bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-sm text-center space-y-4">
         <div className="flex justify-center">{icon}</div>
         <h1 className="text-xl font-bold">{title}</h1>
