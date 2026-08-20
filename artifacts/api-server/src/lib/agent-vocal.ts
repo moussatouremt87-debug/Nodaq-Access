@@ -19,7 +19,7 @@
  */
 import { eq } from "drizzle-orm";
 import { withTenant, appelsRelanceTable } from "@workspace/db";
-import { annonceOuverture } from "@nodaq/shared";
+import { annonceOuverture, toDateString } from "@nodaq/shared";
 import { loadCompanySettings } from "./seller-info.js";
 import { logger } from "./logger.js";
 
@@ -52,11 +52,23 @@ function configuration(): {
   };
 }
 
+/**
+ * Le montant dû, prêt à être prononcé. Formaté ICI, déterministe : la règle
+ * CHIFFRES n'autorise l'agent qu'à dire les chiffres qu'on lui fournit.
+ */
+function montantParle(cents: number): string {
+  if (cents <= 0) return "inconnu";
+  const euros = Math.floor(cents / 100);
+  const centimes = cents % 100;
+  return centimes > 0 ? `${euros},${String(centimes).padStart(2, "0")} euros` : `${euros} euros`;
+}
+
 export async function declencherAppelVocal(options: {
   tenantId: string;
   appelId: string;
   numero: string;
   jeton: string;
+  montantCents?: number;
 }): Promise<ResultatDeclenchement> {
   const config = configuration();
   if (!config) return { kind: "non_configure" };
@@ -84,6 +96,16 @@ export async function declencherAppelVocal(options: {
           // Le jeton de CET appel : les tools le présentent en Authorization,
           // et le serveur résout le tenant depuis la ligne (lot 6a).
           secret__jeton_appel: options.jeton,
+          // NOTRE horloge, le même `toDateString` que la validation de
+          // `record_promise` : sans elle l'agent ne peut pas transformer
+          // « dans 10 jours » en date réelle — constaté aux évals, où il a
+          // enregistré une date inventée (refusée par le serveur, mais
+          // l'appel aurait tourné en rond).
+          date_du_jour: toDateString(new Date()),
+          // Le fait « montant dû » : sans lui, la règle CHIFFRES rend l'agent
+          // muet sur sa propre facture. « inconnu » quand la campagne ne le
+          // porte pas — le prompt lui interdit alors d'avancer un montant.
+          montant_du: montantParle(options.montantCents ?? 0),
         },
       },
     }),

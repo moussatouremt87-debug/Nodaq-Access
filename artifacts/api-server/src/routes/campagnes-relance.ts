@@ -371,7 +371,10 @@ campagnesRelanceWriteRouter.post(
 
     const resultat = await withTenant(tenantId, async (tx) => {
       const [campagne] = await tx
-        .select({ statut: campagnesRelanceTable.statut })
+        .select({
+          statut: campagnesRelanceTable.statut,
+          appels: campagnesRelanceTable.appels,
+        })
         .from(campagnesRelanceTable)
         .where(eq(campagnesRelanceTable.id, campagneId));
 
@@ -386,7 +389,14 @@ campagnesRelanceWriteRouter.post(
         tentative: 1,
         statut: "PLANIFIE",
       });
-      return { kind: "ok" as const, appelId, jeton };
+
+      // Le montant dû part en variable dynamique : la règle CHIFFRES interdit
+      // à l'agent tout chiffre non fourni — sans ce fait, il ne peut même pas
+      // récapituler la facture qu'il relance (constaté aux évals).
+      const entrees = (campagne.appels ?? []) as { factureId?: string; montantCents?: number }[];
+      const montantCents = entrees.find((e) => e.factureId === parsed.data.factureId)?.montantCents ?? 0;
+
+      return { kind: "ok" as const, appelId, jeton, montantCents };
     });
 
     switch (resultat.kind) {
@@ -408,6 +418,7 @@ campagnesRelanceWriteRouter.post(
           appelId: resultat.appelId,
           numero: parsed.data.numero,
           jeton: resultat.jeton,
+          montantCents: resultat.montantCents,
         });
 
         if (declenchement.kind === "sans_raison_sociale") {

@@ -49,7 +49,13 @@ if (!toolsBaseUrl.startsWith("https://")) {
 }
 
 const { configurationAgent } = await import(resolve(RACINE, "voice-agent/agent.config.mjs"));
-const voulu = configurationAgent({ toolsBaseUrl, voiceId });
+const voulu = configurationAgent({
+  toolsBaseUrl,
+  voiceId,
+  // Optionnelle : absente, la plateforme garde son défaut. L'énumération des
+  // valeurs acceptées vit chez eux — leur message d'erreur la liste.
+  llm: process.env.VOICE_AGENT_LLM || undefined,
+});
 
 async function api(methode, chemin, corps) {
   const r = await fetch(`${base}${chemin}`, {
