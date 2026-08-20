@@ -33,6 +33,7 @@ import { fmtEUR } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { containerVariants, itemVariants } from '@/lib/motion-variants';
 import { useDictee } from '@/hooks/use-dictee';
+import { useBrouillon } from '@/hooks/use-brouillon';
 import { useVertical } from '@/hooks/use-vertical';
 
 const API = '/api';
@@ -68,7 +69,10 @@ export default function DevisDictee() {
   const { toast } = useToast();
   const { proposalWord } = useVertical();
   const [, navigate] = useLocation();
-  const [texte, setTexte] = useState('');
+  // Le texte dicté SURVIT à la fermeture de l'écran (4.20) : c'est le seul
+  // contenu du produit qu'on ne peut pas reconstituer — une facture se
+  // retrouve, une parole non enregistrée n'existe plus.
+  const [texte, setTexte, oublierBrouillon] = useBrouillon('devis-dictee');
   // La transcription s'AJOUTE au texte existant : on dicte souvent en
   // plusieurs fois, et écraser perdrait la première moitié.
   const dictee = useDictee((t) => setTexte((prec) => (prec ? `${prec} ${t}` : t)));
@@ -124,6 +128,9 @@ export default function DevisDictee() {
       return r.json();
     },
     onSuccess: () => {
+      // Le brouillon a produit un devis : le garder le ressusciterait au
+      // prochain passage sur l'écran, dans un contexte qui n'a plus rien à voir.
+      oublierBrouillon();
       toast({ title: proposalWord, description: 'Créé — à relire avant l’envoi.' });
       navigate('/devis');
     },
