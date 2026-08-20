@@ -1,7 +1,10 @@
 # ADR 001 — Téléphonie : Twilio Elastic SIP Trunking
 
 **Date :** 2026-08-18
-**Statut :** accepté, avec réserve
+**Statut :** accepté, avec réserve — **amendé par l'ADR 005 (20/08/2026)** :
+le trunk SIP décrit ici n'est plus dans le chemin d'exécution ; le numéro
+Twilio se branche désormais sur ElevenLabs Agents par leur intégration
+native. La réserve de souveraineté demeure, élargie par l'ADR 005.
 **Ticket :** 4.18 §6
 
 ## Contexte

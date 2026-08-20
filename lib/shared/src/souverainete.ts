@@ -91,25 +91,29 @@ export const SOUS_TRAITANTS: readonly SousTraitant[] = [
   },
   {
     id: "synthese-vocale",
-    role: "Synthèse vocale de l'agent de relance téléphonique",
+    // L'identifiant historique est CONSERVÉ (des attestations émises le citent) ;
+    // le rôle, lui, dit le périmètre réel depuis le ticket 4.18-bis : ElevenLabs
+    // n'est plus un moteur de synthèse derrière notre agent, c'est la plateforme
+    // qui EXÉCUTE l'agent.
+    role: "Exécution de l'agent vocal de relance : transport de l'audio, transcription, formulation des répliques et synthèse",
     nom: "ElevenLabs",
-    // ÉTATS-UNIS, et il faut le lire tel quel : c'est le seul sous-traitant du
-    // produit hors du périmètre souverain. L'arbitrage est documenté dans
-    // docs/adr/002-tts-elevenlabs.md — aucune solution auto-hébergée ne tenait
-    // à la fois le naturel et le temps réel en août 2026, et un agent à la voix
-    // robotique fait raccrocher.
+    // ÉTATS-UNIS, et il faut le lire tel quel : c'est le sous-traitant du
+    // produit hors du périmètre souverain, et son périmètre a GRANDI en
+    // août 2026. L'arbitrage initial est dans docs/adr/002-tts-elevenlabs.md ;
+    // l'élargissement à l'exécution complète — et ce qu'il coûte en garanties —
+    // dans docs/adr/005-execution-vocale-elevenlabs-agents.md.
     pays: "États-Unis",
     region: null,
     donnees:
-      "Le texte des répliques prononcées par l'agent. Contient des données personnelles des débiteurs : montants dus, dates de règlement, et selon les cas leur nom.",
+      "L'intégralité des conversations de relance : audio des deux interlocuteurs, transcription, répliques formulées. Contient des données personnelles des débiteurs : montants dus, dates de règlement, et selon les cas leur nom. Sans offre Enterprise (Zero Retention Mode), ces conversations sont conservées par le sous-traitant.",
     variableEnv: "VOICE_TTS_BASE_URL",
-    // PAS de `hoteAttendu`, délibérément. La synthèse n'est pas configurée chez
+    // PAS de `hoteAttendu`, délibérément. L'agent vocal n'est pas configuré chez
     // tous les tenants ; armer la comparaison ferait REFUSER l'attestation
-    // partout où elle est absente, alors que son absence n'est pas une
+    // partout où il est absent, alors que son absence n'est pas une
     // divergence — c'est un service non utilisé. L'hôte est donc constaté et
     // imprimé, comme pour l'envoi d'e-mails.
     source:
-      "Décision d'août 2026 (ADR 002). Réversible : le protocole TextToSpeech ne connaît aucun fournisseur, et la migration vers un moteur souverain est un changement d'adaptateur.",
+      "Décisions d'août 2026 (ADR 002 puis ADR 005). Réversible : la branche d'archive et la route de formulation conservée permettent de revenir à une exécution contrôlée.",
   },
   {
     id: "envoi-email",

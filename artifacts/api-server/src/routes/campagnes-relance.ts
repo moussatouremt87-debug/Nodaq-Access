@@ -21,6 +21,27 @@ import {
   listerCampagnes,
 } from "../lib/campagnes-relance.js";
 import { planifierAppel, estOpposeAuxAppels } from "../lib/appels-relance.js";
+
+/**
+ * La liste blanche des numéros de test (ticket 4.18-bis).
+ *
+ * Armée UNIQUEMENT quand le numéro appelant est américain (+1) : c'est le
+ * signe qu'on est en phase d'essai. Le jour où un numéro français porte les
+ * appels, la liste se désarme d'elle-même — et les protections de droit commun
+ * (opposition, campagne validée) restent seules en vigueur.
+ *
+ * Liste VIDE = aucun appel possible. C'est voulu : une liste blanche qui
+ * s'ouvre en grand quand on oublie de la remplir n'est pas une liste blanche.
+ */
+function numeroAutoriseEnTest(numero: string): boolean {
+  const appelant = process.env["TELEPHONY_CALLER_ID"] ?? "";
+  if (!appelant.startsWith("+1")) return true;
+  const autorises = (process.env["VOICE_TEST_NUMBERS"] ?? "")
+    .split(",")
+    .map((n) => n.trim())
+    .filter((n) => n.length > 0);
+  return autorises.includes(numero);
+}
 import { empreinte } from "../lib/prospection.js";
 
 export const campagnesRelanceReadRouter: IRouter = Router();
@@ -325,6 +346,19 @@ campagnesRelanceWriteRouter.post(
     }
     const campagneId = String(req.params["id"] ?? "");
     const tenantId = req.tenantId!;
+
+    if (!numeroAutoriseEnTest(parsed.data.numero)) {
+      // Tant que le numéro APPELANT est américain, seuls les numéros de
+      // l'équipe sont composables (ticket 4.18-bis, garde-fou fondateur). Un
+      // débiteur français appelé depuis un +1 prendrait l'appel pour une
+      // arnaque — et un essai qui « fuit » vers un vrai numéro serait bien
+      // pire qu'un test raté.
+      res.status(403).json({
+        error:
+          "Numéro hors liste blanche de test. Tant que l'appelant est un numéro américain, seuls les numéros déclarés dans VOICE_TEST_NUMBERS peuvent être composés.",
+      });
+      return;
+    }
 
     if (await estOpposeAuxAppels(tenantId, parsed.data.numero)) {
       // US-7 : l'opposition prime sur tout, y compris sur une campagne validée.

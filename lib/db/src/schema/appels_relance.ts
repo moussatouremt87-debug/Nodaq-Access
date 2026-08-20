@@ -56,6 +56,13 @@ export const appelsRelanceTable = pgTable(
      */
     jetonSha256: text("jeton_sha256"),
 
+    /**
+     * Identifiant de conversation chez la plateforme d'exécution vocale
+     * (ticket 4.18-bis). Écrit au déclenchement, lu par le webhook post-call
+     * pour raccrocher transcription, issue et coût à cette ligne.
+     */
+    conversationId: text("conversation_id"),
+
     /** Millièmes de centime — arrondir au centime fausserait la somme. */
     coutMillicents: integer("cout_millicents").notNull().default(0),
 

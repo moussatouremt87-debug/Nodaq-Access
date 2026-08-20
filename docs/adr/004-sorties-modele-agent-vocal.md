@@ -1,7 +1,10 @@
 # ADR 004 — Les sorties vers les modèles de l'agent vocal
 
 **Date :** 2026-08-19
-**Statut :** accepté
+**Statut :** accepté — **amendé par l'ADR 005 (20/08/2026)** : la
+formulation des répliques part elle aussi chez ElevenLabs. Le partage
+« ce qui engage reste derrière lib/llm » ne vaut plus pour l'agent vocal ;
+voir l'ADR 005 pour l'invariant de remplacement.
 **Ticket :** 4.18 §1
 **Amende :** règle 2 du `CLAUDE.md` (« une seule sortie vers les modèles »)
 

@@ -41,10 +41,12 @@ import {
   REGLE_RELANCE_DEFAUT,
   annonceOuverture,
   deciderEchelonnement,
+  toDateString,
   type MandatCampagne,
   type RegleRelance,
 } from "@nodaq/shared";
 import { loadCompanySettings } from "../lib/seller-info.js";
+import { poserOppositionAppel } from "../lib/appels-relance.js";
 
 const router: IRouter = Router();
 
@@ -194,6 +196,177 @@ router.post("/demarre", async (req, res): Promise<void> => {
       .where(eq(appelsRelanceTable.id, appelId)),
   );
   res.json({ ok: true });
+});
+
+// ── Les server tools du ticket 4.18-bis ────────────────────────────────────
+//
+// Depuis le pivot vers ElevenLabs Agents (ADR 005), c'est le LLM de la
+// plateforme qui formule les répliques. Ces routes sont donc LE point où
+// l'invariant applicable vit désormais : l'agent peut dire ce qu'il veut, il ne
+// peut rien ENREGISTRER que le serveur n'ait validé. Une promesse hors mandat
+// n'est pas « déconseillée » — elle est refusée ici, et le refus est testé.
+//
+// Les réponses sont des DONNÉES, jamais des répliques : le LLM formule. Et un
+// refus ne porte jamais le motif interne (règle du lot 6a — le modèle pourrait
+// le prononcer).
+
+/** L'entrée de campagne de CET appel : numéro et montant dû. */
+async function entreeDeLAppel(
+  tenantId: string,
+  campagneId: string,
+  appelId: string,
+): Promise<{ numero: string; montantCents: number } | null> {
+  return withTenant(tenantId, async (tx) => {
+    const [appel] = await tx
+      .select({ factureId: appelsRelanceTable.factureId })
+      .from(appelsRelanceTable)
+      .where(eq(appelsRelanceTable.id, appelId));
+
+    const [campagne] = await tx
+      .select({ appels: campagnesRelanceTable.appels })
+      .from(campagnesRelanceTable)
+      .where(eq(campagnesRelanceTable.id, campagneId));
+
+    const entrees = (campagne?.appels ?? []) as {
+      factureId?: string;
+      numero?: string;
+      montantCents?: number;
+    }[];
+    const entree = entrees.find((e) => e.factureId === appel?.factureId);
+    return entree?.numero
+      ? { numero: entree.numero, montantCents: entree.montantCents ?? 0 }
+      : null;
+  });
+}
+
+const CorpsPromesse = z.object({
+  montantCents: z.number().int().positive(),
+  /** Jour calendaire `YYYY-MM-DD` — une promesse se tient un jour, pas un instant. */
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  /**
+   * L'agent affirme que le débiteur a confirmé la reformulation (US-3). C'est
+   * une AFFIRMATION du LLM, pas une preuve — la preuve viendra de l'audit du
+   * transcript (lot D). Mais sans elle, rien n'est écrit du tout.
+   */
+  confirme: z.boolean(),
+});
+
+/**
+ * `record_promise` — la seule porte vers une promesse enregistrée.
+ *
+ * C'est ici que vit l'invariant depuis l'ADR 005 : quoi que le LLM ait dit au
+ * téléphone, une promesse hors mandat ou non confirmée n'existe pas pour le
+ * produit. Le refus rend une raison NEUTRE que l'agent peut relayer, jamais le
+ * réglage interne qui l'explique.
+ */
+router.post("/promesse", async (req, res): Promise<void> => {
+  const parsed = CorpsPromesse.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const { montantCents, date, confirme } = parsed.data;
+  const { appelId, campagneId } = req.appelVocal!;
+  const tenantId = req.tenantId!;
+
+  if (!confirme) {
+    // US-3 : pas de promesse sans reformulation confirmée. L'agent doit
+    // récapituler, entendre le « oui », PUIS rappeler ce tool.
+    res.json({
+      enregistree: false,
+      consigne: "Récapitule le montant et la date, obtiens une confirmation, puis réessaie.",
+    });
+    return;
+  }
+
+  const cadre = await cadreDeLAppel(tenantId, campagneId);
+  const entree = await entreeDeLAppel(tenantId, campagneId, appelId);
+  if (!cadre || !entree) {
+    res.status(409).json({ error: "Campagne introuvable ou sans mandat." });
+    return;
+  }
+
+  // La date promise doit tomber dans le retard que le MANDAT accepte — la
+  // version figée à la validation, pas la règle du jour (US-9). `toDateString`
+  // et non `toISOString` : un jour métier se compare en local.
+  const aujourdHui = toDateString(new Date());
+  const limite = new Date();
+  limite.setDate(limite.getDate() + cadre.mandat.retardMaxJours);
+  if (date < aujourdHui || date > toDateString(limite)) {
+    res.json({
+      enregistree: false,
+      consigne:
+        "Cette date ne peut pas être retenue. Propose une date plus proche, ou note la demande pour transmission.",
+    });
+    return;
+  }
+
+  // On ne promet pas PLUS que le montant dû : un trop-perçu enregistré ferait
+  // réclamer au débiteur une somme qu'il ne doit pas.
+  if (entree.montantCents > 0 && montantCents > entree.montantCents) {
+    res.json({
+      enregistree: false,
+      consigne: "Le montant dépasse ce qui est dû. Reprends le montant exact avec la personne.",
+    });
+    return;
+  }
+
+  await withTenant(tenantId, (tx) =>
+    tx
+      .update(appelsRelanceTable)
+      .set({ promesseMontantCents: montantCents, promesseDate: date, issue: "promise" })
+      .where(eq(appelsRelanceTable.id, appelId)),
+  );
+  res.json({ enregistree: true });
+});
+
+/** `record_dispute` — une contestation se note et se transmet, jamais ne se discute (US-4). */
+router.post("/contestation", async (req, res): Promise<void> => {
+  const { appelId } = req.appelVocal!;
+  await withTenant(req.tenantId!, (tx) =>
+    tx
+      .update(appelsRelanceTable)
+      .set({ issue: "dispute" })
+      .where(eq(appelsRelanceTable.id, appelId)),
+  );
+  res.json({ enregistree: true, consigne: "Prends congé poliment : quelqu'un reviendra vers la personne." });
+});
+
+/** `request_human_callback` — la demande d'un humain clôt l'échange (US-2). */
+router.post("/rappel-humain", async (req, res): Promise<void> => {
+  const { appelId } = req.appelVocal!;
+  await withTenant(req.tenantId!, (tx) =>
+    tx
+      .update(appelsRelanceTable)
+      .set({ issue: "callback_requested" })
+      .where(eq(appelsRelanceTable.id, appelId)),
+  );
+  res.json({ enregistree: true, consigne: "Confirme qu'un humain rappellera, puis prends congé." });
+});
+
+/**
+ * `set_do_not_call` — l'opposition est DÉFINITIVE et immédiate (US-7).
+ *
+ * Le numéro n'est pas demandé au LLM : il est lu depuis l'entrée de campagne de
+ * cet appel. Un agent qui pourrait opposer un numéro arbitraire pourrait aussi
+ * en radier un qu'on ne lui a pas confié.
+ */
+router.post("/opposition", async (req, res): Promise<void> => {
+  const { appelId, campagneId } = req.appelVocal!;
+  const tenantId = req.tenantId!;
+  const entree = await entreeDeLAppel(tenantId, campagneId, appelId);
+  if (!entree) {
+    res.status(409).json({ error: "Appel sans entrée de campagne." });
+    return;
+  }
+  await poserOppositionAppel(tenantId, entree.numero);
+  await withTenant(tenantId, (tx) =>
+    tx
+      .update(appelsRelanceTable)
+      .set({ issue: "refused" })
+      .where(eq(appelsRelanceTable.id, appelId)),
+  );
+  res.json({ enregistree: true, consigne: "Confirme que la personne ne sera plus appelée, puis prends congé." });
 });
 
 export default router;

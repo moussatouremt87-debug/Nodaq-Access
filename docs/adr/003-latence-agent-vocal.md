@@ -1,7 +1,9 @@
 # ADR 003 — Latence de l'agent vocal : remplir le blanc, un seul modèle en ligne
 
 **Date :** 2026-08-19
-**Statut :** accepté
+**Statut :** accepté — **rendu caduc par l'ADR 005 (20/08/2026)** : la
+latence d'exécution appartient désormais à la plateforme. Les mesures et
+le raisonnement restent la référence si la réversion est un jour exercée.
 **Ticket :** 4.18 §1
 
 ## Le problème
