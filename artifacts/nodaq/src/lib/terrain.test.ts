@@ -16,10 +16,27 @@
  *      de couleur le fasse tomber sans que personne ne s'en aperçoive.
  */
 import { describe, test, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const CSS = readFileSync(resolve(import.meta.dirname, '../index.css'), 'utf8');
+
+/** Toutes les sources `.tsx` du front, hors tests — lues, pas devinées. */
+function fichiersTsx(): Array<{ chemin: string; contenu: string }> {
+  const racine = resolve(import.meta.dirname, '..');
+  const sortie: Array<{ chemin: string; contenu: string }> = [];
+  const parcourir = (dossier: string) => {
+    for (const entree of readdirSync(dossier, { withFileTypes: true })) {
+      const chemin = resolve(dossier, entree.name);
+      if (entree.isDirectory()) parcourir(chemin);
+      else if (entree.name.endsWith('.tsx') && !entree.name.includes('.test.')) {
+        sortie.push({ chemin: chemin.replace(racine + '/', ''), contenu: readFileSync(chemin, 'utf8') });
+      }
+    }
+  };
+  parcourir(racine);
+  return sortie;
+}
 
 /** Seuil retenu pour un doigt ganté ou imprécis. */
 const CIBLE_MINIMALE_PX = 44;
@@ -236,5 +253,47 @@ describe('hauteur de fenêtre — `min-h-screen` ment sur un téléphone', () =>
       `${nom}.tsx utilise min-h-screen : sur un téléphone, la barre d'URL ` +
         `pousse le bas du contenu hors de l'écran. Utiliser min-h-[100dvh].`,
     ).not.toMatch(/min-h-screen/);
+  });
+});
+
+// ── e. Lisibilité en extérieur (ticket 4.20) ───────────────────────────────
+
+describe('lisibilité — le plein soleil, pas le bureau', () => {
+  /**
+   * Deux mesures, pour deux causes distinctes de disparition d'un texte
+   * dehors : sa TAILLE, et son OPACITÉ.
+   *
+   * L'opacité mérite un mot : le contraste vérifié plus haut porte sur les
+   * JETONS. Un `text-foreground/40` passe sous cette garantie — Tailwind
+   * mélange la couleur au fond, et le ratio calculé sur les jetons ne dit
+   * plus rien du résultat. C'est un trou qui ne se voit dans aucun test de
+   * couleur.
+   */
+  test('un plancher de taille existe pour les pointeurs imprécis', () => {
+    const bloc = blocPointeurGrossier();
+    expect(bloc, 'le bloc `pointer: coarse` a disparu').toBeTruthy();
+    // Les étiquettes de 10 et 11 px sont des repères qui portent du sens
+    // (« proposé », « à compléter ») : illisibles dehors, elles ne portent
+    // plus rien.
+    expect(bloc!, 'aucun plancher de taille de texte').toMatch(/font-size:\s*1[23]px/);
+  });
+
+  test('aucun texte ne descend sous 60 % d’opacité', () => {
+    const sources = fichiersTsx();
+    expect(sources.length, 'aucune source lue').toBeGreaterThan(20);
+
+    const faibles: string[] = [];
+    for (const { chemin, contenu } of sources) {
+      for (const m of contenu.matchAll(/text-[a-z-]+\/(\d{1,2})\b/g)) {
+        if (Number(m[1]) < 60) faibles.push(`${chemin} → ${m[0]}`);
+      }
+    }
+
+    expect(
+      faibles,
+      `Ces textes passent sous 60 % d'opacité : dehors, ils disparaissent. ` +
+        `Le contraste vérifié sur les jetons ne les couvre pas — l'opacité ` +
+        `s'applique après.\n  ${faibles.join('\n  ')}`,
+    ).toEqual([]);
   });
 });

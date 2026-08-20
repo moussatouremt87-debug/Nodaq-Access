@@ -81,7 +81,7 @@ function SectionTab({
             ? 'border-sidebar-primary text-sidebar-primary'
             : [
                 'border-transparent',
-                'text-sidebar-foreground/55',
+                'text-sidebar-foreground/60',
                 'hover:text-sidebar-foreground/90',
                 'hover:border-sidebar-foreground/20',
               ],
@@ -95,7 +95,7 @@ function SectionTab({
               open ? 'rotate-180' : '',
               sectionActive
                 ? 'text-sidebar-primary'
-                : 'text-sidebar-foreground/35',
+                : 'text-sidebar-foreground/60',
             )}
           />
         )}
@@ -131,7 +131,7 @@ function SectionTab({
                     'h-3.5 w-3.5 shrink-0',
                     active
                       ? 'text-sidebar-primary'
-                      : 'text-sidebar-foreground/45',
+                      : 'text-sidebar-foreground/60',
                   )}
                   strokeWidth={2}
                 />
