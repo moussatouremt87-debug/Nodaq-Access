@@ -96,6 +96,8 @@ describe("Connecteur bancaire single-exit guard — variables Bridge lues nulle 
     "BRIDGE_CLIENT_ID",
     "BRIDGE_CLIENT_SECRET",
     "BRIDGE_WEBHOOK_SECRET",
+    "BRIDGE_PAYMENT_CLIENT_ID",
+    "BRIDGE_PAYMENT_CLIENT_SECRET",
     "BRIDGE_PAYMENT_WEBHOOK_SECRET",
   ])(
     "env var '%s' must not appear outside lib/banque-agreee/src/client.ts",
