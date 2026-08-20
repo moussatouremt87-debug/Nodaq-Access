@@ -23,6 +23,12 @@ import { randomBytes } from "node:crypto";
 
 const FAKE_LLM_BASE = "http://fake-llm.internal.test";
 
+// Hôte factice de la plateforme vocale (ticket 4.18-bis). Les tests qui
+// veulent éprouver le DÉCLENCHEMENT posent ELEVENLABS_BASE_URL dessus ; les
+// autres laissent la variable absente et la route répond « non configuré » —
+// aucun test n'atteint jamais la vraie plateforme.
+export const FAKE_ELEVENLABS_BASE = "http://fake-elevenlabs.internal.test";
+
 // ── 1. Inject fake LLM env vars ───────────────────────────────────────────────
 process.env["LLM_BASE_URL"]      = FAKE_LLM_BASE;
 process.env["LLM_API_KEY"]       = "vitest-fake-key";
@@ -63,6 +69,21 @@ globalThis.fetch = async function patchedFetch(
       : input instanceof URL
         ? input.href
         : (input as Request).url;
+
+  if (url.startsWith(FAKE_ELEVENLABS_BASE)) {
+    if (url.endsWith("/v1/convai/twilio/outbound-call")) {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: "queued (simulateur vitest)",
+          conversation_id: "conv-vitest-1",
+          callSid: "CA-vitest-1",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }
+    return new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } });
+  }
 
   if (url.startsWith(FAKE_LLM_BASE)) {
     // STT endpoint — return a minimal valid transcription response.

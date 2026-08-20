@@ -21,6 +21,7 @@ import {
   listerCampagnes,
 } from "../lib/campagnes-relance.js";
 import { planifierAppel, estOpposeAuxAppels } from "../lib/appels-relance.js";
+import { declencherAppelVocal } from "../lib/agent-vocal.js";
 
 /**
  * La liste blanche des numéros de test (ticket 4.18-bis).
@@ -397,10 +398,42 @@ campagnesRelanceWriteRouter.post(
           error: "Cette campagne n'est pas validée : aucun appel ne peut être planifié.",
         });
         return;
-      case "ok":
+      case "ok": {
+        // Depuis le ticket 4.18-bis, planifier DÉCLENCHE : la plateforme
+        // compose, et le jeton part vers elle en variable dynamique secrète.
+        // Sans configuration (tests, déploiement sans agent vocal), l'appel
+        // reste PLANIFIE et la réponse le dit — rien n'échoue en silence.
+        const declenchement = await declencherAppelVocal({
+          tenantId,
+          appelId: resultat.appelId,
+          numero: parsed.data.numero,
+          jeton: resultat.jeton,
+        });
+
+        if (declenchement.kind === "sans_raison_sociale") {
+          res.status(409).json({
+            error:
+              "La raison sociale n'est pas renseignée : l'agent ne peut pas s'annoncer. Complétez le profil entreprise avant de lancer des appels.",
+          });
+          return;
+        }
+
         // Le jeton en clair ne repassera jamais par ici.
-        res.status(201).json({ appelId: resultat.appelId, jeton: resultat.jeton });
+        res.status(201).json({
+          appelId: resultat.appelId,
+          jeton: resultat.jeton,
+          declenche: declenchement.kind === "declenche",
+          conversationId:
+            declenchement.kind === "declenche" ? declenchement.conversationId : null,
+          ...(declenchement.kind === "non_configure"
+            ? { motif: "plateforme vocale non configurée — appel planifié sans être composé" }
+            : {}),
+          ...(declenchement.kind === "refuse_plateforme"
+            ? { motif: "la plateforme a refusé de composer — appel planifié, à relancer" }
+            : {}),
+        });
         return;
+      }
     }
   },
 );
