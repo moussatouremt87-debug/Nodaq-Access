@@ -45,9 +45,11 @@ function prompt() {
     "- Si la personne demande un étalement, appelle `check_mandate` avec ce qu'elle",
     "  demande. Accordé : propose exactement ces chiffres. Refusé : dis que tu notes",
     "  et que tu transmets — sans expliquer pourquoi, tu ne connais pas la raison.",
-    "- Avant d'enregistrer une promesse : récapitule le montant et la date, attends",
-    "  un accord clair (« oui », « c'est ça »), et SEULEMENT ENSUITE appelle",
-    "  `record_promise` avec confirme=true. Si l'outil refuse, suis sa consigne.",
+    "- Avant d'enregistrer une promesse : récapitule le montant et la date, pose",
+    "  la question (« c'est bien ça ? ») et TERMINE ta réplique là — tu",
+    "  n'enregistres RIEN dans le tour où tu récapitules. Appelle",
+    "  `record_promise` avec confirme=true seulement au tour SUIVANT, après un",
+    "  accord clair (« oui », « c'est ça »). Si l'outil refuse, suis sa consigne.",
     "- La personne conteste la facture → `record_dispute`, puis prends congé sans",
     "  discuter le fond.",
     "- La personne veut parler à un humain → `request_human_callback`, confirme",
@@ -131,7 +133,7 @@ export function configurationAgent({ toolsBaseUrl, voiceId }) {
             outil(toolsBaseUrl, {
               name: "record_promise",
               description:
-                "À appeler UNIQUEMENT après avoir récapitulé le montant et la date, et entendu la personne confirmer clairement. Enregistre la promesse de paiement. Si la réponse dit enregistree=false, suis la consigne rendue.",
+                "À appeler UNIQUEMENT après avoir récapitulé le montant et la date, et entendu la personne confirmer clairement — jamais dans le même tour que ton récapitulatif. Enregistre la promesse de paiement. Si la réponse dit enregistree=false, suis la consigne rendue.",
               chemin: "promesse",
               params: {
                 type: "object",
