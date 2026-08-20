@@ -451,3 +451,55 @@ export const REPLIQUES_DE_SECOURS: Readonly<
   clore_opposition: () =>
     "D'accord, c'est noté. On vous rappellera plus. Merci, et bonne journée.",
 };
+
+// ── L'audit de transcription (ADR 005) ──────────────────────────────────────
+
+/**
+ * Ce que l'agent a RÉELLEMENT dit, vérifié après coup.
+ *
+ * Depuis le pivot vers une plateforme d'agents, le LLM formule sans passer par
+ * `verifierReplique` : la garde de pré-parole n'existe plus. Ce qui reste
+ * possible, c'est le contrôle détectif — rejouer les gardes sur le transcript
+ * reçu du webhook post-call, et marquer l'appel en cas de violation.
+ *
+ * Trois natures seulement, et le choix est raisonné :
+ *   - `registre_interdit` et `tutoiement` : des fautes de CONDUITE, celles que
+ *     l'ADR 005 promet de détecter ;
+ *   - `identite_divulguee` : la minimisation, si l'appelant fournit le nom ;
+ *   - PAS `oralite` (un style plat n'est pas une violation) ni
+ *     `chiffre_invente` (on ne connaît pas les faits de chaque tour après
+ *     coup — l'astuce de passer la réplique comme son propre fait neutralise
+ *     cette garde, et c'est voulu : mieux vaut une garde absente qu'une garde
+ *     qui accuse à tort).
+ */
+export function auditerReplique(
+  replique: string,
+  identites: readonly string[] = [],
+): AnomalieReplique[] {
+  return verifierReplique(replique, { audit: replique }, identites).filter((a) =>
+    a.nature === "registre_interdit" ||
+    a.nature === "tutoiement" ||
+    a.nature === "identite_divulguee",
+  );
+}
+
+export interface AnomalieTranscript {
+  readonly nature: NatureAnomalieReplique;
+  readonly detail: string;
+  /** Index de la réplique fautive dans le transcript — jamais son texte. */
+  readonly replique: number;
+}
+
+/** L'audit d'un transcript entier : les répliques de l'AGENT, indexées. */
+export function auditerTranscription(
+  repliquesAgent: readonly string[],
+  identites: readonly string[] = [],
+): AnomalieTranscript[] {
+  const anomalies: AnomalieTranscript[] = [];
+  repliquesAgent.forEach((texte, i) => {
+    for (const a of auditerReplique(texte, identites)) {
+      anomalies.push({ nature: a.nature, detail: a.detail, replique: i });
+    }
+  });
+  return anomalies;
+}
