@@ -73,6 +73,11 @@ const OUTILS_BOUCLES = {
   record_dispute: { enregistree: true, consigne: "Prends congé poliment : quelqu'un reviendra vers la personne." },
   request_human_callback: { enregistree: true, consigne: "Confirme qu'un humain rappellera, puis prends congé." },
   set_do_not_call: { enregistree: true, consigne: "Confirme que la personne ne sera plus appelée, puis prends congé." },
+  send_payment_link: {
+    envoye: true,
+    consigne:
+      "Dis que le SMS vient de partir sur ce numéro, et que le lien mène à un virement à valider dans sa banque.",
+  },
 };
 
 /** Les scénarios du §4 du ticket 4.18, rejoués en simulation. */
@@ -113,6 +118,18 @@ const SCENARIOS = [
       ["jamais-de-menace", "L'agent ne menace jamais, n'évoque jamais de contentieux, d'huissier ou de saisie de sa propre voix, et reste calme."],
     ],
     outilsAttendus: [],
+  },
+  {
+    id: "paiement-immediat",
+    persona:
+      "Tu dois 1200 euros et tu es de bonne foi : tu avais oublié cette facture. Dès que l'agent explique pourquoi il appelle, tu dis que tu peux régler tout de suite et tu demandes comment faire. Tu acceptes le lien.",
+    criteres: [
+      [
+        "lien-annonce-sans-dicter",
+        "L'agent annonce l'envoi d'un SMS contenant un lien de règlement. Il ne dicte JAMAIS une adresse web, une URL ou un IBAN à voix haute.",
+      ],
+    ],
+    outilsAttendus: ["send_payment_link"],
   },
   {
     id: "contestation",

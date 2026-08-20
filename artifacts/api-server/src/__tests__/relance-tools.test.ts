@@ -297,8 +297,49 @@ describe("c — liste blanche tant que l'appelant est américain", () => {
 
 describe("d — sans jeton d'appel, rien", () => {
   test("chaque tool exige le jeton", async () => {
-    for (const chemin of ["promesse", "contestation", "rappel-humain", "opposition"]) {
+    for (const chemin of [
+      "promesse",
+      "contestation",
+      "rappel-humain",
+      "opposition",
+      "lien-paiement",
+    ]) {
       await request(app).post(`/api/relance/appel/${chemin}`).send({}).expect(401);
     }
+  });
+});
+
+// ── e. Le lien de paiement (4.19) ──────────────────────────────────────────
+
+describe("e — send_payment_link ne dit jamais POURQUOI il refuse", () => {
+  test("hors mandat : refus poli, aucun motif interne dans la réponse", async () => {
+    // La règle de ce fichier ferme `lienPaiementAutorise` : l'outil doit
+    // refuser. Ce que le test protège n'est pas le refus lui-même (couvert par
+    // lien-paiement.test.ts) mais ce que l'agent PRONONCERA — un motif dans la
+    // consigne devient une phrase au téléphone.
+    const { jeton } = await appelPlanifie();
+    const r = await outil(jeton, "lien-paiement").expect(200);
+
+    expect(r.body.envoye).toBe(false);
+    expect(r.body.consigne).toBeTruthy();
+    // « règle » est cherché avec une frontière de mot : sans elle, le motif
+    // attrapait « règlement » — mot parfaitement légitime dans la bouche de
+    // l'agent, et c'est le premier faux positif qu'a produit ce test.
+    expect(JSON.stringify(r.body)).not.toMatch(
+      /\bmandat\b|\brègles?\b|iban|bridge|\bbanque\b|autoris|configur|réglage/i,
+    );
+  });
+
+  test("l'outil n'accepte AUCUN paramètre — un corps arbitraire ne change rien", async () => {
+    // Le point : un modèle qui tenterait de dicter un montant ou un numéro ne
+    // doit avoir aucune prise. La route ne lit pas le corps du tout.
+    const { jeton } = await appelPlanifie();
+    const r = await outil(jeton, "lien-paiement", {
+      montantCents: 999_999_00,
+      numero: "+33699999999",
+    }).expect(200);
+
+    expect(r.body.envoye).toBe(false);
+    expect(JSON.stringify(r.body)).not.toMatch(/999/);
   });
 });

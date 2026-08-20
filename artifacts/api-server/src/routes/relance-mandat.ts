@@ -47,6 +47,7 @@ import {
 } from "@nodaq/shared";
 import { loadCompanySettings } from "../lib/seller-info.js";
 import { poserOppositionAppel } from "../lib/appels-relance.js";
+import { emettreLienPaiement } from "../lib/lien-paiement.js";
 
 const router: IRouter = Router();
 
@@ -367,6 +368,53 @@ router.post("/opposition", async (req, res): Promise<void> => {
       .where(eq(appelsRelanceTable.id, appelId)),
   );
   res.json({ enregistree: true, consigne: "Confirme que la personne ne sera plus appelée, puis prends congé." });
+});
+
+/**
+ * `send_payment_link` — le lien de paiement, envoyé pendant l'appel (4.19).
+ *
+ * L'outil ne prend AUCUN paramètre, et c'est le point : montant, destinataire
+ * et bénéficiaire sont lus en base depuis l'appel en cours. Un outil qui
+ * accepterait un montant laisserait le modèle fixer une somme à encaisser —
+ * exactement ce que la règle 3 interdit.
+ *
+ * Les réponses sont des DONNÉES, jamais des répliques, et un refus ne porte
+ * jamais son motif interne : « hors mandat » deviendrait « je n'ai pas le
+ * droit, c'est bloqué dans les réglages » dans la bouche de l'agent.
+ */
+router.post("/lien-paiement", async (req, res): Promise<void> => {
+  const { appelId } = req.appelVocal!;
+  const resultat = await emettreLienPaiement({ tenantId: req.tenantId!, appelId });
+
+  switch (resultat.kind) {
+    case "envoye":
+      res.json({
+        envoye: true,
+        consigne:
+          "Dis que le SMS vient de partir sur ce numéro, et que le lien mène à un virement à valider dans sa banque.",
+      });
+      return;
+
+    case "sms_non_parti":
+      // Le lien existe mais n'a pas pu être remis : ne PAS le faire annoncer
+      // comme envoyé. Le dirigeant le renverra depuis le cockpit.
+      res.json({
+        envoye: false,
+        consigne: "Dis que l'envoi n'a pas abouti, et que quelqu'un le renverra. N'insiste pas.",
+      });
+      return;
+
+    default:
+      // Tous les autres cas — hors mandat, sans IBAN, numéro non autorisé,
+      // montant inconnu, refus de la banque, connecteur non configuré — se
+      // présentent à l'agent de la MÊME façon. Il n'a pas à savoir pourquoi,
+      // et surtout pas à le dire.
+      res.json({
+        envoye: false,
+        consigne: "Dis que tu peux pas envoyer de lien maintenant, et propose de noter un règlement.",
+      });
+      return;
+  }
 });
 
 export default router;
