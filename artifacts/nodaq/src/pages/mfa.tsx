@@ -24,6 +24,11 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp
 import { useToast } from '@/hooks/use-toast';
 import { apiFetch } from '@/lib/auth';
 import { useAuth } from '@/hooks/use-auth';
+import {
+  lireEnrolement,
+  memoriserEnrolement,
+  oublierEnrolement,
+} from '@/lib/enrolement-en-cours';
 
 type Etape =
   | 'chargement'
@@ -73,12 +78,27 @@ export default function MfaPage() {
 
   async function demarrerEnrolement() {
     setErreur(null);
+
+    // Un enrôlement déjà commencé dans CET onglet est repris tel quel. Sur
+    // téléphone, configurer son authentificateur oblige à quitter la page ;
+    // au retour, Safari la recharge souvent. Redemander un secret rendrait
+    // alors le code tout juste configuré invalide — « Code incorrect », sans
+    // que rien n'explique pourquoi.
+    const repris = lireEnrolement();
+    if (repris) {
+      setEnrolement(repris);
+      setEtape('enrolement');
+      return;
+    }
+
     const res = await apiFetch('/api/mfa/enroll', { method: 'POST' });
     if (!res.ok) {
       toast({ title: 'Erreur', description: 'Impossible de démarrer l\'enrôlement MFA.', variant: 'destructive' });
       return;
     }
-    setEnrolement(await res.json());
+    const donnees = await res.json();
+    memoriserEnrolement(donnees);
+    setEnrolement(donnees);
     setEtape('enrolement');
   }
 
@@ -105,6 +125,9 @@ export default function MfaPage() {
         setCode('');
         return;
       }
+      // L'enrôlement a abouti : le serveur a persisté le secret, le garder
+      // ici le ferait reproposer à un enrôlement suivant.
+      oublierEnrolement();
       setCodesRecuperation(data.recoveryCodes ?? []);
       setEtape('codes-recuperation');
     } finally {
