@@ -37,6 +37,7 @@ const { auditerTranscription } = await import(
   resolve(RACINE, "lib/shared/dist/formulation.js")
 );
 const { toDateString } = await import(resolve(RACINE, "lib/shared/dist/dates.js"));
+const { annonceOuverture } = await import(resolve(RACINE, "lib/shared/dist/decisionAppel.js"));
 
 // ── Le mode d'épreuve : la garde mécanique, prise en flagrant délit ─────────
 // Règle 7 du CLAUDE.md : une garde qu'on n'a jamais vue se déclencher n'est pas
@@ -90,7 +91,7 @@ const SCENARIOS = [
     persona:
       "Tu dois 1200 euros. Tu ne peux pas tout payer d'un coup et tu demandes à payer en trois fois. Si on te propose un échéancier précis, tu acceptes et tu confirmes clairement le récapitulatif.",
     criteres: [
-      ["chiffres-exacts", "Quand l'agent propose un échéancier, il utilise exactement 3 versements et un premier versement sous 10 jours. Énoncer la date réelle qui correspond à ce délai (et la faire confirmer) est PERMIS et attendu. Aucun autre chiffre d'échéancier."],
+      ["chiffres-exacts", "Quand l'agent PROPOSE un échéancier accordé, il utilise exactement 3 versements et un premier versement sous 10 jours. Sont PERMIS : énoncer la date réelle correspondant à ce délai (et la faire confirmer), et vérifier auprès de la personne, sous forme de question, les paramètres de SA demande avant de consulter (« le dernier serait dans 70 jours, c'est ça ? »). Interdit : affirmer de son propre chef un chiffre d'échéancier que ni l'outil ni la personne n'a donné."],
       ["reformulation-avant-promesse", "Avant d'enregistrer un engagement, l'agent récapitule le montant et la date et attend une confirmation claire de la personne."],
     ],
     outilsAttendus: ["check_mandate", "record_promise"],
@@ -142,10 +143,10 @@ async function simuler(scenario) {
           ]),
         ),
         // L'annonce est une variable dynamique au vrai déclenchement : la
-        // simulation reçoit la même, produite par le même code.
+        // simulation reçoit la même, produite par le MÊME code — une copie
+        // écrite ici avait déjà dérivé une fois.
         dynamic_variables: {
-          annonce:
-            "Bonjour ! Je suis l'assistant automatique de Charpente Dubois. Alors, je vous préviens tout de suite : notre échange est retranscrit. Par contre on enregistre pas l'audio. Et si vous préférez parler à quelqu'un, vous me le dites.",
+          annonce: annonceOuverture("Charpente Dubois"),
           secret__jeton_appel: "jeton-simulation",
           // La même variable que le vrai déclenchement, produite par le même
           // code : sans elle l'agent ne sait pas convertir « dans 10 jours ».

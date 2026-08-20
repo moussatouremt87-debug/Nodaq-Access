@@ -247,11 +247,21 @@ export function annonceOuverture(nomEntreprise: string): string {
   // négation sans « ne », « on » plutôt que « nous ». L'annonce est la première
   // chose entendue — si elle sonne écrite, tout ce qui suit sonne écrit avec
   // elle, quel que soit le soin mis à la suite.
+  // L'OBJET d'abord, le légal ensuite — décision fondateur du 2026-08-20 :
+  // l'ancienne version ouvrait sur la transcription, et on raccroche pendant
+  // une annonce dont on ne sait pas pourquoi elle appelle. La personne sait
+  // désormais en trois secondes QUI appelle et POURQUOI ; « assistant
+  // automatique » (AI Act), la transcription et la porte de sortie restent
+  // dits, juste après. La mention « on enregistre pas l'audio » saute — un
+  // plus, pas une obligation, et l'ouverture se paie en secondes.
+  //
+  // L'entreprise est nommée dans sa propre phrase courte : une raison sociale
+  // longue ne doit pas pousser la phrase au-delà des quinze mots d'oralité.
   return (
-    `Bonjour ! Je suis l'assistant automatique de ${nomEntreprise}. ` +
-    `Alors, je vous préviens tout de suite : notre échange est retranscrit. ` +
-    `Par contre on enregistre pas l'audio. ` +
-    `Et si vous préférez parler à quelqu'un, vous me le dites.`
+    `Bonjour ! J'vous appelle de la part de ${nomEntreprise}. ` +
+    `C'est pour faire le point sur une facture. ` +
+    `Alors je précise : je suis leur assistant automatique, et notre échange est retranscrit. ` +
+    `Si vous préférez parler à quelqu'un, vous me le dites.`
   );
 }
 
