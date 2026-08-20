@@ -17,8 +17,15 @@
  *
  * 3. IDEMPOTENCE PAR LE MOTEUR. Bridge rejoue, et `paiements` est append-only :
  *    un doublon y écrirait un second encaissement qui n'a jamais eu lieu.
- *    L'index unique sur `bridge_transaction_id` le refuse — une garantie du
- *    moteur, pas une intention du code.
+ *    C'est la mise à jour conditionnelle (`WHERE statut <> 'PAYE'`) qui
+ *    arbitre — atomique, donc juste même sur deux webhooks concurrents.
+ *
+ *    La première version de cette route s'en remettait à l'index unique sur
+ *    `bridge_transaction_id`. Une injection a montré que c'était faux :
+ *    réécrire une ligne avec la valeur qu'elle porte déjà ne viole aucune
+ *    contrainte, et le doublon passait. L'index reste utile pour un AUTRE cas
+ *    — deux liens distincts revendiquant la même transaction — mais il ne
+ *    protège pas le rejeu.
  *
  * ── Ce qu'on n'écrit PAS ──────────────────────────────────────────────────
  * L'issue de l'appel n'est pas touchée. `ISSUES_APPEL` ne contient que
@@ -34,7 +41,7 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { db, withTenant, liensPaiementTable, paiementsTable } from "@workspace/db";
-import { sql, eq } from "drizzle-orm";
+import { sql, eq, and, ne } from "drizzle-orm";
 import { secretWebhookPaiement, verifierSignatureWebhook } from "@nodaq/banque-agreee";
 import { toDateString } from "@nodaq/shared";
 import { logger } from "../lib/logger.js";
@@ -139,46 +146,49 @@ paiementWebhookRouter.post("/webhooks/paiement", async (req, res): Promise<void>
   }
 
   if (lien.statut === "PAYE") {
-    // Rejeu : déjà encaissé. Rien à écrire, et surtout pas une seconde ligne
-    // dans `paiements`.
+    // Sortie rapide sur le rejeu le plus courant : elle évite d'ouvrir une
+    // transaction pour rien. Ce n'est PAS la garde — la garde est le `WHERE`
+    // ci-dessous, et l'épreuve le montre : retirer ce test-ci ne fait échouer
+    // aucun test.
     res.json({ traite: true, deja: true });
     return;
   }
 
   const transactionId = content.payment_transaction_id ?? content.payment_link_id ?? reference;
 
-  try {
-    await withTenant(lien.tenantId, async (tx) => {
-      // L'écriture comptable et le marquage du lien dans la MÊME transaction :
-      // un encaissement enregistré sans que le lien passe en PAYE se ferait
-      // ré-encaisser au rejeu suivant.
-      await tx.insert(paiementsTable).values({
-        tenantId: lien.tenantId,
-        clientId: lien.clientId,
-        factureId: lien.factureId,
-        date: toDateString(new Date()),
-        montantCents: lien.montantCents,
-        sens: "ENCAISSEMENT",
-        moyen: "VIREMENT",
-        nature: "SOLDE",
-        reference: `lien-paiement:${lien.id}`,
-      });
+  const encaisse = await withTenant(lien.tenantId, async (tx) => {
+    // ── LA garde d'idempotence, tenue par le MOTEUR ────────────────────────
+    // Le marquage passe EN PREMIER, conditionné à `statut <> 'PAYE'` : c'est
+    // la mise à jour elle-même qui arbitre. Deux webhooks concurrents pour le
+    // même lien ? Un seul verra une ligne modifiée, l'autre zéro, et il
+    // n'écrira rien.
+    const marques = await tx
+      .update(liensPaiementTable)
+      .set({ statut: "PAYE", payeLe: new Date(), bridgeTransactionId: transactionId })
+      .where(and(eq(liensPaiementTable.id, lien.id), ne(liensPaiementTable.statut, "PAYE")))
+      .returning({ id: liensPaiementTable.id });
 
-      await tx
-        .update(liensPaiementTable)
-        .set({ statut: "PAYE", payeLe: new Date(), bridgeTransactionId: transactionId })
-        .where(eq(liensPaiementTable.id, lien.id));
+    if (marques.length === 0) return false;
+
+    // Même transaction : un encaissement écrit sans que le lien passe en PAYE
+    // se ferait ré-encaisser au rejeu suivant.
+    await tx.insert(paiementsTable).values({
+      tenantId: lien.tenantId,
+      clientId: lien.clientId,
+      factureId: lien.factureId,
+      date: toDateString(new Date()),
+      montantCents: lien.montantCents,
+      sens: "ENCAISSEMENT",
+      moyen: "VIREMENT",
+      nature: "SOLDE",
+      reference: `lien-paiement:${lien.id}`,
     });
-  } catch (err) {
-    // L'index unique sur `bridge_transaction_id` a refusé : c'est un rejeu
-    // concurrent, pas une panne. On accuse réception — réessayer produirait
-    // le même refus.
-    const code = (err as { code?: string }).code;
-    if (code === "23505") {
-      res.json({ traite: true, deja: true });
-      return;
-    }
-    throw err;
+    return true;
+  });
+
+  if (!encaisse) {
+    res.json({ traite: true, deja: true });
+    return;
   }
 
   logger.info({ type }, "[paiement] encaissement enregistré");
