@@ -62,6 +62,12 @@ const outil = (jeton: string, chemin: string, corps: Record<string, unknown> = {
     .send(corps);
 
 beforeAll(async () => {
+  // Le test POSE ses deux variables au lieu d'hériter du shell. La CI n'a pas
+  // de `.env`, et la première exécution y a échoué exactement comme le
+  // CLAUDE.md le prévoit : « un vert obtenu avec une variable d'environnement
+  // locale n'est pas un vert ». Sans appelant posé, la liste blanche se
+  // désarme — à juste titre — et les 403 attendus deviennent des 201.
+  process.env["TELEPHONY_CALLER_ID"] = "+15555550100";
   process.env["VOICE_TEST_NUMBERS"] = NUMERO_TEST;
 
   const email = `tools-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@test.nodaq`;
