@@ -33,7 +33,7 @@ type Etape =
   | 'recuperation'
   | 'parametres';
 
-interface EtatEnrolement { secret: string; qrDataUri: string }
+interface EtatEnrolement { secret: string; qrDataUri: string; otpauthUri: string }
 interface EtatStatut { enabled: boolean; recoveryCodesRemaining?: number }
 
 export default function MfaPage() {
@@ -270,14 +270,38 @@ function EnrolementEcran({ enrolement, code, setCode, erreur, envoi, onSubmit }:
         description="Obligatoire pour les comptes ayant accès aux données financières."
       />
       <div className="flex flex-col items-center gap-4">
+        {/* ── Sur un téléphone, le QR code ne sert à RIEN (ticket 4.20) ─────
+            On ne photographie pas un code affiché sur l'écran qu'on tient.
+            L'appui sur l'URI `otpauth://` ouvre directement Google
+            Authenticator, 1Password ou l'application installée — c'est le
+            chemin normal en mobilité, et il passe donc AVANT le QR.
+
+            Le lien s'affiche partout, pas seulement sous un point de rupture :
+            un poste de bureau peut aussi avoir un gestionnaire de mots de
+            passe installé, et l'appui y fonctionne tout autant. */}
+        <a
+          href={enrolement.otpauthUri}
+          className="flex w-full items-center justify-center gap-2 rounded-md border border-primary bg-primary/10 px-4 py-3 text-sm font-medium text-primary"
+          data-testid="lien-application-authentification"
+        >
+          <ShieldAlert className="h-4 w-4 shrink-0" />
+          Ouvrir mon application d’authentification
+        </a>
+
+        <div className="flex w-full items-center gap-3 text-[11px] uppercase tracking-wider text-muted-foreground">
+          <span className="h-px flex-1 bg-border" />
+          ou
+          <span className="h-px flex-1 bg-border" />
+        </div>
+
         <img
           src={enrolement.qrDataUri}
           alt="QR code à scanner avec votre application d'authentification"
           className="rounded-lg border border-card-border h-44 w-44"
         />
         <p className="text-xs text-muted-foreground text-center max-w-xs">
-          Scannez ce code avec Google Authenticator, 1Password ou une application
-          équivalente. Impossible de scanner ?{' '}
+          Scannez ce code depuis un AUTRE appareil. Ni l’un ni l’autre ?{' '}
+          Saisissez cette clé à la main :{' '}
           <span className="font-mono-nums select-all">{enrolement.secret}</span>
         </p>
         <form onSubmit={onSubmit} className="w-full space-y-4 mt-2">

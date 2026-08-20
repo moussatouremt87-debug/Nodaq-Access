@@ -43,7 +43,15 @@ router.post("/mfa/enroll", async (req, res): Promise<void> => {
   const { secret, otpauthUri } = genererSecretProvisoire(email);
   const qrDataUri = await genererQrDataUri(otpauthUri);
 
-  res.json({ secret, qrDataUri });
+  // `otpauthUri` part AUSSI vers le navigateur (ticket 4.20) : sur un
+  // téléphone, un QR code affiché sur l'écran qu'on tient est inutilisable —
+  // on ne se photographie pas soi-même. L'URI, elle, s'ouvre d'un appui dans
+  // l'application d'authentification.
+  //
+  // Aucun secret supplémentaire n'est exposé : l'URI contient exactement le
+  // `secret` déjà présent dans cette réponse, et le QR l'encode depuis
+  // toujours. C'est la même donnée sous une troisième forme.
+  res.json({ secret, qrDataUri, otpauthUri });
 });
 
 // ── POST /mfa/verify ─────────────────────────────────────────────────────
