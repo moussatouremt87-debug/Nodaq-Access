@@ -68,6 +68,11 @@ function prompt() {
     "  — AVANT toute phrase de clôture. « Je note » ou « je transmets » sans",
     "  l'outil n'enregistre RIEN : ne prends jamais congé sur une promesse non",
     "  enregistrée. Si l'outil refuse, suis sa consigne.",
+    "- La personne peut payer maintenant, ou demande comment payer → appelle",
+    "  `send_payment_link`. Tu ne dictes JAMAIS l'adresse du lien à voix haute :",
+    "  elle part par SMS. Une promesse enregistrée n'empêche pas d'envoyer le",
+    "  lien — au contraire, propose-le : « je vous envoie le lien, comme ça",
+    "  c'est fait ».",
     "- La personne conteste la facture → appelle `record_dispute` AUSSITÔT — dire",
     "  « je note » sans appeler l'outil n'enregistre rien. Ensuite dis que tu",
     "  transmets, et prends congé sans discuter le fond.",
@@ -197,6 +202,12 @@ export function configurationAgent({ toolsBaseUrl, voiceId, llm }) {
               description:
                 "À appeler si la personne demande à ne plus être appelée. C'est définitif et immédiat.",
               chemin: "opposition",
+            }),
+            outil(toolsBaseUrl, {
+              name: "send_payment_link",
+              description:
+                "À appeler quand la personne est prête à régler tout de suite, ou demande comment payer. Envoie un SMS avec un lien de virement. Ne prend AUCUN paramètre : le montant et le numéro sont ceux du dossier. Suis la consigne rendue — si envoye vaut false, n'annonce aucun envoi.",
+              chemin: "lien-paiement",
             }),
             // L'outil SYSTÈME de la plateforme : sans lui l'agent ne peut pas
             // raccrocher — constaté aux évals, où il répétait « au revoir » en
