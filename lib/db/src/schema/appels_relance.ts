@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, integer, date, index } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, uuid, integer, date, index, jsonb } from "drizzle-orm/pg-core";
 import { tenantsTable } from "./tenants";
 import { campagnesRelanceTable } from "./campagnes_relance";
 
@@ -62,6 +62,16 @@ export const appelsRelanceTable = pgTable(
      * pour raccrocher transcription, issue et coût à cette ligne.
      */
     conversationId: text("conversation_id"),
+
+    /** Durée réelle rapportée par la plateforme — l'assiette du pricing v2. */
+    dureeSecondes: integer("duree_secondes"),
+
+    /**
+     * L'audit du transcript (ADR 005) : ce que l'agent a RÉELLEMENT dit,
+     * vérifié après coup contre les gardes. NULL = pas encore audité —
+     * différent d'audité et propre.
+     */
+    auditTranscript: jsonb("audit_transcript"),
 
     /** Millièmes de centime — arrondir au centime fausserait la somme. */
     coutMillicents: integer("cout_millicents").notNull().default(0),
