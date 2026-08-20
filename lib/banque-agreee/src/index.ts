@@ -1,5 +1,6 @@
 export {
   getConfig,
+  configPaiement,
   secretWebhookPaiement,
   creerUtilisateur,
   creerSessionConnexion,

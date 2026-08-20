@@ -80,6 +80,42 @@ export function secretWebhookPaiement(): string | null {
   return process.env["BRIDGE_PAYMENT_WEBHOOK_SECRET"] || null;
 }
 
+/**
+ * Identité de l'app qui porte l'INITIATION DE PAIEMENT.
+ *
+ * Deux montages sont légitimes, et le choix appartient à l'exploitant :
+ *
+ *   — « Bank payment » activé sur l'app d'agrégation : rien à déclarer, les
+ *     identifiants de `getConfig()` conviennent ;
+ *   — une app SÉPARÉE (typiquement un bac à sable, dont la doc Bridge dit que
+ *     rien n'y est transférable vers la production) : ses identifiants vivent
+ *     alors dans `BRIDGE_PAYMENT_CLIENT_ID` / `_SECRET`.
+ *
+ * Ce n'est PAS une valeur par défaut au sens de la règle 2 : il n'y a pas de
+ * secret inventé ici. Il y a un montage à une app et un montage à deux, et on
+ * lit lequel l'exploitant a déclaré. Les deux variables vont ENSEMBLE — n'en
+ * poser qu'une est une erreur de configuration, pas un montage : on lève,
+ * plutôt que d'aller chercher la moitié manquante dans l'autre app.
+ */
+export function configPaiement(): BanqueConfig {
+  const clientId = process.env["BRIDGE_PAYMENT_CLIENT_ID"];
+  const clientSecret = process.env["BRIDGE_PAYMENT_CLIENT_SECRET"];
+
+  if (!clientId && !clientSecret) return getConfig();
+
+  if (!clientId) throw new BanqueConfigError("BRIDGE_PAYMENT_CLIENT_ID");
+  if (!clientSecret) throw new BanqueConfigError("BRIDGE_PAYMENT_CLIENT_SECRET");
+
+  return {
+    clientId,
+    clientSecret,
+    // Le secret de webhook de `BanqueConfig` sert à l'agrégation ; celui du
+    // paiement se lit par `secretWebhookPaiement()`, et la route de paiement
+    // n'utilise que celui-là. On ne recopie donc rien ici.
+    webhookSecret: "",
+  };
+}
+
 function appHeaders(config: BanqueConfig): Record<string, string> {
   return {
     "Bridge-Version": BRIDGE_VERSION,

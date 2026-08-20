@@ -31,7 +31,7 @@ import {
   appelsRelanceTable,
   campagnesRelanceTable,
 } from "@workspace/db";
-import { creerLienPaiement, getConfig, BanqueConfigError } from "@nodaq/banque-agreee";
+import { creerLienPaiement, configPaiement, BanqueConfigError } from "@nodaq/banque-agreee";
 import { loadCompanySettings } from "./seller-info.js";
 import { empreinte } from "./prospection.js";
 import { numeroAutoriseEnTest } from "./numeros-test.js";
@@ -116,7 +116,9 @@ export async function emettreLienPaiement(options: {
 
   let config;
   try {
-    config = getConfig();
+    // L'app qui porte l'initiation de paiement — la même que l'agrégation, ou
+    // une app dédiée si l'exploitant en a déclaré une (voir `configPaiement`).
+    config = configPaiement();
   } catch (err) {
     if (err instanceof BanqueConfigError) return { kind: "non_configure" };
     throw err;
