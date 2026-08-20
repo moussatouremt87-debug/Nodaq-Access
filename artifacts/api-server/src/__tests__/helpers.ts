@@ -178,6 +178,8 @@ const BUSINESS_TABLES = [
   "avoirs", "facture_sequences",
   // incidents_facturation référence factures (facture_id) : avant elle.
   "incidents_facturation", "factures",
+  // liens_paiement référence appels_relance (appel_id) : avant elle.
+  "liens_paiement",
   "appels_relance", "campagnes_relance", "pending_actions", "journal_decisions", "regles_relance", "prospects", "settings", "team_members",
   "clients", "tenant_invites",
   "pa_documents_recus", "pa_transmissions",
@@ -256,6 +258,20 @@ export function tableInsertSql(table: string, tenantId: string, memberAId?: stri
                           )
                           INSERT INTO appels_relance (id, tenant_id, campagne_id, empreinte_numero)
                           SELECT $1, $2, c.id, 'rls-empreinte' FROM c`, [id, tenantId]],
+    // liens_paiement : même raison que ci-dessus — la fixture porte son propre
+    // appel (et la campagne qui le porte), sinon l'isolation ne verrait rien
+    // des deux côtés et passerait sans rien prouver.
+    liens_paiement:     [`WITH c AS (
+                            INSERT INTO campagnes_relance (id, tenant_id, pending_action_id, mandat)
+                            VALUES (gen_random_uuid()::text, $2, 'pa-rls-lien', '{}'::jsonb)
+                            RETURNING id
+                          ), a AS (
+                            INSERT INTO appels_relance (id, tenant_id, campagne_id, empreinte_numero)
+                            SELECT gen_random_uuid()::text, $2, c.id, 'rls-empreinte' FROM c
+                            RETURNING id
+                          )
+                          INSERT INTO liens_paiement (id, tenant_id, appel_id, empreinte_numero, montant_cents)
+                          SELECT $1, $2, a.id, 'rls-empreinte', 12345 FROM a`, [id, tenantId]],
     prospects:          [`INSERT INTO prospects (id, name, tenant_id) VALUES ($1, 'RLS Prospect', $2)`, [id, tenantId]],
     settings:           [`INSERT INTO settings (key, value, tenant_id) VALUES ('rls_test_key', 'v', $1) ON CONFLICT DO NOTHING`, [tenantId]],
     team_members:       [`INSERT INTO team_members (id, name, tenant_id) VALUES ($1, 'RLS Member', $2)`, [id, tenantId]],
