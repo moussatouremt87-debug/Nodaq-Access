@@ -46,3 +46,4 @@ export * from "./team_member_habilitations";
 export * from "./regles_relance";
 export * from "./campagnes_relance";
 export * from "./appels_relance";
+export * from "./liens_paiement";

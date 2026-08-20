@@ -33,7 +33,14 @@ import { cn } from '@/lib/utils';
 import { apiFetch } from '@/lib/auth';
 import { useModules, useBasculerModule, type ModuleResolu } from '@/hooks/use-modules';
 import { useRegleRelance, useEnregistrerRegleRelance } from '@/hooks/use-regles-relance';
-import { BORNES_REGLE_RELANCE, type RegleRelance } from '@nodaq/shared';
+import {
+  BORNES_REGLE_RELANCE,
+  formaterIban,
+  normaliserIban,
+  verifierIban,
+  messageRefusIban,
+  type RegleRelance,
+} from '@nodaq/shared';
 const API = '/api';
 
 type Settings = Record<string, string>;
@@ -63,6 +70,72 @@ function useSettings() {
       return res.json();
     },
   });
+}
+
+/**
+ * L'IBAN qui encaissera les liens de paiement (ticket 4.19).
+ *
+ * Affiché sous la bascule qu'il conditionne : un lien de paiement sans compte
+ * bénéficiaire n'existe pas. La validation de la clé de contrôle appartient à
+ * la route — cet écran se contente d'afficher son refus, et de formater la
+ * saisie par groupes de 4 pour qu'une relecture à l'œil soit possible.
+ */
+function IbanEncaissement() {
+  const { data } = useSettings();
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [saisie, setSaisie] = useState<string | null>(null);
+  const enregistre = data?.['company.iban'] ?? '';
+  const valeur = saisie ?? (enregistre ? formaterIban(enregistre) : '');
+
+  const enregistrer = useMutation({
+    mutationFn: async (iban: string) => {
+      const res = await apiFetch(`${API}/parametres`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 'company.iban': iban }),
+      });
+      const corps = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((corps as { error?: string }).error ?? 'Enregistrement refusé');
+      return corps;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['parametres'] });
+      setSaisie(null);
+      toast({ title: 'IBAN enregistré' });
+    },
+    onError: (e: Error) => toast({ title: 'IBAN refusé', description: e.message, variant: 'destructive' }),
+  });
+
+  const refus = valeur.trim() === '' ? null : verifierIban(valeur);
+
+  return (
+    <div className="space-y-1.5 border-l-2 border-card-border ml-1 pl-4">
+      <Label htmlFor="relance-iban" className="text-xs">IBAN d'encaissement</Label>
+      <div className="flex gap-2">
+        <Input
+          id="relance-iban"
+          value={valeur}
+          placeholder="FR76 3000 1007 9412 3456 7890 185"
+          onChange={e => setSaisie(formaterIban(e.target.value))}
+          className="h-9 font-mono text-xs max-w-md"
+        />
+        <Button
+          variant="outline"
+          className="h-9"
+          disabled={refus !== null || saisie === null || enregistrer.isPending}
+          onClick={() => enregistrer.mutate(normaliserIban(valeur))}
+        >
+          Enregistrer
+        </Button>
+      </div>
+      <div className="text-[11px] text-muted-foreground">
+        {refus
+          ? messageRefusIban(refus)
+          : "Le compte qui recevra les virements. C'est le vôtre : l'argent ne transite jamais par nous."}
+      </div>
+    </div>
+  );
 }
 
 function Toggle({ checked, onChange, label, description }: {
@@ -715,6 +788,7 @@ function RelanceTab() {
           label="Autoriser l'envoi d'un lien de paiement"
           description="Par SMS, pendant l'appel, si cela débloque la conversation."
         />
+        {brouillon.lienPaiementAutorise && <IbanEncaissement />}
         <Toggle
           checked={brouillon.remiseAutorisee}
           onChange={v => maj('remiseAutorisee', v)}

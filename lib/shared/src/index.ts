@@ -187,6 +187,7 @@ export * from "./revenusAcquis.js";
 export * from "./conversationRetention.js";
 export * from "./freshnessRules.js";
 export * from "./dates.js";
+export * from "./iban.js";
 export * from "./previsionnelTresorerie.js";
 export * from "./companyProfile.js";
 export * from "./retardPaiement.js";
