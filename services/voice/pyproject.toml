@@ -15,6 +15,10 @@ requires-python = ">=3.12"
 # not ship. The measurements survive in the ADR.
 dependencies = [
     "httpx>=0.28.1",
+    # Connexion permanente pour la transcription en continu (ADR 004). Ce n'est
+    # pas un SDK de fournisseur — c'est le protocole WebSocket — donc la garde
+    # de couches de `test_layering.py` n'a pas à s'en émouvoir.
+    "websockets>=13.0",
 ]
 
 [dependency-groups]
