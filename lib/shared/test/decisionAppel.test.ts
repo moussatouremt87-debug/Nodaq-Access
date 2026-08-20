@@ -238,20 +238,16 @@ describe("f — US-2 : l'agent s'annonce, et dit la vérité sur la transcriptio
     expect(annonceEstConforme(annonce)).toBe(true);
   });
 
-  test("elle annonce une transcription, PAS un enregistrement", () => {
-    // Le produit ne conserve pas l'audio (§6) : annoncer un enregistrement
-    // qui n'a pas lieu serait faux dans l'autre sens.
+  test("elle annonce une transcription, et ne prétend PAS enregistrer", () => {
+    // Le produit ne conserve pas l'audio (§6). L'annonce disait autrefois
+    // « on enregistre pas l'audio » ; la mention a sauté le 2026-08-20
+    // (décision fondateur : l'ouverture se paie en secondes, et cette
+    // précision était un plus, pas une obligation). Le FOND qui reste
+    // épinglé : la transcription est annoncée, et l'annonce ne CLAME jamais
+    // un enregistrement qui n'a pas lieu — dans un sens comme dans l'autre.
     const annonce = annonceOuverture("Dubois");
     expect(annonce).toMatch(/retranscrit/i);
-    // Formulé à l'oral (« on enregistre pas ») plutôt qu'en registre écrit
-    // (« sans enregistrement »). C'est le fond qui compte : dire qu'aucun
-    // audio n'est conservé.
-    //
-    // Le motif porte sur « enregistre pas » et non sur « n'enregistre pas » :
-    // la négation sans « ne » est précisément le marqueur de familier qu'on a
-    // demandé, et un test qui épingle la LETTRE au lieu du FOND casse au
-    // premier ajustement de registre — ce qui est arrivé ici.
-    expect(annonce).toMatch(/enregistre pas/i);
+    expect(annonce).not.toMatch(/enregistr/i);
   });
 
   test("elle propose la sortie — humain ou rappel", () => {
