@@ -70,6 +70,22 @@ les trois portes d'entrée (connexion, inscription, MFA).
 **Lot D — lisibilité et réseau.** Échelle typographique mobile, contrastes,
 états de chargement et d'erreur, sauvegarde des saisies en cours.
 
+## Une exception envisagée, puis refusée — le micro global
+
+Le lot B a montré **deux microphones** sur le devis dicté : celui de la
+dictée, et le micro global de l'assistant juste en dessous. Ils ne font pas la
+même chose — l'un remplit la zone de texte, l'autre commande l'assistant — et
+l'appui sur le mauvais est plausible.
+
+Une exception masquant le micro global sur cet écran a été posée, puis
+**retirée** : la garde `terrain.test.ts` l'a refusée, et le fondateur a
+tranché le 2026-08-20 — **le micro global reste sur tous les écrans**. C'est
+la promesse « vous ne tapez plus jamais rien », et une promesse à laquelle on
+fait une exception n'en est plus une.
+
+Écrit ici pour que personne ne « corrige » ce point plus tard en croyant à un
+oubli : c'est un choix, pas un reste.
+
 ## Ce qu'on ne fait PAS dans ce ticket
 
 Aucun empaquetage natif, aucun manifeste PWA, aucune notification. Le jour où
