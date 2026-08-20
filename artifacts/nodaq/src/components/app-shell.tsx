@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { Link, useLocation } from 'wouter';
-import { Radio, ShieldCheck, Building2, Check, ChevronsUpDown, Loader2, Sparkles } from 'lucide-react';
+import { Radio, ShieldCheck, Building2, Check, ChevronsUpDown, Loader2, Sparkles, Menu } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { NAV_SECTIONS, MOBILE_NAV, navIsActive, verticalizeNavLabel } from '@/lib/nav';
 import { TopRibbon } from './top-ribbon';
@@ -16,6 +17,7 @@ import {
 import type { AffaireWords, Vertical } from '@nodaq/shared';
 import type { NavItem } from '@/lib/nav';
 import { MicroFlottant } from '@/components/micro-flottant';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
@@ -186,13 +188,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* ── Right column: ribbon + main content ──────────────────── */}
       <div className="flex-1 min-w-0 flex flex-col relative z-10">
-        {/* Mobile nav (mobile only, sticky top) */}
+        {/* Mobile : en-tête mince en haut, navigation FIXE en bas (4.20) */}
         <MobileNav location={location} peutVoir={peutVoir} words={words} proposalWord={proposalWord} />
 
         {/* Desktop top ribbon (desktop only, sticky top-0, h-11) */}
         <TopRibbon />
 
-        <main className="flex-1 min-w-0">
+        {/* La réserve du bas laisse passer la barre du pouce : sans elle, la
+            dernière ligne de chaque écran serait recouverte, et sur une liste
+            c'est exactement l'élément qu'on cherchait à atteindre. */}
+        <main className="flex-1 min-w-0 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-0">
           {children}
           {/* Monté ICI, en fin de page — donc présent sur TOUTES les pages,
               après leur contenu. Le poser page par page garantirait qu'on en
@@ -285,6 +290,25 @@ function EspaceSwitcher() {
   );
 }
 
+/**
+ * La navigation mobile — ticket 4.20.
+ *
+ * ── Pourquoi elle est EN BAS ───────────────────────────────────────────────
+ * Sur un téléphone de six pouces tenu à une main, le haut de l'écran demande
+ * de changer de prise. L'artisan visé a une main occupée : la navigation
+ * descend là où le pouce arrive, et les cibles font 44 px de côté — la borne
+ * d'Apple, et celle qui compte avec des gants.
+ *
+ * ── Quatre entrées, et TOUT le reste derrière « Plus » ────────────────────
+ * La version précédente alignait quatorze entrées dans une bande à faire
+ * défiler horizontalement : on n'y trouvait que ce qu'on savait déjà
+ * chercher, et les trente-trois autres écrans n'étaient atteignables qu'en
+ * tapant l'URL. « Plus » ouvre le menu COMPLET (`NAV_SECTIONS`), le même que
+ * celui du bureau. `nav.test.ts` en fait une garde.
+ *
+ * `pb-[env(safe-area-inset-bottom)]` : sur les iPhone récents, la barre
+ * passerait sinon sous l'indicateur d'accueil.
+ */
 function MobileNav({
   location,
   peutVoir,
@@ -296,10 +320,30 @@ function MobileNav({
   words: AffaireWords;
   proposalWord: string;
 }) {
+  const [menuOuvert, setMenuOuvert] = useState(false);
+
+  const caseDeBarre =
+    'flex flex-1 flex-col items-center justify-center gap-1 min-h-[44px] px-1 py-2 text-[11px] font-medium';
+
   return (
-    <div className="md:hidden sticky top-0 z-30 flex items-center border-b border-sidebar-border bg-sidebar">
-      {/* Scrollable nav items */}
-      <div className="flex items-center gap-1 overflow-x-auto px-2 py-2 flex-1 min-w-0">
+    <>
+      {/* En-tête mince : la marque, et le thème. La navigation, elle, est en bas. */}
+      <div className="md:hidden sticky top-0 z-30 flex items-center justify-between border-b border-sidebar-border bg-sidebar px-3 py-2">
+        <div className="flex items-center gap-2">
+          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
+            <Radio className="h-4 w-4" strokeWidth={2.5} />
+          </div>
+          <span className="text-sm font-semibold tracking-tight">NODAQ</span>
+        </div>
+        <ThemeToggle />
+      </div>
+
+      {/* La barre du pouce. `fixed` et non `sticky` : elle doit rester
+          atteignable même au milieu d'une longue liste. */}
+      <nav
+        aria-label="Navigation principale"
+        className="md:hidden fixed bottom-0 inset-x-0 z-40 flex items-stretch border-t border-sidebar-border bg-sidebar pb-[env(safe-area-inset-bottom)]"
+      >
         {MOBILE_NAV.filter(peutVoir).map(item => {
           const active = navIsActive(item.href, location);
           const Icon = item.icon;
@@ -307,23 +351,82 @@ function MobileNav({
             <Link
               key={item.href}
               href={item.href}
+              aria-current={active ? 'page' : undefined}
               className={cn(
-                'flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium hover-elevate',
-                active
-                  ? 'bg-sidebar-accent text-sidebar-primary'
-                  : 'text-sidebar-foreground/60',
+                caseDeBarre,
+                active ? 'text-sidebar-primary' : 'text-sidebar-foreground/60',
               )}
+              data-testid={`nav-mobile-${item.href}`}
             >
-              <Icon className="h-3.5 w-3.5" />
-              {verticalizeNavLabel(item.href, item.label, words, proposalWord)}
+              <Icon className="h-5 w-5 shrink-0" />
+              <span className="truncate max-w-full">
+                {verticalizeNavLabel(item.href, item.label, words, proposalWord)}
+              </span>
             </Link>
           );
         })}
-      </div>
-      {/* Theme toggle pinned to the right — always visible */}
-      <div className="flex items-center px-2 py-2 border-l border-sidebar-border shrink-0">
-        <ThemeToggle />
-      </div>
-    </div>
+
+        <button
+          type="button"
+          onClick={() => setMenuOuvert(true)}
+          aria-haspopup="dialog"
+          className={cn(caseDeBarre, 'text-sidebar-foreground/60')}
+          data-testid="nav-mobile-plus"
+        >
+          <Menu className="h-5 w-5 shrink-0" />
+          <span>Plus</span>
+        </button>
+      </nav>
+
+      {/* Le menu complet, en feuille basse : elle s'ouvre sous le pouce. */}
+      <Sheet open={menuOuvert} onOpenChange={setMenuOuvert}>
+        <SheetContent side="bottom" className="md:hidden max-h-[85vh] overflow-y-auto bg-sidebar">
+          <SheetHeader className="text-left">
+            <SheetTitle>Toutes les fonctions</SheetTitle>
+          </SheetHeader>
+          <div className="mt-4 space-y-5 pb-[env(safe-area-inset-bottom)]">
+            {NAV_SECTIONS.map(section => {
+              const visibles = section.items.filter(peutVoir);
+              if (visibles.length === 0) return null;
+              return (
+                <div key={section.label}>
+                  <div className="px-1 pb-1 text-[11px] uppercase tracking-wider text-sidebar-foreground/40">
+                    {section.label}
+                  </div>
+                  <div className="grid grid-cols-2 gap-1">
+                    {visibles.map(item => {
+                      const Icon = item.icon;
+                      const active = navIsActive(item.href, location);
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          onClick={() => setMenuOuvert(false)}
+                          className={cn(
+                            'flex min-h-[44px] items-center gap-2 rounded-md px-3 py-2 text-sm hover-elevate',
+                            active
+                              ? 'bg-sidebar-accent text-sidebar-primary'
+                              : 'text-sidebar-foreground/80',
+                          )}
+                          data-testid={`nav-feuille-${item.href}`}
+                        >
+                          <Icon className="h-4 w-4 shrink-0" />
+                          {/* Le libellé passe à la ligne plutôt que d'être
+                              tronqué : dans un menu, « Compte de résult… » est
+                              une information perdue, pas une élégance. */}
+                          <span className="leading-tight">
+                            {verticalizeNavLabel(item.href, item.label, words, proposalWord)}
+                          </span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </SheetContent>
+      </Sheet>
+    </>
   );
 }

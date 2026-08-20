@@ -76,10 +76,14 @@ docker exec "$(docker ps --filter ancestor=postgres:16 --format '{{.Names}}' | h
 echo "→ session vérifiée"
 
 # ── 3. Ce dont l'agent a besoin pour parler ───────────────────────────────
+# L'IBAN est celui du JEU D'ESSAI de la norme ISO 13616, pas un compte réel :
+# le tenant d'essai est jetable et l'app Bridge est un bac à sable, donc aucun
+# euro ne bouge. En production, c'est le dirigeant qui saisit le sien dans
+# Paramètres — la route en vérifie la clé de contrôle avant d'enregistrer.
 curl -s -X POST "$API/parametres" -H "Cookie: $COOKIE" -H "Content-Type: application/json" \
-  -X PATCH -d '{"company.raison_sociale":"Charpente Dubois"}' >/dev/null
+  -X PATCH -d '{"company.raison_sociale":"Charpente Dubois","company.iban":"FR1420041010050500013M02606"}' >/dev/null
 curl -s -X PUT "$API/relance/regles" -H "Cookie: $COOKIE" -H "Content-Type: application/json" \
-  -d '{"echelonnementAutorise":true,"maxVersements":4,"delaiMaxPremierVersementJours":15,"retardMaxJours":45,"lienPaiementAutorise":false,"remiseAutorisee":false}' >/dev/null
+  -d '{"echelonnementAutorise":true,"maxVersements":4,"delaiMaxPremierVersementJours":15,"retardMaxJours":45,"lienPaiementAutorise":true,"remiseAutorisee":false}' >/dev/null
 echo "→ raison sociale et règle de relance posées"
 
 # ── 4. Une campagne, puis sa VALIDATION ───────────────────────────────────
