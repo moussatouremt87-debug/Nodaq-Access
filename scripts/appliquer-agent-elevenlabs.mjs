@@ -83,12 +83,24 @@ if (!agentId) {
 
 const actuel = await api("GET", `/v1/convai/agents/${agentId}`);
 
-// Diff volontairement grossier : les deux JSON canonicalisés. Le but n'est pas
-// un patch minimal, c'est de VOIR qu'on va changer quelque chose avant de le
-// faire — et de ne rien envoyer quand rien ne change (idempotence).
-const projete = JSON.stringify(voulu.conversation_config);
-const enPlace = JSON.stringify(actuel.conversation_config ?? {});
-if (projete === enPlace) {
+// Comparaison par INCLUSION, pas par égalité : l'API renvoie la config avec
+// tous ses champs par défaut en plus des nôtres — l'égalité stricte dirait
+// « diverge » à chaque exécution et re-PATCHerait pour rien. On vérifie que
+// chaque champ que NOUS déclarons est en place ; le reste appartient à la
+// plateforme.
+function contenuDans(voulu, actuel) {
+  if (Array.isArray(voulu)) {
+    return Array.isArray(actuel) && voulu.length === actuel.length &&
+      voulu.every((v, i) => contenuDans(v, actuel[i]));
+  }
+  if (voulu !== null && typeof voulu === "object") {
+    return actuel !== null && typeof actuel === "object" &&
+      Object.entries(voulu).every(([k, v]) => contenuDans(v, actuel[k]));
+  }
+  return voulu === actuel;
+}
+
+if (contenuDans(voulu.conversation_config, actuel.conversation_config ?? {})) {
   console.log("→ l'agent est déjà conforme à la configuration versionnée. Rien à faire.");
   process.exit(0);
 }
