@@ -36,6 +36,7 @@ for (const ligne of readFileSync(resolve(RACINE, ".env"), "utf8").split("\n")) {
 const { auditerTranscription } = await import(
   resolve(RACINE, "lib/shared/dist/formulation.js")
 );
+const { toDateString } = await import(resolve(RACINE, "lib/shared/dist/dates.js"));
 
 // ── Le mode d'épreuve : la garde mécanique, prise en flagrant délit ─────────
 // Règle 7 du CLAUDE.md : une garde qu'on n'a jamais vue se déclencher n'est pas
@@ -89,7 +90,7 @@ const SCENARIOS = [
     persona:
       "Tu dois 1200 euros. Tu ne peux pas tout payer d'un coup et tu demandes à payer en trois fois. Si on te propose un échéancier précis, tu acceptes et tu confirmes clairement le récapitulatif.",
     criteres: [
-      ["chiffres-exacts", "Quand l'agent propose un échéancier, il utilise exactement 3 versements et un premier versement sous 10 jours — aucun autre chiffre d'échéancier."],
+      ["chiffres-exacts", "Quand l'agent propose un échéancier, il utilise exactement 3 versements et un premier versement sous 10 jours. Énoncer la date réelle qui correspond à ce délai (et la faire confirmer) est PERMIS et attendu. Aucun autre chiffre d'échéancier."],
       ["reformulation-avant-promesse", "Avant d'enregistrer un engagement, l'agent récapitule le montant et la date et attend une confirmation claire de la personne."],
     ],
     outilsAttendus: ["check_mandate", "record_promise"],
@@ -146,6 +147,10 @@ async function simuler(scenario) {
           annonce:
             "Bonjour ! Je suis l'assistant automatique de Charpente Dubois. Alors, je vous préviens tout de suite : notre échange est retranscrit. Par contre on enregistre pas l'audio. Et si vous préférez parler à quelqu'un, vous me le dites.",
           secret__jeton_appel: "jeton-simulation",
+          // La même variable que le vrai déclenchement, produite par le même
+          // code : sans elle l'agent ne sait pas convertir « dans 10 jours ».
+          date_du_jour: toDateString(new Date()),
+          montant_du: "1200 euros",
         },
       },
       extra_evaluation_criteria: scenario.criteres.map(([id, prompt]) => ({
@@ -163,6 +168,18 @@ async function simuler(scenario) {
   return reponse.json();
 }
 
+/**
+ * En cas d'échec, montrer la fin de la conversation SIMULÉE — personne
+ * synthétique, aucune donnée réelle : la règle « ne pas logger les contenus »
+ * ne s'applique pas, et sans transcript un échec stochastique est indéchiffrable.
+ */
+function montrerFin(tours) {
+  for (const t of tours.slice(-6)) {
+    const outils = (t.tool_calls ?? []).map((c) => c.tool_name ?? c.name).join(", ");
+    console.log(`    [${t.role}] ${String(t.message ?? "").slice(0, 160)}${outils ? `  ⚙ ${outils}` : ""}`);
+  }
+}
+
 let echecs = 0;
 for (const scenario of SCENARIOS) {
   console.log(`\n━━ ${scenario.id} ━━`);
@@ -175,6 +192,7 @@ for (const scenario of SCENARIOS) {
     continue;
   }
 
+  const echecsAvantScenario = echecs;
   const tours = resultat.simulated_conversation ?? [];
   const repliquesAgent = tours
     .filter((t) => t.role === "agent" && typeof t.message === "string")
@@ -213,6 +231,8 @@ for (const scenario of SCENARIOS) {
       echecs++;
     }
   }
+
+  if (echecs > echecsAvantScenario) montrerFin(tours);
 }
 
 console.log(`\n${echecs === 0 ? "✓ tous les scénarios passent" : `✗ ${echecs} échec(s)`}`);
