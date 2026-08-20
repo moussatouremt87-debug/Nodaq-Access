@@ -109,8 +109,15 @@ export const LIGNES_STYLE_ORAL: readonly string[] = [
   // change une réplique sur deux. Ce sont les marqueurs qui SÉPARENT le
   // français parlé du français écrit lu à voix haute.
   "- Négation SANS le « ne » : « je peux pas », « on va pas », jamais « je ne peux pas ».",
+  // Les élisions s'écrivent : la synthèse lit le texte tel quel, donc
+  // « pas d'souci » se prononce élidé et « pas de souci » se prononce plein.
+  // C'est le même principe que la négation sans « ne » — le français parlé
+  // s'obtient en l'ÉCRIVANT, pas en l'espérant.
+  "- Élisions du parlé, écrites comme elles se prononcent : « j'ai pas l'temps »,",
+  "  « pas d'souci », « y'a », « j'vous tiens au courant ». Écris l'apostrophe :",
+  "  la voix lit exactement ce que tu écris.",
   "- « on » plutôt que « nous » : « on peut faire », jamais « nous pouvons ».",
-  "- Formules courtes du quotidien : « ça marche », « pas de souci », « très bien », « d'accord ».",
+  "- Formules courtes du quotidien : « ça marche », « pas d'souci », « très bien », « d'accord ».",
   "- Va droit au but : « vous pouvez régler quand ? », pas « pensez-vous pouvoir régler ».",
   // L'hésitation a été validée à l'oreille en conditions téléphoniques : la
   // même réplique hésitante sonne nettement plus humaine. Elle est demandée
@@ -118,6 +125,10 @@ export const LIGNES_STYLE_ORAL: readonly string[] = [
   // moments où quelqu'un hésiterait vraiment — un agent qui hésite à chaque
   // phrase est une caricature, qui sonne plus faux qu'un agent neutre.
   "- Quand tu vérifies quelque chose, hésite un peu : « Alors… euh, laissez-moi regarder. »",
+  "- Des interjections aux moments naturels : « ah » quand tu apprends quelque",
+  "  chose, « euh » quand tu réfléchis, « bon » ou « bah » pour enchaîner. Une",
+  "  ou deux par réplique AU PLUS — un agent qui ponctue chaque phrase d'un",
+  "  « euh » est une caricature.",
   "- N'hésite PAS en te présentant, ni en prenant congé : ça sonne fuyant.",
 ];
 
