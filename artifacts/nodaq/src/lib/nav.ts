@@ -146,6 +146,19 @@ export const NAV_SECTIONS: NavSection[] = [
  * mêmes attributs de visibilité, et une troisième déclaration finirait par
  * diverger — un `essentiel` posé d'un côté, oublié de l'autre.
  */
+/**
+ * La barre du POUCE — ticket 4.20.
+ *
+ * Quatre destinations, en bas de l'écran, atteignables sans changer de prise.
+ * Quatre et pas quatorze : une bande de quatorze entrées qu'il faut faire
+ * défiler horizontalement n'est pas une navigation, c'est une liste cachée —
+ * on ne trouve que ce qu'on savait déjà chercher.
+ *
+ * Le RESTE n'est pas perdu : la cinquième case de la barre ouvre le menu
+ * complet (`NAV_SECTIONS`), donc toutes les destinations du bureau sont
+ * atteignables au téléphone. C'est ce que vérifie `nav.test.ts`, et c'est le
+ * trou que ce ticket ferme : 14 destinations sur 47 auparavant.
+ */
 export const MOBILE_NAV: Array<
   Pick<NavItem, 'href' | 'label' | 'icon' | 'requiredRoles' | 'essentiel'>
 > = [
@@ -155,19 +168,22 @@ export const MOBILE_NAV: Array<
   // qui est sur un chantier avec son téléphone.
   { href: '/devis/dictee', label: 'Devis dicté', icon: Mic, essentiel: true },
   { href: '/affaires',     label: 'Affaires',   icon: Briefcase },
-  { href: '/devis',        label: 'Devis',      icon: FileText, essentiel: true },
-  { href: '/factures',     label: 'Factures',   icon: Receipt,      requiredRoles: FINANCIAL_ROLES, essentiel: true },
   { href: '/pointages',    label: 'Heures',     icon: CalendarCheck, essentiel: true },
-  { href: '/marge',        label: 'Marge',      icon: TrendingUp,   requiredRoles: FINANCIAL_ROLES },
-  { href: '/echeancier',   label: 'Fiscal',     icon: CalendarClock, requiredRoles: FINANCIAL_ROLES },
-  { href: '/classeur',     label: 'Classeur',   icon: FolderOpen },
-  { href: '/chat',         label: 'Agent IA',   icon: MessageSquare, essentiel: true },
-  // Plateforme screens (auth-gated at route level)
-  { href: '/equipe',       label: 'Équipe',     icon: UserCog,      requiredRoles: ['OWNER'] },
-  { href: '/votre-metier', label: 'Métier',     icon: Hammer },
-  { href: '/connecteurs',  label: 'Connecteurs', icon: Plug2,       requiredRoles: ['OWNER'] },
-  { href: '/parametres',   label: 'Paramètres', icon: Settings2,    requiredRoles: ['OWNER'], essentiel: true },
 ];
+
+/**
+ * Toutes les destinations atteignables depuis un téléphone.
+ *
+ * Exportée pour que la garde de parité lise EXACTEMENT ce que la coquille
+ * rend : une garde qui recompose la liste de son côté finit par vérifier une
+ * autre application que celle qu'on livre.
+ */
+export function destinationsMobiles(): string[] {
+  return [
+    ...MOBILE_NAV.map((item) => item.href),
+    ...NAV_SECTIONS.flatMap((section) => section.items.map((item) => item.href)),
+  ];
+}
 
 /** Returns true when the given nav href matches the current location. */
 export function navIsActive(href: string, location: string): boolean {
