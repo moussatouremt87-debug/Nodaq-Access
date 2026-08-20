@@ -30,6 +30,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { apiFetch } from '@/lib/auth';
 import { fmtEUR } from '@/lib/format';
+import { cn } from '@/lib/utils';
 import { containerVariants, itemVariants } from '@/lib/motion-variants';
 import { useDictee } from '@/hooks/use-dictee';
 import { useVertical } from '@/hooks/use-vertical';
@@ -175,7 +176,14 @@ export default function DevisDictee() {
           Le bouton APPEND la transcription plutôt que de l'écraser — on dicte
           souvent en plusieurs fois, et perdre la première moitié serait pire
           que de ne rien proposer. */}
-      <div className="mb-3 flex items-start gap-2">
+      {/* ── Le micro, dimensionné pour un chantier (ticket 4.20) ────────────
+          C'est LE geste de cet écran, et il se maintient enfoncé. Une cible de
+          40 px en haut à droite demande de la précision, une main libre et pas
+          de gants — les trois choses qui manquent sur un chantier. Sur
+          téléphone, le bouton occupe donc toute la largeur, sous la zone de
+          texte, à portée du pouce ; au bureau il reprend sa place compacte, où
+          la souris rend la précision gratuite. */}
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start">
         <Textarea
           value={texte}
           onChange={(e) => setTexte(e.target.value)}
@@ -186,20 +194,36 @@ export default function DevisDictee() {
         <Button
           type="button"
           variant="outline"
-          size="icon"
           aria-label="Dicter"
           data-testid="bouton-micro-dictee"
-          className="mt-1 shrink-0"
+          className={cn(
+            'h-14 w-full shrink-0 gap-2 text-base sm:mt-1 sm:h-10 sm:w-10 sm:p-0 sm:text-sm',
+            dictee.enregistre && 'border-destructive text-destructive',
+          )}
           onPointerDown={() => void dictee.demarrer()}
           onPointerUp={dictee.arreter}
           onPointerLeave={dictee.arreter}
           disabled={dictee.transcrit}
         >
           {dictee.transcrit ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Loader2 className="h-5 w-5 animate-spin sm:h-4 sm:w-4" />
           ) : (
-            <Mic className={dictee.enregistre ? 'h-4 w-4 animate-pulse text-destructive' : 'h-4 w-4'} />
+            <Mic
+              className={cn(
+                'h-5 w-5 sm:h-4 sm:w-4',
+                dictee.enregistre && 'animate-pulse text-destructive',
+              )}
+            />
           )}
+          {/* Le libellé n'existe QUE sur mobile : au bureau l'icône seule
+              suffit, et la barre latérale y donne déjà le contexte. */}
+          <span className="sm:hidden">
+            {dictee.transcrit
+              ? 'Transcription…'
+              : dictee.enregistre
+                ? 'Relâchez pour arrêter'
+                : 'Maintenir pour dicter'}
+          </span>
         </Button>
       </div>
       <Button
@@ -259,7 +283,7 @@ export default function DevisDictee() {
                   type="number"
                   inputMode="decimal"
                   placeholder="Qté"
-                  className="h-9 w-24 text-right font-mono-nums"
+                  className="h-11 w-24 text-right font-mono-nums sm:h-9"
                   value={l.quantite ?? ''}
                   onChange={(e) =>
                     majLigne(i, { quantite: e.target.value === '' ? null : Number(e.target.value) })
@@ -267,7 +291,7 @@ export default function DevisDictee() {
                 />
                 <Input
                   placeholder="unité"
-                  className="h-9 w-20"
+                  className="h-11 w-20 sm:h-9"
                   value={l.unite ?? ''}
                   onChange={(e) => majLigne(i, { unite: e.target.value || null })}
                 />
@@ -280,7 +304,7 @@ export default function DevisDictee() {
                     inputMode="decimal"
                     placeholder="0,00"
                     aria-label="Prix unitaire HT en euros"
-                    className="h-9 w-28 text-right font-mono-nums"
+                    className="h-11 w-28 text-right font-mono-nums sm:h-9"
                     value={l.prixUnitaireHtCents === null ? '' : l.prixUnitaireHtCents / 100}
                     onChange={(e) =>
                       majLigne(i, {

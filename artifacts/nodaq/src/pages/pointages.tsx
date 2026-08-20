@@ -12,7 +12,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { CalendarCheck, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
+import { CalendarCheck, ChevronDown, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -156,15 +156,33 @@ export default function Pointages() {
         <h1 className="text-lg font-semibold">Heures de la semaine</h1>
       </div>
 
+      {/* ── Navigation de semaine, au doigt (ticket 4.20) ───────────────────
+          Deux boutons de 32 px encadraient la période sur une seule ligne : à
+          390 px, « Semaine précédente » mangeait la moitié de la largeur et la
+          date passait à l'étroit. Sur téléphone, les flèches deviennent des
+          cibles carrées de 44 px et la période s'affiche entre les deux ; au
+          bureau, les libellés reviennent, il y a la place. */}
       <div className="mb-4 flex items-center justify-between gap-2">
-        <Button variant="outline" size="sm" onClick={() => decalerSemaine(-7)}>
-          Semaine précédente
+        <Button
+          variant="outline"
+          onClick={() => decalerSemaine(-7)}
+          aria-label="Semaine précédente"
+          className="h-11 w-11 shrink-0 p-0 sm:h-8 sm:w-auto sm:px-3"
+        >
+          <ChevronLeft className="h-5 w-5 sm:hidden" />
+          <span className="hidden sm:inline">Semaine précédente</span>
         </Button>
-        <div className="text-xs text-muted-foreground">
+        <div className="min-w-0 text-center text-xs text-muted-foreground">
           {data ? `${fmtJour(data.semaine.debut)} → ${fmtJour(data.semaine.fin)}` : '—'}
         </div>
-        <Button variant="outline" size="sm" onClick={() => decalerSemaine(7)}>
-          Suivante
+        <Button
+          variant="outline"
+          onClick={() => decalerSemaine(7)}
+          aria-label="Semaine suivante"
+          className="h-11 w-11 shrink-0 p-0 sm:h-8 sm:w-auto sm:px-3"
+        >
+          <ChevronRight className="h-5 w-5 sm:hidden" />
+          <span className="hidden sm:inline">Suivante</span>
         </Button>
       </div>
 
@@ -226,7 +244,7 @@ export default function Pointages() {
                         min={0}
                         max={24}
                         step={0.5}
-                        className="h-9 w-20 text-right font-mono-nums"
+                        className="h-11 w-20 text-right font-mono-nums sm:h-9"
                         value={heuresDe(l)}
                         onChange={(e) =>
                           setAjustements((a) => ({
