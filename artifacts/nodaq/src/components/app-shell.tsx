@@ -75,7 +75,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div className="font-semibold text-[15px] tracking-tight text-sidebar-foreground">
               NODAQ
             </div>
-            <div className="text-[10px] uppercase tracking-[0.14em] text-sidebar-foreground/45 font-mono-nums">
+            <div className="text-[10px] uppercase tracking-[0.14em] text-sidebar-foreground/60 font-mono-nums">
               Cockpit v1.0
             </div>
           </div>
@@ -91,7 +91,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             if (visibleItems.length === 0) return null;
             return (
             <div key={section.label}>
-              <div className="px-3 py-1 text-[10px] uppercase tracking-[0.12em] text-sidebar-foreground/35 font-medium">
+              <div className="px-3 py-1 text-[10px] uppercase tracking-[0.12em] text-sidebar-foreground/60 font-medium">
                 {section.label}
               </div>
               <div className="space-y-0.5 mt-0.5">
@@ -116,7 +116,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                       <Icon
                         className={cn(
                           'h-4 w-4 shrink-0',
-                          active ? 'text-sidebar-primary' : 'text-sidebar-foreground/50',
+                          active ? 'text-sidebar-primary' : 'text-sidebar-foreground/60',
                         )}
                         strokeWidth={2}
                       />
@@ -135,7 +135,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <button
               onClick={toutAfficher}
               data-testid="bouton-afficher-tout"
-              className="w-full flex items-center gap-2 rounded-md px-3 py-2 text-[12px] text-sidebar-foreground/55 hover-elevate"
+              className="w-full flex items-center gap-2 rounded-md px-3 py-2 text-[12px] text-sidebar-foreground/60 hover-elevate"
             >
               <ChevronsUpDown className="h-3.5 w-3.5 shrink-0" />
               Afficher toutes les fonctions
@@ -167,7 +167,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <div className="font-medium text-sidebar-foreground/90">
                 Système opérationnel
               </div>
-              <div className="text-sidebar-foreground/45 font-mono-nums">
+              <div className="text-sidebar-foreground/60 font-mono-nums">
                 Synchronisé
               </div>
             </div>
@@ -255,12 +255,12 @@ function EspaceSwitcher() {
                 {courant?.tenantNom ?? 'Espace courant'}
               </span>
               {courant && (
-                <span className="block truncate text-[10px] text-sidebar-foreground/45">
+                <span className="block truncate text-[10px] text-sidebar-foreground/60">
                   {courant.secteurLabel}
                 </span>
               )}
             </span>
-            <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-sidebar-foreground/40" />
+            <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-sidebar-foreground/60" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-60">
@@ -390,7 +390,7 @@ function MobileNav({
               if (visibles.length === 0) return null;
               return (
                 <div key={section.label}>
-                  <div className="px-1 pb-1 text-[11px] uppercase tracking-wider text-sidebar-foreground/40">
+                  <div className="px-1 pb-1 text-[11px] uppercase tracking-wider text-sidebar-foreground/60">
                     {section.label}
                   </div>
                   <div className="grid grid-cols-2 gap-1">

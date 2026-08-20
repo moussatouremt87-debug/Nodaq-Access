@@ -126,7 +126,7 @@ const SECTIONS: SectionCfg[] = [
 
 function AmountCell({ cents, muted = false }: { cents: number; muted?: boolean }) {
   if (cents === 0 && muted) {
-    return <span className="text-muted-foreground/40 font-mono-nums text-xs">—</span>;
+    return <span className="text-muted-foreground/60 font-mono-nums text-xs">—</span>;
   }
   const negative = cents < 0;
   return (
@@ -238,7 +238,7 @@ function LineRow({
               setInputVal(currentCents === 0 ? '' : fmtAmountInput(currentCents));
             }}
             className={`w-full text-right font-mono-nums text-sm px-2 py-0.5 rounded cursor-text hover:bg-muted/30 transition-colors ${
-              currentCents === 0 ? 'text-muted-foreground/40' : ''
+              currentCents === 0 ? 'text-muted-foreground/60' : ''
             }`}
           >
             {currentCents === 0 ? '—' : fmtEUR(currentCents)}
@@ -526,7 +526,7 @@ export default function CompteResultat() {
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <FileSpreadsheet className="h-3.5 w-3.5" />
               Période : {fmtDateFr(from)} au {fmtDateFr(to)}
-              <span className="ml-2 text-muted-foreground/50">Cliquez sur un montant pour le modifier.</span>
+              <span className="ml-2 text-muted-foreground/60">Cliquez sur un montant pour le modifier.</span>
             </div>
           )}
         </div>

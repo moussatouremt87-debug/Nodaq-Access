@@ -337,6 +337,28 @@
       min-height: 0;
       min-width: 0;
     }
+
+    /* ── Plancher de LISIBILITÉ (ticket 4.20) ────────────────────────────
+       Le produit compte 116 usages de texte à 10 ou 11 px : des étiquettes,
+       des unités, des mentions de provenance. À l'intérieur, au bureau, ils
+       se lisent. Dehors, sur un chantier, écran incliné et soleil rasant,
+       ils disparaissent — et ce sont justement des repères qui portent du
+       sens : « proposé », « à compléter », « catalogue ».
+
+       Le plancher est posé ICI, sur le même `pointer: coarse` que les cibles
+       tactiles, et pour la même raison : la contrainte est physique, pas
+       esthétique. Un poste à la souris ne bouge pas d'un pixel.
+
+       Corriger les 116 usages un par un aurait produit une passe illisible
+       en revue, et un oubli à chaque écran ajouté. */
+    .text-\[10px\],
+    .text-\[11px\] {
+      font-size: 12px;
+    }
+
+    .text-xs {
+      font-size: 13px;
+    }
   }
 }
 

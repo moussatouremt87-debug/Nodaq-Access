@@ -201,7 +201,7 @@ export default function AffaireDetail() {
       {!affaire.startDate && !affaire.completedAt && !affaire.dateFinPrevue
         && affaire.avancementPct == null && quoted === 0 && sold === 0 && !affaire.notes && (
         <div className="rounded-2xl border border-dashed border-border bg-card p-6 text-center">
-          <Clock className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+          <Clock className="h-8 w-8 text-muted-foreground/60 mx-auto mb-2" />
           <p className="text-sm text-muted-foreground">Aucun détail ajouté pour cette affaire.</p>
           <Button size="sm" variant="outline" className="mt-3 gap-1.5 text-xs" onClick={() => setDialogOpen(true)}>
             <Pencil className="h-3.5 w-3.5" /> Compléter {words.definite}
