@@ -34,6 +34,13 @@ export const liensPaiementTable = pgTable(
 
     bridgeLinkId: text("bridge_link_id"),
     /**
+     * L'identifiant de transaction de Bridge, posé au retour du webhook.
+     * UNIQUE en base : c'est LUI qui tient l'idempotence. Leur webhook rejoue,
+     * `paiements` est append-only — un doublon y écrirait un encaissement qui
+     * n'a jamais eu lieu.
+     */
+    bridgeTransactionId: text("bridge_transaction_id"),
+    /**
      * URL publique du lien Bridge. VOLUMINEUSE : ne jamais la ramener dans
      * une route de liste sans projection — même doctrine qu'`archived_pdfs`.
      */

@@ -65,6 +65,21 @@ export function getConfig(): BanqueConfig {
   return { clientId, clientSecret, webhookSecret };
 }
 
+/**
+ * Secret du webhook de PAIEMENT (ticket 4.19), distinct de celui de
+ * l'agrégation : chez Bridge, un webhook est déclaré par app avec son propre
+ * secret, et l'app qui porte « Bank payment » n'est pas forcément celle qui
+ * porte l'agrégation (une app sandbox ne partage rien avec la production).
+ *
+ * Rend `null` plutôt que de lever : un déploiement sans liens de paiement est
+ * légitime, et la route répond alors 503. Jamais de repli sur le secret de
+ * l'agrégation — accepter un webhook signé avec le mauvais secret reviendrait
+ * à ne pas le vérifier du tout.
+ */
+export function secretWebhookPaiement(): string | null {
+  return process.env["BRIDGE_PAYMENT_WEBHOOK_SECRET"] || null;
+}
+
 function appHeaders(config: BanqueConfig): Record<string, string> {
   return {
     "Bridge-Version": BRIDGE_VERSION,

@@ -37,6 +37,7 @@ import {
 } from '@workspace/api-client-react';
 import { PageHeader } from '@/components/page-header';
 import { PanneauMandat } from '@/components/panneau-mandat';
+import { LiensPaiement } from '@/components/liens-paiement';
 import { AnimatedKpi } from '@/components/animated-kpi';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
@@ -624,6 +625,10 @@ export default function Cockpit() {
             </div>
           </motion.div>
         </div>
+
+        {/* Liens de paiement (4.19) — la carte se masque d'elle-même
+            tant qu'aucun lien n'a été émis. */}
+        {financier ? <LiensPaiement /> : null}
 
         {/* Activity feed */}
         <motion.div

@@ -42,6 +42,7 @@ import facturationElectroniqueRouter, {
 import eReportingRouter from "./e-reporting";
 import { banqueWebhookRouter } from "./webhooks-banque";
 import { webhookAgentVocalRouter } from "./webhook-agent-vocal";
+import { paiementWebhookRouter } from "./webhooks-paiement";
 import chargesRecurrentesRouter from "./charges-recurrentes";
 import previsionnelTresorerieRouter from "./previsionnel-tresorerie";
 
@@ -57,6 +58,7 @@ import souveraineteRouter from "./souverainete";
 import { modulesReadRouter, modulesWriteRouter } from "./modules";
 import { reglesRelanceReadRouter, reglesRelanceWriteRouter } from "./regles-relance";
 import { campagnesRelanceReadRouter, campagnesRelanceWriteRouter } from "./campagnes-relance";
+import { liensPaiementReadRouter, liensPaiementWriteRouter } from "./liens-paiement";
 import relanceFormulationRouter from "./relance-formulation";
 import relanceMandatRouter from "./relance-mandat";
 import { requireAppelVocal } from "../middleware/requireAppelVocal";
@@ -83,6 +85,9 @@ router.use(banqueWebhookRouter);
 // conversation_id — jamais reçu du client. Public par nature, comme le
 // webhook bancaire au-dessus.
 router.use(webhookAgentVocalRouter);
+// Webhook de paiement Bridge (4.19) : public, authentifié par signature sur
+// le corps brut — même famille que les deux précédents.
+router.use(paiementWebhookRouter);
 
 // ── Le worker vocal (4.18, lot 6) ────────────────────────────────────────
 //
@@ -165,6 +170,9 @@ router.use(biz, modulesReadRouter);
 // il doit donc pouvoir la lire. L'écriture est plus bas, au propriétaire.
 router.use(biz, reglesRelanceReadRouter);
 router.use(biz, campagnesRelanceReadRouter);
+// Les liens de paiement portent des montants dus : lecture réservée aux rôles
+// à accès financier, comme le reste de la relance.
+router.use(biz, liensPaiementReadRouter);
 // ── Le worker vocal (4.18, lot 6) ────────────────────────────────────────
 //
 // PAS `biz` : le worker est une machine, il n'a pas de session. Le jeton
@@ -212,5 +220,7 @@ router.use(ownerOnly, modulesWriteRouter);
 router.use(ownerOnly, reglesRelanceWriteRouter);
 // Proposer une campagne engage le compte : c'est une décision de propriétaire.
 router.use(ownerOnly, campagnesRelanceWriteRouter);
+// Renvoyer un SMS à un débiteur engage le compte : décision de propriétaire.
+router.use(ownerOnly, liensPaiementWriteRouter);
 
 export default router;
