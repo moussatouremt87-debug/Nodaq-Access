@@ -197,6 +197,29 @@ globalThis.fetch = async function patchedFetch(
                           }],
                           nonCompris: [],
                         }
+                      : userText.includes("voix-test-pointage-sans-nom")
+                        ? {
+                            // Sans membre dicté : « trois heures chez Dupont ».
+                            // C'est le cas nominal du chantier — on pointe en
+                            // descendant du camion, on ne se nomme pas soi-même.
+                            intentions: [{
+                              type: "pointer_heures",
+                              affaireMentionnee: "Dupont",
+                              heures: 3,
+                            }],
+                            nonCompris: [],
+                          }
+                      : userText.includes("voix-test-pointage")
+                        ? {
+                            intentions: [{
+                              type: "pointer_heures",
+                              affaireMentionnee: "Dupont",
+                              membreMentionne: "Sophie",
+                              heures: 7.5,
+                              dateMentionnee: "hier",
+                            }],
+                            nonCompris: [],
+                          }
                       : userText.includes("voix-test-absence")
                         ? {
                             intentions: [{

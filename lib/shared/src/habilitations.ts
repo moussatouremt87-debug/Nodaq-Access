@@ -74,8 +74,26 @@ const SANTE: readonly HabilitationSuggestion[] = [
   { type: "autorisation_exercice", libelle: "Autorisation d'exercice" },
 ];
 
+/**
+ * Sécurité privée et sécurité incendie.
+ *
+ * La carte professionnelle CNAPS conditionne l'EXERCICE : sans elle, un agent
+ * ne peut pas être déployé, quelle que soit sa qualification. Les SSIAP, eux,
+ * se recyclent tous les trois ans — et un SSIAP non recyclé n'est plus
+ * opposable sur un événement recevant du public. Ce sont donc exactement les
+ * habilitations que la fenêtre d'alerte à 30 jours doit surveiller.
+ *
+ * Les trois niveaux sont distincts et non interchangeables : un SSIAP 1 est
+ * agent, un SSIAP 2 chef d'équipe, un SSIAP 3 chef de service. Une mission qui
+ * exige un chef d'équipe n'est pas couverte par trois agents — d'où trois
+ * suggestions plutôt qu'une entrée « SSIAP » à préciser à la main.
+ */
 const SECURITE_PRO: readonly HabilitationSuggestion[] = [
   { type: "carte_pro_cnaps", libelle: "Carte professionnelle (CNAPS)" },
+  { type: "ssiap_1", libelle: "SSIAP 1 (agent)" },
+  { type: "ssiap_2", libelle: "SSIAP 2 (chef d'équipe)" },
+  { type: "ssiap_3", libelle: "SSIAP 3 (chef de service)" },
+  { type: "sst", libelle: "SST (sauveteur secouriste du travail)" },
 ];
 
 const AUCUNE: readonly HabilitationSuggestion[] = [];
@@ -92,7 +110,14 @@ const SUGGESTIONS_PAR_VERTICAL: Record<Vertical, readonly HabilitationSuggestion
   // de CHECK, hors de proportion pour ce ticket) : rattaché au pack le plus
   // proche en registre, la prestation B2B.
   services_entreprises: SECURITE_PRO,
-  evenementiel: AUCUNE,
+  // L'événementiel reçoit les MÊMES suggestions, et ce n'est pas une
+  // extension de complaisance : un rassemblement recevant du public impose un
+  // service de sécurité incendie, tenu par des SSIAP. Une société qui ne fait
+  // que ça — sécurité incendie sur événements — se déclare naturellement en
+  // « Événementiel », et ne se voyait proposer AUCUNE des habilitations qui
+  // conditionnent son activité. Le libellé reste libre : un traiteur qui
+  // choisit ce secteur ignore simplement ces lignes.
+  evenementiel: SECURITE_PRO,
   services_projet: AUCUNE,
   services: AUCUNE,
   negoce: AUCUNE,
