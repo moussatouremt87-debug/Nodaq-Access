@@ -78,6 +78,8 @@ export const BAREME_TEMPS_MANUEL: Record<Intention["type"], { readonly champs: n
   // sans nom dicté, c'est celui qui parle, et à l'écran il est déjà
   // sélectionné. On sous-estime, comme partout dans ce barème.
   pointer_heures: { champs: 3 },
+  // nom, telephoneMentionne, emailMentionne, villeMentionnee
+  creer_client: { champs: 4 },
 };
 
 /**
