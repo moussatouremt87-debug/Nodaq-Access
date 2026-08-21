@@ -197,6 +197,8 @@ globalThis.fetch = async function patchedFetch(
                           }],
                           nonCompris: [],
                         }
+                      : userText.includes("voix-test-facturer")
+                        ? { intentions: [{ type: "facturer_devis", devisMentionne: "Delacroix" }], nonCompris: [] }
                       : userText.includes("voix-test-relance")
                         ? { intentions: [{ type: "lancer_relance" }], nonCompris: [] }
                       : userText.includes("voix-test-reglement-cheque")

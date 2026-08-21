@@ -76,6 +76,7 @@ import {
 } from "@nodaq/shared";
 import { verticalDepuisTx } from "./vertical-tenant.js";
 import { conditionFactureEnRetardSql } from "./facturesEnRetard.js";
+import { facturerDevis, messageRefusFacturation } from "./facturer-devis.js";
 import { regleEnVigueur, TYPE_CAMPAGNE_RELANCE } from "./campagnes-relance.js";
 import { recalculerFacture } from "./reglement-facture.js";
 
@@ -125,6 +126,10 @@ export interface ContexteResolution {
    *  proposera, et que l'écran laissera corriger. Le modèle n'en produit
    *  aucun (voir `IntentionEnregistrerReglement`). */
   readonly factures: readonly (Candidat & { readonly soldeCents: number })[];
+  /** Devis ACCEPTÉS pas encore facturés — les seuls qu'on puisse facturer.
+   *  Chacun porte son total TTC, pour que le plan annonce un montant que
+   *  l'utilisateur reconnaît avant de valider. */
+  readonly devisAFacturer: readonly (Candidat & { readonly totalTTCCents: number })[];
   /** Impayés joignables, et le compte de ceux qui ne le sont pas. */
   readonly impayes: {
     readonly joignables: readonly {
@@ -191,8 +196,22 @@ export async function chargerContexte(tenantId: string): Promise<ContexteResolut
       }));
     const impayes = { joignables, sansNumero: lignesRetard.length - joignables.length };
 
+    const devisLignes = await tx.execute(sql`
+      SELECT d.id, d.reference, d.client_name, d.total_ttc_cents
+        FROM devis d
+        LEFT JOIN factures f ON f.devis_id = d.id
+       WHERE d.status = 'ACCEPTE' AND f.id IS NULL`);
+    const devisAFacturer = (devisLignes.rows as Array<{
+      id: string; reference: string; client_name: string; total_ttc_cents: number;
+    }>).map((d) => ({
+      // Référence ET client : on dit « le devis Delacroix » comme « le 0044 ».
+      id: d.id,
+      libelle: `${d.reference} ${d.client_name}`,
+      totalTTCCents: Number(d.total_ttc_cents),
+    }));
+
     const words = affaireWords(await verticalDepuisTx(tx));
-    return { affaires, membres, factures, impayes, words };
+    return { affaires, membres, factures, devisAFacturer, impayes, words };
   });
 }
 
@@ -225,6 +244,8 @@ function libelleOperation(intention: Intention, words: AffaireWords): string {
       return `Enregistrer le règlement de « ${intention.factureMentionnee} »`;
     case "lancer_relance":
       return "Préparer une campagne de relance téléphonique";
+    case "facturer_devis":
+      return `Facturer le devis « ${intention.devisMentionne} »`;
   }
 }
 
@@ -325,6 +346,38 @@ export function construirePlan(
           dateDebut,
         },
         certitude: "aucune_resolution",
+      });
+      continue;
+    }
+
+    if (intention.type === "facturer_devis") {
+      const rDevis = resoudreMention(intention.devisMentionne, contexte.devisAFacturer);
+      if (rDevis.etat === "ambigu") {
+        questions.push({
+          question: `Quel devis « ${intention.devisMentionne} » ?`,
+          candidats: rDevis.candidats,
+          mention: intention.devisMentionne,
+        });
+        continue;
+      }
+      if (rDevis.etat === "introuvable") {
+        // Explicite : un devis non accepté, ou DÉJÀ facturé, n'est pas dans le
+        // contexte — et l'utilisateur doit savoir laquelle des deux raisons
+        // s'applique plutôt que de croire à une erreur d'écoute.
+        incompris.push(
+          `devis « ${intention.devisMentionne} » introuvable parmi les devis acceptés non encore facturés`,
+        );
+        continue;
+      }
+
+      const total = contexte.devisAFacturer.find((d) => d.id === rDevis.candidat.id)?.totalTTCCents ?? 0;
+      operations.push({
+        type: intention.type,
+        libelle:
+          `Facturer « ${rDevis.candidat.libelle} » — ${(total / 100).toFixed(2)} € TTC ` +
+          `(brouillon : l'émission reste un geste à part)`,
+        champs: { devisId: rDevis.candidat.id },
+        certitude: rDevis.certitude,
       });
       continue;
     }
@@ -731,6 +784,17 @@ async function executerOperation(
         ...(op.champs["clientNom"] ? { clientName: op.champs["clientNom"] } : {}),
         ...(op.champs["dateDebut"] ? { startDate: op.champs["dateDebut"] } : {}),
       });
+      return;
+    }
+    case "facturer_devis": {
+      // Le module partagé, pas une seconde conversion : c'est lui qui compare
+      // le total de la facture à celui du devis signé, et qui refuse l'écart.
+      const r = await facturerDevis(tx, tenantId, op.champs["devisId"]!);
+      if (r.kind !== "ok" && r.kind !== "deja") {
+        // Refus explicite plutôt qu'un brouillon faux : la transaction annule
+        // tout le plan, et le message dit lequel des cas s'applique.
+        throw new Error(messageRefusFacturation(r));
+      }
       return;
     }
     case "lancer_relance": {

@@ -234,6 +234,25 @@ export const IntentionLancerRelance = z
   })
   .strict();
 
+
+/**
+ * Facturer un devis accepté (ticket 4.21, lot 3).
+ *
+ * « Facture le devis Delacroix. » Aucun montant ici, et pour la même raison
+ * qu'ailleurs : le total vient du devis signé, calculé par le serveur. Un
+ * chiffre entendu au téléphone n'a rien à faire sur un document opposable.
+ *
+ * Le résultat est un BROUILLON. Facturer d'un mot et émettre d'un autre n'est
+ * pas une lourdeur : émettre attribue un numéro de séquence et archive un
+ * PDF, sans retour possible. On ne dicte pas un acte irréversible.
+ */
+export const IntentionFacturerDevis = z
+  .object({
+    type: z.literal("facturer_devis"),
+    devisMentionne: Mention,
+  })
+  .strict();
+
 export const Intention = z.discriminatedUnion("type", [
   IntentionCreerAffaire,
   IntentionCreerProspect,
@@ -247,6 +266,7 @@ export const Intention = z.discriminatedUnion("type", [
   IntentionCreerClient,
   IntentionEnregistrerReglement,
   IntentionLancerRelance,
+  IntentionFacturerDevis,
 ]);
 export type Intention = z.infer<typeof Intention>;
 
@@ -279,6 +299,7 @@ export const TYPES_INTENTION = [
   "creer_client",
   "enregistrer_reglement",
   "lancer_relance",
+  "facturer_devis",
 ] as const;
 export type TypeIntention = (typeof TYPES_INTENTION)[number];
 
@@ -459,6 +480,10 @@ export const CHAMPS_CORRIGEABLES: Record<TypeIntention, readonly string[]> = {
   // Rien à corriger : la campagne ne porte aucun texte dicté. Le tri se fait
   // dans la file de validation, où l'on exclut un appel d'un clic.
   lancer_relance: [],
+  // Rien à corriger : le devis est un rapprochement, et les montants viennent
+  // du document signé. Corriger l'un ou l'autre reviendrait à facturer autre
+  // chose que ce qui a été accepté.
+  facturer_devis: [],
 };
 
 /** Le champ est-il corrigeable pour ce type d'opération ? */

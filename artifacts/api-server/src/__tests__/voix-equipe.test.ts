@@ -628,3 +628,62 @@ describe("i — lancer_relance : la voix PRÉPARE, elle ne déclenche pas", () =
     expect(body.nonCompris.join(" ")).toContain("aucune facture en retard");
   });
 });
+
+// ── j. Facturer un devis à la voix (ticket 4.21) ────────────────────────────
+
+describe("j — facturer_devis emprunte LE module, pas une seconde conversion", () => {
+  /** Un devis accepté, créé par la vraie route pour que ses totaux soient justes. */
+  async function devisAccepte(l: Locataire, montantCents: number): Promise<{ id: string; ttc: number }> {
+    const { body } = await request(app)
+      .post("/api/devis")
+      .set("Cookie", l.cookie)
+      .send({
+        clientName: "Delacroix",
+        lines: [{ description: "Pose", quantity: 1, unitPriceCents: montantCents }],
+        tvaRate: 20,
+      })
+      .expect(201);
+    await adminPool.query(`UPDATE devis SET status = 'ACCEPTE' WHERE id = $1`, [body.id]);
+    return { id: body.id, ttc: body.totalTTCCents };
+  }
+
+  test("le plan annonce le montant du devis SIGNÉ, et crée un brouillon", async () => {
+    const t = await inscrire("facturer");
+    const d = await devisAccepte(t, 100000);
+
+    const { body } = await interpreter(t, "voix-test-facturer").expect(200);
+    expect(body.operations).toHaveLength(1);
+    // Le montant vient du devis, calculé par le serveur — le modèle n'a
+    // prononcé aucun chiffre, et son schéma ne pourrait pas en porter.
+    expect(body.operations[0].libelle).toContain((d.ttc / 100).toFixed(2));
+    expect(body.operations[0].libelle).toContain("brouillon");
+
+    await executer(t, body.planId).expect(200);
+
+    const { rows } = await adminPool.query(
+      `SELECT statut, number, amount_cents FROM factures WHERE devis_id = $1`, [d.id],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].statut).toBe("BROUILLON");
+    // Sans numéro : l'émission reste un geste à part, jamais dicté.
+    expect(rows[0].number).toBe("");
+    expect(Number(rows[0].amount_cents)).toBe(d.ttc);
+  });
+
+  test("un devis DÉJÀ facturé n'est plus proposé — et on dit pourquoi", async () => {
+    const t = await inscrire("facturer-deja");
+    const d = await devisAccepte(t, 100000);
+    await request(app).post(`/api/devis/${d.id}/facturer`).set("Cookie", t.cookie).expect(201);
+
+    const { body } = await interpreter(t, "voix-test-facturer").expect(200);
+    expect(body.operations).toHaveLength(0);
+    expect(body.nonCompris.join(" ")).toContain("non encore facturés");
+
+    // Et toujours UNE seule facture : le contexte l'a écarté, et l'index
+    // unique l'aurait refusé de toute façon.
+    const { rows } = await adminPool.query(
+      `SELECT count(*)::int AS n FROM factures WHERE devis_id = $1`, [d.id],
+    );
+    expect(rows[0].n).toBe(1);
+  });
+});
