@@ -174,10 +174,13 @@ const BUSINESS_TABLES = [
   "absences", "activity", "affaires", "analytics_tool_logs", "archived_pdfs", "chat_messages",
   // classeur_document_bytes référence classeur_documents (document_id) : avant elle.
   "classeur_document_bytes", "classeur_documents",
-  "connectors", "contrats", "cr_entries", "devis", "echeances",
+  "connectors", "contrats", "cr_entries", "echeances",
   "avoirs", "facture_sequences",
   // incidents_facturation référence factures (facture_id) : avant elle.
-  "incidents_facturation", "factures",
+  // Et depuis la migration 049, factures référence devis (devis_id) : les
+  // factures partent donc AVANT les devis. Une facture est un document
+  // opposable — c'est le devis qui s'efface derrière elle, jamais l'inverse.
+  "incidents_facturation", "factures", "devis",
   // liens_paiement référence appels_relance (appel_id) : avant elle.
   "liens_paiement",
   "appels_relance", "campagnes_relance", "pending_actions", "journal_decisions", "regles_relance", "prospects", "settings", "team_members",

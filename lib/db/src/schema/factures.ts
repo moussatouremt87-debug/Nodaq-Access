@@ -41,6 +41,13 @@ export const facturesTable = pgTable("factures", {
   /** Kept for backward compat; PAYEE statut is authoritative. */
   settled: boolean("settled").notNull().default(false),
   affaireId: text("affaire_id"),
+  /**
+   * Le devis facturé, s'il y en a un. UNIQUE en base (migration 049) : un
+   * devis ne se facture qu'une fois, et c'est le MOTEUR qui le tient — un
+   * contrôle applicatif « ce devis a-t-il déjà une facture ? » se contourne
+   * par deux requêtes simultanées, qui lisent « non » toutes les deux.
+   */
+  devisId: text("devis_id"),
 
   // ── New columns ────────────────────────────────────────────────────────
   /** Authoritative status. Immutability: EMISE → never PATCH/DELETE. */
