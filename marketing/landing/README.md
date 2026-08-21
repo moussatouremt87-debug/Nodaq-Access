@@ -81,7 +81,7 @@ Tous documentés dans le commentaire HTML en tête de `index.html` :
 |---|---|---|
 | `[DATE_CALENDRIER]` | **Renseigné** (17/08) | « À venir — Décembre 2026 », contenu : Paiement en USDC |
 | `[DATE_OUVERTURE_FONDATEURS]` | **Renseigné** (17/08) | « le 1er octobre 2026 » dans la FAQ |
-| `ENDPOINT_FORMULAIRE` | **Branché et activé** (17/08) | FormSubmit `/ajax` vers `moussatoure.mt.87@gmail.com` — inscription et verbatim, sujets distincts. L'adresse a été activée par le fondateur (« Form Activated », formulaire `nodaq-landing.vercel.app`) : les soumissions arrivent directement par email. Une réponse `success:"false"` reste traitée comme un échec, pas de fausse réussite |
+| `ENDPOINT_FORMULAIRE` | **Branché et activé** (nodaq.fr, www, vercel.app) | FormSubmit `/ajax` vers la boîte du fondateur — inscription et verbatim, sujets distincts. Constante unique en tête du `<script>`. À basculer sur l'alias `/ajax/{hash}` (fourni par le fondateur) pour ne plus exposer d'adresse en clair, puis sur l'alias de `contact@nodaq.fr` quand elle sera active (réactivation + `_autoresponse` + test de bout en bout). `success:"false"` reste traité comme un échec |
 | `[ENDPOINT_MESURE]` | Constante dans le `<script>` | Compteur maison sans cookie (`sendBeacon`) : `conversion_email`, `scroll_section3`, `reponse_irritant`. No-op tant que le placeholder reste. Pas de Google Analytics |
 
 Images du prototype à déposer à côté du fichier : `cockpit-annote.png`,

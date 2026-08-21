@@ -17,19 +17,27 @@
     DATE_OUVERTURE_FONDATEURS    RENSEIGNÉ : « le 1er octobre 2026 »
                                  (Section 7, FAQ « Quand est-ce disponible ? »).
     ENDPOINT_FORMULAIRE          BRANCHÉ : FormSubmit (mode /ajax) relaie
-                                 chaque soumission par email vers
-                                 moussatoure.mt.87@gmail.com — inscription
-                                 (champ « email ») et verbatim (champs
-                                 « email » + « irritant »), avec un sujet
-                                 distinct par cas. ACTIVATION REQUISE UNE
-                                 FOIS : la première soumission depuis le
-                                 site déclenche un email d'activation de
-                                 FormSubmit dans cette boîte — cliquer
-                                 « Activate » une seule fois ; ensuite tout
-                                 arrive directement. Une réponse
-                                 success:"false" (adresse non activée) est
-                                 traitée comme un échec — pas de fausse
-                                 réussite.
+                                 chaque soumission vers la boîte du
+                                 fondateur — inscription (champ « email »)
+                                 et verbatim (« email » + « irritant »),
+                                 sujets distincts. Constante UNIQUE en tête
+                                 du <script> : toute bascule d'adresse est
+                                 une modification d'une seule ligne.
+                                 À FAIRE (brief §3) : remplacer par l'alias
+                                 https://formsubmit.co/ajax/{hash} (hash
+                                 fourni par le fondateur depuis son email
+                                 d'activation FormSubmit) pour ne plus
+                                 exposer d'adresse en clair. Quand
+                                 contact@nodaq.fr sera actif : nouvel
+                                 alias + réactivation (première soumission
+                                 → email → « Activate ») + _autoresponse
+                                 (accusé de réception à l'inscrit) + test
+                                 de bout en bout avant de rebrancher les
+                                 campagnes. ACTIVATION : une fois par
+                                 domaine (faite pour nodaq.fr, www et
+                                 vercel.app). Une réponse success:"false"
+                                 est traitée comme un échec — pas de
+                                 fausse réussite.
     GOOGLE_ADS_ID                [À COMPLÉTER : AW-XXXXXXXXX] — constante
     GOOGLE_ADS_LABEL_CONVERSION  dans le <script> + [À COMPLÉTER : label].
                                  gtag.js n'est chargé que si l'ID est
@@ -1318,10 +1326,13 @@ button, input, textarea { font: inherit; color: inherit; }
 (function () {
   "use strict";
 
-  /* Endpoint réel : FormSubmit relaie chaque soumission par email vers la
-     boîte du fondateur (moussatoure.mt.87@gmail.com). Le mode /ajax renvoie
-     du JSON et accepte le POST JSON de fetch. [ENDPOINT_MESURE] reste un
-     placeholder — voir le commentaire en tête de fichier. */
+  /* ── ENDPOINT DE COLLECTE — CONSTANTE UNIQUE (brief §3) ─────────────────
+     FormSubmit /ajax relaie chaque soumission vers la boîte du fondateur.
+     Toute bascule (alias {hash} pour masquer l'adresse, puis alias de
+     contact@nodaq.fr quand elle sera active) = modifier CETTE seule ligne.
+     L'adresse en clair ci-dessous doit être remplacée par l'alias
+     https://formsubmit.co/ajax/{hash} dès que le fondateur fournit le hash
+     (visible dans son tableau de bord / email d'activation FormSubmit). */
   var ENDPOINT_FORMULAIRE = "https://formsubmit.co/ajax/moussatoure.mt.87@gmail.com";
 
   /* Identifiants Google Ads (brief §2). Tant que les jetons subsistent,
