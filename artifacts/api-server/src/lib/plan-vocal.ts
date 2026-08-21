@@ -59,6 +59,8 @@ import {
   journalDecisionsTable,
   pointagesTable,
   clientsTable,
+  facturesTable,
+  paiementsTable,
 } from "@workspace/db";
 import {
   type Intention,
@@ -72,6 +74,7 @@ import {
   champCorrigeable,
 } from "@nodaq/shared";
 import { verticalDepuisTx } from "./vertical-tenant.js";
+import { recalculerFacture } from "./reglement-facture.js";
 
 type Tx = Parameters<Parameters<typeof withTenant>[1]>[0];
 
@@ -111,6 +114,14 @@ export interface Plan {
 export interface ContexteResolution {
   readonly affaires: readonly Candidat[];
   readonly membres: readonly Candidat[];
+  /** Factures ÉMISES seules : une facture en brouillon ou déjà réglée n'a
+   *  pas de règlement à recevoir, et l'offrir au rapprochement ferait
+   *  proposer des cibles absurdes.
+   *
+   *  Chacune porte son SOLDE, calculé ici : c'est le montant que le plan
+   *  proposera, et que l'écran laissera corriger. Le modèle n'en produit
+   *  aucun (voir `IntentionEnregistrerReglement`). */
+  readonly factures: readonly (Candidat & { readonly soldeCents: number })[];
   /** US-A6.1 — le mot du secteur, pour que les libellés soumis à validation
    *  parlent la langue de l'utilisateur (« Créer la mission … » plutôt que
    *  « Créer l'affaire … » chez un consultant). Porté par le contexte, déjà
@@ -123,8 +134,30 @@ export async function chargerContexte(tenantId: string): Promise<ContexteResolut
   return withTenant(tenantId, async (tx) => {
     const affaires = await tx.select({ id: affairesTable.id, libelle: affairesTable.label }).from(affairesTable);
     const membres = await tx.select({ id: teamMembersTable.id, libelle: teamMembersTable.name }).from(teamMembersTable);
+    // Le solde vient d'UNE requête agrégée plutôt que d'une par facture : le
+    // contexte se charge à chaque dictée, et un appel par facture ferait
+    // grossir la latence avec le carnet de commandes.
+    const lignes = await tx.execute(sql`
+      SELECT f.id,
+             f.number,
+             f.customer_name,
+             (f.amount_cents - COALESCE(SUM(
+                CASE WHEN p.sens = 'ENCAISSEMENT' THEN p.montant_cents
+                     ELSE -p.montant_cents END), 0))::int AS solde
+        FROM factures f
+        LEFT JOIN paiements p ON p.facture_id = f.id
+       WHERE f.statut = 'EMISE'
+       GROUP BY f.id, f.number, f.customer_name, f.amount_cents`);
+    const factures = (lignes.rows as Array<{ id: string; number: string; customer_name: string; solde: number }>)
+      .map((f) => ({
+        // Le numéro ET le client dans le libellé : on dit « la 181 » comme
+        // « la facture Delacroix », et le rapprochement doit attraper les deux.
+        id: f.id,
+        libelle: `${f.number} ${f.customer_name}`,
+        soldeCents: Number(f.solde),
+      }));
     const words = affaireWords(await verticalDepuisTx(tx));
-    return { affaires, membres, words };
+    return { affaires, membres, factures, words };
   });
 }
 
@@ -153,6 +186,8 @@ function libelleOperation(intention: Intention, words: AffaireWords): string {
       return `Pointer ${intention.heures} h sur « ${intention.affaireMentionnee} »`;
     case "creer_client":
       return `Créer le client « ${intention.nom} »`;
+    case "enregistrer_reglement":
+      return `Enregistrer le règlement de « ${intention.factureMentionnee} »`;
   }
 }
 
@@ -253,6 +288,50 @@ export function construirePlan(
           dateDebut,
         },
         certitude: "aucune_resolution",
+      });
+      continue;
+    }
+
+    if (intention.type === "enregistrer_reglement") {
+      const rFacture = resoudreMention(intention.factureMentionnee, contexte.factures);
+      if (rFacture.etat === "ambigu") {
+        questions.push({
+          question: `Quelle facture « ${intention.factureMentionnee} » ?`,
+          candidats: rFacture.candidats,
+          mention: intention.factureMentionnee,
+        });
+        continue;
+      }
+      if (rFacture.etat === "introuvable") {
+        // Volontairement explicite : une facture non émise ou déjà réglée
+        // n'est pas dans le contexte, et l'utilisateur doit savoir pourquoi
+        // on ne la trouve pas.
+        incompris.push(
+          `facture « ${intention.factureMentionnee} » introuvable parmi les factures émises non réglées`,
+        );
+        continue;
+      }
+
+      // Le SOLDE, calculé par le serveur, est proposé — et corrigeable à
+      // l'écran. Un règlement partiel se fait ainsi : l'utilisateur ramène le
+      // chiffre à ce qu'il a reçu, de ses doigts, avant de valider.
+      const solde = contexte.factures.find((f) => f.id === rFacture.candidat.id)?.soldeCents ?? 0;
+      if (solde <= 0) {
+        incompris.push(`facture « ${rFacture.candidat.libelle} » : rien ne reste dû`);
+        continue;
+      }
+
+      operations.push({
+        type: intention.type,
+        libelle: `Enregistrer ${(solde / 100).toFixed(2)} € sur « ${rFacture.candidat.libelle} » (solde restant — corrigez si le règlement est partiel)`,
+        champs: {
+          factureId: rFacture.candidat.id,
+          // Centimes : un euro décimal qui voyage en JSON et se reconvertit
+          // trois fois finit par perdre un centime.
+          montantCents: String(solde),
+          moyen: intention.moyen ?? "AUTRE",
+        },
+        certitude: rFacture.certitude,
       });
       continue;
     }
@@ -579,6 +658,40 @@ async function executerOperation(
         ...(op.champs["clientNom"] ? { clientName: op.champs["clientNom"] } : {}),
         ...(op.champs["dateDebut"] ? { startDate: op.champs["dateDebut"] } : {}),
       });
+      return;
+    }
+    case "enregistrer_reglement": {
+      const factureId = op.champs["factureId"]!;
+      const [f] = await tx.select().from(facturesTable).where(eq(facturesTable.id, factureId));
+      if (!f) throw new Error(`Facture ${factureId} introuvable`);
+      // Une facture réglée entre la construction du plan et sa validation
+      // (jusqu'à une heure) ne doit pas recevoir un second encaissement.
+      if (f.statut !== "EMISE") throw new Error(`Facture ${factureId} n'est plus à régler`);
+
+      // Sans montant dicté, c'est le SOLDE — calculé par le serveur depuis le
+      // journal des paiements, jamais par le modèle (règle 3). Le calcul est
+      // celui de la route `/factures/:id/payer`, pas une seconde version.
+      // Le montant vient du plan — c'est-à-dire du solde calculé au serveur,
+      // éventuellement corrigé à l'écran par l'utilisateur. Jamais du modèle.
+      const montantCents = Number(op.champs["montantCents"]);
+      if (!Number.isFinite(montantCents) || montantCents <= 0) {
+        throw new Error("Montant de règlement invalide");
+      }
+
+      await tx.insert(paiementsTable).values({
+        tenantId,
+        factureId,
+        clientId: f.clientId ?? null,
+        affaireId: f.affaireId ?? null,
+        date: toDateString(new Date()),
+        montantCents,
+        sens: "ENCAISSEMENT",
+        moyen: op.champs["moyen"] ?? "AUTRE",
+        nature: "SOLDE",
+      });
+      // Le statut se DÉDUIT du journal, il ne s'écrit pas à la main : deux
+      // façons d'écrire le même fait sont deux façons de le rendre faux.
+      await recalculerFacture(tx, factureId);
       return;
     }
     case "creer_client": {

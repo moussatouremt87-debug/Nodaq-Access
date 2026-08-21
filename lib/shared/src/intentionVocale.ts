@@ -178,6 +178,37 @@ export const IntentionCreerClient = z
   })
   .strict();
 
+
+/**
+ * Enregistrer un règlement reçu (ticket 4.21, lot 3).
+ *
+ * « Delacroix m'a réglé la 181. » L'artisan qui reçoit un chèque sur un
+ * chantier peut le consigner sur place, au lieu de le retrouver trois
+ * semaines plus tard dans une poche de veste.
+ *
+ * ── Aucun montant dans ce schéma, et c'est une garde qui l'a imposé ───────
+ * La première version acceptait un `montantEuros` dicté. Le test « AUCUN
+ * schéma d'intention ne déclare de champ monétaire » l'a refusée, et il avait
+ * raison : ce champ aurait fait produire un montant PAR LE MODÈLE, ce que la
+ * règle 3 interdit — un chiffre entendu de travers sur un règlement se
+ * retrouve en comptabilité.
+ *
+ * Le montant proposé est donc le SOLDE, calculé par le serveur depuis le
+ * journal des paiements. Un règlement partiel reste possible, et par le bon
+ * chemin : l'écran de validation affiche ce solde et laisse le CORRIGER
+ * (`CHAMPS_CORRIGEABLES`). Le chiffre vient alors des doigts de
+ * l'utilisateur, jamais de l'oreille de la machine.
+ */
+export const MOYENS_REGLEMENT_DICTABLES = ["VIREMENT", "CHEQUE", "ESPECES", "CB"] as const;
+
+export const IntentionEnregistrerReglement = z
+  .object({
+    type: z.literal("enregistrer_reglement"),
+    factureMentionnee: Mention,
+    moyen: z.enum(MOYENS_REGLEMENT_DICTABLES).nullable().optional(),
+  })
+  .strict();
+
 export const Intention = z.discriminatedUnion("type", [
   IntentionCreerAffaire,
   IntentionCreerProspect,
@@ -189,6 +220,7 @@ export const Intention = z.discriminatedUnion("type", [
   IntentionAffecterMembre,
   IntentionPointerHeures,
   IntentionCreerClient,
+  IntentionEnregistrerReglement,
 ]);
 export type Intention = z.infer<typeof Intention>;
 
@@ -219,6 +251,7 @@ export const TYPES_INTENTION = [
   "affecter_membre",
   "pointer_heures",
   "creer_client",
+  "enregistrer_reglement",
 ] as const;
 export type TypeIntention = (typeof TYPES_INTENTION)[number];
 
@@ -392,6 +425,10 @@ export const CHAMPS_CORRIGEABLES: Record<TypeIntention, readonly string[]> = {
   declarer_absence: [],
   affecter_membre: [],
   pointer_heures: ["heures"],
+  // Le montant se corrige — c'est un chiffre prononcé, et l'entendre de
+  // travers sur un règlement coûte cher. La FACTURE visée, elle, est un
+  // rapprochement : la changer désignerait un autre dossier.
+  enregistrer_reglement: ["montantCents"],
 };
 
 /** Le champ est-il corrigeable pour ce type d'opération ? */

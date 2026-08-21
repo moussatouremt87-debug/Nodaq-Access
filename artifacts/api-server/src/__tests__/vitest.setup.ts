@@ -197,6 +197,24 @@ globalThis.fetch = async function patchedFetch(
                           }],
                           nonCompris: [],
                         }
+                      : userText.includes("voix-test-reglement-cheque")
+                        ? {
+                            intentions: [{
+                              type: "enregistrer_reglement",
+                              factureMentionnee: "Delacroix",
+                              moyen: "CHEQUE",
+                            }],
+                            nonCompris: [],
+                          }
+                      : userText.includes("voix-test-reglement")
+                        ? {
+                            // Aucun montant : « il m'a payé » = le solde.
+                            intentions: [{
+                              type: "enregistrer_reglement",
+                              factureMentionnee: "Delacroix",
+                            }],
+                            nonCompris: [],
+                          }
                       : userText.includes("voix-test-client")
                         ? {
                             intentions: [{
