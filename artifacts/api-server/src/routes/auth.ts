@@ -9,6 +9,7 @@ import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { hashPassword, verifyPassword } from "../lib/password";
 import { hasFinancialAccess, verticalLabel, type Vertical } from "@nodaq/shared";
+import { secondFacteurSuspendu } from "../lib/mfa-suspension.js";
 import { withTenant, affairesTable, settingsTable, type User, type Session } from "@workspace/db";
 import { sql, inArray } from "drizzle-orm";
 import {
@@ -150,7 +151,10 @@ function reponseAuthentification(
   role: string,
   tenantId: string,
 ) {
-  if (hasFinancialAccess(role)) {
+  // Suspendu : l'écran ne doit pas exiger un second facteur que le serveur
+  // n'attend plus. La condition est LUE au même endroit que celle du
+  // middleware — deux copies auraient divergé.
+  if (hasFinancialAccess(role) && !secondFacteurSuspendu()) {
     if (!user.mfaEnabledAt) return { authenticated: true, mfaStatus: "enroll_required" as const };
     if (!session.mfaVerifiedAt) return { authenticated: true, mfaStatus: "verify_required" as const };
     return {
