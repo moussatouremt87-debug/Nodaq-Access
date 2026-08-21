@@ -428,6 +428,43 @@ button, input, textarea { font: inherit; color: inherit; }
   padding-left: 18px;
   border-left: 2px solid var(--lime);
 }
+/* Le reste des chiffres, replié — même mécanique que la FAQ. */
+.constat__detail {
+  border: 1px solid var(--border);
+  border-top-color: var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+.constat__detail summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  padding: 15px 20px;
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+.constat__detail summary::-webkit-details-marker { display: none; }
+.constat__detail summary::after {
+  content: "+";
+  flex: none;
+  font-family: var(--mono);
+  font-size: 18px;
+  color: var(--lime);
+  transition: transform 0.2s ease;
+}
+.constat__detail[open] summary::after { transform: rotate(45deg); }
+.constat__detail .constat__list { padding: 0 20px 18px; }
+/* Mise en regard coût / tarif : une ligne, ancre interne vers S.06. */
+.bbyt__regard a {
+  color: var(--lime);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.bbyt__regard a:hover { color: var(--lime-hover); }
 .constat__sources {
   margin-top: 26px;
   font-family: var(--mono);
@@ -860,40 +897,45 @@ button, input, textarea { font: inherit; color: inherit; }
     <span class="idx reveal">S.02</span>
     <h2 class="section-title reveal">Ce n’est pas vous. C’est structurel.</h2>
 
+    <!-- Trois statistiques seulement en lecture directe (brief pré-campagne
+         §6) : un visiteur venu d'une publicité décroche avant le produit.
+         Le reste des chiffres est replié dans le details ci-dessous — rien
+         n'est supprimé. -->
     <div class="constat__prose">
-      <p class="constat__kicker reveal">En 2025</p>
       <ul class="constat__list">
-        <li class="reveal"><span class="fig" data-count="86" data-suffix="%">86%</span> des
-          entreprises françaises ont subi un retard de paiement dans les 12 derniers
-          mois — contre <span class="fig" data-count="82" data-suffix="%">82%</span> en 2023.</li>
-        <li class="reveal" style="--d:0.05s">Retard moyen pour les TPE :
+        <li class="reveal">Retard moyen de paiement pour les TPE :
           <span class="fig" data-count="44" data-suffix=" jours">44 jours</span>, contre
           <span class="fig" data-count="36">36</span> pour les grandes entreprises.</li>
-        <li class="reveal" style="--d:0.1s"><span class="fig" data-count="42505">42 505</span>
-          entreprises ont fait défaillance sur les 8 premiers mois de l’année —
-          <span class="fig">3,6 milliards</span> d’euros de dettes fournisseurs impayées.</li>
-        <li class="reveal" style="--d:0.15s"><span class="fig" data-count="19" data-suffix="%">19%</span>
+        <li class="reveal" style="--d:0.05s"><span class="fig" data-count="41" data-suffix="%">41%</span>
+          des dirigeants découvrent des relances oubliées des mois plus tard.</li>
+        <li class="reveal" style="--d:0.1s"><span class="fig" data-count="19" data-suffix="%">19%</span>
           des petites entreprises perdent jusqu’à une journée entière par semaine en
           administratif.</li>
       </ul>
 
-      <p class="constat__kicker reveal">Début 2026</p>
-      <ul class="constat__list">
-        <li class="reveal">Un dirigeant sur deux déclare que des impayés ont déjà mis
-          son entreprise en danger.</li>
-        <li class="reveal" style="--d:0.05s"><span class="fig" data-count="42" data-suffix="%">42%</span>
-          ont fini par abandonner des factures — renoncer à de l’argent gagné.</li>
-        <li class="reveal" style="--d:0.1s"><span class="fig" data-count="41" data-suffix="%">41%</span>
-          découvrent des relances oubliées des mois plus tard.</li>
-      </ul>
+      <details class="constat__detail reveal">
+        <summary>Le détail des chiffres</summary>
+        <ul class="constat__list">
+          <li>En 2025, <span class="fig" data-count="86" data-suffix="%">86%</span> des
+            entreprises françaises ont subi un retard de paiement dans les 12 derniers
+            mois — contre <span class="fig" data-count="82" data-suffix="%">82%</span> en 2023.</li>
+          <li><span class="fig" data-count="42505">42 505</span> entreprises ont fait
+            défaillance sur les 8 premiers mois de l’année —
+            <span class="fig">3,6 milliards</span> d’euros de dettes fournisseurs impayées.</li>
+          <li>Début 2026, un dirigeant sur deux déclare que des impayés ont déjà mis
+            son entreprise en danger.</li>
+          <li><span class="fig" data-count="42" data-suffix="%">42%</span> ont fini par
+            abandonner des factures — renoncer à de l’argent gagné.</li>
+          <li><span class="fig" data-count="71" data-suffix="%">71%</span> des entreprises
+            n’ont aucun outil dédié au suivi des paiements.</li>
+        </ul>
+      </details>
 
       <p class="constat__kicker reveal">Les outils actuels</p>
       <ul class="constat__list">
         <li class="reveal">Soit trop pauvres pour piloter une activité à l’affaire au
           quotidien — un tableur, un carnet, la mémoire.</li>
-        <li class="reveal" style="--d:0.05s"><span class="fig" data-count="71" data-suffix="%">71%</span>
-          des entreprises n’ont aucun outil dédié au suivi des paiements.</li>
-        <li class="reveal" style="--d:0.1s">Soit pensés pour la conformité comptable
+        <li class="reveal" style="--d:0.05s">Soit pensés pour la conformité comptable
           après coup, jamais pour la décision en temps réel.</li>
       </ul>
 
@@ -924,6 +966,12 @@ button, input, textarea { font: inherit; color: inherit; }
       <p class="bbyt__punch">
         Racheter ce temps n’est pas une dépense. C’est l’investissement qui se
         rembourse le plus vite dans votre entreprise.
+      </p>
+      <!-- Mise en regard coût / tarif (brief §6) : l'argument le plus fort de
+           la page, au moment où le calcul vient d'être lu. Ancre interne. -->
+      <p class="bbyt__punch bbyt__regard">
+        Près de 2 000 € par mois d’un côté —
+        <a href="#fondateurs">un tarif fondateur à partir de 49 € HT/mois de l’autre</a>.
       </p>
     </div>
   </div>
