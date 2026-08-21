@@ -79,9 +79,9 @@ Tous documentés dans le commentaire HTML en tête de `index.html` :
 
 | Placeholder | Où | Quoi |
 |---|---|---|
-| `[DATE_CALENDRIER]` | Section 5, colonne « À venir » | Laisser visible tant que le fondateur n'a pas fourni la date |
-| `[DATE_OUVERTURE_FONDATEURS]` | FAQ, « Quand est-ce disponible ? » | Idem |
-| `ENDPOINT_FORMULAIRE` | **Branché** | FormSubmit `/ajax` vers `moussatoure.mt.87@gmail.com` — inscription et verbatim, sujets distincts. **Activation une seule fois** : la première soumission depuis le site en ligne déclenche un email de FormSubmit dans cette boîte → cliquer « Activate ». Une réponse `success:"false"` (non activé) est traitée comme un échec, pas de fausse réussite |
+| `[DATE_CALENDRIER]` | **Renseigné** (17/08) | « À venir — Décembre 2026 », contenu : Paiement en USDC |
+| `[DATE_OUVERTURE_FONDATEURS]` | **Renseigné** (17/08) | « le 1er octobre 2026 » dans la FAQ |
+| `ENDPOINT_FORMULAIRE` | **Branché et activé** (nodaq.fr, www, vercel.app) | FormSubmit `/ajax` vers la boîte du fondateur — inscription et verbatim, sujets distincts. Constante unique en tête du `<script>`. À basculer sur l'alias `/ajax/{hash}` (fourni par le fondateur) pour ne plus exposer d'adresse en clair, puis sur l'alias de `contact@nodaq.fr` quand elle sera active (réactivation + `_autoresponse` + test de bout en bout). `success:"false"` reste traité comme un échec |
 | `[ENDPOINT_MESURE]` | Constante dans le `<script>` | Compteur maison sans cookie (`sendBeacon`) : `conversion_email`, `scroll_section3`, `reponse_irritant`. No-op tant que le placeholder reste. Pas de Google Analytics |
 
 Images du prototype à déposer à côté du fichier : `cockpit-annote.png`,

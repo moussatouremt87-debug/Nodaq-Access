@@ -84,26 +84,22 @@
 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>nodaq — Le copilote des TPE/PME | Devis, marge, relances</title>
-<meta name="description" content="Dictez, photographiez, validez : nodaq prépare vos devis, suit votre marge et relance vos impayés. Hébergé en France. 50 places fondateurs le 1er octobre.">
+<title>NODAQ — Faire ses devis plus vite.</title>
+<meta name="description" content="nodaq dicte vos devis, suit votre marge et relance vos impayés — automatiquement. En développement. Rejoignez les 50 premiers utilisateurs.">
 
-<!-- SEO / GEO (kit du fondateur) : domaine canonique nodaq.fr (ccTLD .fr =
-     géociblage France automatique chez Google). Balises sociales complètes
-     pour pubs Meta et envois d'e-mails ; aperçu à vérifier sur opengraph.xyz. -->
+<!-- SEO : domaine canonique nodaq.fr (ccTLD .fr = géociblage France
+     automatique chez Google, rien à déclarer dans Search Console). -->
 <link rel="canonical" href="https://nodaq.fr/">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://nodaq.fr/">
-<meta property="og:site_name" content="nodaq">
-<meta property="og:title" content="nodaq — Le copilote des TPE/PME">
-<meta property="og:description" content="Devis dictés, marge à jour, relances envoyées avec votre accord. Hébergé en France.">
+<meta property="og:site_name" content="NODAQ">
+<meta property="og:title" content="NODAQ — Faire ses devis plus vite.">
+<meta property="og:description" content="nodaq dicte vos devis, suit votre marge et relance vos impayés — automatiquement. En développement. Rejoignez les 50 premiers utilisateurs.">
 <meta property="og:image" content="https://nodaq.fr/og-image.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:locale" content="fr_FR">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="nodaq — Le copilote des TPE/PME">
-<meta name="twitter:description" content="Devis dictés, marge à jour, relances envoyées avec votre accord.">
-<meta name="twitter:image" content="https://nodaq.fr/og-image.png">
 
 <!-- Données structurées : aide Google à comprendre qui est nodaq. -->
 <script type="application/ld+json">
@@ -114,34 +110,22 @@
   "url": "https://nodaq.fr/",
   "applicationCategory": "BusinessApplication",
   "operatingSystem": "Web",
-  "description": "Copilote de pilotage pour dirigeants de TPE : dictée de devis, lecture automatique des factures, suivi de trésorerie et de marge, relances clients validées en un clic. Données hébergées en France.",
-  "inLanguage": "fr-FR",
+  "description": "nodaq dicte vos devis, suit votre marge et relance vos impayés — automatiquement. Application de gestion pour dirigeants de TPE, en développement.",
+  "inLanguage": "fr",
   "offers": {
     "@type": "Offer",
     "price": "49",
     "priceCurrency": "EUR",
-    "availability": "https://schema.org/PreOrder",
-    "url": "https://nodaq.fr",
     "description": "Tarif fondateur garanti à vie — à partir de 49 € HT/mois, + 9 € HT/mois par salarié. 50 places pour le programme pilote."
   }
 }
 </script>
-<!-- Organisation (kit SEO/GEO) : les faits qui permettent à un assistant de
-     répondre « nodaq est un éditeur français qui… ». Ni logo ni email tant
-     qu'ils n'existent pas réellement (règle : ne rien inventer). -->
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "Organization",
-  "name": "nodaq",
-  "url": "https://nodaq.fr",
-  "description": "Éditeur d'un logiciel SaaS de pilotage d'activité pour les TPE et PME : devis dictés, suivi de marge, relances de factures, hébergé en France.",
-  "areaServed": { "@type": "Country", "name": "France" },
-  "foundingDate": "2026",
-  "knowsLanguage": "fr-FR"
-}
-</script>
 <meta name="theme-color" content="#0a0b0f">
+
+<meta property="og:type" content="website">
+<meta property="og:locale" content="fr_FR">
+<meta property="og:title" content="NODAQ — Vous pilotez votre entreprise à l’aveugle.">
+<meta property="og:description" content="nodaq dicte vos devis, suit votre marge et relance vos impayés — automatiquement. En développement · Accès prioritaire · Tarif fondateur.">
 
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230a0b0f'/><path d='M8 25V7h4l8 12V7h4v18h-4l-8-12v12z' fill='%23a3e635'/><circle cx='9' cy='24' r='2.4' fill='%23d9f99d'/><circle cx='23' cy='8' r='2.4' fill='%23d9f99d'/></svg>">
 
@@ -325,7 +309,7 @@ button, input, textarea { font: inherit; color: inherit; }
 .hero__top { display: flex; justify-content: center; padding: 18px 0 44px; }
 
 /* Vidéo d'ambiance : décorative, muette, jamais un obstacle à la lecture.
-   Chargée par le script uniquement si écran ≥ 640 px et sans
+   Chargée par le script uniquement si écran ≥ 1024 px et sans
    prefers-reduced-motion — sinon la page reste telle quelle. Bien visible
    en haut du hero ; le voile se renforce vers le bas pour que titre et CTA
    restent parfaitement lisibles. */
@@ -920,11 +904,11 @@ button, input, textarea { font: inherit; color: inherit; }
     <p class="eyebrow reveal">Pour les dirigeants de TPE qui pilotent tout eux-mêmes — chantier ou pas.</p>
 
     <h1 class="reveal" style="--d:0.05s">
-      Vous pilotez votre entreprise <span class="grad-alert">à l’aveugle.</span>
+      Le temps <span class="grad-alert">volé le soir</span>.
     </h1>
 
     <p class="hero__sub reveal" style="--d:0.1s">
-      nodaq dicte vos devis, suit votre marge et relance vos impayés — automatiquement.
+      nodaq transforme votre voix en devis prêt à envoyer. La soirée redevient la vôtre.
     </p>
 
     <div class="hero__cta reveal" style="--d:0.15s">
@@ -1365,10 +1349,9 @@ button, input, textarea { font: inherit; color: inherit; }
 
   /* ── Vidéo d'ambiance du hero (décorative) ──────────────────────────────
      Fichier auto-hébergé à côté de la page (déposé par le script de build
-     au déploiement — voir README). Chargée sur écran ≥ 640 px et sans
-     prefers-reduced-motion — seuil demandé par le fondateur après essai en
-     réel, qui prime sur le « desktop uniquement » du brief §9 (la vidéo ne
-     pèse que 646 Ko ; seuls les petits mobiles gardent le poster). En cas
+     au déploiement — voir README). Chargée UNIQUEMENT sur écran ≥ 1024 px
+     et sans prefers-reduced-motion (brief §9 : aucune valeur de conversion
+     sur mobile, où elle coûte bande passante et batterie — 646 Ko). En cas
      d'échec ou de fichier absent, la page reste identique (le poster
      couvre, le dégradé fait le reste). */
   var VIDEO_FOND = "bg-quotidien.mp4";
@@ -1379,7 +1362,7 @@ button, input, textarea { font: inherit; color: inherit; }
   var VIDEO_FOND_WEBM = "bg-quotidien.webm";
   (function () {
     var v = document.getElementById("bg-video");
-    if (!v || reduced || window.innerWidth < 640) return;
+    if (!v || reduced || window.innerWidth < 1024) return;
     var s1 = document.createElement("source");
     s1.src = VIDEO_FOND;
     s1.type = "video/mp4";
@@ -1609,50 +1592,6 @@ button, input, textarea { font: inherit; color: inherit; }
     finishConfirm("");
   });
 })();
-</script>
-<!-- FAQ balisée (kit SEO/GEO) : reprend MOT POUR MOT les questions/réponses
-     de la section S.07 « Questions directes, réponses directes ». Si la FAQ
-     visible change, ce bloc doit changer avec elle — un balisage qui ne
-     reflète pas le texte affiché est ignoré (voire pénalisé) par Google. -->
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "FAQPage",
-  "mainEntity": [
-    {
-      "@type": "Question",
-      "name": "Quand est-ce disponible ?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "nodaq est en développement actif. Le programme fondateurs ouvre l’accès prioritaire dès le 1er octobre 2026, avant toute disponibilité publique."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Combien ça coûte, et le tarif fondateur est-il vraiment garanti ?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Le tarif Essentiel démarre à 49 € HT/mois + 9 € HT/mois par salarié. Les 50 premiers inscrits gardent ce tarif à vie."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Qu’est-ce que je risque en m’inscrivant maintenant ?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Rien. Aucune carte bancaire n’est demandée, et vous pouvez vous désinscrire en un clic à tout moment."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Est-ce fait pour mon activité / ma taille ?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "nodaq est pensé pour toute TPE qui facture à l’affaire plutôt qu’à la période — bâtiment, événementiel, beauté, création… Le bâtiment est notre premier secteur équipé, pas notre seul terrain."
-      }
-    }
-  ]
-}
 </script>
 </body>
 </html>

@@ -3,12 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="canonical" href="https://nodaq.fr/confidentialite.html">
 <title>Politique de confidentialité — NODAQ</title>
-<meta name="robots" content="noindex">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230a0b0f'/><path d='M8 25V7h4l8 12V7h4v18h-4l-8-12v12z' fill='%23a3e635'/><circle cx='9' cy='24' r='2.4' fill='%23d9f99d'/><circle cx='23' cy='8' r='2.4' fill='%23d9f99d'/></svg>">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..900&family=JetBrains+Mono:wght@400..700&display=swap">
+<!-- Polices auto-hébergées (brief §9) : sous-ensembles latin/latin-ext
+     d'Inter et JetBrains Mono en woff2, font-display: swap — plus de
+     tiers Google Fonts, moins de latence. -->
+<link rel="preload" href="fonts/f02.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="fonts.css">
 <style>
 :root {
   --bg: #0a0b0f; --bg-raised: #0e1015;
@@ -90,22 +92,27 @@ strong { color: var(--text); font-weight: 600; }
   croisée avec d’autres sources.
 </p>
 
-<h2>Pas de cookies</h2>
+<h2>Cookies et mesure publicitaire</h2>
 <p>
-  Ce site ne dépose <strong>aucun cookie</strong> et n’utilise aucun traceur
-  publicitaire. La mesure d’audience se limite à des compteurs anonymes sans
-  cookie (nombre d’inscriptions, profondeur de lecture), qui ne permettent pas
-  de vous identifier. C’est pourquoi aucun bandeau de consentement n’est
-  nécessaire.
+  Ce site ne dépose <strong>aucun cookie sans votre accord</strong>. La mesure
+  des conversions publicitaires (Google Ads) est configurée en
+  <strong>mode consentement, refus par défaut</strong> : tant que vous n’avez
+  pas donné votre accord, aucun cookie publicitaire n’est déposé et seuls des
+  signaux agrégés et anonymes sont transmis. Aucun autre traceur n’est utilisé.
 </p>
 
 <h2>Destinataires et sous-traitants</h2>
 <p>
   Les adresses collectées sont accessibles au seul éditeur du site. La
   soumission du formulaire est relayée par <strong>FormSubmit</strong>
-  (service de relais de formulaires) vers la boîte email de l’éditeur —
-  aucune donnée n’y est conservée à d’autres fins que ce relais.
-  Elles ne sont ni vendues, ni louées, ni partagées à des fins commerciales.
+  (service de relais de formulaires, sous-traitant au sens du RGPD) vers la
+  boîte email de l’éditeur — aucune donnée n’y est conservée à d’autres fins
+  que ce relais. Le site est servi par <strong>Vercel</strong> (hébergeur du
+  site). En cas d’activation de la mesure publicitaire, <strong>Google</strong>
+  (Google Ads) intervient comme sous-traitant de mesure, dans les conditions
+  décrites à la section « Cookies et mesure publicitaire ».
+  Les adresses ne sont ni vendues, ni louées, ni partagées à des fins
+  commerciales.
 </p>
 
 <h2>Durée de conservation</h2>
@@ -129,10 +136,16 @@ strong { color: var(--text); font-weight: 600; }
   CNIL (<a href="https://www.cnil.fr" rel="noopener">cnil.fr</a>).
 </p>
 
-<h2>Hébergement des données</h2>
+<h2>Hébergement des données et transferts</h2>
 <p>
-  Les données sont hébergées en France. Aucun transfert hors de l’Union
-  européenne n’est effectué.
+  Le site est servi par Vercel et les soumissions de formulaire sont relayées
+  par FormSubmit : ces prestataires sont américains, des transferts de données
+  hors de l’Union européenne peuvent donc avoir lieu dans le cadre de ce
+  relais. L’application nodaq elle-même (le produit, distinct de ce site
+  vitrine) est conçue pour un hébergement des données en France.
+  <span class="a-completer">[À COMPLÉTER : mécanismes d’encadrement des
+  transferts à faire valider par un conseil (clauses contractuelles types /
+  Data Privacy Framework des prestataires)]</span>
 </p>
 
 </main>
