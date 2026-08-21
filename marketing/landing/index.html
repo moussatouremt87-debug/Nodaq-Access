@@ -129,9 +129,11 @@
 
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230a0b0f'/><path d='M8 25V7h4l8 12V7h4v18h-4l-8-12v12z' fill='%23a3e635'/><circle cx='9' cy='24' r='2.4' fill='%23d9f99d'/><circle cx='23' cy='8' r='2.4' fill='%23d9f99d'/></svg>">
 
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..900&family=JetBrains+Mono:wght@400..700&display=swap">
+<!-- Polices auto-hébergées (brief §9) : sous-ensembles latin/latin-ext
+     d'Inter et JetBrains Mono en woff2, font-display: swap — plus de
+     tiers Google Fonts, moins de latence. -->
+<link rel="preload" href="fonts/f02.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="fonts.css">
 
 <style>
 /* ═══ Charte NODAQ v2 — fond sombre, accent unique vert citron ════════════
@@ -307,9 +309,10 @@ button, input, textarea { font: inherit; color: inherit; }
 .hero__top { display: flex; justify-content: center; padding: 18px 0 44px; }
 
 /* Vidéo d'ambiance : décorative, muette, jamais un obstacle à la lecture.
-   Chargée par le script sauf prefers-reduced-motion — sinon la page reste
-   telle quelle. Bien visible en haut du hero ; le voile se renforce vers le
-   bas pour que titre et CTA restent parfaitement lisibles. */
+   Chargée par le script uniquement si écran ≥ 1024 px et sans
+   prefers-reduced-motion — sinon la page reste telle quelle. Bien visible
+   en haut du hero ; le voile se renforce vers le bas pour que titre et CTA
+   restent parfaitement lisibles. */
 /* Bande au ratio exact de la vidéo (16:9) plutôt que tout le hero : aucun
    recadrage par object-fit: cover, le plan complet est visible sur tous
    les écrans. */
@@ -914,7 +917,7 @@ button, input, textarea { font: inherit; color: inherit; }
     </div>
 
     <figure class="proto reveal" style="--d:0.2s" data-file="cockpit-annote.png">
-      <img src="cockpit-annote.png" alt="Capture d’écran du prototype nodaq : le cockpit." loading="lazy">
+      <picture><source type="image/webp" srcset="cockpit-annote.webp"><img src="cockpit-annote.png" alt="Capture d’écran du prototype nodaq : le cockpit." loading="lazy"></picture>
       <figcaption class="proto__fallback">[ image prototype à déposer : cockpit-annote.png ]</figcaption>
     </figure>
     <div class="annos reveal" style="--d:0.25s">
@@ -1106,21 +1109,21 @@ button, input, textarea { font: inherit; color: inherit; }
     <div class="building">
       <div class="reveal">
         <figure class="proto" data-file="devis-dicte.png">
-          <img src="devis-dicte.png" alt="Capture d’écran du prototype nodaq : devis dicté." loading="lazy">
+          <picture><source type="image/webp" srcset="devis-dicte.webp"><img src="devis-dicte.png" alt="Capture d’écran du prototype nodaq : devis dicté." loading="lazy"></picture>
           <figcaption class="proto__fallback">[ image prototype à déposer : devis-dicte.png ]</figcaption>
         </figure>
         <span class="anno"><i aria-hidden="true"></i>Vous dictez, nodaq rédige le devis</span>
       </div>
       <div class="reveal" style="--d:0.06s">
         <figure class="proto" data-file="marge-mission.png">
-          <img src="marge-mission.png" alt="Capture d’écran du prototype nodaq : marge par mission." loading="lazy">
+          <picture><source type="image/webp" srcset="marge-mission.webp"><img src="marge-mission.png" alt="Capture d’écran du prototype nodaq : marge par mission." loading="lazy"></picture>
           <figcaption class="proto__fallback">[ image prototype à déposer : marge-mission.png ]</figcaption>
         </figure>
         <span class="anno"><i aria-hidden="true"></i>La marge de chaque mission, pendant la mission</span>
       </div>
       <div class="reveal" style="--d:0.12s">
         <figure class="proto" data-file="echeancier.png">
-          <img src="echeancier.png" alt="Capture d’écran du prototype nodaq : échéancier." loading="lazy">
+          <picture><source type="image/webp" srcset="echeancier.webp"><img src="echeancier.png" alt="Capture d’écran du prototype nodaq : échéancier." loading="lazy"></picture>
           <figcaption class="proto__fallback">[ image prototype à déposer : echeancier.png ]</figcaption>
         </figure>
         <span class="anno"><i aria-hidden="true"></i>Les échéances vous préviennent, pas l’inverse</span>
@@ -1346,9 +1349,11 @@ button, input, textarea { font: inherit; color: inherit; }
 
   /* ── Vidéo d'ambiance du hero (décorative) ──────────────────────────────
      Fichier auto-hébergé à côté de la page (déposé par le script de build
-     au déploiement — voir README). Chargée partout (646 Ko) sauf
-     prefers-reduced-motion ; en cas d'échec ou de fichier absent, la page
-     reste identique (le poster couvre, le dégradé fait le reste). */
+     au déploiement — voir README). Chargée UNIQUEMENT sur écran ≥ 1024 px
+     et sans prefers-reduced-motion (brief §9 : aucune valeur de conversion
+     sur mobile, où elle coûte bande passante et batterie — 646 Ko). En cas
+     d'échec ou de fichier absent, la page reste identique (le poster
+     couvre, le dégradé fait le reste). */
   var VIDEO_FOND = "bg-quotidien.mp4";
 
   /* Lien de prise de rendez-vous post-inscription (brief §7). Tant que le
@@ -1357,7 +1362,7 @@ button, input, textarea { font: inherit; color: inherit; }
   var VIDEO_FOND_WEBM = "bg-quotidien.webm";
   (function () {
     var v = document.getElementById("bg-video");
-    if (!v || reduced) return;
+    if (!v || reduced || window.innerWidth < 1024) return;
     var s1 = document.createElement("source");
     s1.src = VIDEO_FOND;
     s1.type = "video/mp4";
