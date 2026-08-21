@@ -30,13 +30,20 @@
                                  success:"false" (adresse non activée) est
                                  traitée comme un échec — pas de fausse
                                  réussite.
-    [ENDPOINT_MESURE]            Constante ENDPOINT_MESURE dans le <script>.
-                                 Compteur maison sans cookie (sendBeacon) :
-                                 conversion email, profondeur de scroll jusqu'à
-                                 la section 3, réponse à la question ouverte.
-                                 Aucun cookie, aucun bandeau requis, pas de
-                                 Google Analytics. No-op tant que le
-                                 placeholder reste.
+    GOOGLE_ADS_ID                [À COMPLÉTER : AW-XXXXXXXXX] — constante
+    GOOGLE_ADS_LABEL_CONVERSION  dans le <script> + [À COMPLÉTER : label].
+                                 gtag.js n'est chargé que si l'ID est
+                                 renseigné. Consent Mode v2 refus par
+                                 défaut : aucun cookie sans accord.
+                                 Événements : conversion_email (succès du
+                                 formulaire uniquement), reponse_irritant,
+                                 clic_rdv, scroll_section3. Le choix
+                                 bandeau (a) / suivi serveur (b) reste à
+                                 trancher par le fondateur.
+    LIEN_RDV                     [À COMPLÉTER : lien Cal.com] — proposition
+                                 d'échange de 15 min dans l'état de
+                                 confirmation, masquée tant que le jeton
+                                 subsiste.
 
     Images du prototype (fichiers à déposer à côté de ce fichier) :
       cockpit-annote.png   Section 1 — cockpit avec 3 annotations-bénéfices.
@@ -1316,7 +1323,11 @@ button, input, textarea { font: inherit; color: inherit; }
      du JSON et accepte le POST JSON de fetch. [ENDPOINT_MESURE] reste un
      placeholder — voir le commentaire en tête de fichier. */
   var ENDPOINT_FORMULAIRE = "https://formsubmit.co/ajax/moussatoure.mt.87@gmail.com";
-  var ENDPOINT_MESURE = "[ENDPOINT_MESURE]";
+
+  /* Identifiants Google Ads (brief §2). Tant que les jetons subsistent,
+     aucun script Google n'est chargé et mesure() est un no-op silencieux. */
+  var GOOGLE_ADS_ID = "[À COMPLÉTER : AW-XXXXXXXXX]";
+  var GOOGLE_ADS_LABEL_CONVERSION = "[À COMPLÉTER : label de conversion Google Ads]";
 
   var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -1347,13 +1358,40 @@ button, input, textarea { font: inherit; color: inherit; }
     if (p && p.catch) p.catch(function () { /* autoplay refusé : poster seul */ });
   })();
 
-  /* ── Mesure sans cookie (sendBeacon, no-op tant que le placeholder reste).
-     Événements : conversion email, scroll jusqu'à la section 3, réponse à la
-     question ouverte. Aucun identifiant, aucun cookie. ─────────────────── */
-  function track(event) {
-    if (ENDPOINT_MESURE.charAt(0) === "[") return;
+  /* ── Mesure des conversions Google Ads (brief §2) ────────────────────────
+     Consent Mode v2, REFUS PAR DÉFAUT : tant que l'utilisateur n'a pas
+     consenti, gtag n'écrit aucun cookie et n'envoie que des signaux agrégés
+     (pings sans cookie). Le choix bandeau (option a) ou suivi serveur
+     (option b) appartient au fondateur — voir compte-rendu. Événements :
+     conversion_email (succès du formulaire uniquement, jamais sur échec ni
+     success:"false"), reponse_irritant, clic_rdv, scroll_section3. */
+  window.dataLayer = window.dataLayer || [];
+  function gtag() { dataLayer.push(arguments); }
+  var mesureActive = GOOGLE_ADS_ID.charAt(0) !== "[";
+  if (mesureActive) {
+    gtag("consent", "default", {
+      ad_storage: "denied",
+      ad_user_data: "denied",
+      ad_personalization: "denied",
+      analytics_storage: "denied",
+    });
+    gtag("js", new Date());
+    gtag("config", GOOGLE_ADS_ID);
+    var gs = document.createElement("script");
+    gs.async = true;
+    gs.src = "https://www.googletagmanager.com/gtag/js?id=" + encodeURIComponent(GOOGLE_ADS_ID);
+    document.head.appendChild(gs);
+  }
+  function mesure(evenement) {
+    if (!mesureActive) return;
     try {
-      navigator.sendBeacon(ENDPOINT_MESURE, JSON.stringify({ event: event }));
+      if (evenement === "conversion_email" && GOOGLE_ADS_LABEL_CONVERSION.charAt(0) !== "[") {
+        gtag("event", "conversion", {
+          send_to: GOOGLE_ADS_ID + "/" + GOOGLE_ADS_LABEL_CONVERSION,
+        });
+      } else {
+        gtag("event", evenement, { send_to: GOOGLE_ADS_ID });
+      }
     } catch (e) { /* la mesure ne doit jamais casser la page */ }
   }
 
@@ -1378,7 +1416,7 @@ button, input, textarea { font: inherit; color: inherit; }
     var depthObs = new IntersectionObserver(function (entries) {
       entries.forEach(function (entry) {
         if (!entry.isIntersecting) return;
-        track("scroll_section3");
+        mesure("scroll_section3");
         depthObs.disconnect();
       });
     }, { threshold: 0.2 });
@@ -1488,7 +1526,7 @@ button, input, textarea { font: inherit; color: inherit; }
       _captcha: "false",
     }).then(function () {
       submittedEmail = email;
-      track("conversion_email");
+      mesure("conversion_email");
       form.hidden = true;
       if (riskEl) riskEl.hidden = true;
       confirmEl.classList.add("is-visible");
@@ -1496,7 +1534,7 @@ button, input, textarea { font: inherit; color: inherit; }
       if (LIEN_RDV.charAt(0) !== "[") {
         var rdvLien = document.getElementById("rdv-lien");
         rdvLien.href = LIEN_RDV;
-        rdvLien.addEventListener("click", function () { track("clic_rdv"); });
+        rdvLien.addEventListener("click", function () { mesure("clic_rdv"); });
         document.getElementById("confirm-rdv").hidden = false;
       }
       confirmEl.querySelector("textarea").focus();
@@ -1526,7 +1564,7 @@ button, input, textarea { font: inherit; color: inherit; }
       _template: "table",
       _captcha: "false",
     }).then(function () {
-      track("reponse_irritant");
+      mesure("reponse_irritant");
       finishConfirm("Merci, c’est noté.");
     }).catch(function () {
       showError("L’envoi a échoué — réessayez dans un instant.");
