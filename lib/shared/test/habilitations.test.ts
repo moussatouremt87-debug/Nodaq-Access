@@ -62,9 +62,32 @@ describe("habilitationsSuggereesParVertical", () => {
     expect(suggestions.map((s) => s.type)).toEqual(["diplome_etat", "autorisation_exercice"]);
   });
 
-  test("services aux entreprises → carte professionnelle CNAPS (registre 'sécurité privée')", () => {
+  test("services aux entreprises → carte CNAPS, les trois SSIAP et le SST", () => {
     const suggestions = habilitationsSuggereesParVertical("services_entreprises");
-    expect(suggestions.map((s) => s.type)).toEqual(["carte_pro_cnaps"]);
+    expect(suggestions.map((s) => s.type)).toEqual([
+      "carte_pro_cnaps", "ssiap_1", "ssiap_2", "ssiap_3", "sst",
+    ]);
+  });
+
+  test("événementiel → les mêmes : un rassemblement impose un service SSIAP", () => {
+    // Le trou d'origine, nommé : une société de sécurité incendie
+    // événementielle se déclare en « Événementiel » et ne se voyait proposer
+    // AUCUNE des habilitations qui conditionnent son activité.
+    const suggestions = habilitationsSuggereesParVertical("evenementiel");
+    expect(suggestions.map((s) => s.type)).toContain("ssiap_2");
+    expect(suggestions.map((s) => s.type)).toContain("carte_pro_cnaps");
+  });
+
+  test("les trois niveaux SSIAP sont DISTINCTS — ils ne se remplacent pas", () => {
+    // Un SSIAP 1 est agent, un SSIAP 2 chef d'équipe, un SSIAP 3 chef de
+    // service : une mission qui exige un chef d'équipe n'est pas couverte par
+    // trois agents. Les fondre en une seule entrée « SSIAP » rendrait
+    // `habilitationsRequises` incapable d'exprimer la contrainte réelle.
+    const types = habilitationsSuggereesParVertical("evenementiel").map((s) => s.type);
+    expect(new Set(types).size).toBe(types.length);
+    for (const niveau of ["ssiap_1", "ssiap_2", "ssiap_3"]) {
+      expect(types).toContain(niveau);
+    }
   });
 
   test("un vertical sans habilitation notoire → aucune suggestion inventée", () => {
