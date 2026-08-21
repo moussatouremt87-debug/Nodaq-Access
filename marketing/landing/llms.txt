@@ -1,0 +1,26 @@
+# nodaq
+
+> Copilote de pilotage d'activité pour les TPE/PME françaises qui facturent à
+> l'affaire (bâtiment en premier, puis événementiel, beauté, création…).
+> Le dirigeant dicte, photographie, valide — nodaq prépare les devis, lit les
+> factures, suit la trésorerie et la marge par mission, et relance les impayés
+> après validation humaine. Données hébergées en France.
+
+## L'essentiel
+
+- Statut : en développement actif. Programme fondateurs (accès prioritaire)
+  ouvert le 1er octobre 2026, limité à 50 inscrits, avant toute
+  disponibilité publique.
+- Tarif : Essentiel à partir de 49 € HT/mois + 9 € HT/mois par salarié.
+  Les 50 premiers inscrits gardent ce tarif à vie.
+- Inscription sans carte bancaire, désinscription en un clic.
+- Aucune action automatique vers l'extérieur : chaque envoi (devis, relance)
+  est validé par le dirigeant avant de partir.
+
+## Pages
+
+- [Accueil](https://nodaq.fr/) : présentation, chiffres sourcés sur les
+  délais de paiement et la charge administrative des TPE, FAQ, inscription.
+- [Mentions légales](https://nodaq.fr/mentions-legales.html)
+- [Confidentialité](https://nodaq.fr/confidentialite.html)
+- [CGV](https://nodaq.fr/cgv.html)
