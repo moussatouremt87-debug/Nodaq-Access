@@ -178,6 +178,62 @@ export const IntentionCreerClient = z
   })
   .strict();
 
+
+/**
+ * Enregistrer un règlement reçu (ticket 4.21, lot 3).
+ *
+ * « Delacroix m'a réglé la 181. » L'artisan qui reçoit un chèque sur un
+ * chantier peut le consigner sur place, au lieu de le retrouver trois
+ * semaines plus tard dans une poche de veste.
+ *
+ * ── Aucun montant dans ce schéma, et c'est une garde qui l'a imposé ───────
+ * La première version acceptait un `montantEuros` dicté. Le test « AUCUN
+ * schéma d'intention ne déclare de champ monétaire » l'a refusée, et il avait
+ * raison : ce champ aurait fait produire un montant PAR LE MODÈLE, ce que la
+ * règle 3 interdit — un chiffre entendu de travers sur un règlement se
+ * retrouve en comptabilité.
+ *
+ * Le montant proposé est donc le SOLDE, calculé par le serveur depuis le
+ * journal des paiements. Un règlement partiel reste possible, et par le bon
+ * chemin : l'écran de validation affiche ce solde et laisse le CORRIGER
+ * (`CHAMPS_CORRIGEABLES`). Le chiffre vient alors des doigts de
+ * l'utilisateur, jamais de l'oreille de la machine.
+ */
+export const MOYENS_REGLEMENT_DICTABLES = ["VIREMENT", "CHEQUE", "ESPECES", "CB"] as const;
+
+export const IntentionEnregistrerReglement = z
+  .object({
+    type: z.literal("enregistrer_reglement"),
+    factureMentionnee: Mention,
+    moyen: z.enum(MOYENS_REGLEMENT_DICTABLES).nullable().optional(),
+  })
+  .strict();
+
+
+/**
+ * Lancer une campagne de relance (ticket 4.21, lot 3).
+ *
+ * « Relance mes impayés. » L'intention est VOLONTAIREMENT nue : aucun seuil,
+ * aucune liste de clients, aucun montant.
+ *
+ * ── Pourquoi si peu de champs ─────────────────────────────────────────────
+ * Le serveur sait déjà quelles factures sont en retard — il en existe UNE
+ * définition, partagée, dont un commentaire raconte le bug qu'avait causé sa
+ * duplication. Laisser le modèle proposer un seuil (« celles de plus de
+ * trente jours ») produirait une seconde définition du retard, entendue au
+ * téléphone.
+ *
+ * Et le tri fin n'a pas à se faire à la voix : la campagne arrive dans la
+ * file « à valider », où l'écran existant permet déjà d'EXCLURE un appel, de
+ * resserrer le mandat et de voir chaque montant. La voix déclenche, l'écran
+ * arbitre — c'est la règle 4 du dépôt, pas une limitation.
+ */
+export const IntentionLancerRelance = z
+  .object({
+    type: z.literal("lancer_relance"),
+  })
+  .strict();
+
 export const Intention = z.discriminatedUnion("type", [
   IntentionCreerAffaire,
   IntentionCreerProspect,
@@ -189,6 +245,8 @@ export const Intention = z.discriminatedUnion("type", [
   IntentionAffecterMembre,
   IntentionPointerHeures,
   IntentionCreerClient,
+  IntentionEnregistrerReglement,
+  IntentionLancerRelance,
 ]);
 export type Intention = z.infer<typeof Intention>;
 
@@ -219,6 +277,8 @@ export const TYPES_INTENTION = [
   "affecter_membre",
   "pointer_heures",
   "creer_client",
+  "enregistrer_reglement",
+  "lancer_relance",
 ] as const;
 export type TypeIntention = (typeof TYPES_INTENTION)[number];
 
@@ -392,6 +452,13 @@ export const CHAMPS_CORRIGEABLES: Record<TypeIntention, readonly string[]> = {
   declarer_absence: [],
   affecter_membre: [],
   pointer_heures: ["heures"],
+  // Le montant se corrige — c'est un chiffre prononcé, et l'entendre de
+  // travers sur un règlement coûte cher. La FACTURE visée, elle, est un
+  // rapprochement : la changer désignerait un autre dossier.
+  enregistrer_reglement: ["montantCents"],
+  // Rien à corriger : la campagne ne porte aucun texte dicté. Le tri se fait
+  // dans la file de validation, où l'on exclut un appel d'un clic.
+  lancer_relance: [],
 };
 
 /** Le champ est-il corrigeable pour ce type d'opération ? */

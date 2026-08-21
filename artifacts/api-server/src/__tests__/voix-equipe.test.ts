@@ -479,3 +479,152 @@ describe("g — l'humain corrige le texte avant que ça s'écrive", () => {
     expect(rows[0].heures).toBe(8);
   });
 });
+
+// ── h. Enregistrer un règlement à la voix (ticket 4.21, lot 3) ───────────────
+
+/** Une facture ÉMISE, prête à recevoir un règlement. */
+async function factureEmise(l: Locataire, numero: string, client: string, montantCents: number): Promise<string> {
+  const id = crypto.randomUUID();
+  await adminPool.query(
+    `INSERT INTO factures (id, tenant_id, number, customer_name, amount_cents, statut, lines, issued_date, due_date)
+     VALUES ($1, $2::uuid, $3, $4, $5, 'EMISE', '[]'::jsonb, CURRENT_DATE, CURRENT_DATE + 30)`,
+    [id, l.tenantId, numero, client, montantCents],
+  );
+  return id;
+}
+
+describe("h — enregistrer_reglement, aller-retour complet", () => {
+  test("le plan propose le SOLDE, calculé par le serveur", async () => {
+    const t = await inscrire("reglement");
+    const factureId = await factureEmise(t, "FACT-2026-0181", "Delacroix", 40000);
+
+    const { body } = await interpreter(t, "voix-test-reglement").expect(200);
+    expect(body.operations).toHaveLength(1);
+    // Le chiffre vient du SERVEUR, jamais du modèle : aucun schéma
+    // d'intention ne porte de champ monétaire, et une garde le vérifie.
+    expect(body.operations[0].champs.montantCents).toBe("40000");
+    expect(body.operations[0].libelle).toContain("solde restant");
+
+    await executer(t, body.planId).expect(200);
+
+    const { rows } = await adminPool.query(
+      `SELECT montant_cents, sens FROM paiements WHERE facture_id = $1`, [factureId],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].montant_cents).toBe(40000);
+    expect(rows[0].sens).toBe("ENCAISSEMENT");
+
+    // Le statut se DÉDUIT du journal — il n'a pas été écrit à la main.
+    const { rows: f } = await adminPool.query(
+      `SELECT statut FROM factures WHERE id = $1`, [factureId],
+    );
+    expect(f[0].statut).toBe("PAYEE");
+  });
+
+  test("règlement PARTIEL : l'utilisateur CORRIGE le solde proposé", async () => {
+    // Le chemin voulu pour un partiel — et le seul possible : le modèle ne
+    // peut pas produire de montant, donc c'est l'humain qui ramène le chiffre
+    // à ce qu'il a reçu, de ses doigts, avant de valider.
+    const t = await inscrire("reglement-partiel");
+    const factureId = await factureEmise(t, "FACT-2026-0182", "Delacroix", 40000);
+
+    const { body } = await interpreter(t, "voix-test-reglement-cheque").expect(200);
+    expect(body.operations[0].champs.montantCents).toBe("40000");
+
+    await request(app)
+      .post("/api/voix/executer")
+      .set("Cookie", t.cookie)
+      .send({ planId: body.planId, corrections: { "0": { montantCents: "15000" } } })
+      .expect(200);
+
+    const { rows } = await adminPool.query(
+      `SELECT montant_cents, moyen FROM paiements WHERE facture_id = $1`, [factureId],
+    );
+    expect(rows[0].montant_cents).toBe(15000);
+    expect(rows[0].moyen).toBe("CHEQUE");
+
+    const { rows: f } = await adminPool.query(
+      `SELECT statut FROM factures WHERE id = $1`, [factureId],
+    );
+    // 150 € sur 400 : il reste dû, la facture n'est pas soldée.
+    expect(f[0].statut).toBe("EMISE");
+  });
+
+  test("facture réglée entre le plan et sa validation → refus, aucun double encaissement", async () => {
+    const t = await inscrire("reglement-course");
+    const factureId = await factureEmise(t, "FACT-2026-0183", "Delacroix", 40000);
+
+    const { body } = await interpreter(t, "voix-test-reglement").expect(200);
+
+    // Quelqu'un solde la facture entre-temps — le plan attend jusqu'à une heure.
+    await adminPool.query(`UPDATE factures SET statut = 'PAYEE' WHERE id = $1`, [factureId]);
+
+    const r = await executer(t, body.planId);
+    expect(r.status).toBe(409);
+
+    const { rows } = await adminPool.query(
+      `SELECT count(*)::int AS n FROM paiements WHERE facture_id = $1`, [factureId],
+    );
+    expect(rows[0].n).toBe(0);
+  });
+});
+
+// ── i. Lancer une relance à la voix (ticket 4.21, lot 3) ────────────────────
+
+describe("i — lancer_relance : la voix PRÉPARE, elle ne déclenche pas", () => {
+  test("les impayés joignables deviennent une campagne PROPOSÉE, à valider", async () => {
+    const t = await inscrire("relance");
+    const clientId = crypto.randomUUID();
+    await adminPool.query(
+      `INSERT INTO clients (id, tenant_id, nom, telephone) VALUES ($1, $2::uuid, 'Delacroix', '+33600000042')`,
+      [clientId, t.tenantId],
+    );
+    await adminPool.query(
+      `INSERT INTO factures (id, tenant_id, number, customer_name, client_id, amount_cents, statut, lines, issued_date, due_date)
+       VALUES ($1, $2::uuid, 'FACT-2026-0200', 'Delacroix', $3, 40000, 'EMISE', '[]'::jsonb, CURRENT_DATE - 60, CURRENT_DATE - 30)`,
+      [crypto.randomUUID(), t.tenantId, clientId],
+    );
+
+    const { body } = await interpreter(t, "voix-test-relance").expect(200);
+    expect(body.operations).toHaveLength(1);
+    expect(body.operations[0].libelle).toContain("resteront à valider");
+
+    await executer(t, body.planId).expect(200);
+
+    // Une campagne existe, et une action l'attend dans la file — mais AUCUN
+    // appel n'est planifié : la règle 4 veut qu'un humain approuve avant
+    // qu'on compose, et la voix ne peut pas approuver à sa place.
+    const { rows: campagnes } = await adminPool.query(
+      `SELECT statut FROM campagnes_relance WHERE tenant_id = $1::uuid`, [t.tenantId],
+    );
+    expect(campagnes).toHaveLength(1);
+    expect(campagnes[0].statut).toBe("PROPOSEE");
+
+    const { rows: appels } = await adminPool.query(
+      `SELECT count(*)::int AS n FROM appels_relance WHERE tenant_id = $1::uuid`, [t.tenantId],
+    );
+    expect(appels[0].n).toBe(0);
+  });
+
+  test("un impayé SANS téléphone est écarté et COMPTÉ, jamais ignoré en silence", async () => {
+    const t = await inscrire("relance-sans-tel");
+    await adminPool.query(
+      `INSERT INTO factures (id, tenant_id, number, customer_name, amount_cents, statut, lines, issued_date, due_date)
+       VALUES ($1, $2::uuid, 'FACT-2026-0201', 'Sans Téléphone', 40000, 'EMISE', '[]'::jsonb, CURRENT_DATE - 60, CURRENT_DATE - 30)`,
+      [crypto.randomUUID(), t.tenantId],
+    );
+
+    const { body } = await interpreter(t, "voix-test-relance").expect(200);
+    // Aucun joignable : on le DIT, plutôt que de rendre un plan vide qui
+    // laisserait croire qu'il n'y a pas d'impayé.
+    expect(body.operations).toHaveLength(0);
+    expect(body.nonCompris.join(" ")).toContain("sans téléphone");
+  });
+
+  test("aucune facture en retard → on le dit", async () => {
+    const t = await inscrire("relance-a-jour");
+    const { body } = await interpreter(t, "voix-test-relance").expect(200);
+    expect(body.operations).toHaveLength(0);
+    expect(body.nonCompris.join(" ")).toContain("aucune facture en retard");
+  });
+});

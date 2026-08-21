@@ -80,6 +80,12 @@ export const BAREME_TEMPS_MANUEL: Record<Intention["type"], { readonly champs: n
   pointer_heures: { champs: 3 },
   // nom, telephoneMentionne, emailMentionne, villeMentionnee
   creer_client: { champs: 4 },
+  // factureMentionnee, moyen — retrouver la facture dans une liste coûte
+  // bien plus que douze secondes, mais le barème ne distingue pas.
+  enregistrer_reglement: { champs: 2 },
+  // Aucun champ : monter une campagne à la main, c'est parcourir les impayés
+  // un par un. Le barème sous-estime ici plus qu'ailleurs — délibérément.
+  lancer_relance: { champs: 0 },
 };
 
 /**
