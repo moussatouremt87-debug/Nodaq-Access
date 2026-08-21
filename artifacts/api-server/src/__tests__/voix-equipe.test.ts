@@ -810,3 +810,73 @@ describe("k — un montant que la voix ne porte pas est RÉCLAMÉ, jamais devin�
     expect(body.operations[0].champs.clientName).toBe("Delacroix");
   });
 });
+
+// ── l. Le montant PRONONCÉ — la règle 3, resserrée sur ce qu'elle protège ───
+
+describe("l — recopier un montant dit n'est pas le fixer", () => {
+  test("« à 45 euros » remplit le prix, en centimes, et ne réclame plus rien", async () => {
+    const t = await inscrire("cat-dicte");
+    // La transcription porte réellement le nombre : c'est la condition.
+    const { body } = await interpreter(t, "voix-test-cat-dicte à 45 euros du mètre").expect(200);
+
+    const op = body.operations[0];
+    expect(op.champs.prixUnitaireHtCents).toBe("4500");
+    // Plus rien à saisir : le champ n'est plus réclamé.
+    expect(op.aCompleter).toEqual([]);
+    expect(op.libelle).toContain("45.00 €");
+
+    // Et il s'applique sans correction — c'est tout l'intérêt.
+    await executer(t, body.planId).expect(200);
+    const { rows } = await adminPool.query(
+      `SELECT prix_unitaire_ht_cents FROM catalogue_lignes WHERE tenant_id = $1`, [t.tenantId],
+    );
+    expect(Number(rows[0].prix_unitaire_ht_cents)).toBe(4500);
+  });
+
+  test("un montant que la phrase ne porte PAS est écarté, pas écrit", async () => {
+    const t = await inscrire("cat-halluc");
+    // Le modèle rend 999 € sur une phrase qui n'a jamais porté ce nombre.
+    // Sans cette vérification, la relaxe de la règle 3 ouvrirait exactement le
+    // trou qu'elle prétend ne pas ouvrir.
+    const { body } = await interpreter(t, "voix-test-cat-halluc à 45 euros du mètre").expect(200);
+
+    const op = body.operations[0];
+    expect(op.champs.prixUnitaireHtCents).toBeNull();
+    // Écarté, pas corrigé au jugé : on retombe sur le champ à saisir.
+    expect(op.aCompleter).toEqual(["prixUnitaireHtCents"]);
+
+    await executer(t, body.planId).expect(422);
+    const { rows } = await adminPool.query(
+      `SELECT count(*)::int AS n FROM catalogue_lignes WHERE tenant_id = $1`, [t.tenantId],
+    );
+    expect(rows[0].n).toBe(0);
+  });
+
+  test("règlement : le montant dicté prime, le solde reste le repli", async () => {
+    const t = await inscrire("regl-dicte");
+    const f = await factureEmise(t, "FACT-2026-0181", "Delacroix", 120000);
+
+    const { body } = await interpreter(t, "voix-test-reglement-dicte il m'a donné 500 euros").expect(200);
+    const op = body.operations[0];
+    // 500 € dictés sur une facture de 1 200 € : un règlement partiel, saisi
+    // d'une phrase au lieu d'une correction à l'écran.
+    expect(op.champs.montantCents).toBe("50000");
+    expect(op.libelle).toContain("montant dicté");
+
+    await executer(t, body.planId).expect(200);
+    const { rows } = await adminPool.query(
+      `SELECT montant_cents FROM paiements WHERE facture_id = $1`, [f],
+    );
+    expect(Number(rows[0].montant_cents)).toBe(50000);
+  });
+
+  test("sans montant dicté, le solde calculé par le serveur s’applique toujours", async () => {
+    const t = await inscrire("regl-solde");
+    await factureEmise(t, "FACT-2026-0181", "Delacroix", 120000);
+
+    // Le chemin d'origine n'a pas bougé : c'est le repli, et il reste sûr.
+    const { body } = await interpreter(t, "voix-test-reglement").expect(200);
+    expect(body.operations[0].champs.montantCents).toBe("120000");
+    expect(body.operations[0].libelle).toContain("solde restant");
+  });
+});

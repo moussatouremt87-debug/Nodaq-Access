@@ -77,6 +77,7 @@ import {
   toDateString,
   champCorrigeable,
   champsManquants,
+  centimesDepuisDictee,
   CHAMPS_A_COMPLETER,
   type TypeIntention,
 } from "@nodaq/shared";
@@ -171,6 +172,11 @@ function verifierChampsASaisir(
     }
   }
   return [...vus].map(([champ, motif]) => ({ champ, motif }));
+}
+
+/** Des centimes, écrits comme l'artisan les lit. */
+function euros(centimes: number): string {
+  return `${(centimes / 100).toFixed(2)} €`;
 }
 
 /** Une opération avant que `aCompleter` n'en soit dérivé. Interne. */
@@ -356,8 +362,20 @@ export function construirePlan(
   intentions: readonly Intention[],
   nonCompris: readonly string[],
   contexte: ContexteResolution,
+  /**
+   * La phrase telle qu'elle a été transcrite.
+   *
+   * Sert à VÉRIFIER qu'un montant dicté figure bien dans ce que l'utilisateur
+   * a dit — un modèle qui hallucine un chiffre est arrêté là. Vide par
+   * défaut : aucun montant n'est alors retenu, et les champs concernés
+   * retombent sur `CHAMPS_A_COMPLETER`. Le repli est l'état sûr.
+   */
+  transcription: string = "",
   aujourdhui: Date = new Date(),
 ): Plan {
+  /** Le montant dicté, en centimes, s'il se retrouve dans la phrase. */
+  const centimesDits = (euros: number | null | undefined): number | null =>
+    centimesDepuisDictee(transcription, euros);
   // `aCompleter` est DÉRIVÉ des champs, une seule fois, au retour : l'écrire
   // sur chacun des sites de construction le ferait diverger au premier oubli.
   const operations: OperationBrute[] = [];
@@ -446,16 +464,19 @@ export function construirePlan(
     }
 
     if (intention.type === "creer_article_catalogue") {
+      // Dicté s'il a réellement été prononcé, à saisir sinon. Le modèle ne
+      // FIXE aucun prix : il recopie celui de l'artisan, et on vérifie qu'il
+      // figure bien dans la phrase avant de le retenir.
+      const prix = centimesDits(intention.montantEuros);
       operations.push({
         type: intention.type,
-        libelle: `Ajouter au catalogue « ${intention.designation} » — prix à saisir`,
+        libelle:
+          `Ajouter au catalogue « ${intention.designation} »` +
+          (prix === null ? " — prix à saisir" : ` — ${euros(prix)} HT`),
         champs: {
           libelle: intention.designation,
           unite: intention.unite ?? null,
-          // Vide, et ça ne peut pas être autrement : un prix de catalogue est
-          // une décision commerciale. Le serveur n'a rien à calculer, et le
-          // modèle n'a pas le droit d'inventer.
-          prixUnitaireHtCents: null,
+          prixUnitaireHtCents: prix === null ? null : String(prix),
         },
         certitude: "aucune_resolution",
       });
@@ -463,14 +484,17 @@ export function construirePlan(
     }
 
     if (intention.type === "creer_charge_recurrente") {
+      const montant = centimesDits(intention.montantEuros);
       operations.push({
         type: intention.type,
-        libelle: `Déclarer une charge ${intention.cadence}le « ${intention.libelle} » — montant à saisir`,
+        libelle:
+          `Déclarer une charge ${intention.cadence}le « ${intention.libelle} »` +
+          (montant === null ? " — montant à saisir" : ` — ${euros(montant)}`),
         champs: {
           libelle: intention.libelle,
           cadence: intention.cadence,
           categorie: intention.categorie ?? "AUTRE",
-          montantCents: null,
+          montantCents: montant === null ? null : String(montant),
         },
         certitude: "aucune_resolution",
       });
@@ -483,6 +507,7 @@ export function construirePlan(
       // refuser un contrat parce que le client n'est pas encore en fiche
       // serait imposer un ordre de saisie que personne ne suit sur un
       // chantier.
+      const montantContrat = centimesDits(intention.montantEuros);
       let clientName: string | null = intention.clientMentionne ?? null;
       let certitude: OperationBrute["certitude"] = "aucune_resolution";
       if (intention.clientMentionne) {
@@ -504,12 +529,13 @@ export function construirePlan(
         type: intention.type,
         libelle:
           `Créer le contrat ${intention.cadence} « ${intention.libelle} »` +
-          `${clientName ? ` pour ${clientName}` : ""} — montant à saisir`,
+          `${clientName ? ` pour ${clientName}` : ""}` +
+          (montantContrat === null ? " — montant à saisir" : ` — ${euros(montantContrat)}`),
         champs: {
           libelle: intention.libelle,
           cadence: intention.cadence,
           clientName,
-          montantCents: null,
+          montantCents: montantContrat === null ? null : String(montantContrat),
         },
         certitude,
       });
@@ -604,23 +630,36 @@ export function construirePlan(
         continue;
       }
 
-      // Le SOLDE, calculé par le serveur, est proposé — et corrigeable à
-      // l'écran. Un règlement partiel se fait ainsi : l'utilisateur ramène le
-      // chiffre à ce qu'il a reçu, de ses doigts, avant de valider.
+      // Deux sources pour le montant, dans cet ordre.
+      //
+      // 1. Ce qui a été DIT — « il m'a réglé 500 euros sur la 181 » — à
+      //    condition que le chiffre se retrouve dans la transcription.
+      // 2. Le SOLDE calculé par le serveur, sinon. C'est le repli, et c'est
+      //    l'état sûr : il vient du journal des paiements, pas d'une oreille.
+      //
+      // Dans les deux cas l'écran affiche le montant et le laisse corriger
+      // avant la moindre écriture.
       const solde = contexte.factures.find((f) => f.id === rFacture.candidat.id)?.soldeCents ?? 0;
       if (solde <= 0) {
         incompris.push(`facture « ${rFacture.candidat.libelle} » : rien ne reste dû`);
         continue;
       }
+      const dit = centimesDits(intention.montantEuros);
+      const aEncaisser = dit ?? solde;
 
       operations.push({
         type: intention.type,
-        libelle: `Enregistrer ${(solde / 100).toFixed(2)} € sur « ${rFacture.candidat.libelle} » (solde restant — corrigez si le règlement est partiel)`,
+        libelle:
+          `Enregistrer ${euros(aEncaisser)} sur « ${rFacture.candidat.libelle} »` +
+          (dit === null
+            ? " (solde restant — corrigez si le règlement est partiel)"
+            : ` (montant dicté ; solde ${euros(solde)})`),
         champs: {
           factureId: rFacture.candidat.id,
           // Centimes : un euro décimal qui voyage en JSON et se reconvertit
-          // trois fois finit par perdre un centime.
-          montantCents: String(solde),
+          // trois fois finit par perdre un centime. La conversion depuis les
+          // euros dictés a lieu une seule fois, dans `centimesDepuisDictee`.
+          montantCents: String(aEncaisser),
           moyen: intention.moyen ?? "AUTRE",
         },
         certitude: rFacture.certitude,

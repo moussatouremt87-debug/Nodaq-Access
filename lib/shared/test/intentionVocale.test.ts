@@ -16,6 +16,7 @@ import {
   resoudreMention,
   interpreterDate,
   TYPES_INTENTION,
+  INTENTIONS_MONTANT_DICTABLE,
   CHAMPS_A_COMPLETER,
   champsManquants,
   champCorrigeable,
@@ -54,17 +55,51 @@ describe("le schéma REFUSE, il ne nettoie pas", () => {
     expect(Intention.safeParse(charge).success).toBe(false);
   });
 
-  test("AUCUN schéma d'intention ne déclare de champ monétaire", () => {
-    // Garde structurelle : si quelqu'un ajoute un jour `montantCents` à une
-    // intention, ce test tombe avant que le modèle puisse s'en servir.
+  test("hors liste blanche, AUCUN schéma ne déclare de champ monétaire", () => {
+    // La garde d'origine interdisait tout champ monétaire, partout. Elle
+    // confondait deux choses : FIXER un prix (interdit au modèle par la
+    // règle 3) et RECOPIER un chiffre que l'utilisateur vient de prononcer
+    // (jamais interdit). Resserrée, pas supprimée : là où un document ou un
+    // journal fait foi — le solde, le total d'un devis signé — la bouche de
+    // l'utilisateur n'est pas une source recevable.
     const interdits = /montant|prix|cents|amount|tarif/i;
+    const dictables = INTENTIONS_MONTANT_DICTABLE as readonly string[];
+
     for (const type of TYPES_INTENTION) {
-      const forme = Intention.options.find(
-        (o) => o.shape.type.value === type,
-      );
+      if (dictables.includes(type)) continue;
+      const forme = Intention.options.find((o) => o.shape.type.value === type);
       expect(forme, `schéma introuvable pour ${type}`).toBeDefined();
       for (const champ of Object.keys(forme!.shape)) {
         expect(interdits.test(champ), `${type}.${champ} évoque un montant`).toBe(false);
+      }
+    }
+  });
+
+  test("`facturer_devis` ne portera JAMAIS de montant dicté", () => {
+    // Nommé à part, et pas seulement couvert par la boucle : c'est le cas où
+    // la relaxe serait le plus tentante et le plus coûteuse. Facturer autre
+    // chose que ce qui a été accepté et signé ne se rattrape pas.
+    expect(INTENTIONS_MONTANT_DICTABLE as readonly string[]).not.toContain("facturer_devis");
+  });
+
+  test("un schéma autorisé ne porte QU'UN champ monétaire, et il est en EUROS", () => {
+    // Le modèle ne rend jamais de centimes : sur « 45 euros » il produirait
+    // « 45 », qu'on écrirait 45 centimes. Un facteur cent, silencieux, sur la
+    // seule source de prix des devis. La conversion est faite par le serveur,
+    // à un seul endroit (`centimesDepuisDictee`).
+    const interdits = /montant|prix|cents|amount|tarif/i;
+    for (const type of INTENTIONS_MONTANT_DICTABLE) {
+      const forme = Intention.options.find((o) => o.shape.type.value === type);
+      expect(forme, `schéma introuvable pour ${type}`).toBeDefined();
+      const monetaires = Object.keys(forme!.shape).filter((c) => interdits.test(c));
+      expect(monetaires, `${type} porte plusieurs champs monétaires`).toEqual(["montantEuros"]);
+    }
+  });
+
+  test("aucun schéma, autorisé ou non, ne parle en centimes", () => {
+    for (const forme of Intention.options) {
+      for (const champ of Object.keys(forme.shape)) {
+        expect(/cents/i.test(champ), `${forme.shape.type.value}.${champ} est en centimes`).toBe(false);
       }
     }
   });

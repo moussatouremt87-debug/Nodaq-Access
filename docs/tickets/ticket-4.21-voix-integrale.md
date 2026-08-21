@@ -40,6 +40,13 @@ modèle ne fait que l'extraire, et la garde `chiffresInventes` refuse tout
 chiffre qui n'était pas dans la phrase. Dicter « facture le solde » et laisser
 le modèle calculer ne l'est pas : c'est le serveur qui calcule, toujours.
 
+> **Ce paragraphe a été écrit à l'ouverture du ticket, puis contredit pendant
+> quatre lots.** La garde qui appliquait la règle 3 — « aucun schéma
+> d'intention ne déclare de champ monétaire » — était plus large que la règle,
+> et elle a gagné à chaque fois : elle interdisait aussi de recopier un montant
+> prononcé. Le fondateur a tranché après le lot 4 : « il faut changer la règle
+> sur l'obstacle. » Voir l'addendum en fin de document.
+
 Autrement dit : **omniscient sur ce qu'on peut DIRE, jamais sur ce qu'il faut
 CALCULER ou DÉCIDER.**
 
@@ -195,3 +202,67 @@ pas été écrit** : les lots ont avancé sur la liste tenue à la main de la se
 « l'écart, chiffré ». Ça tient tant que la liste est courte, et ça cessera de
 tenir au lot 4. À écrire avant de déclarer la couverture atteinte — sans quoi
 « TOUT faire » restera une appréciation, pas une mesure.
+
+
+---
+
+## Addendum — le montant prononcé (2026-08-21)
+
+Après livraison du lot 4, décision du fondateur : **« il faut changer la règle
+sur l'obstacle. »**
+
+### Ce qui était confondu
+
+La garde « aucun schéma d'intention ne déclare de champ monétaire » traitait
+comme une seule chose deux gestes très différents :
+
+- **FIXER un prix** — décider, calculer, arrondir. Interdit au modèle par la
+  règle 3, et ça ne bouge pas.
+- **RECOPIER un montant prononcé** — « la pose de placo à 45 euros du mètre ».
+  Le chiffre sort de la bouche de l'artisan ; le modèle ne décide rien. La
+  règle 3 n'a jamais interdit ça.
+
+La confusion coûtait cher et se voyait : le lot 4 faisait retaper à l'écran un
+nombre qu'on venait de dire à voix haute. L'ouverture du ticket avait pourtant
+énoncé la bonne distinction, noir sur blanc, avant de se faire refuser par sa
+propre garde à chaque lot.
+
+### Ce qui remplace l'interdit
+
+La garde est **resserrée, pas supprimée**. Trois conditions cumulatives :
+
+1. **L'humain est la seule source du chiffre**
+   (`INTENTIONS_MONTANT_DICTABLE` : catalogue, charge récurrente, contrat,
+   règlement). Là où un document fait foi — le solde du journal des paiements,
+   le total d'un devis signé — le serveur calcule, et la bouche de
+   l'utilisateur n'est pas recevable. **`facturer_devis` reste hors liste,
+   définitivement** : facturer autre chose que ce qui a été signé ne se
+   rattrape pas. Un test le nomme à part, pour que la relaxe ne s'y étende
+   jamais par distraction.
+2. **Le montant se retrouve dans la transcription** (`centimesDepuisDictee`).
+   Un modèle qui hallucine un chiffre absent de la phrase est arrêté là — sans
+   quoi la relaxe ouvrirait exactement le trou qu'elle prétend ne pas ouvrir.
+   Non retrouvé, le montant n'est pas « nettoyé » : il est **écarté**, et le
+   champ retombe sur le mécanisme du lot 4, vide et réclamé à l'écran. **Le
+   repli est l'état sûr.**
+3. **En euros, jamais en centimes.** `montantEuros` est le seul nom de champ
+   monétaire qu'un schéma ait le droit de déclarer, et un test le vérifie. Un
+   modèle qui rendrait des centimes écrirait 45 centimes pour « 45 euros » :
+   un facteur cent, silencieux, sur la seule source de prix des devis.
+
+La règle 4 s'applique par-dessus, inchangée : le montant est affiché et
+corrigeable avant la moindre écriture.
+
+### Limite assumée
+
+Un nombre transcrit **en toutes lettres** (« quarante-cinq euros ») n'est pas
+reconnu, et le champ redevient à saisir. Chercher à lire les numéraux français
+buterait sur « un »/« une », articles bien plus souvent que nombres, et
+produirait des acceptations sur du hasard. La limite penche du bon côté : elle
+coûte une saisie, jamais une écriture fausse.
+
+### Le mécanisme du lot 4 n'a pas été jeté
+
+`CHAMPS_A_COMPLETER` reste, et devient le **repli** du chemin dicté au lieu
+d'en être l'unique chemin. C'est ce qui rend la relaxe tenable : il existe un
+état sûr vers lequel retomber quand le montant n'est pas vérifiable.
