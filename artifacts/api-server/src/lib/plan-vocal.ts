@@ -61,6 +61,7 @@ import {
   clientsTable,
   facturesTable,
   paiementsTable,
+  campagnesRelanceTable,
 } from "@workspace/db";
 import {
   type Intention,
@@ -74,6 +75,8 @@ import {
   champCorrigeable,
 } from "@nodaq/shared";
 import { verticalDepuisTx } from "./vertical-tenant.js";
+import { conditionFactureEnRetardSql } from "./facturesEnRetard.js";
+import { regleEnVigueur, TYPE_CAMPAGNE_RELANCE } from "./campagnes-relance.js";
 import { recalculerFacture } from "./reglement-facture.js";
 
 type Tx = Parameters<Parameters<typeof withTenant>[1]>[0];
@@ -122,6 +125,17 @@ export interface ContexteResolution {
    *  proposera, et que l'écran laissera corriger. Le modèle n'en produit
    *  aucun (voir `IntentionEnregistrerReglement`). */
   readonly factures: readonly (Candidat & { readonly soldeCents: number })[];
+  /** Impayés joignables, et le compte de ceux qui ne le sont pas. */
+  readonly impayes: {
+    readonly joignables: readonly {
+      clientId: string | null;
+      factureId: string;
+      montantCents: number;
+      numero: string;
+      clientNom: string;
+    }[];
+    readonly sansNumero: number;
+  };
   /** US-A6.1 — le mot du secteur, pour que les libellés soumis à validation
    *  parlent la langue de l'utilisateur (« Créer la mission … » plutôt que
    *  « Créer l'affaire … » chez un consultant). Porté par le contexte, déjà
@@ -156,8 +170,29 @@ export async function chargerContexte(tenantId: string): Promise<ContexteResolut
         libelle: `${f.number} ${f.customer_name}`,
         soldeCents: Number(f.solde),
       }));
+    const aujourdhui = toDateString(new Date());
+    const retards = await tx.execute(sql`
+      SELECT f.id, f.customer_name, f.client_id, f.amount_cents, c.telephone
+        FROM factures f
+        LEFT JOIN clients c ON c.id = f.client_id
+       WHERE ${conditionFactureEnRetardSql(aujourdhui)}`);
+    const lignesRetard = retards.rows as Array<{
+      id: string; customer_name: string; client_id: string | null;
+      amount_cents: number; telephone: string | null;
+    }>;
+    const joignables = lignesRetard
+      .filter((f) => f.telephone)
+      .map((f) => ({
+        clientId: f.client_id,
+        factureId: f.id,
+        montantCents: Number(f.amount_cents),
+        numero: f.telephone!,
+        clientNom: f.customer_name,
+      }));
+    const impayes = { joignables, sansNumero: lignesRetard.length - joignables.length };
+
     const words = affaireWords(await verticalDepuisTx(tx));
-    return { affaires, membres, factures, words };
+    return { affaires, membres, factures, impayes, words };
   });
 }
 
@@ -188,6 +223,8 @@ function libelleOperation(intention: Intention, words: AffaireWords): string {
       return `Créer le client « ${intention.nom} »`;
     case "enregistrer_reglement":
       return `Enregistrer le règlement de « ${intention.factureMentionnee} »`;
+    case "lancer_relance":
+      return "Préparer une campagne de relance téléphonique";
   }
 }
 
@@ -286,6 +323,42 @@ export function construirePlan(
           clientNom: intention.clientMentionne ?? null,
           ville: intention.villeMentionnee ?? null,
           dateDebut,
+        },
+        certitude: "aucune_resolution",
+      });
+      continue;
+    }
+
+    if (intention.type === "lancer_relance") {
+      // Les impayés joignables : la définition du retard vient du module
+      // partagé (`conditionFactureEnRetardSql`) — en écrire une seconde ici
+      // rejouerait le bug que son en-tête raconte.
+      //
+      // Le NUMÉRO vient du client rattaché : une facture sans client ou sans
+      // téléphone ne peut pas être appelée, et elle est comptée à part plutôt
+      // qu'ignorée en silence.
+      const impayes = contexte.impayes;
+      if (impayes.joignables.length === 0) {
+        incompris.push(
+          impayes.sansNumero > 0
+            ? `aucun impayé joignable — ${impayes.sansNumero} facture(s) en retard sans téléphone`
+            : "aucune facture en retard",
+        );
+        continue;
+      }
+
+      const total = impayes.joignables.reduce((t, a) => t + a.montantCents, 0);
+      operations.push({
+        type: intention.type,
+        libelle:
+          `Préparer une relance pour ${impayes.joignables.length} facture(s) en retard ` +
+          `(${(total / 100).toFixed(2)} €)` +
+          (impayes.sansNumero > 0 ? ` — ${impayes.sansNumero} sans téléphone, écartée(s)` : "") +
+          " — les appels resteront à valider",
+        champs: {
+          // La liste voyage sérialisée : le plan attend en base, et c'est elle
+          // qui sera reprise à l'identique à la validation.
+          appels: JSON.stringify(impayes.joignables),
         },
         certitude: "aucune_resolution",
       });
@@ -657,6 +730,44 @@ async function executerOperation(
         status: "PROSPECT",
         ...(op.champs["clientNom"] ? { clientName: op.champs["clientNom"] } : {}),
         ...(op.champs["dateDebut"] ? { startDate: op.champs["dateDebut"] } : {}),
+      });
+      return;
+    }
+    case "lancer_relance": {
+      const appels = JSON.parse(op.champs["appels"] ?? "[]") as Array<{
+        clientId: string | null; factureId: string; montantCents: number;
+        numero: string; clientNom: string;
+      }>;
+      if (appels.length === 0) throw new Error("Campagne de relance sans appel");
+
+      // La règle du tenant DANS LA VERSION DU JOUR, figée sur la campagne :
+      // c'est elle qui bornera ce que l'agent peut accorder, et elle ne doit
+      // pas bouger si le dirigeant la modifie avant de valider (US-9).
+      const { regle, version } = await regleEnVigueur(tx, tenantId);
+
+      const [action] = await tx
+        .insert(pendingActionsTable)
+        .values({
+          tenantId,
+          type: TYPE_CAMPAGNE_RELANCE,
+          label: `Relance téléphonique — ${appels.length} appel${appels.length > 1 ? "s" : ""}`,
+          description:
+            "Chaque appel de cette liste sera passé par l'assistant vocal, dans les limites du mandat ci-dessous.",
+          amountCents: appels.reduce((t, a) => t + a.montantCents, 0),
+          payload: { appels, mandat: regle },
+        })
+        .returning();
+
+      // La campagne naît PROPOSÉE : valider la dictée prépare la relance, elle
+      // ne la déclenche pas. Aucun appel n'existe hors d'une pending_action
+      // approuvée (règle 4) — et la voix ne peut pas approuver à la place du
+      // dirigeant.
+      await tx.insert(campagnesRelanceTable).values({
+        tenantId,
+        pendingActionId: action!.id,
+        appels,
+        mandat: regle,
+        regleVersion: version,
       });
       return;
     }

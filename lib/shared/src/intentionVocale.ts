@@ -209,6 +209,31 @@ export const IntentionEnregistrerReglement = z
   })
   .strict();
 
+
+/**
+ * Lancer une campagne de relance (ticket 4.21, lot 3).
+ *
+ * « Relance mes impayés. » L'intention est VOLONTAIREMENT nue : aucun seuil,
+ * aucune liste de clients, aucun montant.
+ *
+ * ── Pourquoi si peu de champs ─────────────────────────────────────────────
+ * Le serveur sait déjà quelles factures sont en retard — il en existe UNE
+ * définition, partagée, dont un commentaire raconte le bug qu'avait causé sa
+ * duplication. Laisser le modèle proposer un seuil (« celles de plus de
+ * trente jours ») produirait une seconde définition du retard, entendue au
+ * téléphone.
+ *
+ * Et le tri fin n'a pas à se faire à la voix : la campagne arrive dans la
+ * file « à valider », où l'écran existant permet déjà d'EXCLURE un appel, de
+ * resserrer le mandat et de voir chaque montant. La voix déclenche, l'écran
+ * arbitre — c'est la règle 4 du dépôt, pas une limitation.
+ */
+export const IntentionLancerRelance = z
+  .object({
+    type: z.literal("lancer_relance"),
+  })
+  .strict();
+
 export const Intention = z.discriminatedUnion("type", [
   IntentionCreerAffaire,
   IntentionCreerProspect,
@@ -221,6 +246,7 @@ export const Intention = z.discriminatedUnion("type", [
   IntentionPointerHeures,
   IntentionCreerClient,
   IntentionEnregistrerReglement,
+  IntentionLancerRelance,
 ]);
 export type Intention = z.infer<typeof Intention>;
 
@@ -252,6 +278,7 @@ export const TYPES_INTENTION = [
   "pointer_heures",
   "creer_client",
   "enregistrer_reglement",
+  "lancer_relance",
 ] as const;
 export type TypeIntention = (typeof TYPES_INTENTION)[number];
 
@@ -429,6 +456,9 @@ export const CHAMPS_CORRIGEABLES: Record<TypeIntention, readonly string[]> = {
   // travers sur un règlement coûte cher. La FACTURE visée, elle, est un
   // rapprochement : la changer désignerait un autre dossier.
   enregistrer_reglement: ["montantCents"],
+  // Rien à corriger : la campagne ne porte aucun texte dicté. Le tri se fait
+  // dans la file de validation, où l'on exclut un appel d'un clic.
+  lancer_relance: [],
 };
 
 /** Le champ est-il corrigeable pour ce type d'opération ? */

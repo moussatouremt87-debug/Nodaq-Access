@@ -568,3 +568,63 @@ describe("h — enregistrer_reglement, aller-retour complet", () => {
     expect(rows[0].n).toBe(0);
   });
 });
+
+// ── i. Lancer une relance à la voix (ticket 4.21, lot 3) ────────────────────
+
+describe("i — lancer_relance : la voix PRÉPARE, elle ne déclenche pas", () => {
+  test("les impayés joignables deviennent une campagne PROPOSÉE, à valider", async () => {
+    const t = await inscrire("relance");
+    const clientId = crypto.randomUUID();
+    await adminPool.query(
+      `INSERT INTO clients (id, tenant_id, nom, telephone) VALUES ($1, $2::uuid, 'Delacroix', '+33600000042')`,
+      [clientId, t.tenantId],
+    );
+    await adminPool.query(
+      `INSERT INTO factures (id, tenant_id, number, customer_name, client_id, amount_cents, statut, lines, issued_date, due_date)
+       VALUES ($1, $2::uuid, 'FACT-2026-0200', 'Delacroix', $3, 40000, 'EMISE', '[]'::jsonb, CURRENT_DATE - 60, CURRENT_DATE - 30)`,
+      [crypto.randomUUID(), t.tenantId, clientId],
+    );
+
+    const { body } = await interpreter(t, "voix-test-relance").expect(200);
+    expect(body.operations).toHaveLength(1);
+    expect(body.operations[0].libelle).toContain("resteront à valider");
+
+    await executer(t, body.planId).expect(200);
+
+    // Une campagne existe, et une action l'attend dans la file — mais AUCUN
+    // appel n'est planifié : la règle 4 veut qu'un humain approuve avant
+    // qu'on compose, et la voix ne peut pas approuver à sa place.
+    const { rows: campagnes } = await adminPool.query(
+      `SELECT statut FROM campagnes_relance WHERE tenant_id = $1::uuid`, [t.tenantId],
+    );
+    expect(campagnes).toHaveLength(1);
+    expect(campagnes[0].statut).toBe("PROPOSEE");
+
+    const { rows: appels } = await adminPool.query(
+      `SELECT count(*)::int AS n FROM appels_relance WHERE tenant_id = $1::uuid`, [t.tenantId],
+    );
+    expect(appels[0].n).toBe(0);
+  });
+
+  test("un impayé SANS téléphone est écarté et COMPTÉ, jamais ignoré en silence", async () => {
+    const t = await inscrire("relance-sans-tel");
+    await adminPool.query(
+      `INSERT INTO factures (id, tenant_id, number, customer_name, amount_cents, statut, lines, issued_date, due_date)
+       VALUES ($1, $2::uuid, 'FACT-2026-0201', 'Sans Téléphone', 40000, 'EMISE', '[]'::jsonb, CURRENT_DATE - 60, CURRENT_DATE - 30)`,
+      [crypto.randomUUID(), t.tenantId],
+    );
+
+    const { body } = await interpreter(t, "voix-test-relance").expect(200);
+    // Aucun joignable : on le DIT, plutôt que de rendre un plan vide qui
+    // laisserait croire qu'il n'y a pas d'impayé.
+    expect(body.operations).toHaveLength(0);
+    expect(body.nonCompris.join(" ")).toContain("sans téléphone");
+  });
+
+  test("aucune facture en retard → on le dit", async () => {
+    const t = await inscrire("relance-a-jour");
+    const { body } = await interpreter(t, "voix-test-relance").expect(200);
+    expect(body.operations).toHaveLength(0);
+    expect(body.nonCompris.join(" ")).toContain("aucune facture en retard");
+  });
+});
