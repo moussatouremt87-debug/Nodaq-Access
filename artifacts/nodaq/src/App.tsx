@@ -1,7 +1,9 @@
 import { Switch, Route, useLocation } from 'wouter';
+import { routeOuverteEnLectureSeule } from '@nodaq/shared';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from '@/contexts/theme-context';
+import { ModeInterfaceProvider } from '@/contexts/mode-interface';
 import { AppShell } from '@/components/app-shell';
 import { NavProgressBar } from '@/components/nav-progress-bar';
 import { Toaster } from '@/components/ui/toaster';
@@ -25,6 +27,7 @@ import ParametresEnvoi from '@/pages/parametres-envoi';
 import Analytique from '@/pages/analytique';
 import Rapports from '@/pages/rapports';
 import CompteResultat from '@/pages/compte-resultat';
+import Cabinet from '@/pages/cabinet';
 import Echeancier from '@/pages/echeancier';
 import ChargesRecurrentes from '@/pages/charges-recurrentes';
 import PrevisionnelTresorerie from '@/pages/previsionnel-tresorerie';
@@ -35,12 +38,41 @@ import VotreMetier from '@/pages/votre-metier';
 import Onboarding from '@/pages/onboarding';
 import Reprise from '@/pages/reprise';
 import FacturationElectronique from '@/pages/facturation-electronique';
+import JournalDecisions from '@/pages/journal-decisions';
 import Login from '@/pages/login';
 import Register from '@/pages/register';
 import DevisAccepter from '@/pages/devis-accepter';
 import MembreAccepter from '@/pages/membre-accepter';
 import Mfa from '@/pages/mfa';
 import { useAuth, FINANCIAL_ROLES, type MembershipRole } from '@/hooks/use-auth';
+
+/**
+ * US-A5.4 — écran refusé à un tiers de confiance sorti de son périmètre.
+ * Distinct du « réservé aux administrateurs » ci-dessous : le tiers n'a pas à
+ * demander une élévation de droits, son accès est volontairement borné au
+ * dossier financier, et le lui dire évite qu'il croie à une panne.
+ */
+function HorsPerimetreTiers() {
+  return (
+    <div className="flex flex-col items-center justify-center h-full p-12 gap-3 text-center">
+      <div className="text-2xl font-semibold text-foreground">Hors de votre accès</div>
+      <div className="text-sm text-muted-foreground max-w-sm">
+        L'accès qui vous a été ouvert est limité au dossier financier, en consultation.
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Vrai si l'utilisateur est un tiers de confiance ET que la route demandée
+ * sort de son périmètre. Appelé par les DEUX HOC de route ci-dessous plutôt
+ * que route par route : c'est ce qui le rend valable pour les écrans qui
+ * n'existent pas encore, exactement comme la garde serveur
+ * (`middleware/lectureSeule.ts`) l'est pour les routeurs à venir.
+ */
+function tiersHorsPerimetre(role: MembershipRole, chemin: string): boolean {
+  return role === 'VIEWER' && !routeOuverteEnLectureSeule(chemin);
+}
 
 /** HOC: redirects to /login if not authenticated */
 function PlatformRoute(Page: React.ComponentType) {
@@ -66,6 +98,7 @@ function PlatformRoute(Page: React.ComponentType) {
       setLocation(`/mfa?from=${from}`);
       return null;
     }
+    if (tiersHorsPerimetre(data.role, window.location.pathname)) return <HorsPerimetreTiers />;
     return <Page />;
   };
 }
@@ -93,6 +126,7 @@ function RoleRoute(Page: React.ComponentType, allowedRoles: readonly MembershipR
       setLocation(`/mfa?from=${from}`);
       return null;
     }
+    if (tiersHorsPerimetre(data.role, window.location.pathname)) return <HorsPerimetreTiers />;
     if (!allowedRoles.includes(data.role)) {
       return (
         <div className="flex flex-col items-center justify-center h-full p-12 gap-3 text-center">
@@ -208,6 +242,7 @@ function ApplicationInterne() {
               <Route path="/parametres/envoi" component={PlatformRoute(ParametresEnvoi)} />
               <Route path="/rapports" component={RoleRoute(Rapports, FINANCIAL_ROLES)} />
               <Route path="/compte-resultat" component={RoleRoute(CompteResultat, FINANCIAL_ROLES)} />
+              <Route path="/cabinet" component={RoleRoute(Cabinet, FINANCIAL_ROLES)} />
               <Route path="/echeancier" component={RoleRoute(Echeancier, FINANCIAL_ROLES)} />
               <Route path="/charges-recurrentes" component={RoleRoute(ChargesRecurrentes, FINANCIAL_ROLES)} />
               <Route path="/previsionnel-tresorerie" component={RoleRoute(PrevisionnelTresorerie, FINANCIAL_ROLES)} />
@@ -218,6 +253,7 @@ function ApplicationInterne() {
               <Route path="/onboarding" component={RoleRoute(Onboarding, ['OWNER'])} />
               <Route path="/reprise" component={RoleRoute(Reprise, ['OWNER'])} />
               <Route path="/facturation-electronique" component={RoleRoute(FacturationElectronique, ['OWNER'])} />
+              <Route path="/journal-decisions" component={RoleRoute(JournalDecisions, ['OWNER'])} />
               <Route component={NotFound} />
             </Switch>
           </motion.div>
@@ -230,10 +266,12 @@ function ApplicationInterne() {
 export default function App() {
   return (
     <ThemeProvider>
-      <QueryClientProvider client={queryClient}>
-        <AppRouter />
-        <Toaster />
-      </QueryClientProvider>
+      <ModeInterfaceProvider>
+        <QueryClientProvider client={queryClient}>
+          <AppRouter />
+          <Toaster />
+        </QueryClientProvider>
+      </ModeInterfaceProvider>
     </ThemeProvider>
   );
 }

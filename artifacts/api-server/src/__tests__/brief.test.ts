@@ -73,6 +73,50 @@ afterAll(async () => {
   await cleanupUsers(...cleanupEmails);
 }, 30_000);
 
+function dansNJours(jours: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + jours);
+  return toDateString(d);
+}
+
+describe("c — habilitations à surveiller (US-A4.4)", () => {
+  test("une habilitation expirée est urgente, une bientôt expirée non, une valide n'apparaît pas", async () => {
+    const l = await inscrire("habilitations-brief");
+
+    const { body: membre } = await request(app).post("/api/equipe").set("Cookie", l.cookie)
+      .send({ name: "Salarié Brief" }).expect(201);
+
+    await request(app).post(`/api/equipe/${membre.id}/habilitations`).set("Cookie", l.cookie)
+      .send({ type: "habilitation_electrique", libelle: "Habilitation électrique — expirée", dateExpiration: dansNJours(-5) })
+      .expect(201);
+    await request(app).post(`/api/equipe/${membre.id}/habilitations`).set("Cookie", l.cookie)
+      .send({ type: "caces", libelle: "CACES — bientôt expiré", dateExpiration: dansNJours(10) })
+      .expect(201);
+    await request(app).post(`/api/equipe/${membre.id}/habilitations`).set("Cookie", l.cookie)
+      .send({ type: "diplome_etat", libelle: "Diplôme d'État — valide", dateExpiration: dansNJours(300) })
+      .expect(201);
+
+    const { body } = await request(app).get("/api/brief").set("Cookie", l.cookie).expect(200);
+    const habilitations = body.sections.find((s: { type: string }) => s.type === "habilitations");
+    expect(habilitations.items).toHaveLength(2);
+    const labels = habilitations.items.map((i: { label: string; urgent: boolean }) => i.label);
+    expect(labels.some((lbl: string) => lbl.includes("expirée"))).toBe(true);
+    expect(labels.some((lbl: string) => lbl.includes("bientôt expiré"))).toBe(true);
+    expect(labels.some((lbl: string) => lbl.includes("valide"))).toBe(false);
+
+    const expiree = habilitations.items.find((i: { label: string }) => i.label.includes("expirée"));
+    const bientot = habilitations.items.find((i: { label: string }) => i.label.includes("bientôt expiré"));
+    expect(expiree.urgent).toBe(true);
+    expect(bientot.urgent).toBe(false);
+  });
+
+  test("aucune habilitation à surveiller → pas de section habilitations", async () => {
+    const l = await inscrire("habilitations-brief-vide");
+    const { body } = await request(app).get("/api/brief").set("Cookie", l.cookie).expect(200);
+    expect(body.sections.find((s: { type: string }) => s.type === "habilitations")).toBeUndefined();
+  });
+});
+
 describe("a, b — sévérité calibrée par secteur, en retard significatif en tête", () => {
   test("bâtiment (délai usuel 30j) : 15 jours de retard → pas urgent ; 45 jours → urgent, en tête", async () => {
     const l = await inscrire("batiment-brief");

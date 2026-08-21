@@ -25,6 +25,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { useToast } from '@/hooks/use-toast';
 import { useDictee } from '@/hooks/use-dictee';
 import { apiFetch } from '@/lib/auth';
+import { Input } from '@/components/ui/input';
+import { CHAMPS_CORRIGEABLES } from '@nodaq/shared';
 
 const API = '/api';
 
@@ -32,6 +34,8 @@ interface Operation {
   type: string;
   libelle: string;
   certitude: string;
+  /** Les champs résolus. Seuls ceux de `CHAMPS_CORRIGEABLES` sont modifiables. */
+  champs?: Record<string, string | null>;
 }
 
 interface Question {
@@ -84,6 +88,19 @@ export function MicroFlottant() {
 
   const { enregistre, transcrit, demarrer, arreter } = useDictee(interpreter);
 
+  /**
+   * Corrections saisies avant validation : index d'opération → champ → valeur.
+   *
+   * Un nom propre entendu par une machine devient facilement autre chose —
+   * « Menuiserie Delacroix » ressort en « Menuiserie de la Croix ». L'écran
+   * montrait ce qui allait être écrit sans permettre de le rectifier : il
+   * fallait tout annuler et redicter, ce que personne ne fait deux fois.
+   */
+  const [corrections, setCorrections] = useState<Record<string, Record<string, string>>>({});
+
+  const corriger = (i: number, champ: string, valeur: string) =>
+    setCorrections((c) => ({ ...c, [i]: { ...(c[i] ?? {}), [champ]: valeur } }));
+
   const valider = useCallback(async () => {
     if (!plan) return;
     setApplique(true);
@@ -91,7 +108,10 @@ export function MicroFlottant() {
       const res = await apiFetch(`${API}/voix/executer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ planId: plan.planId }),
+        body: JSON.stringify({
+          planId: plan.planId,
+          ...(Object.keys(corrections).length > 0 ? { corrections } : {}),
+        }),
       });
       if (!res.ok) {
         const j = (await res.json().catch(() => ({}))) as { error?: string };
@@ -149,14 +169,39 @@ export function MicroFlottant() {
           <div className="space-y-4 py-4">
             {plan?.operations.length ? (
               <ul className="space-y-2" data-testid="liste-operations">
-                {plan.operations.map((o, i) => (
-                  <li key={i} className="rounded-lg border border-card-border p-3 text-sm">
-                    {o.libelle}
-                    {o.certitude === 'partielle' && (
-                      <span className="ml-2 text-xs text-muted-foreground">(rapprochement approximatif)</span>
-                    )}
-                  </li>
-                ))}
+                {plan.operations.map((o, i) => {
+                  const modifiables = CHAMPS_CORRIGEABLES[o.type as keyof typeof CHAMPS_CORRIGEABLES] ?? [];
+                  const aCorriger = modifiables.filter((c) => o.champs?.[c] != null);
+                  return (
+                    <li key={i} className="rounded-lg border border-card-border p-3 text-sm">
+                      {o.libelle}
+                      {o.certitude === 'partielle' && (
+                        <span className="ml-2 text-xs text-muted-foreground">(rapprochement approximatif)</span>
+                      )}
+                      {/* Les champs DICTÉS se relisent et se corrigent ici.
+                          Jamais les identifiants résolus : les modifier ne
+                          serait plus corriger une transcription, mais viser
+                          autre chose que ce que le libellé annonce. */}
+                      {aCorriger.length > 0 && (
+                        <div className="mt-2 space-y-1.5">
+                          {aCorriger.map((champ) => (
+                            <div key={champ} className="flex items-center gap-2">
+                              <span className="w-20 shrink-0 text-[11px] uppercase tracking-wide text-muted-foreground">
+                                {champ}
+                              </span>
+                              <Input
+                                value={corrections[i]?.[champ] ?? o.champs?.[champ] ?? ''}
+                                onChange={(e) => corriger(i, champ, e.target.value)}
+                                className="h-9 text-sm"
+                                data-testid={`correction-${i}-${champ}`}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             ) : (
               <p className="text-sm text-muted-foreground">Aucune opération à appliquer.</p>

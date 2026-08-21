@@ -130,7 +130,7 @@ export default function Contrats() {
         </div>
 
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-48" data-testid="select-filter-contrat-status">
+          <SelectTrigger className="w-48" aria-label="Filtrer par statut de contrat" data-testid="select-filter-contrat-status">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

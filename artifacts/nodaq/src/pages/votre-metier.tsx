@@ -89,8 +89,9 @@ export default function VotreMetierPage() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">Métier :</label>
+                <label htmlFor="choix-metier" className="text-sm font-medium text-foreground">Métier :</label>
                 <select
+                  id="choix-metier"
                   value={selected}
                   onChange={e => handleChange(e.target.value as Vertical)}
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"

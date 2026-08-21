@@ -33,7 +33,7 @@ import type { Vertical } from "./verticalPacks.js";
  * hide the second change; dating it tomorrow would claim a snapshot that does
  * not exist yet. The suffix keeps the value sortable and honest.
  */
-export const MODULE_CATALOG_VERSION = "2026-08-03.2";
+export const MODULE_CATALOG_VERSION = "2026-08-18.2";
 
 export interface ModuleDefinition {
   id: string;
@@ -95,88 +95,72 @@ export const MODULES: readonly ModuleDefinition[] = [
     id: "rh",
     title: "Équipe & plannings",
     description: "Équipe, absences, plannings capacité vs charge, performance horaire.",
-    href: "/rh",
-    tools: ["plan_staffing", "analyze_hourly_performance"],
+    // `/rh` ne routait rien : l'écran s'appelle `/equipe` depuis toujours.
+    href: "/equipe",
+    // `plan_staffing` et `analyze_hourly_performance` n'existent pas côté
+    // serveur. Les déclarer laissait croire qu'éteindre ce module retirait
+    // des outils à l'agent, ce qui n'a jamais été le cas.
+    tools: [],
     defaultOn: "tous",
   },
 
-  // ── HORS SOCLE (pivot ADR-007) — éteints par défaut, jamais supprimés ───
-  // Aucune donnée ni ligne de code n'est perdue : un owner réactive en un clic
-  // et tout répond à l'identique. Tant qu'il est éteint, le module perd la nav
-  // et le toolset de l'agent — et les routes adossées à un outil répondent
-  // 409 « module désactivé », par disparition de l'outil, pas par un contrôle
-  // d'accès (voir docs/modules.md §3).
-  {
-    id: "stocks",
-    title: "Stocks & prix matières",
-    description:
-      "Suivi des stocks, alertes sous seuil, valorisation et simulation prix matières.",
-    href: "/stocks",
-    tools: ["check_stock_alerts", "adjust_stock", "simulate_material_prices"],
-    defaultOn: "aucun",
-  },
-  {
-    id: "immobilisations",
-    title: "Immobilisations",
-    description: "Registre des immobilisations, plans d'amortissement et impact trésorerie.",
-    href: "/immobilisations",
-    tools: [],
-    defaultOn: "aucun",
-  },
-  {
-    id: "reglementaire",
-    title: "Veille réglementaire",
-    description: "Obligations françaises applicables au profil de l'entreprise, par urgence.",
-    href: "/reglementaire",
-    tools: ["check_regulatory_watch"],
-    defaultOn: "aucun",
-  },
-  {
-    id: "avis",
-    title: "Avis clients",
-    description: "E-réputation : suivi des avis et réponses validées en 1 clic.",
-    href: "/avis",
-    tools: ["analyze_reputation", "draft_review_reply"],
-    defaultOn: "aucun",
-  },
-  {
-    id: "rgpd",
-    title: "Assistant RGPD",
-    description: "Registre des traitements (art. 30), modèles CNIL et audit de complétude.",
-    href: "/rgpd",
-    tools: ["check_rgpd_register"],
-    defaultOn: "aucun",
-  },
+  // ── HORS SOCLE (pivot ADR-007) — éteint par défaut, jamais supprimé ────
   {
     id: "facturation_electronique",
     title: "Facturation électronique",
     description:
-      "Factur-X, dépôt en plateforme agréée (PDP) et e-reporting — obligation 09/2026.",
-    href: "/factures",
+      "Factur-X, dépôt en plateforme agréée (PDP) et e-reporting. RECEVOIR une " +
+      "facture électronique est obligatoire pour TOUTES les entreprises depuis " +
+      "le 1er septembre 2026 ; l'obligation d'ÉMETTRE arrive au 1er septembre " +
+      "2027 pour les TPE et PME.",
+    // `/factures` était FAUX, et dangereusement : ce module éteint par défaut
+    // aurait fait disparaître l'écran Factures — le socle du produit — chez
+    // tous les tenants le jour où quelqu'un aurait branché le filtrage. La
+    // page de ce module est `/facturation-electronique`, et elle existe.
+    href: "/facturation-electronique",
     tools: [],
-    defaultOn: "aucun",
+    /*
+     * « tous », et le raisonnement inverse mérite d'être écrit puisqu'il a
+     * été tenu ici même.
+     *
+     * J'avais laissé « aucun » en m'appuyant sur l'échéance de septembre
+     * 2027. Cette date est celle de l'ÉMISSION pour les TPE/PME — celle
+     * qu'encode `OBLIGATION_EMISSION_ELECTRONIQUE_DATE`. Mais la RÉCEPTION
+     * s'impose à toutes les entreprises, sans exception de taille, depuis le
+     * 1er septembre 2026 ; `lib/facturx` le dit depuis toujours
+     * (« extraction = réception, obligation 09/2026 »).
+     *
+     * Éteindre ce module par défaut retirait donc de la navigation l'écran
+     * où l'artisan raccorde sa plateforme — précisément l'écran dont il a
+     * besoin pour une obligation déjà en vigueur. Un module optionnel ne
+     * peut pas porter une obligation légale en cours.
+     */
+    defaultOn: "tous",
   },
-  {
-    id: "prevision_ventes",
-    title: "Prévision des ventes",
-    description: "Projection du chiffre d'affaires à partir des factures (carte cockpit).",
-    tools: ["forecast_sales"],
-    defaultOn: "aucun",
-  },
-  {
-    id: "signaux_clients",
-    title: "Signaux clients",
-    description: "Segmentation churn/croissance par client sur 24 mois de facturation.",
-    tools: ["analyze_customer_signals"],
-    defaultOn: "aucun",
-  },
-  {
-    id: "silae",
-    title: "Silae (SIRH & paie)",
-    description: "Lecture des salariés et absences depuis Silae, et synchronisation humaine.",
-    tools: ["silae_get_employees", "silae_get_absences"],
-    defaultOn: "aucun",
-  },
+
+  // ── Ce qui a été RETIRÉ de ce catalogue, et pourquoi ───────────────────
+  // stocks, immobilisations, reglementaire, avis, rgpd, prevision_ventes,
+  // signaux_clients, silae.
+  //
+  // Le pivot ADR-007 les avait mis « hors socle » plutôt que supprimés, au
+  // motif qu'« un module éteint garde son code, ses routes et ses tests, et
+  // qu'un owner le réactive en un clic ». Cette doctrine est juste — mais
+  // elle suppose qu'il y ait du code derrière. Vérification faite : les six
+  // pages annoncées (/stocks, /immobilisations, /reglementaire, /avis,
+  // /rgpd, et /rh) n'existent dans AUCUNE route, et les treize outils cités
+  // n'existent nulle part côté serveur. Il n'y avait rien à réactiver.
+  //
+  // Un catalogue qui décrit un produit inexistant est pire qu'un catalogue
+  // incomplet : il rend `resolveModules` inutilisable — le brancher aurait
+  // masqué l'écran Factures chez tous les tenants (le module
+  // `facturation_electronique` déclarait `href: "/factures"` et un défaut
+  // « aucun »), sans masquer une seule page réelle ni retirer un seul outil.
+  // C'est très probablement pourquoi personne ne l'a jamais appelé.
+  //
+  // Les gardes de parité (`artifacts/nodaq/src/lib/modules-parite.test.ts` et
+  // `artifacts/api-server/src/__tests__/modules-outils-parite.test.ts`)
+  // empêchent désormais un module de déclarer une page ou un outil qui
+  // n'existe pas.
 ] as const;
 
 export interface ResolvedModule {

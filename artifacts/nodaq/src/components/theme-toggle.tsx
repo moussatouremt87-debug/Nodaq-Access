@@ -12,7 +12,7 @@ export function ThemeToggle({ className }: { className?: string }) {
       aria-label={isDark ? 'Passer en mode clair' : 'Passer en mode sombre'}
       className={cn(
         'flex h-7 w-7 items-center justify-center rounded-md',
-        'text-sidebar-foreground/55 hover:text-sidebar-foreground',
+        'text-sidebar-foreground/60 hover:text-sidebar-foreground',
         'transition-colors hover-elevate shrink-0',
         className,
       )}

@@ -20,8 +20,8 @@ import {
   computeVatBreakdown,
 } from "@nodaq/facturx";
 import type { FacturXInvoice, FacturXLine, FacturXParty } from "@nodaq/facturx";
-import { decennaleApplicable } from "@nodaq/shared";
 import type { Vertical } from "@nodaq/shared";
+import { REGLES_MENTIONS } from "./mentions-obligatoires.js";
 
 // ── Local type aliases (mirror lib/db/src/schema/factures.ts) ────────────────
 
@@ -107,64 +107,23 @@ export interface MentionIssue {
 }
 
 /**
- * `vertical` gate `decennale_manquante` et `attestation_tva_manquante` :
- * ces deux règles concernent spécifiquement les travaux (décennale,
- * art. 279-0 bis CGI) — les appliquer à un secteur sans lien contractuel
- * avec un maître d'ouvrage bloquait à tort l'émission d'une facture
- * hors bâtiment légitimement à taux réduit (US-A2.5). La liste des
- * secteurs concernés est celle, déjà tranchée, de `regulatoryWatch.ts`
- * (entrée `garantie-decennale`) — une seule source de vérité.
+ * Les mentions obligatoires manquantes sur ce document, pour ce secteur.
+ *
+ * Le corps de cette fonction était une suite de `if` ; les règles vivent
+ * désormais dans `mentions-obligatoires.ts`, chacune déclarant les secteurs
+ * qu'elle concerne (US-A7.1). Cette fonction n'est plus qu'un ÉVALUATEUR :
+ * ajouter une obligation ne la touche pas.
+ *
+ * Signature et sortie inchangées — `routes/factures.ts` filtre toujours sur
+ * `bloquant` et rend un 422 avec `code` et `message`.
  */
 export function auditMentionsFR(data: FactureForPdf, vertical: Vertical): MentionIssue[] {
-  const issues: MentionIssue[] = [];
-  const add = (code: string, message: string, bloquant = true) =>
-    issues.push({ code, message, bloquant });
-
-  if (!data.seller.siret?.replace(/\D/g, "")) {
-    add(
-      "siret_vendeur_manquant",
-      "SIRET de l'entreprise absent — mention obligatoire (art. 242 nonies A CGI). L'émission est bloquée jusqu'à renseignement dans Profil entreprise.",
-    );
-  }
-  if (!data.clientName?.trim()) {
-    add("client_manquant", "Nom du client absent — la facture ne peut pas être identifiée.");
-  }
-  if (!data.issuedDate?.match(/^\d{4}-\d{2}-\d{2}$/)) {
-    add("date_emission_invalide", "Date d'émission absente ou au mauvais format.");
-  }
-  if (data.lines.length === 0) {
-    add("aucune_ligne", "Facture sans aucune ligne — émission impossible.", false);
-  }
-
-  const travauxConcernes = decennaleApplicable(vertical);
-
-  const hasReducedRate = data.lines.some(l => l.vatRate === 10 || l.vatRate === 5.5);
-  if (travauxConcernes && hasReducedRate && !data.attestationTvaFournie) {
-    add(
-      "attestation_tva_manquante",
-      "Ligne(s) au taux réduit (10 % ou 5,5 %) sans attestation TVA signée par le client. L'émission est bloquée : récupérez et cochez l'attestation avant d'émettre.",
-    );
-  }
-
-  if (travauxConcernes && !data.seller.decennaleAssureur && !data.autoliquidation) {
-    add(
-      "decennale_manquante",
-      "Assurance décennale non renseignée dans Profil entreprise. La mention est obligatoire sur les factures de travaux (art. L.241-1 C.assur.). Complétez votre profil.",
-      false,
-    );
-  }
-
-  // US-A1.3 : une entreprise en franchise en base de TVA (art. 293 B CGI) ne
-  // peut légalement facturer aucune TVA. Une ligne à taux non nul serait un
-  // document juridiquement faux — bloquer plutôt que l'émettre.
-  if (data.seller.tvaFranchise && data.lines.some(l => (l.vatRate ?? 0) > 0)) {
-    add(
-      "franchise_tva_incoherente",
-      "Le profil entreprise est déclaré en franchise en base de TVA (art. 293 B du CGI), mais une ligne porte un taux de TVA non nul. Corrigez le profil entreprise ou les lignes de la facture avant d'émettre.",
-    );
-  }
-
-  return issues;
+  return REGLES_MENTIONS.filter(
+    // Pas de `verticals` = socle commun, évalué partout. C'est ce qui garantit
+    // qu'un secteur sans obligation propre ne subit aucune vérification
+    // superflue, sans qu'on ait à l'écrire secteur par secteur.
+    (regle) => (!regle.verticals || regle.verticals.includes(vertical)) && regle.enDefaut(data),
+  ).map(({ code, message, bloquant }) => ({ code, message, bloquant }));
 }
 
 // ── Human-readable PDF via pdfkit ────────────────────────────────────────────

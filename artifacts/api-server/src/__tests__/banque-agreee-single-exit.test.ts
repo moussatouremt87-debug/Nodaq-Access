@@ -82,14 +82,24 @@ function findViolatingLines(file: string, content: string, re: RegExp): string[]
 }
 
 const FIX_MESSAGE =
-  "BRIDGE_CLIENT_ID/BRIDGE_CLIENT_SECRET/BRIDGE_WEBHOOK_SECRET ne doivent être lues que dans lib/banque-agreee/src/client.ts — voir getConfig().";
+  "Les variables BRIDGE_* ne doivent être lues que dans lib/banque-agreee/src/client.ts — voir getConfig() et secretWebhookPaiement().";
 
 describe("Connecteur bancaire single-exit guard — variables Bridge lues nulle part ailleurs", () => {
   test("collected source files to scan (must be > 0)", () => {
     expect(ALL_FILES.length).toBeGreaterThan(0);
   });
 
-  test.each(["BRIDGE_CLIENT_ID", "BRIDGE_CLIENT_SECRET", "BRIDGE_WEBHOOK_SECRET"])(
+  // BRIDGE_PAYMENT_WEBHOOK_SECRET s'ajoute au ticket 4.19 : une garde qui ne
+  // couvre que les variables d'hier laisse passer celles de demain, et c'est
+  // exactement comme ça qu'un secret finit lu depuis une route.
+  test.each([
+    "BRIDGE_CLIENT_ID",
+    "BRIDGE_CLIENT_SECRET",
+    "BRIDGE_WEBHOOK_SECRET",
+    "BRIDGE_PAYMENT_CLIENT_ID",
+    "BRIDGE_PAYMENT_CLIENT_SECRET",
+    "BRIDGE_PAYMENT_WEBHOOK_SECRET",
+  ])(
     "env var '%s' must not appear outside lib/banque-agreee/src/client.ts",
     (envVar) => {
       const re = new RegExp(`\\b${envVar}\\b`);

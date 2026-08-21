@@ -2,7 +2,13 @@
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <!-- PAS de `maximum-scale` ni de `user-scalable=no` : ils empêchent
+         d'agrandir la page. WCAG 1.4.4 (AA) exige le contraire, et c'est
+         l'utilisateur malvoyant qui en paie le prix — sur TOUS les écrans à
+         la fois. Trouvé par axe dans un vrai navigateur (US-A8.2) : l'audit
+         jsdom ne voit que des composants, jamais cet en-tête. Gardé par
+         `src/lib/accessibilite-parite.test.ts`. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>NODAQ — Cockpit de pilotage</title>
     <meta name="description" content="NODAQ — le cockpit de pilotage pour dirigeants de TPE/PME. Trésorerie, affaires, factures et prospects, en temps réel." />
     <meta name="robots" content="index, follow" />
@@ -15,11 +21,27 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <!-- Flash-prevention: apply theme before first paint -->
+    <!--
+      Flash-prevention: apply theme before first paint.
+
+      US-A8.1 — sans choix explicite, c'est le SYSTÈME qui tranche. Le défaut
+      sombre en dur était une hypothèse d'usage de bureau : en plein soleil,
+      un fond sombre est le pire cas, quel que soit son contraste calculé.
+      Le paysagiste dont le téléphone bascule en clair dehors obtient le
+      thème clair sans avoir rien à régler.
+
+      Ce script décide du PREMIER rendu ; `src/contexts/theme-context.tsx`
+      décide de la suite. Les deux doivent trancher pareil, sinon l'écran
+      bascule visiblement à chaque chargement — c'est ce qu'éprouve
+      `src/contexts/theme-context.test.tsx`, qui évalue CE script et compare.
+    -->
     <script>
       (function () {
         var t = localStorage.getItem('nodaq-theme');
-        var isDark = t !== 'light'; // default: dark
+        var isDark =
+          t === 'dark' || t === 'light'
+            ? t === 'dark'
+            : !window.matchMedia('(prefers-color-scheme: light)').matches;
         if (isDark) {
           document.documentElement.classList.add('dark');
           document.documentElement.style.colorScheme = 'dark';

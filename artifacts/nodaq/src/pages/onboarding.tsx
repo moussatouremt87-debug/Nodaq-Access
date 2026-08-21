@@ -32,7 +32,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { apiFetch } from '@/lib/auth';
 import { useLocation } from 'wouter';
-import { useUpdateVerticalMutation, secteursOnboarding } from '@/hooks/use-vertical';
+import { useUpdateVerticalMutation, secteursOnboarding, useVertical } from '@/hooks/use-vertical';
 import { useCompanyProfile, COMPANY_PROFILE_QUERY_KEY } from '@/hooks/use-company-profile';
 import { COMPANY_TYPE_PROFIL, type CompanyTypeProfil, type Vertical } from '@nodaq/shared';
 
@@ -540,6 +540,12 @@ function EcranClasseur({ onNext, onSkip }: { onNext: () => void; onSkip: () => v
 
 function EcranMetier({ onDone, onSkip }: { onDone: () => void; onSkip: () => void }) {
   const { toast } = useToast();
+  // US-A4.3 : le secteur vient d'être choisi sur l'écran précédent
+  // (`EcranSecteur`, `updateVertical`) — la mutation met déjà à jour le cache
+  // React Query en `onSuccess`, donc `useVertical()` ici reflète le choix
+  // fait quelques secondes plus tôt dans le même flux, sans requête réseau
+  // supplémentaire.
+  const { externalWorkerWords } = useVertical();
   const [decennale, setDecennale] = useState({ assureur: '', numero: '', couverture: '' });
   const [tauxHoraire, setTauxHoraire] = useState('');
   const [saving, setSaving] = useState(false);
@@ -773,7 +779,7 @@ function EcranMetier({ onDone, onSkip }: { onDone: () => void; onSkip: () => voi
 
         {equipe.length === 0 && (
           <p className="text-xs text-muted-foreground">
-            Ajoutez vos salariés, apprentis et sous-traitants habituels pour que le planning soit pré-rempli.
+            Ajoutez vos salariés, apprentis et {externalWorkerWords.plural} habituels pour que le planning soit pré-rempli.
           </p>
         )}
 
@@ -796,7 +802,9 @@ function EcranMetier({ onDone, onSkip }: { onDone: () => void; onSkip: () => voi
               >
                 <option value="SALARIE">Salarié</option>
                 <option value="APPRENTI">Apprenti</option>
-                <option value="SOUS_TRAITANT">Sous-traitant</option>
+                <option value="SOUS_TRAITANT">
+                  {externalWorkerWords.singular.charAt(0).toUpperCase() + externalWorkerWords.singular.slice(1)}
+                </option>
               </select>
             </div>
             <div className="space-y-1">
@@ -821,7 +829,7 @@ function EcranMetier({ onDone, onSkip }: { onDone: () => void; onSkip: () => voi
 
         {equipe.some(m => m.typeLien === 'SOUS_TRAITANT') && (
           <p className="text-xs text-muted-foreground">
-            Les sous-traitants sont inclus dans votre coût mensuel mais exclus du calcul de capacité.
+            Les {externalWorkerWords.plural} sont inclus dans votre coût mensuel mais exclus du calcul de capacité.
           </p>
         )}
       </div>
@@ -902,7 +910,7 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-[100dvh] bg-background">
       <div className="max-w-xl mx-auto px-4 py-10">
         {/* Header */}
         <div className="mb-8">

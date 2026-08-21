@@ -169,14 +169,21 @@ const BUSINESS_TABLES = [
   "paiements", "affectations",
   // contact_bases référence contacts_prospection : les enfants d'abord.
   "contact_bases", "oppositions", "contacts_prospection",
+  // team_member_habilitations référence team_members (membre_id) : avant lui.
+  "team_member_habilitations",
   "absences", "activity", "affaires", "analytics_tool_logs", "archived_pdfs", "chat_messages",
   // classeur_document_bytes référence classeur_documents (document_id) : avant elle.
   "classeur_document_bytes", "classeur_documents",
-  "connectors", "contrats", "cr_entries", "devis", "echeances",
+  "connectors", "contrats", "cr_entries", "echeances",
   "avoirs", "facture_sequences",
   // incidents_facturation référence factures (facture_id) : avant elle.
-  "incidents_facturation", "factures",
-  "pending_actions", "prospects", "settings", "team_members",
+  // Et depuis la migration 049, factures référence devis (devis_id) : les
+  // factures partent donc AVANT les devis. Une facture est un document
+  // opposable — c'est le devis qui s'efface derrière elle, jamais l'inverse.
+  "incidents_facturation", "factures", "devis",
+  // liens_paiement référence appels_relance (appel_id) : avant elle.
+  "liens_paiement",
+  "appels_relance", "campagnes_relance", "pending_actions", "journal_decisions", "regles_relance", "prospects", "settings", "team_members",
   "clients", "tenant_invites",
   "pa_documents_recus", "pa_transmissions",
   // bank_accounts référence bank_connections (connection_id) : avant elle.
@@ -235,11 +242,47 @@ export function tableInsertSql(table: string, tenantId: string, memberAId?: stri
     echeances:          [`INSERT INTO echeances (id, label, type, due_date, tenant_id) VALUES ($1, 'rls-test', 'LOYER', $2, $3)`, [id, now, tenantId]],
     factures:           [`INSERT INTO factures (id, number, customer_name, amount_cents, due_date, issued_date, tenant_id) VALUES ($1, 'RLS-F-001', 'RLS Client', 1000, $2, $2, $3)`, [id, now, tenantId]],
     pending_actions:    [`INSERT INTO pending_actions (id, label, type, tenant_id) VALUES ($1, 'rls-test', 'SIGNATURE', $2)`, [id, tenantId]],
+    // journal_decisions est APPEND-ONLY : le nettoyage par DELETE de
+    // `cleanupTenants` tourne sous adminPool (superutilisateur), qui n'est pas
+    // concerné par le REVOKE posé sur app_user.
+    journal_decisions:  [`INSERT INTO journal_decisions (id, tenant_id, action_id, action_type, action_label, decision) VALUES ($1, $2, 'act-rls-test', 'PLAN_VOCAL', 'rls-test', 'APPROUVEE')`, [id, tenantId]],
+    // regles_relance est APPEND-ONLY comme journal_decisions : même remarque
+    // sur le nettoyage, qui tourne sous adminPool.
+    regles_relance:     [`INSERT INTO regles_relance (id, tenant_id, version) VALUES ($1, $2, 1)`, [id, tenantId]],
+    campagnes_relance:  [`INSERT INTO campagnes_relance (id, tenant_id, pending_action_id, mandat) VALUES ($1, $2, 'pa-rls-test', '{}'::jsonb)`, [id, tenantId]],
+    // appels_relance référence campagnes_relance : la fixture crée sa propre
+    // campagne dans la même instruction, sinon elle n'insérerait rien pour un
+    // tenant qui n'en a pas — et l'isolation « verrait » zéro ligne des deux
+    // côtés, donc passerait sans rien prouver.
+    appels_relance:     [`WITH c AS (
+                            INSERT INTO campagnes_relance (id, tenant_id, pending_action_id, mandat)
+                            VALUES (gen_random_uuid()::text, $2, 'pa-rls-appel', '{}'::jsonb)
+                            RETURNING id
+                          )
+                          INSERT INTO appels_relance (id, tenant_id, campagne_id, empreinte_numero)
+                          SELECT $1, $2, c.id, 'rls-empreinte' FROM c`, [id, tenantId]],
+    // liens_paiement : même raison que ci-dessus — la fixture porte son propre
+    // appel (et la campagne qui le porte), sinon l'isolation ne verrait rien
+    // des deux côtés et passerait sans rien prouver.
+    liens_paiement:     [`WITH c AS (
+                            INSERT INTO campagnes_relance (id, tenant_id, pending_action_id, mandat)
+                            VALUES (gen_random_uuid()::text, $2, 'pa-rls-lien', '{}'::jsonb)
+                            RETURNING id
+                          ), a AS (
+                            INSERT INTO appels_relance (id, tenant_id, campagne_id, empreinte_numero)
+                            SELECT gen_random_uuid()::text, $2, c.id, 'rls-empreinte' FROM c
+                            RETURNING id
+                          )
+                          INSERT INTO liens_paiement (id, tenant_id, appel_id, empreinte_numero, montant_cents)
+                          SELECT $1, $2, a.id, 'rls-empreinte', 12345 FROM a`, [id, tenantId]],
     prospects:          [`INSERT INTO prospects (id, name, tenant_id) VALUES ($1, 'RLS Prospect', $2)`, [id, tenantId]],
     settings:           [`INSERT INTO settings (key, value, tenant_id) VALUES ('rls_test_key', 'v', $1) ON CONFLICT DO NOTHING`, [tenantId]],
     team_members:       [`INSERT INTO team_members (id, name, tenant_id) VALUES ($1, 'RLS Member', $2)`, [id, tenantId]],
     absences:           memberAId
       ? [`INSERT INTO absences (id, membre_id, date_debut, date_fin, tenant_id) VALUES ($1, $2, $3, $3, $4) ON CONFLICT DO NOTHING`, [id, memberAId, now, tenantId]]
+      : [`SELECT 1`, []], // skip if no member provided
+    team_member_habilitations: memberAId
+      ? [`INSERT INTO team_member_habilitations (id, membre_id, type, libelle, tenant_id) VALUES ($1, $2, 'rls_test', 'RLS Habilitation', $3) ON CONFLICT DO NOTHING`, [id, memberAId, tenantId]]
       : [`SELECT 1`, []], // skip if no member provided
     // archived_pdfs: id is TEXT PK, bytes is BYTEA — both must be supplied explicitly.
     archived_pdfs:    [`INSERT INTO archived_pdfs (id, tenant_id, document_type, document_id, bytes, sha256, byte_size) VALUES ($1, $2::uuid, 'FACTURE', $3, $4, $5, $6) ON CONFLICT DO NOTHING`, [id, tenantId, crypto.randomUUID(), Buffer.from("rls-test-pdf"), "rls-test-sha256-placeholder", 12]],
@@ -384,7 +427,14 @@ export function texteBrut(pdf: Buffer): string {
     } catch {
       // Flux non compressé ou binaire — polices, images : rien à en tirer.
     }
-    i = fin + 1;
+    // Après « endstream », et pas `fin + 1` : le mot « endstream » CONTIENT
+    // « stream ». Reprendre la recherche un octet après son début la faisait
+    // re-tomber dedans, puis encadrer le flux suivant à partir d'un mauvais
+    // décalage — l'inflate échouait, le `catch` l'avalait, et seul le PREMIER
+    // flux du document était réellement lu. Un PDF de deux pages ne rendait
+    // donc que la première, en silence : une assertion `not.toContain` sur la
+    // page 2 passait sans rien vérifier.
+    i = fin + "endstream".length;
   }
 
   const decodeHex = (hex: string): string => {

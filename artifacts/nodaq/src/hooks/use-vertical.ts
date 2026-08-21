@@ -34,8 +34,11 @@ export function useVertical() {
   // Déjà disponible côté client — `verticalPack` est isomorphe, pas de route
   // réseau supplémentaire.
   const delaiPaiementUsuelJours = pack.delaiPaiementUsuelJours;
+  // US-A4.3 : mot du prestataire externe (sous-traitant/freelance/extra/
+  // intérimaire selon le secteur) — coûté, jamais compté dans la capacité RH.
+  const externalWorkerWords = pack.externalWorkerWords;
 
-  return { vertical, words, proposalWord, delaiPaiementUsuelJours, isLoading };
+  return { vertical, words, proposalWord, delaiPaiementUsuelJours, externalWorkerWords, isLoading };
 }
 
 export function useUpdateVerticalMutation() {

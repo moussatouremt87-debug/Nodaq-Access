@@ -8,8 +8,8 @@ import { apiFetch } from '@/lib/auth';
  * reredéclare les statuts backend plutôt que d'importer le paquet partagé).
  * Garder les deux synchronisés si l'un change.
  */
-export type MembershipRole = 'OWNER' | 'MEMBER' | 'ACCOUNTANT';
-export const FINANCIAL_ROLES: readonly MembershipRole[] = ['OWNER', 'ACCOUNTANT'];
+export type MembershipRole = 'OWNER' | 'MEMBER' | 'ACCOUNTANT' | 'VIEWER';
+export const FINANCIAL_ROLES: readonly MembershipRole[] = ['OWNER', 'ACCOUNTANT', 'VIEWER'];
 
 /**
  * MFA (ticket 4.15) — trois états pour OWNER/ACCOUNTANT, un seul pour MEMBER.
@@ -50,8 +50,19 @@ export function useIsOwner() {
   return data?.authenticated === true && 'role' in data && data.role === 'OWNER';
 }
 
-/** OWNER ou ACCOUNTANT — les deux rôles qui voient les données financières. */
+/** Les rôles qui voient les données financières — MEMBER excepté. */
 export function useHasFinancialAccess() {
   const { data } = useAuth();
   return data?.authenticated === true && 'role' in data && FINANCIAL_ROLES.includes(data.role);
+}
+
+/**
+ * Tiers de confiance en lecture seule (US-A5.4) — un banquier qui instruit un
+ * dossier de prêt. Sert à MASQUER les commandes d'écriture : le refus, lui,
+ * vient du serveur (`middleware/lectureSeule.ts`), qui reste seul juge. Ce
+ * hook évite simplement de proposer un bouton dont on sait qu'il échouera.
+ */
+export function useLectureSeule() {
+  const { data } = useAuth();
+  return data?.authenticated === true && 'role' in data && data.role === 'VIEWER';
 }

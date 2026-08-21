@@ -1,8 +1,8 @@
 import { Router, type IRouter } from "express";
-import { withTenant, DrizzleTx, teamMembersTable, affairesTable, facturesTable, settingsTable } from "@workspace/db";
-import { eq, asc, sql } from "drizzle-orm";
+import { withTenant, DrizzleTx, teamMembersTable, affairesTable, facturesTable, settingsTable, teamMemberHabilitationsTable } from "@workspace/db";
+import { eq, and, asc, sql } from "drizzle-orm";
 import { z } from "zod";
-import { toDateString, affaireWords } from "@nodaq/shared";
+import { toDateString, affaireWords, compteDansCapacite, TYPE_LIEN_VALUES, statutHabilitation } from "@nodaq/shared";
 import {
   buildSemaines,
   calcHorizon,
@@ -14,6 +14,7 @@ import {
   type AbsenceRecord,
   type AffaireRecord,
 } from "../services/planning-service";
+import { verticalDepuisTx } from "../lib/vertical-tenant.js";
 
 /**
  * planning-service.ts does all of its internal calendar arithmetic in UTC
@@ -87,6 +88,10 @@ const CreateMemberBody = z.object({
   role: z.string().optional(),
   email: z.string().email().optional(),
   availability: z.enum(["DISPONIBLE", "PARTIEL", "ABSENT"]).optional(),
+  // US-A4.3 : SALARIE par défaut — un membre créé depuis la gestion d'équipe
+  // courante (hors onboarding) reste salarié tant qu'on ne dit pas le
+  // contraire, cohérent avec le défaut déjà posé par la colonne en base.
+  typeLien: z.enum(TYPE_LIEN_VALUES).optional(),
   schedule: z.array(ScheduleSlotBody).optional(),
 });
 
@@ -100,22 +105,84 @@ router.get("/equipe", async (req, res): Promise<void> => {
   const tenantId = req.tenantId!;
   await ensureDefaultMembers(tenantId);
 
-  const members = await withTenant(tenantId, async (tx) =>
-    tx.select().from(teamMembersTable).orderBy(asc(teamMembersTable.createdAt))
-  );
+  const { members, habilitationsParMembre } = await withTenant(tenantId, async (tx) => {
+    const members = await tx.select().from(teamMembersTable).orderBy(asc(teamMembersTable.createdAt));
+    const habilitations = await tx.select().from(teamMemberHabilitationsTable);
+    const habilitationsParMembre = new Map<string, typeof habilitations>();
+    for (const h of habilitations) {
+      const liste = habilitationsParMembre.get(h.membreId) ?? [];
+      liste.push(h);
+      habilitationsParMembre.set(h.membreId, liste);
+    }
+    return { members, habilitationsParMembre };
+  });
 
+  // US-A4.4 : le statut de chaque habilitation est calculé au vol, jamais
+  // stocké — aucun scheduler dans ce dépôt, voir statutHabilitation.
+  const todayStr = toDateString(new Date());
   const parsed = members.map(m => ({
     ...m,
     schedule: (() => { try { return JSON.parse(m.schedule); } catch { return []; } })(),
+    habilitations: (habilitationsParMembre.get(m.id) ?? []).map(h => ({
+      id: h.id,
+      type: h.type,
+      libelle: h.libelle,
+      dateExpiration: h.dateExpiration,
+      statut: statutHabilitation(h.dateExpiration, todayStr),
+    })),
   }));
   res.json(parsed);
+});
+
+const CreateHabilitationBody = z.object({
+  type: z.string().min(1),
+  libelle: z.string().min(1).max(120),
+  dateExpiration: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "dateExpiration must be YYYY-MM-DD").nullable().optional(),
+});
+
+router.post("/equipe/:id/habilitations", async (req, res): Promise<void> => {
+  const { id: membreId } = req.params as { id: string };
+  const parsed = CreateHabilitationBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+  const tenantId = req.tenantId!;
+  const { type, libelle, dateExpiration } = parsed.data;
+
+  const created = await withTenant(tenantId, async (tx) => {
+    const [membre] = await tx.select({ id: teamMembersTable.id }).from(teamMembersTable).where(eq(teamMembersTable.id, membreId));
+    if (!membre) return null;
+
+    const [habilitation] = await tx.insert(teamMemberHabilitationsTable).values({
+      tenantId, membreId, type, libelle,
+      ...(dateExpiration ? { dateExpiration } : {}),
+    }).returning();
+    return habilitation;
+  });
+
+  if (!created) { res.status(404).json({ error: "Membre introuvable" }); return; }
+
+  const todayStr = toDateString(new Date());
+  res.status(201).json({ ...created, statut: statutHabilitation(created.dateExpiration, todayStr) });
+});
+
+router.delete("/equipe/:id/habilitations/:habilitationId", async (req, res): Promise<void> => {
+  const { id: membreId, habilitationId } = req.params as { id: string; habilitationId: string };
+  const tenantId = req.tenantId!;
+
+  const [deleted] = await withTenant(tenantId, async (tx) =>
+    tx.delete(teamMemberHabilitationsTable)
+      .where(and(eq(teamMemberHabilitationsTable.id, habilitationId), eq(teamMemberHabilitationsTable.membreId, membreId)))
+      .returning()
+  );
+  if (!deleted) { res.status(404).json({ error: "Not found" }); return; }
+  res.status(204).send();
 });
 
 router.post("/equipe", async (req, res): Promise<void> => {
   const parsed = CreateMemberBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-  const { name, role = "Collaborateur", email, availability = "DISPONIBLE", schedule = [] } = parsed.data;
+  const { name, role = "Collaborateur", email, availability = "DISPONIBLE", schedule = [], typeLien } = parsed.data;
   const tenantId = req.tenantId!;
 
   const [member] = await withTenant(tenantId, async (tx) =>
@@ -123,6 +190,7 @@ router.post("/equipe", async (req, res): Promise<void> => {
       tenantId, name, role, availability,
       schedule: JSON.stringify(schedule),
       ...(email ? { email } : {}),
+      ...(typeLien ? { typeLien } : {}),
     }).returning()
   );
 
@@ -145,6 +213,7 @@ router.patch("/equipe/:id", async (req, res): Promise<void> => {
     if (parsed.data.role !== undefined) updateData.role = parsed.data.role;
     if (parsed.data.email !== undefined) updateData.email = parsed.data.email;
     if (parsed.data.availability !== undefined) updateData.availability = parsed.data.availability;
+    if (parsed.data.typeLien !== undefined) updateData.typeLien = parsed.data.typeLien;
     if (parsed.data.schedule !== undefined) updateData.schedule = JSON.stringify(parsed.data.schedule);
 
     const [updated] = await tx.update(teamMembersTable)
@@ -173,8 +242,6 @@ router.delete("/equipe/:id", async (req, res): Promise<void> => {
 
 // Même clé et même défaut que routes/votre-metier.ts (US-A1.1) : un tenant
 // qui n'a jamais répondu garde le vocabulaire BTP historique.
-const VERTICAL_SETTING_KEY = "votre-metier.metier";
-const DEFAULT_VERTICAL = "industrie_btp";
 
 async function fetchPlanningData(tenantId: string) {
   return withTenant(tenantId, async (tx) => {
@@ -182,7 +249,7 @@ async function fetchPlanningData(tenantId: string) {
     const coutRaw = await getSetting(tx, "equipe.coutJourCharge");
     const tauxJourFacture = tauxRaw !== null ? Number(tauxRaw) : null;
     const coutJourCharge  = coutRaw !== null ? Number(coutRaw) : null;
-    const metier = (await getSetting(tx, VERTICAL_SETTING_KEY)) ?? DEFAULT_VERTICAL;
+    const metier = await verticalDepuisTx(tx);
 
     const rawMembers = await tx.select().from(teamMembersTable).orderBy(asc(teamMembersTable.createdAt));
 
@@ -215,10 +282,12 @@ router.get("/equipe/plannings", async (req, res): Promise<void> => {
   const cout = coutJourCharge ?? 250;
 
   const members: MemberRecord[] = rawMembers.map(m => ({
-    id: m.id, name: m.name, availability: m.availability,
+    id: m.id, name: m.name, availability: m.availability, typeLien: m.typeLien,
     schedule: (() => { try { return JSON.parse(m.schedule); } catch { return []; } })(),
   }));
-  const activeCount = members.filter(m => m.availability !== "ABSENT").length;
+  // US-A4.3 : même règle que buildSemaines — un sous-traitant ne compte pas
+  // dans l'effectif de capacité affiché (horizon, simulation).
+  const activeCount = members.filter(m => m.availability !== "ABSENT" && compteDansCapacite(m.typeLien)).length;
 
   const affaires: AffaireRecord[] = rawAffaires.map(a => ({
     id: a.id, label: a.label, status: a.status,
@@ -275,10 +344,12 @@ router.post("/equipe/plannings/simuler", async (req, res): Promise<void> => {
   const cout = coutJourCharge ?? 250;
 
   const members: MemberRecord[] = rawMembers.map(m => ({
-    id: m.id, name: m.name, availability: m.availability,
+    id: m.id, name: m.name, availability: m.availability, typeLien: m.typeLien,
     schedule: (() => { try { return JSON.parse(m.schedule); } catch { return []; } })(),
   }));
-  const activeCount = members.filter(m => m.availability !== "ABSENT").length;
+  // US-A4.3 : même règle que buildSemaines — un sous-traitant ne compte pas
+  // dans l'effectif de capacité affiché (horizon, simulation).
+  const activeCount = members.filter(m => m.availability !== "ABSENT" && compteDansCapacite(m.typeLien)).length;
 
   const affaires: AffaireRecord[] = rawAffaires.map(a => ({
     id: a.id, label: a.label, status: a.status,

@@ -6,10 +6,15 @@
  * OpenAPI spec version: 0.1.0
  */
 
+/**
+ * OWNER crée un co-propriétaire à égalité — réservé aux OWNER existants (route ownerOnly). VIEWER crée un tiers de confiance en lecture seule (US-A5.4) et exige alors accesExpireAt.
+ */
 export type InviteMembreBodyRole = typeof InviteMembreBodyRole[keyof typeof InviteMembreBodyRole];
 
 
 export const InviteMembreBodyRole = {
+  OWNER: 'OWNER',
   MEMBER: 'MEMBER',
   ACCOUNTANT: 'ACCOUNTANT',
+  VIEWER: 'VIEWER',
 } as const;

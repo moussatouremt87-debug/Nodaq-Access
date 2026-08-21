@@ -269,3 +269,362 @@ describe("f — declare_absence via l'agent de chat", () => {
     expect(final.rows).toHaveLength(1);
   });
 });
+
+// ── e. Pointer des heures à la voix (ticket 4.21, lot 1) ─────────────────────
+//
+// « Trois heures chez Delacroix aujourd'hui. » C'est la saisie qu'on repousse
+// au vendredi et qu'on finit par faire de mémoire, donc mal.
+
+describe("e — pointer_heures, aller-retour complet", () => {
+  test("membre et date dictés → une ligne réelle, source « confirmé »", async () => {
+    const t = await inscrire("pointage");
+    await createTestTeamMember(t.tenantId, "Sophie");
+    await affaire(t, "Dupont");
+
+    const { body } = await interpreter(t, "voix-test-pointage").expect(200);
+    expect(body.operations).toHaveLength(1);
+    // Le nombre vient de la PHRASE, pas d'un calcul : la règle 3 interdit au
+    // modèle de calculer un total, pas de transcrire ce qu'il entend.
+    expect(body.operations[0].champs.heures).toBe("7.5");
+
+    await executer(t, body.planId).expect(200);
+
+    const { rows } = await adminPool.query(
+      `SELECT heures::float AS heures, source, date FROM pointages WHERE tenant_id = $1::uuid`,
+      [t.tenantId],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].heures).toBe(7.5);
+    // « confirmé » : ces heures ont été affirmées puis validées à l'écran.
+    // « proposé » désignerait une heure que personne n'a dite.
+    expect(rows[0].source).toBe("confirme");
+  });
+
+  test("sans nom dicté, c'est CELUI QUI PARLE — résolu par le serveur", async () => {
+    const t = await inscrire("pointage-moi");
+    await affaire(t, "Dupont");
+
+    // Le membre d'équipe porte l'adresse du compte : c'est le seul lien
+    // existant entre un utilisateur et un membre (team_members n'a pas de
+    // colonne user_id), et le rapprochement se fait dessus.
+    const { rows: session } = await adminPool.query(
+      `SELECT u.email FROM users u
+         JOIN memberships m ON m.user_id = u.id
+        WHERE m.tenant_id = $1::uuid LIMIT 1`,
+      [t.tenantId],
+    );
+    await adminPool.query(
+      `INSERT INTO team_members (id, tenant_id, name, email) VALUES ($1, $2::uuid, 'Le patron', $3)`,
+      [crypto.randomUUID(), t.tenantId, session[0].email],
+    );
+
+    const { body } = await interpreter(t, "voix-test-pointage-sans-nom").expect(200);
+    expect(body.operations).toHaveLength(1);
+    await executer(t, body.planId).expect(200);
+
+    const { rows } = await adminPool.query(
+      `SELECT p.heures::float AS heures, m.name FROM pointages p
+         JOIN team_members m ON m.id = p.membre_id
+        WHERE p.tenant_id = $1::uuid`,
+      [t.tenantId],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].heures).toBe(3);
+    expect(rows[0].name).toBe("Le patron");
+  });
+
+  test("sans nom dicté ET sans membre correspondant → refus explicite, zéro ligne", async () => {
+    const t = await inscrire("pointage-orphelin");
+    await affaire(t, "Dupont");
+
+    const { body } = await interpreter(t, "voix-test-pointage-sans-nom").expect(200);
+    // Le plan se construit — c'est à l'EXÉCUTION que le rapprochement échoue.
+    // Mieux vaut refuser que pointer les heures de quelqu'un d'autre parce
+    // qu'une correspondance approximative a semblé plausible.
+    const r = await executer(t, body.planId);
+    expect(r.status).toBeGreaterThanOrEqual(400);
+
+    const { rows } = await adminPool.query(
+      `SELECT count(*)::int AS n FROM pointages WHERE tenant_id = $1::uuid`,
+      [t.tenantId],
+    );
+    expect(rows[0].n).toBe(0);
+  });
+});
+
+// ── f. Créer un client à la voix (ticket 4.21, lot 2) ────────────────────────
+
+describe("f — creer_client, aller-retour complet", () => {
+  test("« nouveau client … à Rouen » → une ligne réelle, type NON dicté", async () => {
+    const t = await inscrire("client");
+
+    const { body } = await interpreter(t, "voix-test-client").expect(200);
+    expect(body.operations).toHaveLength(1);
+    expect(body.operations[0].libelle).toContain("Menuiserie Delacroix");
+
+    await executer(t, body.planId).expect(200);
+
+    const { rows } = await adminPool.query(
+      `SELECT nom, ville, telephone, type FROM clients WHERE tenant_id = $1::uuid`,
+      [t.tenantId],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].nom).toBe("Menuiserie Delacroix");
+    expect(rows[0].ville).toBe("Rouen");
+    // Le TYPE reste le défaut de la table : particulier et professionnel
+    // n'obéissent pas aux mêmes règles de démarchage, et le déduire d'un nom
+    // d'entreprise entendu serait une décision juridique prise par un modèle.
+    expect(rows[0].type).toBe("PARTICULIER");
+  });
+
+  test("rejeu du même plan → aucun doublon de client", async () => {
+    const t = await inscrire("client-rejeu");
+    const { body } = await interpreter(t, "voix-test-client").expect(200);
+
+    await executer(t, body.planId).expect(200);
+    const second = await executer(t, body.planId).expect(200);
+    expect(second.body.deja).toBe(true);
+
+    const { rows } = await adminPool.query(
+      `SELECT count(*)::int AS n FROM clients WHERE tenant_id = $1::uuid`,
+      [t.tenantId],
+    );
+    // Un client créé deux fois, c'est un dossier dédoublé — et une fusion
+    // manuelle plus tard, si quelqu'un s'en aperçoit.
+    expect(rows[0].n).toBe(1);
+  });
+});
+
+// ── g. Corriger avant de valider (ticket 4.21) ───────────────────────────────
+//
+// Un nom propre entendu par une machine devient facilement autre chose. L'écran
+// montrait ce qui allait être écrit sans permettre de le rectifier : il fallait
+// tout annuler et redicter, ce que personne ne fait deux fois.
+
+describe("g — l'humain corrige le texte avant que ça s'écrive", () => {
+  test("un nom mal entendu se corrige, et c'est la CORRECTION qui est écrite", async () => {
+    const t = await inscrire("correction");
+
+    const { body } = await interpreter(t, "voix-test-client").expect(200);
+    expect(body.operations[0].champs.nom).toBe("Menuiserie Delacroix");
+
+    await request(app)
+      .post("/api/voix/executer")
+      .set("Cookie", t.cookie)
+      .send({
+        planId: body.planId,
+        corrections: { "0": { nom: "Menuiserie de la Croix", ville: "Le Havre" } },
+      })
+      .expect(200);
+
+    const { rows } = await adminPool.query(
+      `SELECT nom, ville FROM clients WHERE tenant_id = $1::uuid`,
+      [t.tenantId],
+    );
+    expect(rows[0].nom).toBe("Menuiserie de la Croix");
+    expect(rows[0].ville).toBe("Le Havre");
+  });
+
+  test("corriger un IDENTIFIANT est refusé — et rien ne s'écrit", async () => {
+    // Le point de sécurité : un `affaireId` réécrit à la main ne serait plus
+    // une correction de transcription, mais le choix d'une AUTRE cible que
+    // celle que le serveur a résolue et montrée. La validation humaine
+    // porterait alors sur un libellé qui ne décrit plus l'opération.
+    const t = await inscrire("correction-forgee");
+    await createTestTeamMember(t.tenantId, "Sophie");
+    await affaire(t, "Dupont");
+
+    const { body } = await interpreter(t, "voix-test-pointage").expect(200);
+
+    const r = await request(app)
+      .post("/api/voix/executer")
+      .set("Cookie", t.cookie)
+      .send({ planId: body.planId, corrections: { "0": { affaireId: "affaire-d-un-autre" } } })
+      .expect(400);
+    expect(r.body.error).toMatch(/non autoris/i);
+
+    const { rows } = await adminPool.query(
+      `SELECT count(*)::int AS n FROM pointages WHERE tenant_id = $1::uuid`,
+      [t.tenantId],
+    );
+    expect(rows[0].n).toBe(0);
+
+    // Et le plan reste applicable : un refus n'a pas consommé la validation.
+    await executer(t, body.planId).expect(200);
+    const { rows: apres } = await adminPool.query(
+      `SELECT count(*)::int AS n FROM pointages WHERE tenant_id = $1::uuid`,
+      [t.tenantId],
+    );
+    expect(apres[0].n).toBe(1);
+  });
+
+  test("un nombre dicté se corrige aussi — c'est l'humain qui le pose", async () => {
+    // La règle 3 interdit au MODÈLE de fixer un nombre, pas à l'utilisateur de
+    // rectifier le sien.
+    const t = await inscrire("correction-heures");
+    await createTestTeamMember(t.tenantId, "Sophie");
+    await affaire(t, "Dupont");
+
+    const { body } = await interpreter(t, "voix-test-pointage").expect(200);
+    await request(app)
+      .post("/api/voix/executer")
+      .set("Cookie", t.cookie)
+      .send({ planId: body.planId, corrections: { "0": { heures: "8" } } })
+      .expect(200);
+
+    const { rows } = await adminPool.query(
+      `SELECT heures::float AS heures FROM pointages WHERE tenant_id = $1::uuid`,
+      [t.tenantId],
+    );
+    expect(rows[0].heures).toBe(8);
+  });
+});
+
+// ── h. Enregistrer un règlement à la voix (ticket 4.21, lot 3) ───────────────
+
+/** Une facture ÉMISE, prête à recevoir un règlement. */
+async function factureEmise(l: Locataire, numero: string, client: string, montantCents: number): Promise<string> {
+  const id = crypto.randomUUID();
+  await adminPool.query(
+    `INSERT INTO factures (id, tenant_id, number, customer_name, amount_cents, statut, lines, issued_date, due_date)
+     VALUES ($1, $2::uuid, $3, $4, $5, 'EMISE', '[]'::jsonb, CURRENT_DATE, CURRENT_DATE + 30)`,
+    [id, l.tenantId, numero, client, montantCents],
+  );
+  return id;
+}
+
+describe("h — enregistrer_reglement, aller-retour complet", () => {
+  test("le plan propose le SOLDE, calculé par le serveur", async () => {
+    const t = await inscrire("reglement");
+    const factureId = await factureEmise(t, "FACT-2026-0181", "Delacroix", 40000);
+
+    const { body } = await interpreter(t, "voix-test-reglement").expect(200);
+    expect(body.operations).toHaveLength(1);
+    // Le chiffre vient du SERVEUR, jamais du modèle : aucun schéma
+    // d'intention ne porte de champ monétaire, et une garde le vérifie.
+    expect(body.operations[0].champs.montantCents).toBe("40000");
+    expect(body.operations[0].libelle).toContain("solde restant");
+
+    await executer(t, body.planId).expect(200);
+
+    const { rows } = await adminPool.query(
+      `SELECT montant_cents, sens FROM paiements WHERE facture_id = $1`, [factureId],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].montant_cents).toBe(40000);
+    expect(rows[0].sens).toBe("ENCAISSEMENT");
+
+    // Le statut se DÉDUIT du journal — il n'a pas été écrit à la main.
+    const { rows: f } = await adminPool.query(
+      `SELECT statut FROM factures WHERE id = $1`, [factureId],
+    );
+    expect(f[0].statut).toBe("PAYEE");
+  });
+
+  test("règlement PARTIEL : l'utilisateur CORRIGE le solde proposé", async () => {
+    // Le chemin voulu pour un partiel — et le seul possible : le modèle ne
+    // peut pas produire de montant, donc c'est l'humain qui ramène le chiffre
+    // à ce qu'il a reçu, de ses doigts, avant de valider.
+    const t = await inscrire("reglement-partiel");
+    const factureId = await factureEmise(t, "FACT-2026-0182", "Delacroix", 40000);
+
+    const { body } = await interpreter(t, "voix-test-reglement-cheque").expect(200);
+    expect(body.operations[0].champs.montantCents).toBe("40000");
+
+    await request(app)
+      .post("/api/voix/executer")
+      .set("Cookie", t.cookie)
+      .send({ planId: body.planId, corrections: { "0": { montantCents: "15000" } } })
+      .expect(200);
+
+    const { rows } = await adminPool.query(
+      `SELECT montant_cents, moyen FROM paiements WHERE facture_id = $1`, [factureId],
+    );
+    expect(rows[0].montant_cents).toBe(15000);
+    expect(rows[0].moyen).toBe("CHEQUE");
+
+    const { rows: f } = await adminPool.query(
+      `SELECT statut FROM factures WHERE id = $1`, [factureId],
+    );
+    // 150 € sur 400 : il reste dû, la facture n'est pas soldée.
+    expect(f[0].statut).toBe("EMISE");
+  });
+
+  test("facture réglée entre le plan et sa validation → refus, aucun double encaissement", async () => {
+    const t = await inscrire("reglement-course");
+    const factureId = await factureEmise(t, "FACT-2026-0183", "Delacroix", 40000);
+
+    const { body } = await interpreter(t, "voix-test-reglement").expect(200);
+
+    // Quelqu'un solde la facture entre-temps — le plan attend jusqu'à une heure.
+    await adminPool.query(`UPDATE factures SET statut = 'PAYEE' WHERE id = $1`, [factureId]);
+
+    const r = await executer(t, body.planId);
+    expect(r.status).toBe(409);
+
+    const { rows } = await adminPool.query(
+      `SELECT count(*)::int AS n FROM paiements WHERE facture_id = $1`, [factureId],
+    );
+    expect(rows[0].n).toBe(0);
+  });
+});
+
+// ── i. Lancer une relance à la voix (ticket 4.21, lot 3) ────────────────────
+
+describe("i — lancer_relance : la voix PRÉPARE, elle ne déclenche pas", () => {
+  test("les impayés joignables deviennent une campagne PROPOSÉE, à valider", async () => {
+    const t = await inscrire("relance");
+    const clientId = crypto.randomUUID();
+    await adminPool.query(
+      `INSERT INTO clients (id, tenant_id, nom, telephone) VALUES ($1, $2::uuid, 'Delacroix', '+33600000042')`,
+      [clientId, t.tenantId],
+    );
+    await adminPool.query(
+      `INSERT INTO factures (id, tenant_id, number, customer_name, client_id, amount_cents, statut, lines, issued_date, due_date)
+       VALUES ($1, $2::uuid, 'FACT-2026-0200', 'Delacroix', $3, 40000, 'EMISE', '[]'::jsonb, CURRENT_DATE - 60, CURRENT_DATE - 30)`,
+      [crypto.randomUUID(), t.tenantId, clientId],
+    );
+
+    const { body } = await interpreter(t, "voix-test-relance").expect(200);
+    expect(body.operations).toHaveLength(1);
+    expect(body.operations[0].libelle).toContain("resteront à valider");
+
+    await executer(t, body.planId).expect(200);
+
+    // Une campagne existe, et une action l'attend dans la file — mais AUCUN
+    // appel n'est planifié : la règle 4 veut qu'un humain approuve avant
+    // qu'on compose, et la voix ne peut pas approuver à sa place.
+    const { rows: campagnes } = await adminPool.query(
+      `SELECT statut FROM campagnes_relance WHERE tenant_id = $1::uuid`, [t.tenantId],
+    );
+    expect(campagnes).toHaveLength(1);
+    expect(campagnes[0].statut).toBe("PROPOSEE");
+
+    const { rows: appels } = await adminPool.query(
+      `SELECT count(*)::int AS n FROM appels_relance WHERE tenant_id = $1::uuid`, [t.tenantId],
+    );
+    expect(appels[0].n).toBe(0);
+  });
+
+  test("un impayé SANS téléphone est écarté et COMPTÉ, jamais ignoré en silence", async () => {
+    const t = await inscrire("relance-sans-tel");
+    await adminPool.query(
+      `INSERT INTO factures (id, tenant_id, number, customer_name, amount_cents, statut, lines, issued_date, due_date)
+       VALUES ($1, $2::uuid, 'FACT-2026-0201', 'Sans Téléphone', 40000, 'EMISE', '[]'::jsonb, CURRENT_DATE - 60, CURRENT_DATE - 30)`,
+      [crypto.randomUUID(), t.tenantId],
+    );
+
+    const { body } = await interpreter(t, "voix-test-relance").expect(200);
+    // Aucun joignable : on le DIT, plutôt que de rendre un plan vide qui
+    // laisserait croire qu'il n'y a pas d'impayé.
+    expect(body.operations).toHaveLength(0);
+    expect(body.nonCompris.join(" ")).toContain("sans téléphone");
+  });
+
+  test("aucune facture en retard → on le dit", async () => {
+    const t = await inscrire("relance-a-jour");
+    const { body } = await interpreter(t, "voix-test-relance").expect(200);
+    expect(body.operations).toHaveLength(0);
+    expect(body.nonCompris.join(" ")).toContain("aucune facture en retard");
+  });
+});

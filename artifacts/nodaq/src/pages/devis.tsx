@@ -244,7 +244,7 @@ export default function DevisPage() {
               onChange={e => setSearch(e.target.value)} className="pl-9" />
           </div>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="sm:w-48">
+            <SelectTrigger className="sm:w-48" aria-label="Filtrer par statut">
               <SelectValue placeholder="Tous les statuts" />
             </SelectTrigger>
             <SelectContent>
@@ -668,7 +668,7 @@ function DevisDialog({ open, onOpenChange, devis, onSaved }: {
             <div className="space-y-1.5">
               <Label>Statut</Label>
               <Select value={status} onValueChange={setStatus}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger aria-label="Statut du devis"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {STATUS_OPTIONS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
                 </SelectContent>

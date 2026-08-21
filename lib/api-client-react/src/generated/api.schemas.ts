@@ -107,6 +107,8 @@ export interface Affaire {
   avancementPct?: number | null;
   /** @nullable */
   dateFinPrevue?: string | null;
+  /** Types d'habilitation requis pour affecter un salarié à cette affaire (US-A4.4). Avertissement, jamais bloquant. */
+  habilitationsRequises?: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -126,6 +128,7 @@ export interface AffaireInput {
   status?: string;
   notes?: string;
   startDate?: string;
+  habilitationsRequises?: string[];
 }
 
 export interface AffaireUpdate {
@@ -147,6 +150,7 @@ export interface AffaireUpdate {
      */
   avancementPct?: number;
   dateFinPrevue?: string;
+  habilitationsRequises?: string[];
 }
 
 export interface StatusCount {
@@ -902,6 +906,7 @@ export const MembreRole = {
   OWNER: 'OWNER',
   MEMBER: 'MEMBER',
   ACCOUNTANT: 'ACCOUNTANT',
+  VIEWER: 'VIEWER',
 } as const;
 
 export interface Membre {
@@ -909,6 +914,16 @@ export interface Membre {
   email: string;
   nom: string;
   role: MembreRole;
+  /**
+     * Qualificatif libre affiché à côté du rôle (ex. "Conjoint collaborateur"). N'affecte jamais les droits.
+     * @nullable
+     */
+  libelle?: string | null;
+  /**
+     * Échéance de l'accès (US-A5.4). null = permanent, ce que sont toutes les adhésions sauf celle d'un tiers de confiance (VIEWER).
+     * @nullable
+     */
+  expiresAt?: string | null;
   createdAt: string;
 }
 
@@ -916,15 +931,25 @@ export type InvitationEnAttenteRole = typeof InvitationEnAttenteRole[keyof typeo
 
 
 export const InvitationEnAttenteRole = {
+  OWNER: 'OWNER',
   MEMBER: 'MEMBER',
   ACCOUNTANT: 'ACCOUNTANT',
+  VIEWER: 'VIEWER',
 } as const;
 
 export interface InvitationEnAttente {
   id: string;
   email: string;
   role: InvitationEnAttenteRole;
+  /** @nullable */
+  libelle?: string | null;
+  /** Validité du LIEN d'invitation (7 jours) — à ne pas confondre avec accesExpireAt. */
   expiresAt: string;
+  /**
+     * Échéance de l'ACCÈS une fois l'invitation acceptée (US-A5.4), reportée sur le membership. Obligatoire pour un VIEWER.
+     * @nullable
+     */
+  accesExpireAt?: string | null;
   createdAt: string;
 }
 
@@ -933,42 +958,78 @@ export interface MembresListResponse {
   invitationsEnAttente: InvitationEnAttente[];
 }
 
+/**
+ * OWNER crée un co-propriétaire à égalité — réservé aux OWNER existants (route ownerOnly). VIEWER crée un tiers de confiance en lecture seule (US-A5.4) et exige alors accesExpireAt.
+ */
 export type InviteMembreBodyRole = typeof InviteMembreBodyRole[keyof typeof InviteMembreBodyRole];
 
 
 export const InviteMembreBodyRole = {
+  OWNER: 'OWNER',
   MEMBER: 'MEMBER',
   ACCOUNTANT: 'ACCOUNTANT',
+  VIEWER: 'VIEWER',
 } as const;
 
 export interface InviteMembreBody {
   email: string;
+  /** OWNER crée un co-propriétaire à égalité — réservé aux OWNER existants (route ownerOnly). VIEWER crée un tiers de confiance en lecture seule (US-A5.4) et exige alors accesExpireAt. */
   role: InviteMembreBodyRole;
+  /** Qualificatif libre facultatif (ex. "Conjoint collaborateur", "Associé fondateur"). */
+  libelle?: string;
+  /** Échéance de l'accès accordé. OBLIGATOIRE pour le rôle VIEWER (400 sinon) — un accès ouvert à quelqu'un d'extérieur à l'entreprise ne doit pas pouvoir rester ouvert par oubli. FACULTATIVE pour les autres rôles depuis US-A7.3 : une fin de contrat saisonnier se connaît à l'avance et se programme dès l'invitation. */
+  accesExpireAt?: string;
 }
 
+export interface EcheanceMembreBody {
+  /**
+     * Date de fin d'accès, dans le futur. `null` retire l'échéance (accès permanent) — refusé pour un VIEWER, dont l'accès doit toujours en porter une (US-A5.4).
+     * @nullable
+     */
+  expiresAt: string | null;
+}
+
+/**
+ * OWNER n'est accepté ici que pour un membre déjà OWNER (mise à jour du libellé sans changement de rôle) — la promotion d'un MEMBER/ACCOUNTANT en OWNER via cette route est toujours refusée par le serveur.
+ */
 export type RoleMembreBodyRole = typeof RoleMembreBodyRole[keyof typeof RoleMembreBodyRole];
 
 
 export const RoleMembreBodyRole = {
+  OWNER: 'OWNER',
   MEMBER: 'MEMBER',
   ACCOUNTANT: 'ACCOUNTANT',
+  VIEWER: 'VIEWER',
 } as const;
 
 export interface RoleMembreBody {
+  /** OWNER n'est accepté ici que pour un membre déjà OWNER (mise à jour du libellé sans changement de rôle) — la promotion d'un MEMBER/ACCOUNTANT en OWNER via cette route est toujours refusée par le serveur. */
   role: RoleMembreBodyRole;
+  /**
+     * Qualificatif libre facultatif ; absent = inchangé, null = effacé.
+     * @nullable
+     */
+  libelle?: string | null;
 }
 
 export type InvitationApercuRoleOffert = typeof InvitationApercuRoleOffert[keyof typeof InvitationApercuRoleOffert];
 
 
 export const InvitationApercuRoleOffert = {
+  OWNER: 'OWNER',
   MEMBER: 'MEMBER',
   ACCOUNTANT: 'ACCOUNTANT',
+  VIEWER: 'VIEWER',
 } as const;
 
 export interface InvitationApercu {
   tenantNom: string;
   roleOffert: InvitationApercuRoleOffert;
+  /**
+     * Échéance de l'accès proposé — affichée avant acceptation (US-A5.4).
+     * @nullable
+     */
+  accesExpireAt?: string | null;
   email: string;
   compteExistant: boolean;
   expire: boolean;
@@ -986,8 +1047,10 @@ export type InvitationAcceptationResponseRole = typeof InvitationAcceptationResp
 
 
 export const InvitationAcceptationResponseRole = {
+  OWNER: 'OWNER',
   MEMBER: 'MEMBER',
   ACCOUNTANT: 'ACCOUNTANT',
+  VIEWER: 'VIEWER',
 } as const;
 
 export interface InvitationAcceptationResponse {

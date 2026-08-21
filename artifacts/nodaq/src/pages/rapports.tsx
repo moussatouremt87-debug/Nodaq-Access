@@ -92,13 +92,16 @@ export default function RapportsPage() {
       <div className="px-5 md:px-8 pt-6 space-y-6 print:px-0">
         {/* Month selector */}
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => setMois(prevMois(mois))}>
+          {/* Boutons à icône seule : sans `aria-label`, ils n'ont AUCUN nom
+              accessible — un lecteur d'écran annonce « bouton », sans plus
+              (US-A8.2, WCAG 4.1.2). */}
+          <Button variant="ghost" size="icon" aria-label="Mois précédent" onClick={() => setMois(prevMois(mois))}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <div className="rounded-lg border border-card-border bg-card px-5 py-2 font-semibold text-sm min-w-[180px] text-center">
             {fmtMois(mois)}
           </div>
-          <Button variant="ghost" size="icon" onClick={() => setMois(nextMois(mois))} disabled={isFuture}>
+          <Button variant="ghost" size="icon" aria-label="Mois suivant" onClick={() => setMois(nextMois(mois))} disabled={isFuture}>
             <ChevronRight className="h-4 w-4" />
           </Button>
           {mois !== currentMois() && (

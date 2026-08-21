@@ -1132,7 +1132,7 @@ paths:
     post:
       operationId: inviterMembre
       tags: [membres]
-      summary: Invite a collaborator (OWNER only) — role restricted to MEMBER/ACCOUNTANT
+      summary: Invite a collaborator (OWNER only) — OWNER role allowed, grants equal authority
       requestBody:
         required: true
         content:
@@ -1153,7 +1153,7 @@ paths:
     patch:
       operationId: changerRoleMembre
       tags: [membres]
-      summary: Change a member's role (OWNER only) — cannot target or grant OWNER
+      summary: Change a member's role or libelle (OWNER only) — cannot promote to or demote from OWNER
       parameters:
         - in: path
           name: id
@@ -1174,7 +1174,44 @@ paths:
               schema:
                 $ref: "#/components/schemas/Membre"
         "403":
-          description: Target membership is OWNER, or new role is OWNER
+          description: Would promote a non-OWNER to OWNER, or demote an existing OWNER
+        "404":
+          description: Not found
+
+  /membres/{id}/echeance:
+    patch:
+      operationId: programmerEcheanceMembre
+      tags: [membres]
+      summary: >-
+        Programme (ou retire) la fin d'accès d'un membre (OWNER only) — US-A7.3.
+        Distincte d'une révocation immédiate : la date est connue à l'avance et
+        s'applique toute seule le moment venu.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EcheanceMembreBody"
+      responses:
+        "200":
+          description: Échéance mise à jour
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Membre"
+        "400":
+          description: Date absente, illisible ou déjà passée
+        "403":
+          description: >-
+            Cible = dernier OWNER du tenant (une révocation programmée est une
+            révocation différée, la même protection s'applique), ou tentative de
+            retirer l'échéance d'un VIEWER.
         "404":
           description: Not found
 
@@ -1182,7 +1219,7 @@ paths:
     delete:
       operationId: revoquerMembre
       tags: [membres]
-      summary: Revoke a member's access (OWNER only) — cannot target OWNER
+      summary: Revoke a member's access (OWNER only) — cannot revoke the last remaining OWNER
       parameters:
         - in: path
           name: id
@@ -1193,7 +1230,7 @@ paths:
         "204":
           description: Revoked
         "403":
-          description: Target membership is OWNER
+          description: Target is the last remaining OWNER of this tenant
         "404":
           description: Not found
 
@@ -1383,6 +1420,11 @@ components:
         dateFinPrevue:
           type: ["string", "null"]
           format: date
+        habilitationsRequises:
+          type: array
+          items:
+            type: string
+          description: Types d'habilitation requis pour affecter un salarié à cette affaire (US-A4.4). Avertissement, jamais bloquant.
         createdAt:
           type: string
           format: date-time
@@ -1421,6 +1463,10 @@ components:
         startDate:
           type: string
           format: date
+        habilitationsRequises:
+          type: array
+          items:
+            type: string
 
     AffaireUpdate:
       type: object
@@ -1456,6 +1502,10 @@ components:
         dateFinPrevue:
           type: string
           format: date
+        habilitationsRequises:
+          type: array
+          items:
+            type: string
 
     AffaireStats:
       type: object
@@ -2484,7 +2534,16 @@ components:
           type: string
         role:
           type: string
-          enum: [OWNER, MEMBER, ACCOUNTANT]
+          enum: [OWNER, MEMBER, ACCOUNTANT, VIEWER]
+        libelle:
+          type: ["string", "null"]
+          description: Qualificatif libre affiché à côté du rôle (ex. "Conjoint collaborateur"). N'affecte jamais les droits.
+        expiresAt:
+          type: ["string", "null"]
+          format: date-time
+          description: >-
+            Échéance de l'accès (US-A5.4). null = permanent, ce que sont toutes
+            les adhésions sauf celle d'un tiers de confiance (VIEWER).
         createdAt:
           type: string
           format: date-time
@@ -2499,10 +2558,19 @@ components:
           type: string
         role:
           type: string
-          enum: [MEMBER, ACCOUNTANT]
+          enum: [OWNER, MEMBER, ACCOUNTANT, VIEWER]
+        libelle:
+          type: ["string", "null"]
         expiresAt:
           type: string
           format: date-time
+          description: Validité du LIEN d'invitation (7 jours) — à ne pas confondre avec accesExpireAt.
+        accesExpireAt:
+          type: ["string", "null"]
+          format: date-time
+          description: >-
+            Échéance de l'ACCÈS une fois l'invitation acceptée (US-A5.4),
+            reportée sur le membership. Obligatoire pour un VIEWER.
         createdAt:
           type: string
           format: date-time
@@ -2528,7 +2596,35 @@ components:
           type: string
         role:
           type: string
-          enum: [MEMBER, ACCOUNTANT]
+          enum: [OWNER, MEMBER, ACCOUNTANT, VIEWER]
+          description: >-
+            OWNER crée un co-propriétaire à égalité — réservé aux OWNER existants
+            (route ownerOnly). VIEWER crée un tiers de confiance en lecture seule
+            (US-A5.4) et exige alors accesExpireAt.
+        libelle:
+          type: string
+          description: Qualificatif libre facultatif (ex. "Conjoint collaborateur", "Associé fondateur").
+        accesExpireAt:
+          type: string
+          format: date-time
+          description: >-
+            Échéance de l'accès accordé. OBLIGATOIRE pour le rôle VIEWER (400
+            sinon) — un accès ouvert à quelqu'un d'extérieur à l'entreprise ne
+            doit pas pouvoir rester ouvert par oubli. FACULTATIVE pour les autres
+            rôles depuis US-A7.3 : une fin de contrat saisonnier se connaît à
+            l'avance et se programme dès l'invitation.
+
+    EcheanceMembreBody:
+      type: object
+      required: [expiresAt]
+      properties:
+        expiresAt:
+          type: ["string", "null"]
+          format: date-time
+          description: >-
+            Date de fin d'accès, dans le futur. `null` retire l'échéance (accès
+            permanent) — refusé pour un VIEWER, dont l'accès doit toujours en
+            porter une (US-A5.4).
 
     RoleMembreBody:
       type: object
@@ -2536,7 +2632,14 @@ components:
       properties:
         role:
           type: string
-          enum: [MEMBER, ACCOUNTANT]
+          enum: [OWNER, MEMBER, ACCOUNTANT, VIEWER]
+          description: >-
+            OWNER n'est accepté ici que pour un membre déjà OWNER (mise à jour du
+            libellé sans changement de rôle) — la promotion d'un MEMBER/ACCOUNTANT
+            en OWNER via cette route est toujours refusée par le serveur.
+        libelle:
+          type: ["string", "null"]
+          description: Qualificatif libre facultatif ; absent = inchangé, null = effacé.
 
     InvitationApercu:
       type: object
@@ -2546,7 +2649,11 @@ components:
           type: string
         roleOffert:
           type: string
-          enum: [MEMBER, ACCOUNTANT]
+          enum: [OWNER, MEMBER, ACCOUNTANT, VIEWER]
+        accesExpireAt:
+          type: ["string", "null"]
+          format: date-time
+          description: Échéance de l'accès proposé — affichée avant acceptation (US-A5.4).
         email:
           type: string
         compteExistant:
@@ -2577,4 +2684,6 @@ components:
           type: string
         role:
           type: string
-          enum: [MEMBER, ACCOUNTANT]
+          # OWNER manquait ici depuis US-A5.1, qui a rendu les invitations
+          # OWNER possibles : cette route renvoie `invite.role` tel quel.
+          enum: [OWNER, MEMBER, ACCOUNTANT, VIEWER]

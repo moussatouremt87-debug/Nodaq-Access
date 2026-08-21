@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   CalendarClock,
   ShieldCheck,
+  ShieldAlert,
   Users2,
   ArrowRight,
 } from 'lucide-react';
@@ -22,6 +23,7 @@ import { cn } from '@/lib/utils';
 
 const SECTION_META: Record<string, { icon: typeof Sunrise; label: string; tone: string }> = {
   overdue: { icon: AlertTriangle, label: 'Retards', tone: 'text-destructive' },
+  habilitations: { icon: ShieldAlert, label: 'Habilitations', tone: 'text-destructive' },
   deadlines: { icon: CalendarClock, label: 'Échéances', tone: 'text-chart-3' },
   actions: { icon: ShieldCheck, label: 'Actions en attente', tone: 'text-primary' },
   prospects: { icon: Users2, label: 'Prospects', tone: 'text-chart-2' },

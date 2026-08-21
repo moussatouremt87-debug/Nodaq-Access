@@ -6,10 +6,15 @@
  * OpenAPI spec version: 0.1.0
  */
 
+/**
+ * OWNER n'est accepté ici que pour un membre déjà OWNER (mise à jour du libellé sans changement de rôle) — la promotion d'un MEMBER/ACCOUNTANT en OWNER via cette route est toujours refusée par le serveur.
+ */
 export type RoleMembreBodyRole = typeof RoleMembreBodyRole[keyof typeof RoleMembreBodyRole];
 
 
 export const RoleMembreBodyRole = {
+  OWNER: 'OWNER',
   MEMBER: 'MEMBER',
   ACCOUNTANT: 'ACCOUNTANT',
+  VIEWER: 'VIEWER',
 } as const;

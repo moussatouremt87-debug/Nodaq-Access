@@ -2,8 +2,20 @@
  * Membres & accès — qui peut se connecter à ce tenant, et avec quel rôle.
  *
  * ╔═══════════════════════════════════════════════════════════════════════════╗
- * ║  AUCUNE INVITATION NE PEUT DONNER LE RÔLE OWNER.                          ║
+ * ║  PLUSIEURS OWNER À ÉGALITÉ SONT POSSIBLES (US-A5.1) — MAIS UNIQUEMENT    ║
+ * ║  PAR INVITATION D'UN OWNER EXISTANT. LA PROMOTION D'UN MEMBRE DÉJÀ       ║
+ * ║  PRÉSENT EN OWNER RESTE REFUSÉE (PATCH .../role). LE DERNIER OWNER       ║
+ * ║  D'UN TENANT RESTE PROTÉGÉ (DELETE compte les OWNER restants).           ║
  * ╚═══════════════════════════════════════════════════════════════════════════╝
+ *
+ * Avant 038 (US-A5.1), aucune invitation ne pouvait donner OWNER — décision
+ * délibérée, encore documentée dans l'historique de 027_tenant_invites.sql.
+ * Le cas qui a fait revenir dessus : une société d'exercice libéral à
+ * plusieurs associés, où chacun doit porter la même autorité, sans
+ * hiérarchie implicite entre eux. `/membres/inviter` reste réservée aux
+ * OWNER (`ownerOnly`, voir routes/index.ts) : seul quelqu'un qui a déjà
+ * l'autorité totale peut l'accorder à quelqu'un d'autre — inviter en OWNER
+ * n'ouvre donc aucune élévation de privilège qu'un OWNER n'avait pas déjà.
  *
  * Distinct de `equipe.ts`/`teamMembersTable` : ceci concerne des COMPTES DE
  * CONNEXION (memberships), pas la planification/pointages du personnel de
@@ -39,6 +51,7 @@ import {
   ApercuInvitationParams,
   AccepterInvitationParams,
   AccepterInvitationBody,
+  ProgrammerEcheanceMembreBody,
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -59,6 +72,10 @@ router.get("/membres", async (req, res): Promise<void> => {
       email: usersTable.email,
       nom: usersTable.nom,
       role: membershipsTable.role,
+      libelle: membershipsTable.libelle,
+      // US-A5.4 — l'écran doit pouvoir montrer l'échéance d'un tiers de
+      // confiance, et signaler un accès déjà expiré.
+      expiresAt: membershipsTable.expiresAt,
       createdAt: membershipsTable.createdAt,
     })
     .from(membershipsTable)
@@ -72,7 +89,9 @@ router.get("/membres", async (req, res): Promise<void> => {
         id: tenantInvitesTable.id,
         email: tenantInvitesTable.email,
         role: tenantInvitesTable.role,
+        libelle: tenantInvitesTable.libelle,
         expiresAt: tenantInvitesTable.expiresAt,
+        accesExpireAt: tenantInvitesTable.accesExpireAt,
         createdAt: tenantInvitesTable.createdAt,
       })
       .from(tenantInvitesTable)
@@ -87,7 +106,34 @@ router.post("/membres/inviter", async (req, res): Promise<void> => {
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const tenantId = req.tenantId!;
   const email = parsed.data.email.toLowerCase().trim();
-  const role = parsed.data.role; // "MEMBER" | "ACCOUNTANT" — le schéma généré l'interdit déjà à "OWNER"
+  // "MEMBER" | "ACCOUNTANT" | "OWNER" (US-A5.1) | "VIEWER" (US-A5.4) —
+  // cette route est déjà ownerOnly (routes/index.ts) : seul un OWNER peut
+  // accorder OWNER, et seul un OWNER peut ouvrir ses comptes à un tiers.
+  const role = parsed.data.role;
+  const libelle = parsed.data.libelle?.trim() || null;
+
+  // Échéance d'accès : OBLIGATOIRE pour un tiers de confiance (US-A5.4 — un
+  // accès ouvert à quelqu'un d'extérieur ne doit pas pouvoir rester ouvert par
+  // oubli), FACULTATIVE pour les autres depuis US-A7.3.
+  //
+  // A5.4 la refusait hors VIEWER, et son commentaire disait pourquoi : « rien
+  // dans le produit ne la propose ni ne la montre ». A7.3 est la story qui la
+  // propose et la montre — la condition du refus a disparu, pas la prudence
+  // qui l'avait motivé. Une fin de contrat saisonnier se connaît d'avance ;
+  // la programmer vaut mieux qu'un geste manuel qu'on oublie.
+  let accesExpireAt: Date | null = null;
+  if (parsed.data.accesExpireAt) {
+    accesExpireAt = new Date(parsed.data.accesExpireAt);
+    if (Number.isNaN(accesExpireAt.getTime()) || accesExpireAt.getTime() <= Date.now()) {
+      res.status(400).json({ error: "La date de fin d'accès doit être dans le futur." });
+      return;
+    }
+  } else if (role === "VIEWER") {
+    res.status(400).json({
+      error: "Un accès en lecture seule doit porter une date de fin.",
+    });
+    return;
+  }
 
   const existingUser = await findUserByEmail(email);
   if (existingUser) {
@@ -108,14 +154,17 @@ router.post("/membres/inviter", async (req, res): Promise<void> => {
   const [invite] = await withTenant(tenantId, (tx) =>
     tx
       .insert(tenantInvitesTable)
-      .values({ tenantId, email, role, tokenSha256, invitedBy: req.session!.userId, expiresAt })
+      .values({ tenantId, email, role, libelle, accesExpireAt, tokenSha256, invitedBy: req.session!.userId, expiresAt })
       .returning(),
   );
 
   const [tenant] = await db.select({ nom: tenantsTable.nom }).from(tenantsTable).where(eq(tenantsTable.id, tenantId));
   const tenantNom = tenant?.nom ?? "votre entreprise";
   const lien = `${process.env["PUBLIC_URL"] ?? "https://nodaq.fr"}/membres/accepter/${token}`;
-  const roleLabel = role === "ACCOUNTANT" ? "comptable" : "membre";
+  const roleLabel = role === "OWNER" ? "copropriétaire, à égalité de droits"
+    : role === "ACCOUNTANT" ? "comptable"
+    : role === "VIEWER" ? "en lecture seule, limité au dossier financier"
+    : "membre";
 
   const corps = [
     `Bonjour,`,
@@ -125,6 +174,12 @@ router.post("/membres/inviter", async (req, res): Promise<void> => {
     `Pour accepter l'invitation : ${lien}`,
     ``,
     `Ce lien expire dans 7 jours.`,
+    // Deux horloges distinctes, donc deux phrases : la validité du lien, et
+    // la durée de l'accès une fois accepté. Les confondre ferait croire au
+    // tiers que son accès dure sept jours.
+    ...(accesExpireAt
+      ? [``, `L'accès qui vous est ouvert prend fin le ${accesExpireAt.toLocaleDateString("fr-FR")}.`]
+      : []),
   ].join("\n");
 
   const envoi = await sendDocument({
@@ -141,6 +196,8 @@ router.post("/membres/inviter", async (req, res): Promise<void> => {
     id: invite!.id,
     email: invite!.email,
     role: invite!.role,
+    libelle: invite!.libelle,
+    accesExpireAt: invite!.accesExpireAt,
     expiresAt: invite!.expiresAt,
     createdAt: invite!.createdAt,
     envoye: envoi.success,
@@ -159,14 +216,45 @@ router.patch("/membres/:id/role", async (req, res): Promise<void> => {
     .from(membershipsTable)
     .where(and(eq(membershipsTable.id, params.data.id), eq(membershipsTable.tenantId, tenantId)));
   if (!cible) { res.status(404).json({ error: "Membre introuvable" }); return; }
-  // Restreindre le NOUVEAU rôle à MEMBER/ACCOUNTANT (schéma généré) ne suffit
-  // pas : rien n'empêcherait sinon un owner de se démettre lui-même par
-  // erreur via cette route. Le rôle ACTUEL d'un OWNER ne se change jamais ici.
-  if (cible.role === "OWNER") { res.status(403).json({ error: "Le rôle du propriétaire ne se change pas depuis cet écran." }); return; }
+
+  // US-A5.1 — garde à deux branches, plus le blocage inconditionnel
+  // d'origine : un OWNER peut désormais exister au pluriel (par invitation,
+  // voir /membres/inviter), mais SEULE cette voie en crée un. Promotion
+  // (MEMBER/ACCOUNTANT → OWNER) et démotion (OWNER → autre chose) restent
+  // toutes deux refusées ici ; seul un passage OWNER→OWNER (donc ne
+  // touchant que `libelle`) est permis.
+  if (parsed.data.role === "OWNER" && cible.role !== "OWNER") {
+    res.status(403).json({ error: "La promotion au rôle propriétaire ne passe pas par cet écran — invitez un copropriétaire directement." });
+    return;
+  }
+  if (cible.role === "OWNER" && parsed.data.role !== "OWNER") {
+    res.status(403).json({ error: "Le rôle du propriétaire ne se change pas depuis cet écran." });
+    return;
+  }
+
+  // US-A5.4 — même doctrine que pour OWNER, et pour une raison précise : un
+  // accès en lecture seule ne vaut QUE porté par une échéance
+  // (`memberships.expires_at`), et cet écran n'en demande aucune. Y basculer
+  // un membre créerait un accès tiers permanent, exactement ce que la story
+  // cherche à empêcher. L'invitation reste l'unique voie — elle, exige la
+  // date. Le chemin inverse est refusé aussi : rendre l'écriture à un tiers
+  // externe doit être un geste délibéré, pas un changement de liste
+  // déroulante.
+  if (parsed.data.role === "VIEWER" && cible.role !== "VIEWER") {
+    res.status(403).json({ error: "Un accès en lecture seule s'accorde par invitation, avec une date de fin." });
+    return;
+  }
+  if (cible.role === "VIEWER" && parsed.data.role !== "VIEWER") {
+    res.status(403).json({ error: "Un accès en lecture seule ne se transforme pas en accès complet depuis cet écran." });
+    return;
+  }
+
+  const updateData: { role: string; libelle?: string | null } = { role: parsed.data.role };
+  if (parsed.data.libelle !== undefined) updateData.libelle = parsed.data.libelle?.trim() || null;
 
   const [updated] = await db
     .update(membershipsTable)
-    .set({ role: parsed.data.role })
+    .set(updateData)
     .where(eq(membershipsTable.id, params.data.id))
     .returning();
   const [user] = await db
@@ -179,6 +267,93 @@ router.patch("/membres/:id/role", async (req, res): Promise<void> => {
     email: user?.email ?? "",
     nom: user?.nom ?? "",
     role: updated!.role,
+    libelle: updated!.libelle,
+    expiresAt: updated!.expiresAt,
+    createdAt: updated!.createdAt,
+  });
+});
+
+/**
+ * US-A7.3 — programmer (ou retirer) la fin d'accès d'un membre.
+ *
+ * Distincte de `DELETE /membres/:id`, qui révoque SUR-LE-CHAMP. Ici la date est
+ * connue à l'avance — une fin de contrat saisonnier — et s'applique toute
+ * seule le moment venu : `requireMembership` relit l'adhésion à chaque requête
+ * et refuse dès l'échéance passée (US-A5.4). Aucun travail périodique, aucun
+ * geste manuel le jour J, donc aucun oubli possible.
+ *
+ * Route SÉPARÉE de `PATCH /membres/:id/role` volontairement : celle-là porte
+ * les gardes des transitions de rôle, celle-ci porte les règles de la
+ * planification. Les mêler rendrait les deux plus difficiles à relire.
+ */
+router.patch("/membres/:id/echeance", async (req, res): Promise<void> => {
+  const params = ChangerRoleMembreParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const parsed = ProgrammerEcheanceMembreBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const tenantId = req.tenantId!;
+
+  const [cible] = await db
+    .select()
+    .from(membershipsTable)
+    .where(and(eq(membershipsTable.id, params.data.id), eq(membershipsTable.tenantId, tenantId)));
+  if (!cible) { res.status(404).json({ error: "Membre introuvable" }); return; }
+
+  let echeance: Date | null = null;
+  if (parsed.data.expiresAt) {
+    echeance = new Date(parsed.data.expiresAt);
+    if (Number.isNaN(echeance.getTime()) || echeance.getTime() <= Date.now()) {
+      res.status(400).json({ error: "La date de fin d'accès doit être dans le futur." });
+      return;
+    }
+  }
+
+  // Un tiers de confiance porte TOUJOURS une fin d'accès (US-A5.4). Lui retirer
+  // son échéance fabriquerait l'accès externe permanent que cette story-là
+  // existait pour empêcher.
+  if (!echeance && cible.role === "VIEWER") {
+    res.status(403).json({
+      error: "Un accès en lecture seule doit garder une date de fin. Révoquez-le si vous voulez le fermer.",
+    });
+    return;
+  }
+
+  // ── La garde qui n'est écrite dans aucun critère d'acceptation ───────────
+  // `DELETE` refuse de révoquer le dernier propriétaire. Une révocation
+  // PROGRAMMÉE est une révocation différée : sans le même comptage ici, elle
+  // deviendrait la porte dérobée qui contourne l'autre — le tenant se
+  // retrouverait un jour sans aucun accès propriétaire, à une date que plus
+  // personne ne surveille.
+  if (echeance && cible.role === "OWNER") {
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(membershipsTable)
+      .where(and(eq(membershipsTable.tenantId, tenantId), eq(membershipsTable.role, "OWNER")));
+    if (count <= 1) {
+      res.status(403).json({
+        error: "Le dernier propriétaire de cet espace ne peut pas voir son accès programmé pour se fermer.",
+      });
+      return;
+    }
+  }
+
+  const [updated] = await db
+    .update(membershipsTable)
+    .set({ expiresAt: echeance })
+    .where(eq(membershipsTable.id, params.data.id))
+    .returning();
+  const [user] = await db
+    .select({ email: usersTable.email, nom: usersTable.nom })
+    .from(usersTable)
+    .where(eq(usersTable.id, updated!.userId));
+
+  res.json({
+    id: updated!.id,
+    email: user?.email ?? "",
+    nom: user?.nom ?? "",
+    role: updated!.role,
+    libelle: updated!.libelle,
+    expiresAt: updated!.expiresAt,
     createdAt: updated!.createdAt,
   });
 });
@@ -193,7 +368,21 @@ router.delete("/membres/:id", async (req, res): Promise<void> => {
     .from(membershipsTable)
     .where(and(eq(membershipsTable.id, params.data.id), eq(membershipsTable.tenantId, tenantId)));
   if (!cible) { res.status(404).json({ error: "Membre introuvable" }); return; }
-  if (cible.role === "OWNER") { res.status(403).json({ error: "Le propriétaire ne peut pas être révoqué." }); return; }
+
+  // US-A5.1 — le blocage inconditionnel devient un comptage : plusieurs
+  // OWNER peuvent coexister à égalité (voir /membres/inviter), seul LE
+  // DERNIER reste protégé. Comparer à 1, pas à 0 : on compte AVANT la
+  // suppression de la cible.
+  if (cible.role === "OWNER") {
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(membershipsTable)
+      .where(and(eq(membershipsTable.tenantId, tenantId), eq(membershipsTable.role, "OWNER")));
+    if (count <= 1) {
+      res.status(403).json({ error: "Le dernier propriétaire de cet espace ne peut pas être révoqué." });
+      return;
+    }
+  }
 
   await db.delete(membershipsTable).where(eq(membershipsTable.id, params.data.id));
   // Aucune invalidation de session à part : requireMembership revérifie
@@ -278,6 +467,9 @@ membresPublicRouter.get("/membres/inviter/:token", limiterDebit, async (req, res
   res.json({
     tenantNom: tenant?.nom ?? "",
     roleOffert: invite.role,
+    // US-A5.4 — montrée AVANT l'acceptation : le tiers doit savoir jusqu'à
+    // quand court l'accès qu'il accepte.
+    accesExpireAt: invite.accesExpireAt,
     email: invite.email,
     compteExistant,
     expire: invite.expiresAt < new Date(),
@@ -330,7 +522,15 @@ membresPublicRouter.post("/membres/inviter/:token/accepter", limiterDebit, async
     if (!updatedInvite) return null;
     await tx
       .insert(membershipsTable)
-      .values({ userId, tenantId: invite.tenantId, role: invite.role })
+      .values({
+        userId,
+        tenantId: invite.tenantId,
+        role: invite.role,
+        libelle: invite.libelle,
+        // US-A5.4 — l'échéance passe de l'invitation à l'adhésion ici, dans
+        // la transaction qui existe déjà. `null` pour tous les autres rôles.
+        expiresAt: invite.accesExpireAt,
+      })
       .onConflictDoNothing();
     return updatedInvite;
   });

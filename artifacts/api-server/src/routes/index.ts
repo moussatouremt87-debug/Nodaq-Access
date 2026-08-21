@@ -17,6 +17,7 @@ import echeancesRouter from "./echeances";
 import margeRouter from "./marge";
 import rapportsRouter from "./rapports";
 import compteResultatRouter from "./compte-resultat";
+import cabinetRouter from "./cabinet";
 import equipeRouter from "./equipe";
 import connecteursRouter from "./connecteurs";
 import parametresRouter from "./parametres";
@@ -40,6 +41,8 @@ import facturationElectroniqueRouter, {
 } from "./facturation-electronique";
 import eReportingRouter from "./e-reporting";
 import { banqueWebhookRouter } from "./webhooks-banque";
+import { webhookAgentVocalRouter } from "./webhook-agent-vocal";
+import { paiementWebhookRouter } from "./webhooks-paiement";
 import chargesRecurrentesRouter from "./charges-recurrentes";
 import previsionnelTresorerieRouter from "./previsionnel-tresorerie";
 
@@ -48,7 +51,17 @@ import { resolveTenant } from "../middleware/resolveTenant";
 import { requireMembership } from "../middleware/requireMembership";
 import { requireRole } from "../middleware/requireRole";
 import { requireMfaVerified } from "../middleware/requireMfaVerified";
+import { lectureSeuleMethode, lectureSeulePerimetre } from "../middleware/lectureSeule";
 import { FINANCIAL_ROLES } from "@nodaq/shared";
+import journalDecisionsRouter from "./journal-decisions";
+import souveraineteRouter from "./souverainete";
+import { modulesReadRouter, modulesWriteRouter } from "./modules";
+import { reglesRelanceReadRouter, reglesRelanceWriteRouter } from "./regles-relance";
+import { campagnesRelanceReadRouter, campagnesRelanceWriteRouter } from "./campagnes-relance";
+import { liensPaiementReadRouter, liensPaiementWriteRouter } from "./liens-paiement";
+import relanceFormulationRouter from "./relance-formulation";
+import relanceMandatRouter from "./relance-mandat";
+import { requireAppelVocal } from "../middleware/requireAppelVocal";
 import membresRouter, { membresPublicRouter } from "./membres";
 import mfaRouter from "./mfa";
 
@@ -67,6 +80,37 @@ router.use(facturationElectroniqueWebhookRouter);
 // signature HMAC — voir webhooks-banque.ts. Un seul webhook applicatif,
 // tenant résolu via la policy RLS étroite bank_connections_webhook_lookup.
 router.use(banqueWebhookRouter);
+// Webhook post-call de la plateforme vocale (4.18-bis) : signature HMAC
+// vérifiée sur le corps BRUT, tenant résolu par policy étroite depuis le
+// conversation_id — jamais reçu du client. Public par nature, comme le
+// webhook bancaire au-dessus.
+router.use(webhookAgentVocalRouter);
+// Webhook de paiement Bridge (4.19) : public, authentifié par signature sur
+// le corps brut — même famille que les deux précédents.
+router.use(paiementWebhookRouter);
+
+// ── Le worker vocal (4.18, lot 6) ────────────────────────────────────────
+//
+// AVANT le bloc `biz`, et BORNÉ AU CHEMIN. Deux contraintes qui se sont
+// rappelées à moi l'une après l'autre :
+//
+//   * `router.use(mw, sous)` exécute `mw` pour TOUTE requête qui atteint la
+//     ligne, pas seulement pour celles que le sous-routeur sait traiter. Sans
+//     préfixe, `requireAppelVocal` exigeait un jeton d'appel pour tout ce qui
+//     est déclaré plus bas — factures, avoirs, paramètres ;
+//   * les routeurs `biz` sont eux aussi montés sans préfixe : placé après eux,
+//     ce montage n'était jamais atteint, `requireAuth` ayant déjà refusé la
+//     requête faute de cookie.
+//
+// Le worker est une MACHINE : il n'a pas de session. Le jeton qu'il présente
+// désigne UN appel, et `req.tenantId` est posé depuis la ligne trouvée en base
+// — jamais depuis le corps. La règle 1 est ainsi tenue par construction : le
+// worker n'a aucun moyen de nommer un tenant.
+//
+// Ces routes ne sont exposées à aucune interface : rien dans `artifacts/nodaq`
+// ne les appelle, et un humain n'a pas de jeton d'appel.
+router.use("/relance/appel", requireAppelVocal, relanceMandatRouter);
+router.use("/relance/formulation", requireAppelVocal, relanceFormulationRouter);
 
 // ── MFA (ticket 4.15) — requireAuth SEUL, pas la chaîne biz ────────────────
 // Une session bloquée par requireMfaVerified doit pouvoir atteindre ces
@@ -78,7 +122,15 @@ router.use([requireAuth], mfaRouter);
 // requireMfaVerified en dernier : bloque toute session OWNER/ACCOUNTANT sans
 // second facteur prouvé CETTE session, avant qu'elle n'atteigne quoi que ce
 // soit — ownerOnly et financierOnly en héritent en composant `biz`.
-const biz: RequestHandler[] = [requireAuth, resolveTenant, requireMembership, requireMfaVerified];
+// US-A5.4 — les deux gardes du tiers de confiance viennent APRÈS
+// requireMembership (qui vient de relire le rôle en base) et sont posées ici,
+// dans `biz`, plutôt que sur un sous-ensemble de routeurs : c'est ce qui les
+// rend valables pour les 97 routes mutantes actuelles ET pour celles qui
+// n'existent pas encore. Voir middleware/lectureSeule.ts.
+const biz: RequestHandler[] = [
+  requireAuth, resolveTenant, requireMembership, requireMfaVerified,
+  lectureSeuleMethode, lectureSeulePerimetre,
+];
 const ownerOnly: RequestHandler[] = [...biz, requireRole(["OWNER"])];
 // Routeurs EXCLUSIVEMENT financiers — bloqués en entier pour un MEMBER, pas
 // seulement masqués : contrairement à affaires/contrats (voir plus bas), ils
@@ -111,6 +163,25 @@ router.use(biz, voixRouter);
 router.use(biz, prospectionRouter);
 router.use(biz, clientsRouter);
 router.use(biz, affectationsRouter);
+// Lecture des modules : la NAVIGATION en dépend, donc tout rôle doit pouvoir
+// la lire. L'écriture est plus bas, réservée au propriétaire.
+router.use(biz, modulesReadRouter);
+// Règle de relance : un MEMBER valide des campagnes DANS SON CADRE (4.18 US-9),
+// il doit donc pouvoir la lire. L'écriture est plus bas, au propriétaire.
+router.use(biz, reglesRelanceReadRouter);
+router.use(biz, campagnesRelanceReadRouter);
+// Les liens de paiement portent des montants dus : lecture réservée aux rôles
+// à accès financier, comme le reste de la relance.
+router.use(biz, liensPaiementReadRouter);
+// ── Le worker vocal (4.18, lot 6) ────────────────────────────────────────
+//
+// PAS `biz` : le worker est une machine, il n'a pas de session. Le jeton
+// qu'il présente désigne UN appel, et `req.tenantId` est posé depuis la ligne
+// trouvée en base — jamais depuis le corps. La règle 1 est ainsi tenue par
+// construction : le worker n'a aucun moyen de nommer un tenant.
+//
+// Ces routes ne sont exposées à aucune interface : rien dans `artifacts/nodaq`
+// ne les appelle, et un humain n'a pas de jeton d'appel.
 
 // ── Business routes (OWNER ou ACCOUNTANT seulement) ───────────────────────
 router.use(financierOnly, echeancesRouter);
@@ -124,6 +195,10 @@ router.use(financierOnly, avoirsRouter);
 router.use(financierOnly, analyticsRouter);
 router.use(financierOnly, paiementsRouter);
 router.use(financierOnly, eReportingRouter);
+// US-A5.2 — boucle elle-même sur PLUSIEURS tenants (listUserMemberships),
+// pas sur req.tenantId ; financierOnly ne sert ici qu'à exiger un accès
+// financier sur le tenant COURANT avant d'exposer le portefeuille entier.
+router.use(financierOnly, cabinetRouter);
 
 // ── OWNER-only routes ─────────────────────────────────────────────────────
 router.use(ownerOnly, equipeRouter);
@@ -131,7 +206,21 @@ router.use(ownerOnly, connecteursRouter);
 router.use(ownerOnly, parametresRouter);
 router.use(ownerOnly, entreprisesRouter);
 router.use(ownerOnly, onboardingWriteRouter);
+// US-A6.4 — preuve à produire en cas de contrôle : c'est l'OWNER qui la
+// produit, pas un collaborateur.
+router.use(ownerOnly, journalDecisionsRouter);
 router.use(ownerOnly, membresRouter);
 router.use(ownerOnly, facturationElectroniqueRouter);
+// US-A7.4 — l'attestation engage l'entreprise devant un donneur d'ordre :
+// elle se produit depuis le compte du dirigeant.
+router.use(ownerOnly, souveraineteRouter);
+// Allumer ou éteindre un module engage le compte, pas l'écran de celui qui
+// clique : c'est une décision de propriétaire.
+router.use(ownerOnly, modulesWriteRouter);
+router.use(ownerOnly, reglesRelanceWriteRouter);
+// Proposer une campagne engage le compte : c'est une décision de propriétaire.
+router.use(ownerOnly, campagnesRelanceWriteRouter);
+// Renvoyer un SMS à un débiteur engage le compte : décision de propriétaire.
+router.use(ownerOnly, liensPaiementWriteRouter);
 
 export default router;

@@ -82,6 +82,7 @@ export const ListAffairesResponse = zod.object({
   "montantVenduHt": zod.number().nullish().describe('Montant vendu HT en centimes, issu du devis signé ou d\'une reprise de l\'existant.'),
   "avancementPct": zod.number().nullish().describe('Avancement en %, 0 à 100.'),
   "dateFinPrevue": zod.coerce.date().nullish(),
+  "habilitationsRequises": zod.array(zod.string()).optional().describe('Types d\'habilitation requis pour affecter un salarié à cette affaire (US-A4.4). Avertissement, jamais bloquant.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })),
@@ -102,7 +103,8 @@ export const CreateAffaireBody = zod.object({
   "quotedAmountCents": zod.number().optional(),
   "status": zod.string().optional(),
   "notes": zod.string().optional(),
-  "startDate": zod.coerce.date().optional()
+  "startDate": zod.coerce.date().optional(),
+  "habilitationsRequises": zod.array(zod.string()).optional()
 })
 
 export const CreateAffaireResponse = zod.object({
@@ -120,6 +122,7 @@ export const CreateAffaireResponse = zod.object({
   "montantVenduHt": zod.number().nullish().describe('Montant vendu HT en centimes, issu du devis signé ou d\'une reprise de l\'existant.'),
   "avancementPct": zod.number().nullish().describe('Avancement en %, 0 à 100.'),
   "dateFinPrevue": zod.coerce.date().nullish(),
+  "habilitationsRequises": zod.array(zod.string()).optional().describe('Types d\'habilitation requis pour affecter un salarié à cette affaire (US-A4.4). Avertissement, jamais bloquant.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -147,6 +150,7 @@ export const GetAffaireResponse = zod.object({
   "montantVenduHt": zod.number().nullish().describe('Montant vendu HT en centimes, issu du devis signé ou d\'une reprise de l\'existant.'),
   "avancementPct": zod.number().nullish().describe('Avancement en %, 0 à 100.'),
   "dateFinPrevue": zod.coerce.date().nullish(),
+  "habilitationsRequises": zod.array(zod.string()).optional().describe('Types d\'habilitation requis pour affecter un salarié à cette affaire (US-A4.4). Avertissement, jamais bloquant.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -177,7 +181,8 @@ export const UpdateAffaireBody = zod.object({
   "completedAt": zod.coerce.date().optional(),
   "montantVenduHt": zod.number().optional().describe('Montant vendu HT en centimes.'),
   "avancementPct": zod.number().min(updateAffaireBodyAvancementPctMin).max(updateAffaireBodyAvancementPctMax).optional(),
-  "dateFinPrevue": zod.coerce.date().optional()
+  "dateFinPrevue": zod.coerce.date().optional(),
+  "habilitationsRequises": zod.array(zod.string()).optional()
 })
 
 export const UpdateAffaireResponse = zod.object({
@@ -195,6 +200,7 @@ export const UpdateAffaireResponse = zod.object({
   "montantVenduHt": zod.number().nullish().describe('Montant vendu HT en centimes, issu du devis signé ou d\'une reprise de l\'existant.'),
   "avancementPct": zod.number().nullish().describe('Avancement en %, 0 à 100.'),
   "dateFinPrevue": zod.coerce.date().nullish(),
+  "habilitationsRequises": zod.array(zod.string()).optional().describe('Types d\'habilitation requis pour affecter un salarié à cette affaire (US-A4.4). Avertissement, jamais bloquant.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -778,6 +784,7 @@ export const ConvertDevisToAffaireResponse = zod.object({
   "montantVenduHt": zod.number().nullish().describe('Montant vendu HT en centimes, issu du devis signé ou d\'une reprise de l\'existant.'),
   "avancementPct": zod.number().nullish().describe('Avancement en %, 0 à 100.'),
   "dateFinPrevue": zod.coerce.date().nullish(),
+  "habilitationsRequises": zod.array(zod.string()).optional().describe('Types d\'habilitation requis pour affecter un salarié à cette affaire (US-A4.4). Avertissement, jamais bloquant.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -1357,58 +1364,91 @@ export const ListMembresResponse = zod.object({
   "id": zod.string(),
   "email": zod.string(),
   "nom": zod.string(),
-  "role": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT']),
+  "role": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT', 'VIEWER']),
+  "libelle": zod.string().nullish().describe('Qualificatif libre affiché à côté du rôle (ex. \"Conjoint collaborateur\"). N\'affecte jamais les droits.'),
+  "expiresAt": zod.coerce.date().nullish().describe('Échéance de l\'accès (US-A5.4). null = permanent, ce que sont toutes les adhésions sauf celle d\'un tiers de confiance (VIEWER).'),
   "createdAt": zod.coerce.date()
 })),
   "invitationsEnAttente": zod.array(zod.object({
   "id": zod.string(),
   "email": zod.string(),
-  "role": zod.enum(['MEMBER', 'ACCOUNTANT']),
-  "expiresAt": zod.coerce.date(),
+  "role": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT', 'VIEWER']),
+  "libelle": zod.string().nullish(),
+  "expiresAt": zod.coerce.date().describe('Validité du LIEN d\'invitation (7 jours) — à ne pas confondre avec accesExpireAt.'),
+  "accesExpireAt": zod.coerce.date().nullish().describe('Échéance de l\'ACCÈS une fois l\'invitation acceptée (US-A5.4), reportée sur le membership. Obligatoire pour un VIEWER.'),
   "createdAt": zod.coerce.date()
 }))
 })
 
 
 /**
- * @summary Invite a collaborator (OWNER only) — role restricted to MEMBER/ACCOUNTANT
+ * @summary Invite a collaborator (OWNER only) — OWNER role allowed, grants equal authority
  */
 export const InviterMembreBody = zod.object({
   "email": zod.string(),
-  "role": zod.enum(['MEMBER', 'ACCOUNTANT'])
+  "role": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT', 'VIEWER']).describe('OWNER crée un co-propriétaire à égalité — réservé aux OWNER existants (route ownerOnly). VIEWER crée un tiers de confiance en lecture seule (US-A5.4) et exige alors accesExpireAt.'),
+  "libelle": zod.string().optional().describe('Qualificatif libre facultatif (ex. \"Conjoint collaborateur\", \"Associé fondateur\").'),
+  "accesExpireAt": zod.coerce.date().optional().describe('Échéance de l\'accès accordé. OBLIGATOIRE pour le rôle VIEWER (400 sinon) — un accès ouvert à quelqu\'un d\'extérieur à l\'entreprise ne doit pas pouvoir rester ouvert par oubli. FACULTATIVE pour les autres rôles depuis US-A7.3 : une fin de contrat saisonnier se connaît à l\'avance et se programme dès l\'invitation.')
 })
 
 export const InviterMembreResponse = zod.object({
   "id": zod.string(),
   "email": zod.string(),
-  "role": zod.enum(['MEMBER', 'ACCOUNTANT']),
-  "expiresAt": zod.coerce.date(),
+  "role": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT', 'VIEWER']),
+  "libelle": zod.string().nullish(),
+  "expiresAt": zod.coerce.date().describe('Validité du LIEN d\'invitation (7 jours) — à ne pas confondre avec accesExpireAt.'),
+  "accesExpireAt": zod.coerce.date().nullish().describe('Échéance de l\'ACCÈS une fois l\'invitation acceptée (US-A5.4), reportée sur le membership. Obligatoire pour un VIEWER.'),
   "createdAt": zod.coerce.date()
 })
 
 
 /**
- * @summary Change a member's role (OWNER only) — cannot target or grant OWNER
+ * @summary Change a member's role or libelle (OWNER only) — cannot promote to or demote from OWNER
  */
 export const ChangerRoleMembreParams = zod.object({
   "id": zod.coerce.string()
 })
 
 export const ChangerRoleMembreBody = zod.object({
-  "role": zod.enum(['MEMBER', 'ACCOUNTANT'])
+  "role": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT', 'VIEWER']).describe('OWNER n\'est accepté ici que pour un membre déjà OWNER (mise à jour du libellé sans changement de rôle) — la promotion d\'un MEMBER\/ACCOUNTANT en OWNER via cette route est toujours refusée par le serveur.'),
+  "libelle": zod.string().nullish().describe('Qualificatif libre facultatif ; absent = inchangé, null = effacé.')
 })
 
 export const ChangerRoleMembreResponse = zod.object({
   "id": zod.string(),
   "email": zod.string(),
   "nom": zod.string(),
-  "role": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT']),
+  "role": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT', 'VIEWER']),
+  "libelle": zod.string().nullish().describe('Qualificatif libre affiché à côté du rôle (ex. \"Conjoint collaborateur\"). N\'affecte jamais les droits.'),
+  "expiresAt": zod.coerce.date().nullish().describe('Échéance de l\'accès (US-A5.4). null = permanent, ce que sont toutes les adhésions sauf celle d\'un tiers de confiance (VIEWER).'),
   "createdAt": zod.coerce.date()
 })
 
 
 /**
- * @summary Revoke a member's access (OWNER only) — cannot target OWNER
+ * @summary Programme (ou retire) la fin d'accès d'un membre (OWNER only) — US-A7.3. Distincte d'une révocation immédiate : la date est connue à l'avance et s'applique toute seule le moment venu.
+ */
+export const ProgrammerEcheanceMembreParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ProgrammerEcheanceMembreBody = zod.object({
+  "expiresAt": zod.coerce.date().nullable().describe('Date de fin d\'accès, dans le futur. `null` retire l\'échéance (accès permanent) — refusé pour un VIEWER, dont l\'accès doit toujours en porter une (US-A5.4).')
+})
+
+export const ProgrammerEcheanceMembreResponse = zod.object({
+  "id": zod.string(),
+  "email": zod.string(),
+  "nom": zod.string(),
+  "role": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT', 'VIEWER']),
+  "libelle": zod.string().nullish().describe('Qualificatif libre affiché à côté du rôle (ex. \"Conjoint collaborateur\"). N\'affecte jamais les droits.'),
+  "expiresAt": zod.coerce.date().nullish().describe('Échéance de l\'accès (US-A5.4). null = permanent, ce que sont toutes les adhésions sauf celle d\'un tiers de confiance (VIEWER).'),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Revoke a member's access (OWNER only) — cannot revoke the last remaining OWNER
  */
 export const RevoquerMembreParams = zod.object({
   "id": zod.coerce.string()
@@ -1426,7 +1466,8 @@ export const ApercuInvitationParams = zod.object({
 
 export const ApercuInvitationResponse = zod.object({
   "tenantNom": zod.string(),
-  "roleOffert": zod.enum(['MEMBER', 'ACCOUNTANT']),
+  "roleOffert": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT', 'VIEWER']),
+  "accesExpireAt": zod.coerce.date().nullish().describe('Échéance de l\'accès proposé — affichée avant acceptation (US-A5.4).'),
   "email": zod.string(),
   "compteExistant": zod.boolean(),
   "expire": zod.boolean(),
@@ -1453,7 +1494,7 @@ export const AccepterInvitationBody = zod.object({
 export const AccepterInvitationResponse = zod.object({
   "userId": zod.string(),
   "tenantId": zod.string(),
-  "role": zod.enum(['MEMBER', 'ACCOUNTANT'])
+  "role": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT', 'VIEWER'])
 })
 
 

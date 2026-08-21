@@ -7,11 +7,18 @@
  * - Les champs financiers d'affaires/contrats/cockpit sont `null` pour un
  *   MEMBER, présents pour OWNER/ACCOUNTANT (jamais `0` — voir
  *   maskFinancialFields.ts).
- * - `/membres/*` : lecture/écriture réservée à OWNER, garde explicite contre
- *   la modification d'un membership OWNER, et le flux d'acceptation
- *   d'invitation (compte existant / nouveau compte, jeton réutilisé/expiré).
- *   Le rôle OWNER par invitation est refusé à la fois par Zod ET par la
- *   contrainte CHECK en base — les deux sont éprouvées séparément.
+ * - `/membres/*` : lecture/écriture réservée à OWNER. US-A5.1 — plusieurs
+ *   OWNER à égalité sont possibles PAR INVITATION d'un OWNER existant (Zod
+ *   ET la contrainte CHECK en base l'acceptent désormais, éprouvés
+ *   séparément) ; la PROMOTION d'un membre déjà présent en OWNER via
+ *   `PATCH .../role` reste refusée, ainsi que sa démotion — seule
+ *   l'invitation crée un co-OWNER. Le DERNIER OWNER d'un tenant reste
+ *   protégé contre la révocation (`DELETE`), mais plus que lui : la garde
+ *   est un comptage, pas un blocage inconditionnel. Couvre aussi le flux
+ *   d'acceptation d'invitation (compte existant / nouveau compte, jeton
+ *   réutilisé/expiré) et l'isolation par tenant de `memberships`/`users` —
+ *   des tables INFRA sans RLS, filtrées à la main (voir membres.ts), donc
+ *   pas couvertes par la garde RLS générique de rls.test.ts.
  */
 import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
@@ -26,6 +33,7 @@ import {
   createTestSession,
   cleanupTenants,
   cleanupUsers,
+  completeMfaForRegisteredOwner,
 } from "./helpers";
 
 let tenantId: string;
@@ -247,25 +255,43 @@ describe("Gestion des membres — réservée au OWNER", () => {
     expect(rows[0]?.role).toBe("ACCOUNTANT");
   });
 
-  test("POST /api/membres/inviter → role OWNER refusé par Zod (400)", async () => {
+  test("POST /api/membres/inviter → role OWNER accepté (US-A5.1) : Zod et la contrainte CHECK l'autorisent désormais", async () => {
     const email = `af-invite-owner-${Date.now()}@test.nodaq`;
-    const res = await as(cookieOwner).post("/api/membres/inviter", { email, role: "OWNER" });
-    expect(res.status).toBe(400);
+    const res = await as(cookieOwner).post("/api/membres/inviter", { email, role: "OWNER", libelle: "Associée fondatrice" });
+    expect(res.status).toBe(201);
+    expect(res.body.role).toBe("OWNER");
+    expect(res.body.libelle).toBe("Associée fondatrice");
+
+    const { rows } = await adminPool.query("SELECT role, libelle FROM tenant_invites WHERE email = $1", [email.toLowerCase()]);
+    expect(rows[0]?.role).toBe("OWNER");
+    expect(rows[0]?.libelle).toBe("Associée fondatrice");
   });
 
-  test("tenant_invites.role rejette OWNER par contrainte CHECK, indépendamment de Zod", async () => {
-    await expect(
-      adminPool.query(
-        `INSERT INTO tenant_invites (id, tenant_id, email, role, token_sha256, invited_by, expires_at)
-         VALUES ($1, $2, 'check-owner@test.nodaq', 'OWNER', 'check-owner-hash', $3, now() + interval '7 days')`,
-        [crypto.randomUUID(), tenantId, ownerUserId],
-      ),
-    ).rejects.toThrow();
+  test("un MEMBER ne peut pas inviter (donc a fortiori pas inviter un OWNER) — inviter-en-OWNER n'élève jamais un privilège qu'un OWNER n'avait pas déjà", async () => {
+    const email = `af-invite-owner-member-${Date.now()}@test.nodaq`;
+    const res = await as(cookieMember).post("/api/membres/inviter", { email, role: "OWNER" });
+    expect(res.status).toBe(403);
   });
 
-  test("PATCH /api/membres/:id/role — ne peut jamais cibler un OWNER", async () => {
+  test("PATCH /api/membres/:id/role — la PROMOTION d'un MEMBER en OWNER est refusée (seule l'invitation crée un co-OWNER)", async () => {
+    const res = await as(cookieOwner).patch(`/api/membres/${memberMembershipId}/role`, { role: "OWNER" });
+    expect(res.status).toBe(403);
+
+    // Le membership visé n'a pas bougé.
+    const { rows } = await adminPool.query("SELECT role FROM memberships WHERE id = $1", [memberMembershipId]);
+    expect(rows[0]?.role).toBe("MEMBER");
+  });
+
+  test("PATCH /api/membres/:id/role — la DÉMOTION d'un OWNER est refusée", async () => {
     const res = await as(cookieOwner).patch(`/api/membres/${ownerMembershipId}/role`, { role: "ACCOUNTANT" });
     expect(res.status).toBe(403);
+  });
+
+  test("PATCH /api/membres/:id/role — un passage OWNER→OWNER est permis (met à jour libelle sans toucher au rôle)", async () => {
+    const res = await as(cookieOwner).patch(`/api/membres/${ownerMembershipId}/role`, { role: "OWNER", libelle: "Gérant associé" });
+    expect(res.status).toBe(200);
+    expect(res.body.role).toBe("OWNER");
+    expect(res.body.libelle).toBe("Gérant associé");
   });
 
   test("PATCH /api/membres/:id/role → 403 pour un MEMBER, 200 pour un OWNER changeant un MEMBER", async () => {
@@ -280,9 +306,66 @@ describe("Gestion des membres — réservée au OWNER", () => {
     await as(cookieOwner).patch(`/api/membres/${memberMembershipId}/role`, { role: "MEMBER" });
   });
 
-  test("DELETE /api/membres/:id — ne peut jamais révoquer un OWNER", async () => {
+  test("DELETE /api/membres/:id — le DERNIER OWNER ne peut pas être révoqué (comptage, pas un blocage inconditionnel)", async () => {
     const res = await as(cookieOwner).delete(`/api/membres/${ownerMembershipId}`);
     expect(res.status).toBe(403);
+  });
+
+  test("US-A5.1 — cycle de vie complet d'un co-OWNER : invitation, acceptation, coexistence, révocation possible tant qu'il en reste un autre", async () => {
+    const email = `af-coowner-${Date.now()}@test.nodaq`;
+    emails.push(email);
+
+    const invite = await as(cookieOwner).post("/api/membres/inviter", { email, role: "OWNER" });
+    expect(invite.status).toBe(201);
+
+    // Le jeton en clair ne transite jamais par l'API (voir plus bas dans ce
+    // fichier) — on fabrique nous-mêmes une invitation OWNER acceptable,
+    // même patron que les tests "Acceptation d'invitation" existants.
+    const token = "coowner-token-" + crypto.randomUUID();
+    const tokenSha256 = crypto.createHash("sha256").update(token).digest("hex");
+    await adminPool.query(
+      `INSERT INTO tenant_invites (id, tenant_id, email, role, token_sha256, invited_by, expires_at)
+       VALUES ($1, $2, $3, 'OWNER', $4, $5, now() + interval '7 days')`,
+      [crypto.randomUUID(), tenantId, email.toLowerCase(), tokenSha256, ownerUserId],
+    );
+
+    const accept = await request(app)
+      .post(`/api/membres/inviter/${token}/accepter`)
+      .send({ password: "Test1234!", nom: "Coowner Test" });
+    expect(accept.status).toBe(200);
+    expect(accept.body.role).toBe("OWNER");
+    const setCookie = accept.headers["set-cookie"] as string[] | string | undefined;
+    const coOwnerCookie = (Array.isArray(setCookie) ? setCookie : [setCookie ?? ""])
+      .find((c) => c.startsWith("nodaq_sid=")) ?? "";
+    // Le flux d'acceptation réel (contrairement à createTestSession, qui
+    // pose mfa_verified_at directement) crée une session NON vérifiée MFA —
+    // même garde que pour tout compte fraîchement créé.
+    await completeMfaForRegisteredOwner(accept.body.userId);
+
+    // La base compte bien 2 OWNER pour ce tenant — aucune erreur de
+    // contrainte (memberships n'a jamais restreint le rôle, voir migration
+    // 001 : seule UNIQUE (user_id, tenant_id) existe).
+    const { rows: owners } = await adminPool.query(
+      "SELECT id FROM memberships WHERE tenant_id = $1 AND role = 'OWNER'",
+      [tenantId],
+    );
+    expect(owners.length).toBe(2);
+    const coOwnerMembershipId = owners.find((o: { id: string }) => o.id !== ownerMembershipId)!.id;
+
+    // Le co-OWNER franchit ownerOnly avec SA PROPRE session, indépendamment
+    // du premier OWNER — pas de logique "premier arrivé" cachée
+    // (requireRole/requireMembership ne lisent que la session de l'appelant).
+    const listeVueParCoOwner = await request(app).get("/api/membres").set("Cookie", coOwnerCookie);
+    expect(listeVueParCoOwner.status).toBe(200);
+    expect(listeVueParCoOwner.body.membres.some((m: { id: string }) => m.id === coOwnerMembershipId)).toBe(true);
+
+    // Avec 2 OWNER, la révocation de l'un des deux devient possible.
+    const revoke = await as(cookieOwner).delete(`/api/membres/${coOwnerMembershipId}`);
+    expect(revoke.status).toBe(204);
+
+    // Revenu à 1 seul OWNER : la garde du dernier OWNER s'applique de nouveau.
+    const revokeLast = await as(cookieOwner).delete(`/api/membres/${ownerMembershipId}`);
+    expect(revokeLast.status).toBe(403);
   });
 
   test("DELETE /api/membres/:id → 403 pour un MEMBER, 204 pour un OWNER révoquant un membership jetable", async () => {
@@ -401,5 +484,42 @@ describe("Acceptation d'invitation — public", () => {
       .send({ password });
     expect(rightPassword.status).toBe(200);
     expect(rightPassword.body.role).toBe("ACCOUNTANT");
+  });
+});
+
+// ── Isolation entre tenants (US-A5.1, AC3) ──────────────────────────────────
+// `memberships`/`users` sont des tables INFRA SANS RLS (voir l'en-tête de
+// membres.ts) : leur isolation par tenant repose ENTIÈREMENT sur le filtre
+// manuel `.where(eq(membershipsTable.tenantId, tenantId))` de la route, pas
+// sur une policy postgres. C'est exactement le cas — deux structures
+// distinctes, proches opérationnellement (un cabinet associatif partageant
+// des moyens, par exemple) — que rls.test.ts (générique, RLS uniquement) ne
+// peut pas éprouver pour cette route précise.
+describe("Isolation entre tenants — memberships/users sans RLS (US-A5.1, AC3)", () => {
+  test("GET /api/membres d'un tenant ne révèle jamais les membres/invitations d'un autre tenant, même proche opérationnellement", async () => {
+    const tenantA = await createTestTenant("IsolationMembresA");
+    const tenantB = await createTestTenant("IsolationMembresB");
+    tenantIds.push(tenantA.id, tenantB.id);
+
+    const emailA = `af-isol-a-${Date.now()}@test.nodaq`;
+    const emailB = `af-isol-b-${Date.now()}@test.nodaq`;
+    emails.push(emailA, emailB);
+    const userA = await createTestUser(emailA, "Test1234!");
+    const userB = await createTestUser(emailB, "Test1234!");
+    await createTestMembership(userA.id, tenantA.id, "OWNER");
+    await createTestMembership(userB.id, tenantB.id, "OWNER");
+    const sessionA = await createTestSession(userA.id, tenantA.id);
+    const cookieA = cookieHeader(sessionA.id);
+
+    await adminPool.query(
+      `INSERT INTO tenant_invites (id, tenant_id, email, role, token_sha256, invited_by, expires_at)
+       VALUES ($1, $2, 'af-isol-invite-b@test.nodaq', 'MEMBER', 'isol-hash-b', $3, now() + interval '7 days')`,
+      [crypto.randomUUID(), tenantB.id, userB.id],
+    );
+
+    const vueA = await request(app).get("/api/membres").set("Cookie", cookieA);
+    expect(vueA.status).toBe(200);
+    expect(vueA.body.membres.every((m: { email: string }) => m.email !== emailB)).toBe(true);
+    expect(vueA.body.invitationsEnAttente).toHaveLength(0);
   });
 });

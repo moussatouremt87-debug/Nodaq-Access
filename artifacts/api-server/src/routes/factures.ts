@@ -8,7 +8,10 @@
  */
 import { Router, type IRouter } from "express";
 import { requireRole } from "../middleware/requireRole.js";
-import { withTenant, facturesTable, avoirsTable, activityTable, archivedPdfsTable, paiementsTable, CLE_PA_API_KEY } from "@workspace/db";
+import {
+  withTenant, facturesTable, avoirsTable, activityTable, archivedPdfsTable,
+  paiementsTable, CLE_PA_API_KEY, devisTable,
+} from "@workspace/db";
 import { and, eq, desc, sql } from "drizzle-orm";
 import { z } from "zod";
 import { auditInvoice } from "@nodaq/facturx";
@@ -32,6 +35,7 @@ import { logger } from "../lib/logger.js";
 import { champsErreur } from "../lib/erreur-pg.js";
 import { secretExiste } from "../lib/tenant-secrets.js";
 import { estFactureEnRetard, residuelFactureCents } from "../lib/facturesEnRetard.js";
+import { VERTICAL_SETTING_KEY, DEFAULT_VERTICAL } from "../lib/vertical-tenant.js";
 
 const router: IRouter = Router();
 
@@ -112,9 +116,6 @@ function computeTotals(lines: FactureLine[], autoliquidation: boolean) {
   return { totalHTCents, totalTVACents, amountCents };
 }
 
-// Même clé et même défaut que routes/votre-metier.ts (US-A1.1).
-const VERTICAL_SETTING_KEY = "votre-metier.metier";
-const DEFAULT_VERTICAL: Vertical = "industrie_btp";
 
 /**
  * Charge les réglages entreprise d'un tenant, et son vertical (US-A2.5 :
@@ -612,6 +613,18 @@ router.post("/factures/:id/emettre", async (req, res): Promise<void> => {
 
   res.json({
     ...emitted,
+    /**
+     * US-A7.1 — les mentions manquantes NON bloquantes.
+     *
+     * Elles étaient calculées puis jetées : `blockers` seul était rendu, et
+     * une règle non bloquante (la décennale, par exemple) n'atteignait donc
+     * jamais l'utilisateur. Une vérification dont le résultat est écarté ne
+     * vérifie rien. Champ ADDITIF, sur le modèle d'`objectifsFranchis`
+     * juste en dessous — aucun appelant existant n'en dépend.
+     */
+    avertissementsMentions: mentionIssues
+      .filter((i) => !i.bloquant)
+      .map((i) => ({ code: i.code, message: i.message })),
     /** Objectifs franchis PAR CETTE ÉMISSION. Vide le reste du temps. */
     objectifsFranchis: franchis.map((f) => ({
       objectif: f.objectif,
@@ -720,6 +733,125 @@ router.post("/factures/:id/payer", async (req, res): Promise<void> => {
     return;
   }
   res.json(result.facture);
+});
+
+/**
+ * POST /devis/:id/facturer — la facture issue d'un devis accepté.
+ *
+ * ── Ce que cette route REFUSE de faire ────────────────────────────────────
+ * Émettre. Elle crée un BROUILLON : le numéro, la date d'émission et l'archive
+ * PDF appartiennent à `/factures/:id/emettre`, qui les pose dans la même
+ * transaction et de façon irréversible. Facturer d'un geste et émettre d'un
+ * autre, ce n'est pas une lourdeur — c'est la différence entre préparer un
+ * document et l'opposer à un client.
+ *
+ * ── L'invariant : la facture vaut le devis, au centime ────────────────────
+ * Un devis applique sa remise au SOUS-TOTAL ; une facture calcule ligne par
+ * ligne. Reporter l'un dans l'autre sans vérifier laisserait passer un écart
+ * d'arrondi — c'est-à-dire facturer un autre montant que celui qui a été
+ * accepté et signé. La conversion compare donc les deux totaux et REFUSE en
+ * cas d'écart, plutôt que de produire un document faux avec assurance.
+ */
+router.post("/devis/:id/facturer", async (req, res): Promise<void> => {
+  const tenantId = req.tenantId!;
+  const { id } = req.params;
+
+  const resultat = await withTenant(tenantId, async (tx) => {
+    const [d] = await tx.select().from(devisTable).where(eq(devisTable.id, id!));
+    if (!d) return { kind: "introuvable" as const };
+    if (d.status !== "ACCEPTE") return { kind: "non_accepte" as const, statut: d.status };
+
+    // Déjà facturé : on rend la facture existante plutôt qu'une erreur. Le
+    // geste est idempotent côté appelant, et l'index unique de la migration
+    // 049 tient le cas où deux requêtes arrivent ensemble.
+    const [deja] = await tx.select().from(facturesTable).where(eq(facturesTable.devisId, d.id));
+    if (deja) return { kind: "deja" as const, facture: deja };
+
+    if (d.lines.length === 0) return { kind: "sans_ligne" as const };
+
+    // La remise du devis est reportée sur CHAQUE prix unitaire, avec la même
+    // formule que celle des totaux du devis. Les lignes restent lisibles
+    // (« 10 m² à 45 € » devient « 10 m² à 42,75 € »), et le total suit.
+    const facteur = 1 - (d.remise ?? 0) / 100;
+    const lignes: FactureLine[] = d.lines.map((l) => ({
+      id: crypto.randomUUID(),
+      description: l.description,
+      quantity: l.quantity,
+      unitPriceCents: Math.round(l.unitPriceCents * facteur),
+      vatRate: d.tvaRate,
+      vatCategory: "S" as const,
+    }));
+
+    const { totalHTCents, totalTVACents, amountCents } = computeTotals(lignes, false);
+
+    // LA garde : ce qu'on s'apprête à facturer vaut-il ce qui a été accepté ?
+    // Un écart d'arrondi de quelques centimes est possible ; le taire ne l'est
+    // pas. L'écart est rendu à l'appelant, en centimes, pour qu'il tranche.
+    if (amountCents !== d.totalTTCCents) {
+      return {
+        kind: "ecart" as const,
+        attendu: d.totalTTCCents,
+        obtenu: amountCents,
+      };
+    }
+
+    const aujourdhui = toDateString(new Date());
+    const echeance = new Date();
+    echeance.setDate(echeance.getDate() + 30);
+
+    const [creee] = await tx
+      .insert(facturesTable)
+      .values({
+        tenantId,
+        customerName: d.clientName,
+        // Vide : le numéro séquentiel est attribué à L'ÉMISSION, jamais avant.
+        // Un brouillon numéroté trouerait la séquence s'il était supprimé.
+        number: "",
+        issuedDate: aujourdhui,
+        dueDate: toDateString(echeance),
+        amountCents,
+        residualCents: amountCents,
+        settled: false,
+        statut: "BROUILLON",
+        lines: lignes,
+        totalHTCents,
+        totalTVACents,
+        devisId: d.id,
+        ...(d.affaireId ? { affaireId: d.affaireId } : {}),
+        ...(d.notes ? { notes: d.notes } : {}),
+      })
+      .returning();
+
+    return { kind: "ok" as const, facture: creee! };
+  });
+
+  switch (resultat.kind) {
+    case "introuvable":
+      res.status(404).json({ error: "Devis introuvable." });
+      return;
+    case "non_accepte":
+      res.status(422).json({
+        error: "Seul un devis accepté se facture. Celui-ci est en " + resultat.statut + ".",
+      });
+      return;
+    case "sans_ligne":
+      res.status(422).json({ error: "Ce devis n'a aucune ligne : il n'y a rien à facturer." });
+      return;
+    case "ecart":
+      res.status(422).json({
+        error:
+          "La facture ne vaudrait pas le devis accepté (" +
+          (resultat.obtenu / 100).toFixed(2) + " € contre " +
+          (resultat.attendu / 100).toFixed(2) + " €). Rien n'a été créé.",
+      });
+      return;
+    case "deja":
+      res.status(200).json(resultat.facture);
+      return;
+    case "ok":
+      res.status(201).json(resultat.facture);
+      return;
+  }
 });
 
 export default router;

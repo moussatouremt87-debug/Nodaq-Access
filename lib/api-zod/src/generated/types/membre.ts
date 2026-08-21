@@ -12,5 +12,15 @@ export interface Membre {
   email: string;
   nom: string;
   role: MembreRole;
+  /**
+     * Qualificatif libre affiché à côté du rôle (ex. "Conjoint collaborateur"). N'affecte jamais les droits.
+     * @nullable
+     */
+  libelle?: string | null;
+  /**
+     * Échéance de l'accès (US-A5.4). null = permanent, ce que sont toutes les adhésions sauf celle d'un tiers de confiance (VIEWER).
+     * @nullable
+     */
+  expiresAt?: Date | null;
   createdAt: Date;
 }

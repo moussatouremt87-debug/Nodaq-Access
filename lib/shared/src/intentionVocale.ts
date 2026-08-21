@@ -125,6 +125,115 @@ export const IntentionAffecterMembre = z
   })
   .strict();
 
+
+/**
+ * Pointer des heures (ticket 4.21, lot 1).
+ *
+ * « Trois heures chez Delacroix aujourd'hui. » C'est la saisie qu'on repousse
+ * au vendredi et qu'on finit par faire de mémoire, donc mal — et c'est la
+ * seule qui se dicte naturellement en descendant du chantier, une main sur le
+ * volant posée.
+ *
+ * `heures` est un NOMBRE dicté, pas un nombre calculé : l'utilisateur le
+ * prononce, le modèle l'extrait, et la garde des chiffres inventés refuse
+ * tout ce qui n'était pas dans la phrase. La règle 3 interdit au modèle de
+ * calculer un total, pas de transcrire ce qu'il entend.
+ *
+ * Le rattachement est une MENTION, résolue par le serveur contre les affaires
+ * du tenant — jamais un identifiant fabriqué par le modèle.
+ */
+export const IntentionPointerHeures = z
+  .object({
+    type: z.literal("pointer_heures"),
+    affaireMentionnee: Mention,
+    membreMentionne: Mention.nullable().optional(),
+    /** Quart d'heure minimum, journée maximum : au-delà, c'est une erreur de
+     *  dictée, pas une longue journée. */
+    heures: z.number().min(0.25).max(24),
+    dateMentionnee: Mention.nullable().optional(),
+  })
+  .strict();
+
+
+/**
+ * Créer un client (ticket 4.21, lot 2).
+ *
+ * L'asymétrie la plus visible du vocabulaire vocal : on pouvait dicter un
+ * PROSPECT mais pas un CLIENT — alors que le client est l'objet auquel se
+ * rattachent affaires, devis et factures. « Nouveau client, Menuiserie
+ * Delacroix, à Rouen. »
+ *
+ * Le TYPE (particulier ou professionnel) n'est pas dicté : il commande des
+ * règles de démarchage différentes (voir `canauxProspection`), et le déduire
+ * d'un nom d'entreprise entendu serait une décision juridique prise par un
+ * modèle. Le serveur applique le défaut de la table, l'écran corrige.
+ */
+export const IntentionCreerClient = z
+  .object({
+    type: z.literal("creer_client"),
+    nom: Mention,
+    telephoneMentionne: Mention.nullable().optional(),
+    emailMentionne: Mention.nullable().optional(),
+    villeMentionnee: Mention.nullable().optional(),
+  })
+  .strict();
+
+
+/**
+ * Enregistrer un règlement reçu (ticket 4.21, lot 3).
+ *
+ * « Delacroix m'a réglé la 181. » L'artisan qui reçoit un chèque sur un
+ * chantier peut le consigner sur place, au lieu de le retrouver trois
+ * semaines plus tard dans une poche de veste.
+ *
+ * ── Aucun montant dans ce schéma, et c'est une garde qui l'a imposé ───────
+ * La première version acceptait un `montantEuros` dicté. Le test « AUCUN
+ * schéma d'intention ne déclare de champ monétaire » l'a refusée, et il avait
+ * raison : ce champ aurait fait produire un montant PAR LE MODÈLE, ce que la
+ * règle 3 interdit — un chiffre entendu de travers sur un règlement se
+ * retrouve en comptabilité.
+ *
+ * Le montant proposé est donc le SOLDE, calculé par le serveur depuis le
+ * journal des paiements. Un règlement partiel reste possible, et par le bon
+ * chemin : l'écran de validation affiche ce solde et laisse le CORRIGER
+ * (`CHAMPS_CORRIGEABLES`). Le chiffre vient alors des doigts de
+ * l'utilisateur, jamais de l'oreille de la machine.
+ */
+export const MOYENS_REGLEMENT_DICTABLES = ["VIREMENT", "CHEQUE", "ESPECES", "CB"] as const;
+
+export const IntentionEnregistrerReglement = z
+  .object({
+    type: z.literal("enregistrer_reglement"),
+    factureMentionnee: Mention,
+    moyen: z.enum(MOYENS_REGLEMENT_DICTABLES).nullable().optional(),
+  })
+  .strict();
+
+
+/**
+ * Lancer une campagne de relance (ticket 4.21, lot 3).
+ *
+ * « Relance mes impayés. » L'intention est VOLONTAIREMENT nue : aucun seuil,
+ * aucune liste de clients, aucun montant.
+ *
+ * ── Pourquoi si peu de champs ─────────────────────────────────────────────
+ * Le serveur sait déjà quelles factures sont en retard — il en existe UNE
+ * définition, partagée, dont un commentaire raconte le bug qu'avait causé sa
+ * duplication. Laisser le modèle proposer un seuil (« celles de plus de
+ * trente jours ») produirait une seconde définition du retard, entendue au
+ * téléphone.
+ *
+ * Et le tri fin n'a pas à se faire à la voix : la campagne arrive dans la
+ * file « à valider », où l'écran existant permet déjà d'EXCLURE un appel, de
+ * resserrer le mandat et de voir chaque montant. La voix déclenche, l'écran
+ * arbitre — c'est la règle 4 du dépôt, pas une limitation.
+ */
+export const IntentionLancerRelance = z
+  .object({
+    type: z.literal("lancer_relance"),
+  })
+  .strict();
+
 export const Intention = z.discriminatedUnion("type", [
   IntentionCreerAffaire,
   IntentionCreerProspect,
@@ -134,6 +243,10 @@ export const Intention = z.discriminatedUnion("type", [
   IntentionConsignerActivite,
   IntentionDeclarerAbsence,
   IntentionAffecterMembre,
+  IntentionPointerHeures,
+  IntentionCreerClient,
+  IntentionEnregistrerReglement,
+  IntentionLancerRelance,
 ]);
 export type Intention = z.infer<typeof Intention>;
 
@@ -162,6 +275,10 @@ export const TYPES_INTENTION = [
   "consigner_activite",
   "declarer_absence",
   "affecter_membre",
+  "pointer_heures",
+  "creer_client",
+  "enregistrer_reglement",
+  "lancer_relance",
 ] as const;
 export type TypeIntention = (typeof TYPES_INTENTION)[number];
 
@@ -296,4 +413,56 @@ export function interpreterDate(
   }
 
   return null;
+}
+
+// ── Ce qu'un humain peut CORRIGER avant de valider ──────────────────────────
+
+/**
+ * Champs corrigeables à l'écran de validation, par type d'intention.
+ *
+ * ── Pourquoi cette liste existe ───────────────────────────────────────────
+ * Un nom propre entendu par une machine devient facilement autre chose :
+ * « Menuiserie Delacroix » ressort en « Menuiserie de la Croix », et on ne
+ * s'en aperçoit qu'une fois la fiche créée. L'écran montrait ce qui allait
+ * être écrit sans permettre de le rectifier : il fallait tout annuler et
+ * redicter, ce que personne ne fait deux fois.
+ *
+ * ── Pourquoi une LISTE BLANCHE, et pas « tout est corrigeable » ───────────
+ * Les corrections voyagent depuis le navigateur, et le plan attend en base
+ * jusqu'à une heure. Laisser corriger n'importe quel champ reviendrait à
+ * laisser réécrire le plan : un `affaireId` remplacé à la main ne serait plus
+ * une correction de transcription, mais le choix d'une AUTRE cible que celle
+ * que le serveur a résolue et montrée à l'écran.
+ *
+ * Ne figurent donc ici que les champs issus de la DICTÉE — du texte et des
+ * nombres prononcés. Jamais un identifiant, jamais un résultat de
+ * rapprochement.
+ *
+ * Corriger `heures` est légitime et même souhaitable : la règle 3 interdit au
+ * MODÈLE de fixer un nombre, pas à l'utilisateur de rectifier le sien.
+ */
+export const CHAMPS_CORRIGEABLES: Record<TypeIntention, readonly string[]> = {
+  creer_affaire: ["label", "ville"],
+  creer_prospect: ["nom", "telephone", "ville"],
+  creer_client: ["nom", "telephone", "email", "ville"],
+  maj_statut_affaire: [],
+  creer_echeance: ["libelle"],
+  creer_entree_classeur: ["titre"],
+  consigner_activite: ["libelle"],
+  declarer_absence: [],
+  affecter_membre: [],
+  pointer_heures: ["heures"],
+  // Le montant se corrige — c'est un chiffre prononcé, et l'entendre de
+  // travers sur un règlement coûte cher. La FACTURE visée, elle, est un
+  // rapprochement : la changer désignerait un autre dossier.
+  enregistrer_reglement: ["montantCents"],
+  // Rien à corriger : la campagne ne porte aucun texte dicté. Le tri se fait
+  // dans la file de validation, où l'on exclut un appel d'un clic.
+  lancer_relance: [],
+};
+
+/** Le champ est-il corrigeable pour ce type d'opération ? */
+export function champCorrigeable(type: string, champ: string): boolean {
+  const liste = CHAMPS_CORRIGEABLES[type as TypeIntention];
+  return liste !== undefined && liste.includes(champ);
 }

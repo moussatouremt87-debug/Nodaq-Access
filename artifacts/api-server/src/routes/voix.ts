@@ -15,7 +15,8 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { getConfig, chatCompletion, LlmConfigError } from "@nodaq/llm";
-import { SortieModele, TYPES_INTENTION, STATUTS_AFFAIRE_DICTABLES, TYPES_ABSENCE_DICTABLES } from "@nodaq/shared";
+import { SortieModele, TYPES_INTENTION, STATUTS_AFFAIRE_DICTABLES, TYPES_ABSENCE_DICTABLES, affaireWords, type Vertical } from "@nodaq/shared";
+import { verticalDuTenant } from "../lib/vertical-tenant.js";
 import {
   chargerContexte,
   construirePlan,
@@ -43,6 +44,15 @@ const InterpreterBody = z.object({
 
 const ExecuterBody = z.object({
   planId: z.string().min(1),
+  /**
+   * Corrections saisies à l'écran de validation : index d'opération → champ →
+   * valeur. Un nom propre entendu par une machine devient facilement autre
+   * chose ; l'écran laisse rectifier avant d'écrire.
+   *
+   * Le SERVEUR décide de ce qui est corrigeable (`CHAMPS_CORRIGEABLES`) : ce
+   * schéma accepte la forme, pas le contenu.
+   */
+  corrections: z.record(z.string(), z.record(z.string(), z.string())).optional(),
 });
 
 /**
@@ -52,9 +62,12 @@ const ExecuterBody = z.object({
  * protège. Un modèle qui renverrait un identifiant ou un prix verrait sa
  * sortie refusée, pas corrigée.
  */
-function consigne(): string {
+function consigne(vertical: Vertical): string {
+  const words = affaireWords(vertical);
   return [
-    "Tu transformes une phrase dictée par un artisan du bâtiment en INTENTIONS.",
+    // US-A6.1 — « un artisan du bâtiment » était écrit en dur : le modèle
+    // interprétait la dictée d'un consultant à travers le prisme du BTP.
+    "Tu transformes une phrase dictée par un professionnel en INTENTIONS.",
     "",
     "Tu ne calcules rien, tu ne fixes aucun prix, tu n'inventes aucun identifiant.",
     "Tu rends UNIQUEMENT les faits dictés, tels qu'ils ont été dits.",
@@ -63,7 +76,8 @@ function consigne(): string {
     `Statuts d'affaire : ${STATUTS_AFFAIRE_DICTABLES.join(", ")}.`,
     `Types d'absence : ${TYPES_ABSENCE_DICTABLES.join(", ")}.`,
     "",
-    "Les noms de personnes, de chantiers et de villes sont rendus TELS QUELS.",
+    `Dans cette entreprise, une affaire se dit « ${words.singular} ».`,
+    `Les noms de personnes, de ${words.plural} et de villes sont rendus TELS QUELS.`,
     "Ne cherche pas à deviner à qui ils correspondent : ce n'est pas ton travail.",
     "Les dates sont rendues telles que dictées (« le 27 août », « lundi prochain »).",
     "",
@@ -92,12 +106,16 @@ router.post("/voix/interpreter", async (req, res): Promise<void> => {
     throw err;
   }
 
+  // US-A6.1 — relu à CHAQUE dictée : un changement de secteur s'applique dès
+  // la phrase suivante, sans redémarrage (AC3).
+  const vertical = await verticalDuTenant(tenantId);
+
   let brut: string;
   try {
     const reponse = await chatCompletion(
       config,
       [
-        { role: "system", content: consigne() },
+        { role: "system", content: consigne(vertical) },
         { role: "user", content: parsed.data.texte },
       ],
       undefined,
@@ -149,7 +167,12 @@ router.post("/voix/executer", async (req, res): Promise<void> => {
 
   let resultat;
   try {
-    resultat = await executerPlan(tenantId, parsed.data.planId);
+    resultat = await executerPlan(
+      tenantId,
+      parsed.data.planId,
+      { userId: req.session!.userId, email: req.session!.email },
+      parsed.data.corrections,
+    );
   } catch (err) {
     // Une opération a échoué : la transaction a tout annulé, y compris le
     // marquage. Le plan reste applicable une fois la cause corrigée.
@@ -163,6 +186,12 @@ router.post("/voix/executer", async (req, res): Promise<void> => {
   switch (resultat.kind) {
     case "introuvable":
       res.status(404).json({ error: "Plan introuvable." });
+      return;
+    case "correction_refusee":
+      // L'écran ne propose JAMAIS ces champs : une correction qui en porte un
+      // vient d'une requête forgée, pas d'un utilisateur. Rien n'a été écrit.
+      logger.warn({ champs: resultat.champs }, "[voix] correction hors liste blanche");
+      res.status(400).json({ error: "Correction non autorisée sur ce champ." });
       return;
     case "expire":
       res.status(410).json({

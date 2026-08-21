@@ -26,6 +26,7 @@ import {
   ScrollText,
   Landmark,
   LineChart,
+  FileClock,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { decennaleApplicable, type AffaireWords, type Vertical } from '@nodaq/shared';
@@ -45,6 +46,21 @@ export type NavItem = {
    * par défaut avant chargement ne masquent jamais une entrée à tort.
    */
   visibleForVertical?: (vertical: Vertical | undefined) => boolean;
+  /**
+   * Entrée conservée en MODE SIMPLIFIÉ (US-A8.4) — le strict nécessaire pour
+   * faire tourner l'entreprise : devis, facture, heures, et de quoi revenir
+   * en arrière.
+   *
+   * ABSENT = fonction avancée, masquée en mode simplifié. Ce sens-là est
+   * délibéré : une entrée ajoutée demain sans que personne n'ait tranché
+   * reste masquée. L'inverse ferait repousser le menu complet par
+   * inadvertance, chez précisément l'utilisateur qu'on cherchait à ne pas
+   * submerger.
+   *
+   * Rien n'est jamais SUPPRIMÉ : « Afficher toutes les fonctions » lève le
+   * filtre à la demande (AC2).
+   */
+  essentiel?: boolean;
 };
 
 export type NavSection = {
@@ -56,16 +72,16 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: 'Tableau de bord',
     items: [
-      { href: '/',      label: 'Cockpit',     icon: LayoutDashboard, testId: 'nav-cockpit' },
+      { href: '/',      label: 'Cockpit',     icon: LayoutDashboard, testId: 'nav-cockpit', essentiel: true },
       { href: '/brief', label: 'Brief matin', icon: Sunrise,         testId: 'nav-brief' },
-      { href: '/chat',  label: 'Agent IA',    icon: MessageSquare,   testId: 'nav-chat' },
+      { href: '/chat',  label: 'Agent IA',    icon: MessageSquare,   testId: 'nav-chat', essentiel: true },
     ],
   },
   {
     label: 'Commercial',
     items: [
       { href: '/affaires',  label: 'Affaires',  icon: Briefcase, testId: 'nav-affaires' },
-      { href: '/devis',     label: 'Devis',     icon: FileText,  testId: 'nav-devis' },
+      { href: '/devis',     label: 'Devis',     icon: FileText,  testId: 'nav-devis', essentiel: true },
       { href: '/contrats',  label: 'Contrats',  icon: Repeat,    testId: 'nav-contrats' },
       { href: '/prospects', label: 'Prospects', icon: Users,     testId: 'nav-prospects' },
       {
@@ -82,17 +98,22 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: 'Finance',
     items: [
-      { href: '/factures',   label: 'Factures',         icon: Receipt,       testId: 'nav-factures',   requiredRoles: FINANCIAL_ROLES },
+      { href: '/factures',   label: 'Factures',         icon: Receipt,       testId: 'nav-factures',   requiredRoles: FINANCIAL_ROLES, essentiel: true },
       { href: '/avoirs',     label: 'Avoirs',           icon: FileText,      testId: 'nav-avoirs',     requiredRoles: FINANCIAL_ROLES },
       { href: '/analytique', label: 'Activité',          icon: BarChart2,     testId: 'nav-analytique' },
-      { href: '/pointages',  label: 'Heures',           icon: CalendarCheck, testId: 'nav-pointages' },
-      { href: '/devis/dictee', label: 'Devis dicté',    icon: Mic,           testId: 'nav-devis-dictee' },
+      { href: '/pointages',  label: 'Heures',           icon: CalendarCheck, testId: 'nav-pointages', essentiel: true },
+      { href: '/devis/dictee', label: 'Devis dicté',    icon: Mic,           testId: 'nav-devis-dictee', essentiel: true },
       { href: '/marge',      label: 'Marge',            icon: TrendingUp,    testId: 'nav-marge',      requiredRoles: FINANCIAL_ROLES },
       { href: '/rapports',   label: 'Rapports',         icon: FileBarChart,  testId: 'nav-rapports',   requiredRoles: FINANCIAL_ROLES },
       { href: '/echeancier',      label: 'Échéancier fiscal',   icon: CalendarClock,   testId: 'nav-echeancier',      requiredRoles: FINANCIAL_ROLES },
       { href: '/charges-recurrentes', label: 'Charges récurrentes', icon: Landmark,    testId: 'nav-charges-recurrentes', requiredRoles: FINANCIAL_ROLES },
       { href: '/previsionnel-tresorerie', label: 'Prévisionnel',   icon: LineChart,    testId: 'nav-previsionnel-tresorerie', requiredRoles: FINANCIAL_ROLES },
       { href: '/compte-resultat', label: 'Compte de résultat', icon: FileSpreadsheet, testId: 'nav-compte-resultat', requiredRoles: FINANCIAL_ROLES },
+      // US-A5.2 — console cabinet. `requiredRoles` ne suffit pas : l'entrée
+      // n'a de sens que pour un utilisateur qui a PLUSIEURS espaces, une
+      // condition qui ne dépend ni du rôle ni du secteur et qui est donc
+      // filtrée dans `app-shell.tsx` (voir `peutVoir`).
+      { href: '/cabinet', label: 'Cabinet', icon: Building2, testId: 'nav-cabinet', requiredRoles: FINANCIAL_ROLES },
     ],
   },
   {
@@ -107,41 +128,62 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: '/equipe',       label: 'Équipe & plannings', icon: UserCog,  testId: 'nav-equipe',       requiredRoles: ['OWNER'] },
       { href: '/votre-metier', label: 'Votre métier',       icon: Hammer,   testId: 'nav-votre-metier' },
       { href: '/connecteurs',  label: 'Connecteurs',        icon: Plug2,    testId: 'nav-connecteurs',  requiredRoles: ['OWNER'] },
-      { href: '/parametres',   label: 'Paramètres',         icon: Settings2, testId: 'nav-parametres',  requiredRoles: ['OWNER'] },
+      { href: '/parametres',   label: 'Paramètres',         icon: Settings2, testId: 'nav-parametres',  requiredRoles: ['OWNER'], essentiel: true },
       // Sous-entrée de Paramètres : l'envoi se règle une fois, on n'y revient pas.
       { href: '/parametres/envoi', label: 'Envoi des documents', icon: Send, testId: 'nav-parametres-envoi' },
       { href: '/onboarding',   label: 'Profil entreprise',   icon: Building2,   testId: 'nav-onboarding',  requiredRoles: ['OWNER'] },
       { href: '/reprise',      label: 'Reprise des données', icon: DatabaseZap, testId: 'nav-reprise',     requiredRoles: ['OWNER'] },
       { href: '/facturation-electronique', label: 'Facturation électronique', icon: ScrollText, testId: 'nav-facturation-electronique', requiredRoles: ['OWNER'] },
+      // US-A6.4 — pièce à produire en cas de contrôle : c'est l'OWNER qui la
+      // produit, pas un collaborateur. Même gating que le routeur serveur.
+      { href: '/journal-decisions', label: 'Journal des décisions', icon: FileClock, testId: 'nav-journal-decisions', requiredRoles: ['OWNER'] },
     ],
   },
 ];
 
-export const MOBILE_NAV: Array<{
-  href: string;
-  label: string;
-  icon: LucideIcon;
-  requiredRoles?: readonly MembershipRole[];
-}> = [
-  { href: '/',             label: 'Cockpit',    icon: LayoutDashboard },
+/**
+ * Type DÉRIVÉ de `NavItem` plutôt que réécrit : les deux menus partagent les
+ * mêmes attributs de visibilité, et une troisième déclaration finirait par
+ * diverger — un `essentiel` posé d'un côté, oublié de l'autre.
+ */
+/**
+ * La barre du POUCE — ticket 4.20.
+ *
+ * Quatre destinations, en bas de l'écran, atteignables sans changer de prise.
+ * Quatre et pas quatorze : une bande de quatorze entrées qu'il faut faire
+ * défiler horizontalement n'est pas une navigation, c'est une liste cachée —
+ * on ne trouve que ce qu'on savait déjà chercher.
+ *
+ * Le RESTE n'est pas perdu : la cinquième case de la barre ouvre le menu
+ * complet (`NAV_SECTIONS`), donc toutes les destinations du bureau sont
+ * atteignables au téléphone. C'est ce que vérifie `nav.test.ts`, et c'est le
+ * trou que ce ticket ferme : 14 destinations sur 47 auparavant.
+ */
+export const MOBILE_NAV: Array<
+  Pick<NavItem, 'href' | 'label' | 'icon' | 'requiredRoles' | 'essentiel'>
+> = [
+  { href: '/',             label: 'Cockpit',    icon: LayoutDashboard, essentiel: true },
   // Deuxième position, délibérément : le devis dicté est la fonction sur
   // laquelle repose le produit, et l'artisan qui la veut est justement celui
   // qui est sur un chantier avec son téléphone.
-  { href: '/devis/dictee', label: 'Devis dicté', icon: Mic },
+  { href: '/devis/dictee', label: 'Devis dicté', icon: Mic, essentiel: true },
   { href: '/affaires',     label: 'Affaires',   icon: Briefcase },
-  { href: '/devis',        label: 'Devis',      icon: FileText },
-  { href: '/factures',     label: 'Factures',   icon: Receipt,      requiredRoles: FINANCIAL_ROLES },
-  { href: '/pointages',    label: 'Heures',     icon: CalendarCheck },
-  { href: '/marge',        label: 'Marge',      icon: TrendingUp,   requiredRoles: FINANCIAL_ROLES },
-  { href: '/echeancier',   label: 'Fiscal',     icon: CalendarClock, requiredRoles: FINANCIAL_ROLES },
-  { href: '/classeur',     label: 'Classeur',   icon: FolderOpen },
-  { href: '/chat',         label: 'Agent IA',   icon: MessageSquare },
-  // Plateforme screens (auth-gated at route level)
-  { href: '/equipe',       label: 'Équipe',     icon: UserCog,      requiredRoles: ['OWNER'] },
-  { href: '/votre-metier', label: 'Métier',     icon: Hammer },
-  { href: '/connecteurs',  label: 'Connecteurs', icon: Plug2,       requiredRoles: ['OWNER'] },
-  { href: '/parametres',   label: 'Paramètres', icon: Settings2,    requiredRoles: ['OWNER'] },
+  { href: '/pointages',    label: 'Heures',     icon: CalendarCheck, essentiel: true },
 ];
+
+/**
+ * Toutes les destinations atteignables depuis un téléphone.
+ *
+ * Exportée pour que la garde de parité lise EXACTEMENT ce que la coquille
+ * rend : une garde qui recompose la liste de son côté finit par vérifier une
+ * autre application que celle qu'on livre.
+ */
+export function destinationsMobiles(): string[] {
+  return [
+    ...MOBILE_NAV.map((item) => item.href),
+    ...NAV_SECTIONS.flatMap((section) => section.items.map((item) => item.href)),
+  ];
+}
 
 /** Returns true when the given nav href matches the current location. */
 export function navIsActive(href: string, location: string): boolean {

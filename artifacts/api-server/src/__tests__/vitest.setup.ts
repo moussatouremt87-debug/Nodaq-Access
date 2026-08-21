@@ -23,6 +23,12 @@ import { randomBytes } from "node:crypto";
 
 const FAKE_LLM_BASE = "http://fake-llm.internal.test";
 
+// Hôte factice de la plateforme vocale (ticket 4.18-bis). Les tests qui
+// veulent éprouver le DÉCLENCHEMENT posent ELEVENLABS_BASE_URL dessus ; les
+// autres laissent la variable absente et la route répond « non configuré » —
+// aucun test n'atteint jamais la vraie plateforme.
+export const FAKE_ELEVENLABS_BASE = "http://fake-elevenlabs.internal.test";
+
 // ── 1. Inject fake LLM env vars ───────────────────────────────────────────────
 process.env["LLM_BASE_URL"]      = FAKE_LLM_BASE;
 process.env["LLM_API_KEY"]       = "vitest-fake-key";
@@ -63,6 +69,21 @@ globalThis.fetch = async function patchedFetch(
       : input instanceof URL
         ? input.href
         : (input as Request).url;
+
+  if (url.startsWith(FAKE_ELEVENLABS_BASE)) {
+    if (url.endsWith("/v1/convai/twilio/outbound-call")) {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: "queued (simulateur vitest)",
+          conversation_id: "conv-vitest-1",
+          callSid: "CA-vitest-1",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }
+    return new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } });
+  }
 
   if (url.startsWith(FAKE_LLM_BASE)) {
     // STT endpoint — return a minimal valid transcription response.
@@ -176,6 +197,59 @@ globalThis.fetch = async function patchedFetch(
                           }],
                           nonCompris: [],
                         }
+                      : userText.includes("voix-test-relance")
+                        ? { intentions: [{ type: "lancer_relance" }], nonCompris: [] }
+                      : userText.includes("voix-test-reglement-cheque")
+                        ? {
+                            intentions: [{
+                              type: "enregistrer_reglement",
+                              factureMentionnee: "Delacroix",
+                              moyen: "CHEQUE",
+                            }],
+                            nonCompris: [],
+                          }
+                      : userText.includes("voix-test-reglement")
+                        ? {
+                            // Aucun montant : « il m'a payé » = le solde.
+                            intentions: [{
+                              type: "enregistrer_reglement",
+                              factureMentionnee: "Delacroix",
+                            }],
+                            nonCompris: [],
+                          }
+                      : userText.includes("voix-test-client")
+                        ? {
+                            intentions: [{
+                              type: "creer_client",
+                              nom: "Menuiserie Delacroix",
+                              telephoneMentionne: "06 12 34 56 78",
+                              villeMentionnee: "Rouen",
+                            }],
+                            nonCompris: [],
+                          }
+                      : userText.includes("voix-test-pointage-sans-nom")
+                        ? {
+                            // Sans membre dicté : « trois heures chez Dupont ».
+                            // C'est le cas nominal du chantier — on pointe en
+                            // descendant du camion, on ne se nomme pas soi-même.
+                            intentions: [{
+                              type: "pointer_heures",
+                              affaireMentionnee: "Dupont",
+                              heures: 3,
+                            }],
+                            nonCompris: [],
+                          }
+                      : userText.includes("voix-test-pointage")
+                        ? {
+                            intentions: [{
+                              type: "pointer_heures",
+                              affaireMentionnee: "Dupont",
+                              membreMentionne: "Sophie",
+                              heures: 7.5,
+                              dateMentionnee: "hier",
+                            }],
+                            nonCompris: [],
+                          }
                       : userText.includes("voix-test-absence")
                         ? {
                             intentions: [{
@@ -226,6 +300,51 @@ globalThis.fetch = async function patchedFetch(
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       );
+    }
+
+    // ── Formulation des répliques de l'agent vocal (4.18) ──────────────────
+    //
+    // Le simulateur produit délibérément des répliques FAUTIVES quand on le lui
+    // demande — un chiffre inventé, une menace. C'est le seul moyen d'éprouver
+    // les gardes de sortie de la route : un simulateur qui ne rendrait que du
+    // conforme laisserait croire que les gardes fonctionnent sans jamais les
+    // avoir vues se déclencher (règle 7 du CLAUDE.md).
+    if (userText.includes("objectif :")) {
+      const repondre = (contenu: string): Response =>
+        new Response(
+          JSON.stringify({
+            id: "chatcmpl-vitest-formulation",
+            object: "chat.completion",
+            model: "test/fake-chat-model",
+            choices: [{ index: 0, message: { role: "assistant", content: contenu }, finish_reason: "stop" }],
+            usage: { prompt_tokens: 40, completion_tokens: 15, total_tokens: 55 },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+
+      // Panne du modèle : `chatCompletion` lève, la route doit prononcer le filet.
+      if (userText.includes("formulation-test-panne")) {
+        return new Response('{"error":"boom"}', { status: 500 });
+      }
+      if (userText.includes("formulation-test-menace")) {
+        return repondre("Sans règlement rapide, on passe au contentieux.");
+      }
+      if (userText.includes("formulation-test-chiffre")) {
+        // 9999 ne figure dans aucun fait : la garde de la règle 3 doit mordre.
+        return repondre("Alors, vous réglez 9999 euros. C'est bien ça ?");
+      }
+      if (userText.includes("formulation-test-nom")) {
+        // Le cas que la minimisation doit attraper : le modèle reprend le nom
+        // que le débiteur vient de donner.
+        return repondre("Ah d'accord monsieur Delacroix. Je note et je transmets.");
+      }
+      if (userText.includes("formulation-test-courrier")) {
+        return repondre("Nous vous prions de bien vouloir procéder au règlement.");
+      }
+      // Cas nominal : une réplique parlée, sans aucun chiffre, qui rebondit.
+      // Elle est volontairement encadrée de guillemets — un modèle en met
+      // malgré la consigne, et la route doit les retirer sans toucher au reste.
+      return repondre('"Ah, d\'accord. Alors, je note ça."');
     }
 
     // create_prospect simulation: one round only (no pending tool result)

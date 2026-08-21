@@ -57,3 +57,17 @@ attached_assets/
 .env
 .env.*
 !.env.example
+
+# Front bundlé recopié dans le paquet API par `build.mjs` — sortie de build,
+# au même titre que `dist`.
+artifacts/api-server/public
+
+# Python — `services/voice` (ticket 4.18). L'environnement est reconstruit par
+# `uv sync` depuis `uv.lock`, qui LUI est versionné : c'est le pendant de
+# `pnpm-lock.yaml`, et une CI qui ne le lit pas ne teste pas ce qu'on livre.
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

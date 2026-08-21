@@ -9,6 +9,7 @@ import {
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
+import { CONTRAINTES_AUDIO } from '@/hooks/use-dictee';
 
 const API_BASE = '/api';
 
@@ -202,7 +203,10 @@ export function useChat() {
   const startRecording = useCallback(async () => {
     if (isRecording) return;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Mêmes contraintes que le micro flottant : la discussion se dicte dans
+      // les mêmes cuisines et les mêmes ateliers (US-A8.1). Deux réglages de
+      // captation pour un seul produit n'auraient aucune justification.
+      const stream = await navigator.mediaDevices.getUserMedia(CONTRAINTES_AUDIO);
       audioStreamRef.current = stream;
       audioChunksRef.current = [];
 

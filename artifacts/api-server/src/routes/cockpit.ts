@@ -14,10 +14,8 @@ import {
 import { caNetCentsSql, nbFacturesCaSql, conditionFactureCa } from "../lib/chiffreAffaires.js";
 import { conditionFactureEnRetardSql } from "../lib/facturesEnRetard.js";
 import { maskFinancialFields } from "../lib/maskFinancialFields.js";
+import { verticalDepuisTx } from "../lib/vertical-tenant.js";
 
-// Même clé et même défaut que routes/votre-metier.ts (US-A1.1)/factures.ts.
-const VERTICAL_SETTING_KEY = "votre-metier.metier";
-const DEFAULT_VERTICAL: Vertical = "industrie_btp";
 
 const router: IRouter = Router();
 
@@ -77,10 +75,7 @@ router.get("/cockpit/kpis", async (req, res): Promise<void> => {
     // ne recalcule PAS "en retard" : `conditionFactureEnRetardSql`, appelée
     // avec le SEUIL décalé du délai sectoriel plutôt qu'avec `aujourdhui`,
     // reste l'unique définition (voir `seuilRetardSignificatif`).
-    const [verticalRow] = await tx.select({ value: settingsTable.value }).from(settingsTable).where(
-      sql`${settingsTable.key} = ${VERTICAL_SETTING_KEY}`,
-    );
-    const vertical = (verticalRow?.value as Vertical | undefined) ?? DEFAULT_VERTICAL;
+    const vertical = await verticalDepuisTx(tx);
     const delaiPaiementUsuelJours = verticalPack(vertical).delaiPaiementUsuelJours;
     const seuilSignificatif = seuilRetardSignificatif(aujourdhui, delaiPaiementUsuelJours);
     const [totalImpayeSignificatif] = await tx

@@ -16,7 +16,7 @@
 import { describe, test, expect } from "vitest";
 import { readFileSync } from "fs";
 import { join } from "path";
-import { NAV_SECTIONS } from "./nav";
+import { NAV_SECTIONS, destinationsMobiles } from "./nav";
 
 const RACINE = join(__dirname, "..");
 const SOURCE_NAV = readFileSync(join(RACINE, "lib", "nav.ts"), "utf8");
@@ -104,6 +104,41 @@ describe("navigation mobile — les fonctions principales sont atteignables", ()
 
   test("le paramétrage d'envoi figure explicitement dans les menus", () => {
     expect(NAV_SECTIONS_HREFS).toContain("/parametres/envoi");
+  });
+});
+
+// ── Parité mobile ↔ bureau (ticket 4.20) ───────────────────────────────────
+
+describe("parité mobile — un téléphone atteint TOUT ce qu'un bureau atteint", () => {
+  // Le trou que ce ticket ferme : la garde d'origine se contentait qu'une
+  // route figure dans l'UN des deux menus. Trente-trois destinations vivaient
+  // donc au bureau seulement, sans que rien n'échoue — atteignables en tapant
+  // l'URL, c'est-à-dire pas atteignables.
+  test("aucune destination du bureau n'est hors de portée sur mobile", () => {
+    const mobiles = new Set(destinationsMobiles());
+    const inatteignables = NAV_SECTIONS_HREFS.filter((href) => !mobiles.has(href)).sort();
+
+    expect(
+      inatteignables,
+      `Ces écrans figurent au menu du bureau et pas sur mobile : ` +
+        `${inatteignables.join(", ")}. La feuille « Plus » rend NAV_SECTIONS ; ` +
+        `si elle ne les couvre plus, c'est que la coquille a divergé.`,
+    ).toEqual([]);
+  });
+
+  test("la barre du pouce reste COURTE — quatre entrées, pas quatorze", () => {
+    // Une bande qu'il faut faire défiler horizontalement n'est pas une
+    // navigation : on n'y trouve que ce qu'on savait déjà chercher. La
+    // découverte passe par « Plus », qui ouvre le menu complet.
+    expect(MOBILE_NAV_HREFS.length).toBeLessThanOrEqual(4);
+  });
+
+  test("`destinationsMobiles` couvre la barre ET la feuille", () => {
+    // La garde ci-dessus ne vaut que si cette fonction dit la vérité sur ce
+    // que la coquille rend. Elle est exportée pour ça, et lue par les deux.
+    const toutes = destinationsMobiles();
+    for (const href of MOBILE_NAV_HREFS) expect(toutes).toContain(href);
+    for (const href of NAV_SECTIONS_HREFS) expect(toutes).toContain(href);
   });
 });
 

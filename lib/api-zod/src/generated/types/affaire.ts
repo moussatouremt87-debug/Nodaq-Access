@@ -39,6 +39,8 @@ export interface Affaire {
   avancementPct?: number | null;
   /** @nullable */
   dateFinPrevue?: Date | null;
+  /** Types d'habilitation requis pour affecter un salarié à cette affaire (US-A4.4). Avertissement, jamais bloquant. */
+  habilitationsRequises?: string[];
   createdAt: Date;
   updatedAt: Date;
 }

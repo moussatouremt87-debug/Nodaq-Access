@@ -316,3 +316,34 @@ describe("g — POST /api/auth/login reflète l'état MFA sans fuiter tenantId/r
     expect(res.body.mfaStatus).toBeUndefined();
   });
 });
+
+// ── e. L'enrôlement depuis un TÉLÉPHONE (ticket 4.20) ─────────────────────
+
+describe("e — l'enrôlement doit être possible sur l'appareil qu'on tient", () => {
+  test("l'enrôlement rend l'URI otpauth, pas seulement un QR code", async () => {
+    // Le défaut, signalé par le fondateur en testant depuis son téléphone :
+    // on ne photographie pas un QR code affiché sur l'écran qu'on tient. Sans
+    // l'URI, l'enrôlement mobile n'a pour repli que la saisie à la main d'une
+    // clé de 32 caractères — et personne ne la saisit sans faute.
+    const u = await creerUtilisateur("OWNER", "owner-otpauth");
+    const cookie = await sessionEnAttente(u.userId);
+
+    const { body } = await request(app)
+      .post("/api/mfa/enroll")
+      .set("Cookie", cookie)
+      .expect(200);
+
+    const { secret, qrDataUri, otpauthUri } = body as {
+      secret: string; qrDataUri: string; otpauthUri: string;
+    };
+
+    expect(qrDataUri, "le QR reste, pour un enrôlement depuis un autre appareil")
+      .toMatch(/^data:image/);
+    expect(otpauthUri, "l'URI otpauth manque : l'enrôlement mobile est impossible")
+      .toMatch(/^otpauth:\/\/totp\//);
+    // Le POINT : l'URI porte le MÊME secret que celui affiché. Deux secrets
+    // différents produiraient une application d'authentification qui génère
+    // des codes refusés — sans que rien ne l'explique à l'utilisateur.
+    expect(otpauthUri).toContain(`secret=${secret}`);
+  });
+});

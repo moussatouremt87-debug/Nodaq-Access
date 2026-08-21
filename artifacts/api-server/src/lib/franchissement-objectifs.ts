@@ -42,7 +42,7 @@ import {
   debutExercicePrecedent,
   toDateString,
   calculerSeuilRentabilite,
-  CLE_TAUX_MARGE,
+  resoudreTauxMargeBps,
   CLE_CHARGES_FIXES,
 } from "@nodaq/shared";
 import { caNetCentsSql, statutsCaSql } from "./chiffreAffaires.js";
@@ -109,9 +109,13 @@ export async function etatObjectifs(
       const n = Number(v);
       return Number.isFinite(n) ? n : null;
     };
+    // US-A3.3 : le taux de marge peut venir d'une répartition par catégorie
+    // (commerce à marges variables) autant que du taux unique — un seul
+    // résolveur partagé avec la route /cockpit/objectifs, pour ne pas
+    // dupliquer une deuxième fois cette lecture.
     const seuil = calculerSeuilRentabilite({
       chargesFixesAnnuellesCents: nombre(CLE_CHARGES_FIXES),
-      tauxMargeBps: nombre(CLE_TAUX_MARGE),
+      tauxMargeBps: resoudreTauxMargeBps(Object.fromEntries(parCle)),
     });
 
     const premiere = historique?.premiere ?? null;

@@ -8,5 +8,11 @@
 import type { RoleMembreBodyRole } from './roleMembreBodyRole';
 
 export interface RoleMembreBody {
+  /** OWNER n'est accepté ici que pour un membre déjà OWNER (mise à jour du libellé sans changement de rôle) — la promotion d'un MEMBER/ACCOUNTANT en OWNER via cette route est toujours refusée par le serveur. */
   role: RoleMembreBodyRole;
+  /**
+     * Qualificatif libre facultatif ; absent = inchangé, null = effacé.
+     * @nullable
+     */
+  libelle?: string | null;
 }

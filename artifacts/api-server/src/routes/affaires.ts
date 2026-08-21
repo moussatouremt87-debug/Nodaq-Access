@@ -14,6 +14,23 @@ import { maskFinancialFields } from "../lib/maskFinancialFields.js";
 
 const router: IRouter = Router();
 
+// US-A4.4 : habilitations_requises est un JSON texte (même patron que
+// team_members.schedule) — jamais un crash sur une valeur héritée invalide.
+function parseHabilitationsRequises(raw: string): string[] {
+  try {
+    const val = JSON.parse(raw);
+    return Array.isArray(val) ? val : [];
+  } catch {
+    return [];
+  }
+}
+
+function avecHabilitationsParsees<T extends { habilitationsRequises: string }>(
+  affaire: T,
+): Omit<T, "habilitationsRequises"> & { habilitationsRequises: string[] } {
+  return { ...affaire, habilitationsRequises: parseHabilitationsRequises(affaire.habilitationsRequises) };
+}
+
 // Les affaires mêlent des données de travail qu'un MEMBER doit voir
 // (libellé, client, statut, dates) à des montants réservés à OWNER/
 // ACCOUNTANT — masqués champ par champ, PAS bloqués en entier : voir
@@ -67,7 +84,7 @@ router.get("/affaires", async (req, res): Promise<void> => {
 
   const totalQuotedCents = affaires.reduce((acc, a) => acc + (a.quotedAmountCents ?? a.montantVenduHt ?? 0), 0);
   const affairesMasquees = affaires.map((a) =>
-    maskFinancialFields(a, ["quotedAmountCents", "invoicedAmountCents", "marginCents", "montantVenduHt"], financier),
+    maskFinancialFields(avecHabilitationsParsees(a), ["quotedAmountCents", "invoicedAmountCents", "marginCents", "montantVenduHt"], financier),
   );
   res.json(maskFinancialFields(
     { affaires: affairesMasquees, total: affaires.length, totalQuotedCents },
@@ -95,6 +112,7 @@ router.post("/affaires", async (req, res): Promise<void> => {
       notes: data.notes ?? null,
       startDate,
       reference: `AFF-${refNum}`,
+      ...(data.habilitationsRequises ? { habilitationsRequises: JSON.stringify(data.habilitationsRequises) } : {}),
     }).returning();
     await tx.insert(activityTable).values({
       tenantId,
@@ -105,7 +123,7 @@ router.post("/affaires", async (req, res): Promise<void> => {
     return affaire;
   });
 
-  res.status(201).json(affaire);
+  res.status(201).json(avecHabilitationsParsees(affaire!));
 });
 
 router.get("/affaires/:id", async (req, res): Promise<void> => {
@@ -117,7 +135,7 @@ router.get("/affaires/:id", async (req, res): Promise<void> => {
   );
   if (!affaire) { res.status(404).json({ error: "Affaire not found" }); return; }
   res.json(maskFinancialFields(
-    affaire,
+    avecHabilitationsParsees(affaire),
     ["quotedAmountCents", "invoicedAmountCents", "marginCents", "montantVenduHt"],
     hasFinancialAccess(req.session?.role),
   ));
@@ -145,13 +163,16 @@ router.patch("/affaires/:id", async (req, res): Promise<void> => {
     const rawFin = data.dateFinPrevue as unknown as Date | string | null;
     updateData.dateFinPrevue = rawFin instanceof Date ? toDateString(rawFin) : rawFin;
   }
+  if (data.habilitationsRequises !== undefined) {
+    updateData.habilitationsRequises = JSON.stringify(data.habilitationsRequises);
+  }
 
   const tenantId = req.tenantId!;
   const [affaire] = await withTenant(tenantId, async (tx) =>
     tx.update(affairesTable).set(updateData).where(eq(affairesTable.id, params.data.id)).returning()
   );
   if (!affaire) { res.status(404).json({ error: "Affaire not found" }); return; }
-  res.json(affaire);
+  res.json(avecHabilitationsParsees(affaire));
 });
 
 router.delete("/affaires/:id", async (req, res): Promise<void> => {

@@ -2,7 +2,12 @@ import { Router, type IRouter } from "express";
 import { withTenant, settingsTable } from "@workspace/db";
 import { inArray } from "drizzle-orm";
 import { z } from "zod";
-import { verifierReglagesObjectifs } from "@nodaq/shared";
+import {
+  verifierReglagesObjectifs,
+  verifierIban,
+  normaliserIban,
+  messageRefusIban,
+} from "@nodaq/shared";
 
 const router: IRouter = Router();
 
@@ -14,9 +19,12 @@ const DEFAULTS: Record<string, string> = {
   "notif.actionAvalider": "true",
   "notif.prospectQualifie": "false",
   "notif.echeanceFiscale": "true",
-  "modules.classeur": "true",
-  "modules.marge": "true",
-  "modules.rapport": "true",
+  // Les trois bascules « modules.* » ont été retirées : elles étaient
+  // écrites en base et LUES PAR PERSONNE, alors que l'écran Paramètres
+  // promettait que « les modules désactivés restent disponibles dans la
+  // navigation mais leurs données sont masquées ». Le produit modélise déjà
+  // les modules dans `moduleCatalog.ts` — autrement, et mieux. Une seule
+  // vérité, et pas de promesse qui ne soit tenue par personne.
 };
 
 const SetSettingsBody = z.record(z.string(), z.string());
@@ -51,6 +59,24 @@ router.patch("/parametres", async (req, res): Promise<void> => {
   if (refus.length > 0) {
     res.status(400).json({ error: refus.map((r) => r.message).join(" "), refus });
     return;
+  }
+
+  // ── L'IBAN qui recevra l'argent ─────────────────────────────────────────
+  //
+  // Ticket 4.19 : c'est le bénéficiaire des liens de paiement. Une faute de
+  // frappe ne produit pas un message d'erreur plus tard — elle fait échouer
+  // tous les liens du tenant, ou pire, désigne un autre compte. La clé de
+  // contrôle se vérifie donc ICI, avant l'écriture, et l'IBAN est rangé
+  // normalisé : deux saisies du même compte ne doivent pas produire deux
+  // valeurs différentes en base.
+  const ibanSaisi = parsed.data["company.iban"];
+  if (ibanSaisi !== undefined && ibanSaisi.trim() !== "") {
+    const refus = verifierIban(ibanSaisi);
+    if (refus) {
+      res.status(400).json({ error: messageRefusIban(refus) });
+      return;
+    }
+    parsed.data["company.iban"] = normaliserIban(ibanSaisi);
   }
 
   const tenantId = req.tenantId!;

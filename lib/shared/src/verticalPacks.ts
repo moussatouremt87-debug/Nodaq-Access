@@ -45,7 +45,7 @@
  */
 
 /** Bump à chaque ajout de pack ou correction de vocabulaire. */
-export const VERTICAL_PACKS_VERSION = "2026-08-16";
+export const VERTICAL_PACKS_VERSION = "2026-08-17";
 
 /**
  * Verticaux STORABLES, dans l'ordre d'affichage : la cible du pivot d'abord,
@@ -144,6 +144,14 @@ export interface VerticalPack {
    * `retardPaiement.ts` pour le calcul de sévérité qui consomme ce champ.
    */
   readonly delaiPaiementUsuelJours: number;
+  /**
+   * Le mot pour un prestataire externe (indépendant, intérimaire,
+   * sous-traitant) — coûté dans les affaires, jamais compté dans la
+   * capacité RH interne (US-A4.3). Même doctrine que `proposalWord` : des
+   * mots bruts, pas une structure `AffaireWords` complète — aucun usage
+   * actuel n'a besoin d'article ni d'accord.
+   */
+  readonly externalWorkerWords: { readonly singular: string; readonly plural: string };
 }
 
 const AFFAIRE: AffaireWords = {
@@ -211,6 +219,15 @@ const DOSSIER: AffaireWords = {
   noneLabel: "Aucun dossier",
 };
 
+// Mots de prestataire externe (US-A4.3) — mêmes trois registres cités par le
+// backlog lui-même : "sous-traitant" (bâtiment), "freelance" (un consultant
+// qui fait appel à...), "extra" (un restaurant qui fait appel à...) ; les
+// verticaux restants prennent le registre neutre "intérimaire".
+const SOUS_TRAITANT_WORDS = { singular: "sous-traitant", plural: "sous-traitants" };
+const FREELANCE_WORDS = { singular: "freelance", plural: "freelances" };
+const EXTRA_WORDS = { singular: "extra", plural: "extras" };
+const INTERIMAIRE_WORDS = { singular: "intérimaire", plural: "intérimaires" };
+
 /**
  * Les packs. Exhaustif par construction (`Record<Vertical, …>`) : ajouter un
  * vertical sans lui écrire de pack ne compile pas.
@@ -229,6 +246,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     words: CHANTIER,
     proposalWord: "Devis",
     delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
+    externalWorkerWords: SOUS_TRAITANT_WORDS,
   },
   paysage: {
     id: "paysage",
@@ -239,6 +257,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     words: CHANTIER,
     proposalWord: "Devis",
     delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
+    externalWorkerWords: SOUS_TRAITANT_WORDS,
   },
   evenementiel: {
     id: "evenementiel",
@@ -249,6 +268,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     // Prestation ponctuelle, réglée à l'événement (acompte + solde à la
     // prestation) — pas un cycle B2B à délai long.
     delaiPaiementUsuelJours: COMPTANT,
+    externalWorkerWords: EXTRA_WORDS,
   },
   maintenance: {
     id: "maintenance",
@@ -257,6 +277,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     words: INTERVENTION,
     proposalWord: "Devis",
     delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
+    externalWorkerWords: SOUS_TRAITANT_WORDS,
   },
   services_projet: {
     id: "services_projet",
@@ -265,6 +286,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     words: MISSION,
     proposalWord: "Proposition commerciale",
     delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
+    externalWorkerWords: FREELANCE_WORDS,
   },
   industrie_btp: {
     id: "industrie_btp",
@@ -276,6 +298,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     words: CHANTIER,
     proposalWord: "Devis",
     delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
+    externalWorkerWords: SOUS_TRAITANT_WORDS,
   },
   services: {
     id: "services",
@@ -284,6 +307,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     words: MISSION,
     proposalWord: "Proposition commerciale",
     delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
+    externalWorkerWords: INTERIMAIRE_WORDS,
   },
   negoce: {
     id: "negoce",
@@ -296,6 +320,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     proposalWord: "Devis",
     // Vente comptant en majorité, comme le retail.
     delaiPaiementUsuelJours: COMPTANT,
+    externalWorkerWords: INTERIMAIRE_WORDS,
   },
   retail: {
     id: "retail",
@@ -305,6 +330,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     proposalWord: "Devis",
     // Le cas nommé explicitement par l'AC1 de US-A3.1.
     delaiPaiementUsuelJours: COMPTANT,
+    externalWorkerWords: INTERIMAIRE_WORDS,
   },
   // ── Cible du pivot multi-secteur (US-A1.1) ──────────────────────────────
   restauration_chr: {
@@ -317,6 +343,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     proposalWord: "Devis",
     // Paiement à table/caisse, immédiat.
     delaiPaiementUsuelJours: COMPTANT,
+    externalWorkerWords: EXTRA_WORDS,
   },
   services_personne: {
     id: "services_personne",
@@ -328,6 +355,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     // tranché prudemment vers le délai standard : classer à tort en comptant
     // masquerait un indicateur utile, l'erreur inverse est sans conséquence.
     delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
+    externalWorkerWords: INTERIMAIRE_WORDS,
   },
   professions_liberales: {
     id: "professions_liberales",
@@ -336,6 +364,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     words: MISSION,
     proposalWord: "Proposition commerciale",
     delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
+    externalWorkerWords: FREELANCE_WORDS,
   },
   artisanat_service: {
     id: "artisanat_service",
@@ -348,6 +377,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     // pack (`words: PRESTATION`) : un choix unique et prudent, pas une
     // sous-catégorie que ce fichier ne porte pas.
     delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
+    externalWorkerWords: INTERIMAIRE_WORDS,
   },
   services_entreprises: {
     id: "services_entreprises",
@@ -356,6 +386,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     words: INTERVENTION,
     proposalWord: "Proposition commerciale",
     delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
+    externalWorkerWords: SOUS_TRAITANT_WORDS,
   },
   transport: {
     id: "transport",
@@ -366,6 +397,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     words: MISSION,
     proposalWord: "Devis",
     delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
+    externalWorkerWords: SOUS_TRAITANT_WORDS,
   },
   sante_liberale: {
     id: "sante_liberale",
@@ -376,6 +408,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     // Tiers payant/mutuelle = délai structurel, souvent plus long qu'un B2B
     // classique — même côté de la frontière que le délai standard.
     delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
+    externalWorkerWords: INTERIMAIRE_WORDS,
   },
   autre: {
     id: "autre",
@@ -388,6 +421,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     // vertical inconnu ici ; `DEFAULT_METIER` d'onboarding vaut
     // `industrie_btp`, lui-même délai standard).
     delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
+    externalWorkerWords: INTERIMAIRE_WORDS,
   },
 };
 
@@ -446,6 +480,29 @@ export function delaiPaiementUsuelJours(vertical: string | null | undefined): nu
 /** Pack d'un tenant, avec repli neutre. Seule porte d'accès aux données métier
  *  d'un vertical : une feature qui indexerait `VERTICAL_PACKS` à la main
  *  planterait sur une valeur inconnue venue de la base. */
+/**
+ * Secteurs dont l'exercice est couvert par un SECRET PROFESSIONNEL légal
+ * (US-A7.2). Le praticien engage sa responsabilité propre sur ce que l'outil
+ * fait de la donnée de ses patients ou de ses clients — pas seulement celle de
+ * NODAQ.
+ *
+ * Ces deux secteurs sont proposés à l'onboarding aujourd'hui : la question
+ * n'est pas théorique.
+ *
+ * Le point d'attention de la story est explicite et vaut d'être répété ici :
+ * ouvrir réellement un secteur à secret professionnel renforcé demande une
+ * revue juridique dédiée. Cette liste sert le classement technique, elle ne
+ * vaut pas validation légale.
+ */
+export const SECRET_PROFESSIONNEL_VERTICALS = [
+  "sante_liberale",
+  "professions_liberales",
+] as const satisfies readonly Vertical[];
+
+export function estSecretProfessionnel(vertical: string | null | undefined): boolean {
+  return (SECRET_PROFESSIONNEL_VERTICALS as readonly string[]).includes(vertical ?? "");
+}
+
 export function verticalPack(vertical: string | null | undefined): VerticalPack {
   if (!vertical) return VERTICAL_PACKS.autre;
   return (VERTICALS as readonly string[]).includes(vertical)

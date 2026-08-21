@@ -31,7 +31,7 @@ import {
   devisTable,
 } from "@workspace/db";
 import { eq, and, count } from "drizzle-orm";
-import { toDateString } from "@nodaq/shared";
+import { toDateString, compteDansCapacite } from "@nodaq/shared";
 
 // ── Validation SIRET (Luhn, inlinée pour éviter la dépendance circulaire) ────
 
@@ -237,7 +237,7 @@ onboardingReadRouter.get("/reprise/capacite-equipe", async (req, res): Promise<v
   }
 
   const capaciteJours = membres
-    .filter(m => m.typeLien !== "SOUS_TRAITANT")
+    .filter(m => compteDansCapacite(m.typeLien))
     .reduce((sum, m) => sum + (m.joursParSemaine ?? 5), 0);
 
   const coutMensuelTotal = membres
