@@ -309,7 +309,7 @@ button, input, textarea { font: inherit; color: inherit; }
 .hero__top { display: flex; justify-content: center; padding: 18px 0 44px; }
 
 /* Vidéo d'ambiance : décorative, muette, jamais un obstacle à la lecture.
-   Chargée par le script uniquement si écran ≥ 1024 px et sans
+   Chargée par le script uniquement si écran ≥ 640 px et sans
    prefers-reduced-motion — sinon la page reste telle quelle. Bien visible
    en haut du hero ; le voile se renforce vers le bas pour que titre et CTA
    restent parfaitement lisibles. */
@@ -1349,9 +1349,10 @@ button, input, textarea { font: inherit; color: inherit; }
 
   /* ── Vidéo d'ambiance du hero (décorative) ──────────────────────────────
      Fichier auto-hébergé à côté de la page (déposé par le script de build
-     au déploiement — voir README). Chargée UNIQUEMENT sur écran ≥ 1024 px
-     et sans prefers-reduced-motion (brief §9 : aucune valeur de conversion
-     sur mobile, où elle coûte bande passante et batterie — 646 Ko). En cas
+     au déploiement — voir README). Chargée sur écran ≥ 640 px et sans
+     prefers-reduced-motion — seuil demandé par le fondateur après essai en
+     réel, qui prime sur le « desktop uniquement » du brief §9 (la vidéo ne
+     pèse que 646 Ko ; seuls les petits mobiles gardent le poster). En cas
      d'échec ou de fichier absent, la page reste identique (le poster
      couvre, le dégradé fait le reste). */
   var VIDEO_FOND = "bg-quotidien.mp4";
@@ -1362,7 +1363,7 @@ button, input, textarea { font: inherit; color: inherit; }
   var VIDEO_FOND_WEBM = "bg-quotidien.webm";
   (function () {
     var v = document.getElementById("bg-video");
-    if (!v || reduced || window.innerWidth < 1024) return;
+    if (!v || reduced || window.innerWidth < 640) return;
     var s1 = document.createElement("source");
     s1.src = VIDEO_FOND;
     s1.type = "video/mp4";
