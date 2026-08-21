@@ -69,6 +69,7 @@ import {
   resoudreMention,
   interpreterDate,
   toDateString,
+  champCorrigeable,
 } from "@nodaq/shared";
 import { verticalDepuisTx } from "./vertical-tenant.js";
 
@@ -741,6 +742,8 @@ async function executerOperation(
 
 export type ResultatExecution =
   | { readonly kind: "introuvable" }
+  /** Une correction portait sur un champ hors liste blanche : rien n'est écrit. */
+  | { readonly kind: "correction_refusee"; readonly champs: readonly string[] }
   | { readonly kind: "expire" }
   | { readonly kind: "deja_applique"; readonly executeLe: Date }
   | { readonly kind: "ok"; readonly nbOperations: number };
@@ -756,6 +759,46 @@ export type ResultatExecution =
  * écrite. Un plan à moitié appliqué est le pire résultat — l'artisan croit
  * avoir tout dicté.
  */
+/**
+ * Corrections apportées à l'écran avant validation : index d'opération →
+ * champ → nouvelle valeur. Voir `appliquerCorrections`.
+ */
+export type CorrectionsPlan = Readonly<Record<string, Readonly<Record<string, string>>>>;
+
+/**
+ * Applique les corrections de l'utilisateur au plan, en n'acceptant QUE les
+ * champs issus de la dictée (`CHAMPS_CORRIGEABLES`).
+ *
+ * Tout le reste est ignoré en silence côté données, mais COMPTÉ : un champ
+ * refusé n'est pas une faute de l'utilisateur — l'écran ne les propose pas —
+ * c'est le signe d'une requête forgée, et l'appelant la refuse.
+ *
+ * Ce qui est en jeu : un `affaireId` réécrit à la main ne serait pas une
+ * correction de transcription, mais le choix d'une AUTRE cible que celle que
+ * le serveur a résolue et montrée à l'écran. La validation humaine porterait
+ * alors sur un libellé qui ne décrit plus l'opération exécutée.
+ */
+export function appliquerCorrections(
+  operations: readonly OperationPlanifiee[],
+  corrections: CorrectionsPlan,
+): { readonly operations: readonly OperationPlanifiee[]; readonly refuses: readonly string[] } {
+  const refuses: string[] = [];
+  const sortie = operations.map((op, i) => {
+    const patch = corrections[String(i)];
+    if (!patch) return op;
+    const champs: Record<string, string | null> = { ...op.champs };
+    for (const [champ, valeur] of Object.entries(patch)) {
+      if (!champCorrigeable(op.type, champ)) {
+        refuses.push(`${op.type}.${champ}`);
+        continue;
+      }
+      champs[champ] = valeur;
+    }
+    return { ...op, champs };
+  });
+  return { operations: sortie, refuses };
+}
+
 export async function executerPlan(
   tenantId: string,
   planId: string,
@@ -763,6 +806,8 @@ export async function executerPlan(
    *  (`/voix/executer` et `/pending-actions/:id/approve`) ; sans lui le
    *  journal ne prouverait que la date, pas l'auteur. */
   decideur?: { userId: string; email: string },
+  /** Corrections saisies à l'écran de validation, déjà filtrées ou non. */
+  corrections?: CorrectionsPlan,
 ): Promise<ResultatExecution> {
   return withTenant(tenantId, async (tx) => {
     const [ligne] = await tx
@@ -777,7 +822,13 @@ export async function executerPlan(
     }
 
     const plan = ligne.payload as Plan | null;
-    const operations = plan?.operations ?? [];
+    const brutes = plan?.operations ?? [];
+    // Les corrections sont appliquées AVANT toute écriture, et le résultat
+    // filtré est ce qui s'exécute — pas le plan d'origine.
+    const { operations, refuses } = corrections
+      ? appliquerCorrections(brutes, corrections)
+      : { operations: brutes, refuses: [] as readonly string[] };
+    if (refuses.length > 0) return { kind: "correction_refusee" as const, champs: refuses };
 
     // Le marquage se fait AVANT les écritures, sous condition `executeLe IS
     // NULL` : deux requêtes simultanées passent le contrôle ci-dessus, mais

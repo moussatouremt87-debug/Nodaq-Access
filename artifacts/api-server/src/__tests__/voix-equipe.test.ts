@@ -394,3 +394,88 @@ describe("f — creer_client, aller-retour complet", () => {
     expect(rows[0].n).toBe(1);
   });
 });
+
+// ── g. Corriger avant de valider (ticket 4.21) ───────────────────────────────
+//
+// Un nom propre entendu par une machine devient facilement autre chose. L'écran
+// montrait ce qui allait être écrit sans permettre de le rectifier : il fallait
+// tout annuler et redicter, ce que personne ne fait deux fois.
+
+describe("g — l'humain corrige le texte avant que ça s'écrive", () => {
+  test("un nom mal entendu se corrige, et c'est la CORRECTION qui est écrite", async () => {
+    const t = await inscrire("correction");
+
+    const { body } = await interpreter(t, "voix-test-client").expect(200);
+    expect(body.operations[0].champs.nom).toBe("Menuiserie Delacroix");
+
+    await request(app)
+      .post("/api/voix/executer")
+      .set("Cookie", t.cookie)
+      .send({
+        planId: body.planId,
+        corrections: { "0": { nom: "Menuiserie de la Croix", ville: "Le Havre" } },
+      })
+      .expect(200);
+
+    const { rows } = await adminPool.query(
+      `SELECT nom, ville FROM clients WHERE tenant_id = $1::uuid`,
+      [t.tenantId],
+    );
+    expect(rows[0].nom).toBe("Menuiserie de la Croix");
+    expect(rows[0].ville).toBe("Le Havre");
+  });
+
+  test("corriger un IDENTIFIANT est refusé — et rien ne s'écrit", async () => {
+    // Le point de sécurité : un `affaireId` réécrit à la main ne serait plus
+    // une correction de transcription, mais le choix d'une AUTRE cible que
+    // celle que le serveur a résolue et montrée. La validation humaine
+    // porterait alors sur un libellé qui ne décrit plus l'opération.
+    const t = await inscrire("correction-forgee");
+    await createTestTeamMember(t.tenantId, "Sophie");
+    await affaire(t, "Dupont");
+
+    const { body } = await interpreter(t, "voix-test-pointage").expect(200);
+
+    const r = await request(app)
+      .post("/api/voix/executer")
+      .set("Cookie", t.cookie)
+      .send({ planId: body.planId, corrections: { "0": { affaireId: "affaire-d-un-autre" } } })
+      .expect(400);
+    expect(r.body.error).toMatch(/non autoris/i);
+
+    const { rows } = await adminPool.query(
+      `SELECT count(*)::int AS n FROM pointages WHERE tenant_id = $1::uuid`,
+      [t.tenantId],
+    );
+    expect(rows[0].n).toBe(0);
+
+    // Et le plan reste applicable : un refus n'a pas consommé la validation.
+    await executer(t, body.planId).expect(200);
+    const { rows: apres } = await adminPool.query(
+      `SELECT count(*)::int AS n FROM pointages WHERE tenant_id = $1::uuid`,
+      [t.tenantId],
+    );
+    expect(apres[0].n).toBe(1);
+  });
+
+  test("un nombre dicté se corrige aussi — c'est l'humain qui le pose", async () => {
+    // La règle 3 interdit au MODÈLE de fixer un nombre, pas à l'utilisateur de
+    // rectifier le sien.
+    const t = await inscrire("correction-heures");
+    await createTestTeamMember(t.tenantId, "Sophie");
+    await affaire(t, "Dupont");
+
+    const { body } = await interpreter(t, "voix-test-pointage").expect(200);
+    await request(app)
+      .post("/api/voix/executer")
+      .set("Cookie", t.cookie)
+      .send({ planId: body.planId, corrections: { "0": { heures: "8" } } })
+      .expect(200);
+
+    const { rows } = await adminPool.query(
+      `SELECT heures::float AS heures FROM pointages WHERE tenant_id = $1::uuid`,
+      [t.tenantId],
+    );
+    expect(rows[0].heures).toBe(8);
+  });
+});

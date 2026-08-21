@@ -354,3 +354,48 @@ export function interpreterDate(
 
   return null;
 }
+
+// ── Ce qu'un humain peut CORRIGER avant de valider ──────────────────────────
+
+/**
+ * Champs corrigeables à l'écran de validation, par type d'intention.
+ *
+ * ── Pourquoi cette liste existe ───────────────────────────────────────────
+ * Un nom propre entendu par une machine devient facilement autre chose :
+ * « Menuiserie Delacroix » ressort en « Menuiserie de la Croix », et on ne
+ * s'en aperçoit qu'une fois la fiche créée. L'écran montrait ce qui allait
+ * être écrit sans permettre de le rectifier : il fallait tout annuler et
+ * redicter, ce que personne ne fait deux fois.
+ *
+ * ── Pourquoi une LISTE BLANCHE, et pas « tout est corrigeable » ───────────
+ * Les corrections voyagent depuis le navigateur, et le plan attend en base
+ * jusqu'à une heure. Laisser corriger n'importe quel champ reviendrait à
+ * laisser réécrire le plan : un `affaireId` remplacé à la main ne serait plus
+ * une correction de transcription, mais le choix d'une AUTRE cible que celle
+ * que le serveur a résolue et montrée à l'écran.
+ *
+ * Ne figurent donc ici que les champs issus de la DICTÉE — du texte et des
+ * nombres prononcés. Jamais un identifiant, jamais un résultat de
+ * rapprochement.
+ *
+ * Corriger `heures` est légitime et même souhaitable : la règle 3 interdit au
+ * MODÈLE de fixer un nombre, pas à l'utilisateur de rectifier le sien.
+ */
+export const CHAMPS_CORRIGEABLES: Record<TypeIntention, readonly string[]> = {
+  creer_affaire: ["label", "ville"],
+  creer_prospect: ["nom", "telephone", "ville"],
+  creer_client: ["nom", "telephone", "email", "ville"],
+  maj_statut_affaire: [],
+  creer_echeance: ["libelle"],
+  creer_entree_classeur: ["titre"],
+  consigner_activite: ["libelle"],
+  declarer_absence: [],
+  affecter_membre: [],
+  pointer_heures: ["heures"],
+};
+
+/** Le champ est-il corrigeable pour ce type d'opération ? */
+export function champCorrigeable(type: string, champ: string): boolean {
+  const liste = CHAMPS_CORRIGEABLES[type as TypeIntention];
+  return liste !== undefined && liste.includes(champ);
+}
