@@ -154,6 +154,30 @@ export const IntentionPointerHeures = z
   })
   .strict();
 
+
+/**
+ * Créer un client (ticket 4.21, lot 2).
+ *
+ * L'asymétrie la plus visible du vocabulaire vocal : on pouvait dicter un
+ * PROSPECT mais pas un CLIENT — alors que le client est l'objet auquel se
+ * rattachent affaires, devis et factures. « Nouveau client, Menuiserie
+ * Delacroix, à Rouen. »
+ *
+ * Le TYPE (particulier ou professionnel) n'est pas dicté : il commande des
+ * règles de démarchage différentes (voir `canauxProspection`), et le déduire
+ * d'un nom d'entreprise entendu serait une décision juridique prise par un
+ * modèle. Le serveur applique le défaut de la table, l'écran corrige.
+ */
+export const IntentionCreerClient = z
+  .object({
+    type: z.literal("creer_client"),
+    nom: Mention,
+    telephoneMentionne: Mention.nullable().optional(),
+    emailMentionne: Mention.nullable().optional(),
+    villeMentionnee: Mention.nullable().optional(),
+  })
+  .strict();
+
 export const Intention = z.discriminatedUnion("type", [
   IntentionCreerAffaire,
   IntentionCreerProspect,
@@ -164,6 +188,7 @@ export const Intention = z.discriminatedUnion("type", [
   IntentionDeclarerAbsence,
   IntentionAffecterMembre,
   IntentionPointerHeures,
+  IntentionCreerClient,
 ]);
 export type Intention = z.infer<typeof Intention>;
 
@@ -193,6 +218,7 @@ export const TYPES_INTENTION = [
   "declarer_absence",
   "affecter_membre",
   "pointer_heures",
+  "creer_client",
 ] as const;
 export type TypeIntention = (typeof TYPES_INTENTION)[number];
 

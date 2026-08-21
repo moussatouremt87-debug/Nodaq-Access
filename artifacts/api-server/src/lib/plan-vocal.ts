@@ -58,6 +58,7 @@ import {
   teamMembersTable,
   journalDecisionsTable,
   pointagesTable,
+  clientsTable,
 } from "@workspace/db";
 import {
   type Intention,
@@ -149,6 +150,8 @@ function libelleOperation(intention: Intention, words: AffaireWords): string {
       return `Affecter « ${intention.membreMentionne} » sur « ${intention.affaireMentionnee} »`;
     case "pointer_heures":
       return `Pointer ${intention.heures} h sur « ${intention.affaireMentionnee} »`;
+    case "creer_client":
+      return `Créer le client « ${intention.nom} »`;
   }
 }
 
@@ -248,6 +251,23 @@ export function construirePlan(
           ville: intention.villeMentionnee ?? null,
           dateDebut,
         },
+        certitude: "aucune_resolution",
+      });
+      continue;
+    }
+
+    if (intention.type === "creer_client") {
+      operations.push({
+        type: intention.type,
+        libelle: libelleOperation(intention, words),
+        champs: {
+          nom: intention.nom,
+          telephone: intention.telephoneMentionne ?? null,
+          email: intention.emailMentionne ?? null,
+          ville: intention.villeMentionnee ?? null,
+        },
+        // Rien à rapprocher : on CRÉE. Un rapprochement approximatif sur un
+        // client existant fusionnerait deux dossiers, ce qui ne se défait pas.
         certitude: "aucune_resolution",
       });
       continue;
@@ -557,6 +577,20 @@ async function executerOperation(
         status: "PROSPECT",
         ...(op.champs["clientNom"] ? { clientName: op.champs["clientNom"] } : {}),
         ...(op.champs["dateDebut"] ? { startDate: op.champs["dateDebut"] } : {}),
+      });
+      return;
+    }
+    case "creer_client": {
+      await tx.insert(clientsTable).values({
+        tenantId,
+        nom: op.champs["nom"]!,
+        // Le TYPE n'est pas dicté : particulier et professionnel n'obéissent
+        // pas aux mêmes règles de démarchage (voir `canauxProspection`), et
+        // le déduire d'un nom entendu serait une décision juridique prise par
+        // un modèle. Le défaut de la table s'applique, l'écran corrige.
+        ...(op.champs["telephone"] ? { telephone: op.champs["telephone"] } : {}),
+        ...(op.champs["email"] ? { email: op.champs["email"] } : {}),
+        ...(op.champs["ville"] ? { ville: op.champs["ville"] } : {}),
       });
       return;
     }

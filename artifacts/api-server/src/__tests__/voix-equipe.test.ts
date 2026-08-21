@@ -351,3 +351,46 @@ describe("e — pointer_heures, aller-retour complet", () => {
     expect(rows[0].n).toBe(0);
   });
 });
+
+// ── f. Créer un client à la voix (ticket 4.21, lot 2) ────────────────────────
+
+describe("f — creer_client, aller-retour complet", () => {
+  test("« nouveau client … à Rouen » → une ligne réelle, type NON dicté", async () => {
+    const t = await inscrire("client");
+
+    const { body } = await interpreter(t, "voix-test-client").expect(200);
+    expect(body.operations).toHaveLength(1);
+    expect(body.operations[0].libelle).toContain("Menuiserie Delacroix");
+
+    await executer(t, body.planId).expect(200);
+
+    const { rows } = await adminPool.query(
+      `SELECT nom, ville, telephone, type FROM clients WHERE tenant_id = $1::uuid`,
+      [t.tenantId],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].nom).toBe("Menuiserie Delacroix");
+    expect(rows[0].ville).toBe("Rouen");
+    // Le TYPE reste le défaut de la table : particulier et professionnel
+    // n'obéissent pas aux mêmes règles de démarchage, et le déduire d'un nom
+    // d'entreprise entendu serait une décision juridique prise par un modèle.
+    expect(rows[0].type).toBe("PARTICULIER");
+  });
+
+  test("rejeu du même plan → aucun doublon de client", async () => {
+    const t = await inscrire("client-rejeu");
+    const { body } = await interpreter(t, "voix-test-client").expect(200);
+
+    await executer(t, body.planId).expect(200);
+    const second = await executer(t, body.planId).expect(200);
+    expect(second.body.deja).toBe(true);
+
+    const { rows } = await adminPool.query(
+      `SELECT count(*)::int AS n FROM clients WHERE tenant_id = $1::uuid`,
+      [t.tenantId],
+    );
+    // Un client créé deux fois, c'est un dossier dédoublé — et une fusion
+    // manuelle plus tard, si quelqu'un s'en aperçoit.
+    expect(rows[0].n).toBe(1);
+  });
+});

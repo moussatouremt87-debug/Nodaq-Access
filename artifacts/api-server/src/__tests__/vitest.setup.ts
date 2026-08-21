@@ -197,6 +197,16 @@ globalThis.fetch = async function patchedFetch(
                           }],
                           nonCompris: [],
                         }
+                      : userText.includes("voix-test-client")
+                        ? {
+                            intentions: [{
+                              type: "creer_client",
+                              nom: "Menuiserie Delacroix",
+                              telephoneMentionne: "06 12 34 56 78",
+                              villeMentionnee: "Rouen",
+                            }],
+                            nonCompris: [],
+                          }
                       : userText.includes("voix-test-pointage-sans-nom")
                         ? {
                             // Sans membre dicté : « trois heures chez Dupont ».
