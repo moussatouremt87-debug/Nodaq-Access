@@ -44,6 +44,15 @@ const InterpreterBody = z.object({
 
 const ExecuterBody = z.object({
   planId: z.string().min(1),
+  /**
+   * Corrections saisies à l'écran de validation : index d'opération → champ →
+   * valeur. Un nom propre entendu par une machine devient facilement autre
+   * chose ; l'écran laisse rectifier avant d'écrire.
+   *
+   * Le SERVEUR décide de ce qui est corrigeable (`CHAMPS_CORRIGEABLES`) : ce
+   * schéma accepte la forme, pas le contenu.
+   */
+  corrections: z.record(z.string(), z.record(z.string(), z.string())).optional(),
 });
 
 /**
@@ -158,10 +167,12 @@ router.post("/voix/executer", async (req, res): Promise<void> => {
 
   let resultat;
   try {
-    resultat = await executerPlan(tenantId, parsed.data.planId, {
-      userId: req.session!.userId,
-      email: req.session!.email,
-    });
+    resultat = await executerPlan(
+      tenantId,
+      parsed.data.planId,
+      { userId: req.session!.userId, email: req.session!.email },
+      parsed.data.corrections,
+    );
   } catch (err) {
     // Une opération a échoué : la transaction a tout annulé, y compris le
     // marquage. Le plan reste applicable une fois la cause corrigée.
@@ -175,6 +186,12 @@ router.post("/voix/executer", async (req, res): Promise<void> => {
   switch (resultat.kind) {
     case "introuvable":
       res.status(404).json({ error: "Plan introuvable." });
+      return;
+    case "correction_refusee":
+      // L'écran ne propose JAMAIS ces champs : une correction qui en porte un
+      // vient d'une requête forgée, pas d'un utilisateur. Rien n'a été écrit.
+      logger.warn({ champs: resultat.champs }, "[voix] correction hors liste blanche");
+      res.status(400).json({ error: "Correction non autorisée sur ce champ." });
       return;
     case "expire":
       res.status(410).json({
