@@ -181,6 +181,9 @@ button, input, textarea { font: inherit; color: inherit; }
 .shell--wide { max-width: 1040px; }
 /* Filet hairline entre sections — rythme de relevé bancaire. */
 .section { padding: 68px 0; position: relative; overflow: hidden; border-top: 1px solid var(--border); }
+/* Variante resserrée : bloc court entre deux sections (méthode). */
+.section--slim { padding: 40px 0 !important; }
+.methode p { margin: 0; font-size: 15px; line-height: 1.8; color: var(--text-soft); }
 
 /* Index de section : la numérotation réelle du prompt (S.02 → S.08),
    en mono registre au-dessus du titre. */
@@ -765,6 +768,20 @@ button, input, textarea { font: inherit; color: inherit; }
 .confirm__skip:hover { color: var(--text-soft); }
 .confirm__done { display: none; margin-top: 16px; font-size: 14.5px; color: var(--lime-pale); }
 .confirm__done.is-visible { display: block; }
+.confirm__rdv {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+  font-size: 14.5px;
+  line-height: 1.7;
+  color: var(--text-soft);
+}
+.confirm__rdv a {
+  color: var(--lime);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.confirm__rdv a:hover { color: var(--lime-hover); }
 
 /* ── Footer minimal ─────────────────────────────────────────────────────── */
 .footer {
@@ -1129,6 +1146,25 @@ button, input, textarea { font: inherit; color: inherit; }
   </div>
 </section>
 
+<!-- ═══ MÉTHODE (sans numéro — brief §7) ════════════════════════════════
+     La page reste impersonnelle (décision arrêtée : pas de section
+     fondateur). La crédibilité repose sur la méthode : uniquement des faits
+     vérifiables. Le nombre d'entretiens est un jeton tant que le fondateur
+     ne l'a pas fourni — ne jamais écrire de formulation vague à la place. -->
+<section class="section section--slim" aria-label="D'où viennent ces constats">
+  <div class="shell">
+    <div class="card methode reveal">
+      <p>
+        D’où viennent ces constats : des chiffres publics, tous sourcés plus haut
+        (Coface, CAPEB, Ipsos/Payt) ; des entretiens menés avec des dirigeants de
+        TPE — <span class="placeholder-token">[À COMPLÉTER : nombre d’entretiens
+        menés et métiers interrogés]</span> ; et le choix de ne montrer que l’état
+        réel du produit, jamais des maquettes marketing.
+      </p>
+    </div>
+  </div>
+</section>
+
 <!-- ═══ S6 · LES 50 PREMIERS ════════════════════════════════════════════ -->
 <section class="section" id="fondateurs">
   <div class="shell">
@@ -1230,6 +1266,14 @@ button, input, textarea { font: inherit; color: inherit; }
         <button class="confirm__skip" type="button" id="irritant-skip">Ignorer</button>
       </div>
       <p class="confirm__done" id="confirm-done"></p>
+      <!-- Proposition d'échange (brief §7) : moment de plus fort engagement.
+           Masquée tant que le lien de rendez-vous n'est pas configuré
+           (constante LIEN_RDV dans le script) — jamais de lien mort. -->
+      <p class="confirm__rdv" id="confirm-rdv" hidden>
+        15 minutes pour peser sur ce que nodaq construit en premier ?
+        Vos retours tranchent le secteur et la fonctionnalité prioritaires.
+        <a id="rdv-lien" href="#" rel="noopener">Réserver un échange</a>.
+      </p>
     </div>
   </div>
 </section>
@@ -1277,6 +1321,10 @@ button, input, textarea { font: inherit; color: inherit; }
      prefers-reduced-motion ; en cas d'échec ou de fichier absent, la page
      reste identique (le poster couvre, le dégradé fait le reste). */
   var VIDEO_FOND = "bg-quotidien.mp4";
+
+  /* Lien de prise de rendez-vous post-inscription (brief §7). Tant que le
+     jeton subsiste, la proposition reste masquée — jamais de lien mort. */
+  var LIEN_RDV = "[À COMPLÉTER : lien Cal.com]";
   var VIDEO_FOND_WEBM = "bg-quotidien.webm";
   (function () {
     var v = document.getElementById("bg-video");
@@ -1439,6 +1487,13 @@ button, input, textarea { font: inherit; color: inherit; }
       form.hidden = true;
       if (riskEl) riskEl.hidden = true;
       confirmEl.classList.add("is-visible");
+      // Proposition d'échange : seulement si le lien est configuré.
+      if (LIEN_RDV.charAt(0) !== "[") {
+        var rdvLien = document.getElementById("rdv-lien");
+        rdvLien.href = LIEN_RDV;
+        rdvLien.addEventListener("click", function () { track("clic_rdv"); });
+        document.getElementById("confirm-rdv").hidden = false;
+      }
       confirmEl.querySelector("textarea").focus();
     }).catch(function () {
       showError("L’envoi a échoué — réessayez dans un instant.");
