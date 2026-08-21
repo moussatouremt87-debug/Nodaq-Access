@@ -197,6 +197,12 @@ globalThis.fetch = async function patchedFetch(
                           }],
                           nonCompris: [],
                         }
+                      : userText.includes("voix-test-catalogue")
+                        ? { intentions: [{ type: "creer_article_catalogue", designation: "Pose de placo", unite: "m2" }], nonCompris: [] }
+                      : userText.includes("voix-test-charge")
+                        ? { intentions: [{ type: "creer_charge_recurrente", libelle: "Assurance decennale", cadence: "mensuel", categorie: "ASSURANCE" }], nonCompris: [] }
+                      : userText.includes("voix-test-contrat")
+                        ? { intentions: [{ type: "creer_contrat", libelle: "Entretien annuel", cadence: "annuel", clientMentionne: "Delacroix" }], nonCompris: [] }
                       : userText.includes("voix-test-facturer")
                         ? { intentions: [{ type: "facturer_devis", devisMentionne: "Delacroix" }], nonCompris: [] }
                       : userText.includes("voix-test-relance")

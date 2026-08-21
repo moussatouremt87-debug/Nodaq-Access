@@ -62,6 +62,9 @@ import {
   facturesTable,
   paiementsTable,
   campagnesRelanceTable,
+  catalogueLignesTable,
+  chargesRecurrentesTable,
+  contratsTable,
 } from "@workspace/db";
 import {
   type Intention,
@@ -73,6 +76,9 @@ import {
   interpreterDate,
   toDateString,
   champCorrigeable,
+  champsManquants,
+  CHAMPS_A_COMPLETER,
+  type TypeIntention,
 } from "@nodaq/shared";
 import { verticalDepuisTx } from "./vertical-tenant.js";
 import { conditionFactureEnRetardSql } from "./facturesEnRetard.js";
@@ -97,7 +103,78 @@ export interface OperationPlanifiee {
   readonly champs: Record<string, string | null>;
   /** Ce que la résolution a donné, pour chaque mention rapprochée. */
   readonly certitude: "exacte" | "partielle" | "aucune_resolution";
+  /**
+   * Champs encore VIDES que l'écran doit réclamer avant de valider (lot 4).
+   *
+   * Presque toujours `[]`. Non vide quand la voix ne peut légitimement pas
+   * porter la donnée : un prix de catalogue, un montant de charge ou de
+   * contrat, que ni le modèle (règle 3) ni le serveur (rien à calculer) n'ont
+   * le droit de produire. Le blocage à l'écran est un confort ;
+   * `executerPlan` refuse de toute façon.
+   */
+  readonly aCompleter: readonly string[];
 }
+
+/**
+ * Lit un champ que la voix a laissé vide et que l'humain devait remplir.
+ *
+ * C'est ICI que se tient la garde, pas dans le bouton grisé de l'écran : les
+ * corrections voyagent depuis le navigateur et le plan attend en base jusqu'à
+ * une heure. Un plan rejoué sans la correction doit échouer, pas écrire un
+ * prix à zéro — un article de catalogue à 0 € contaminerait tous les devis
+ * suivants sans rien signaler.
+ *
+ * L'unité est le CENTIME, comme partout dans ce dépôt. Accepter des euros ici
+ * ferait diviser un montant par cent, en silence.
+ */
+function entierPositifRequis(
+  op: { readonly type: string; readonly champs: Record<string, string | null> },
+  champ: string,
+): number {
+  const brut = op.champs[champ];
+  if (brut === null || brut === undefined || brut.trim() === "") {
+    throw new Error(
+      `Le champ « ${champ} » doit être renseigné avant de valider — la dictée ne le fournit pas.`,
+    );
+  }
+  const n = Number(brut);
+  if (!Number.isInteger(n) || n < 0) {
+    throw new Error(`Le champ « ${champ} » attend un entier de centimes, positif.`);
+  }
+  return n;
+}
+
+/**
+ * Les champs réclamés qui empêchent encore d'écrire, et pourquoi.
+ *
+ * Portée volontairement étroite : uniquement les champs de
+ * `CHAMPS_A_COMPLETER`, c'est-à-dire ceux que la voix laisse vides par
+ * construction. Les autres champs corrigés gardent leur validation d'origine,
+ * là où elle se trouve — élargir la règle ici en ferait une seconde
+ * définition, à côté de la première.
+ */
+function verifierChampsASaisir(
+  operations: readonly { readonly type: string; readonly champs: Record<string, string | null> }[],
+): readonly { champ: string; motif: "vide" | "format" }[] {
+  const vus = new Map<string, "vide" | "format">();
+  for (const op of operations) {
+    for (const champ of CHAMPS_A_COMPLETER[op.type as TypeIntention] ?? []) {
+      const brut = op.champs[champ];
+      if (brut === null || brut === undefined || brut.trim() === "") {
+        vus.set(champ, "vide");
+        continue;
+      }
+      // Entier de centimes, positif. Pas de virgule, pas de point : 45,00 et
+      // 45.00 sont des EUROS, et les accepter diviserait le montant par cent.
+      const n = Number(brut.trim());
+      if (!Number.isInteger(n) || n < 0) vus.set(champ, "format");
+    }
+  }
+  return [...vus].map(([champ, motif]) => ({ champ, motif }));
+}
+
+/** Une opération avant que `aCompleter` n'en soit dérivé. Interne. */
+type OperationBrute = Omit<OperationPlanifiee, "aCompleter">;
 
 export interface QuestionPlan {
   readonly question: string;
@@ -141,6 +218,11 @@ export interface ContexteResolution {
     }[];
     readonly sansNumero: number;
   };
+  /** Clients existants — pour normaliser le nom porté par un contrat.
+   *  `contrats.clientName` est du TEXTE, pas une clé étrangère : le
+   *  rapprochement ne sert donc qu'à écrire le nom tel qu'il existe déjà,
+   *  et une mention introuvable reste écrite telle qu'elle a été dictée. */
+  readonly clients: readonly Candidat[];
   /** US-A6.1 — le mot du secteur, pour que les libellés soumis à validation
    *  parlent la langue de l'utilisateur (« Créer la mission … » plutôt que
    *  « Créer l'affaire … » chez un consultant). Porté par le contexte, déjà
@@ -210,8 +292,13 @@ export async function chargerContexte(tenantId: string): Promise<ContexteResolut
       totalTTCCents: Number(d.total_ttc_cents),
     }));
 
+    const clientsLignes = await tx
+      .select({ id: clientsTable.id, nom: clientsTable.nom })
+      .from(clientsTable);
+    const clients = clientsLignes.map((c) => ({ id: c.id, libelle: c.nom }));
+
     const words = affaireWords(await verticalDepuisTx(tx));
-    return { affaires, membres, factures, devisAFacturer, impayes, words };
+    return { affaires, membres, factures, devisAFacturer, clients, impayes, words };
   });
 }
 
@@ -246,6 +333,12 @@ function libelleOperation(intention: Intention, words: AffaireWords): string {
       return "Préparer une campagne de relance téléphonique";
     case "facturer_devis":
       return `Facturer le devis « ${intention.devisMentionne} »`;
+    case "creer_article_catalogue":
+      return `Ajouter au catalogue « ${intention.designation} »`;
+    case "creer_charge_recurrente":
+      return `Déclarer la charge ${intention.cadence}le « ${intention.libelle} »`;
+    case "creer_contrat":
+      return `Créer le contrat ${intention.cadence} « ${intention.libelle} »`;
   }
 }
 
@@ -265,7 +358,9 @@ export function construirePlan(
   contexte: ContexteResolution,
   aujourdhui: Date = new Date(),
 ): Plan {
-  const operations: OperationPlanifiee[] = [];
+  // `aCompleter` est DÉRIVÉ des champs, une seule fois, au retour : l'écrire
+  // sur chacun des sites de construction le ferait diverger au premier oubli.
+  const operations: OperationBrute[] = [];
   const questions: QuestionPlan[] = [];
   const incompris = [...nonCompris];
   const { words } = contexte;
@@ -346,6 +441,77 @@ export function construirePlan(
           dateDebut,
         },
         certitude: "aucune_resolution",
+      });
+      continue;
+    }
+
+    if (intention.type === "creer_article_catalogue") {
+      operations.push({
+        type: intention.type,
+        libelle: `Ajouter au catalogue « ${intention.designation} » — prix à saisir`,
+        champs: {
+          libelle: intention.designation,
+          unite: intention.unite ?? null,
+          // Vide, et ça ne peut pas être autrement : un prix de catalogue est
+          // une décision commerciale. Le serveur n'a rien à calculer, et le
+          // modèle n'a pas le droit d'inventer.
+          prixUnitaireHtCents: null,
+        },
+        certitude: "aucune_resolution",
+      });
+      continue;
+    }
+
+    if (intention.type === "creer_charge_recurrente") {
+      operations.push({
+        type: intention.type,
+        libelle: `Déclarer une charge ${intention.cadence}le « ${intention.libelle} » — montant à saisir`,
+        champs: {
+          libelle: intention.libelle,
+          cadence: intention.cadence,
+          categorie: intention.categorie ?? "AUTRE",
+          montantCents: null,
+        },
+        certitude: "aucune_resolution",
+      });
+      continue;
+    }
+
+    if (intention.type === "creer_contrat") {
+      // Le nom du client est rapproché pour l'écrire tel qu'il existe déjà.
+      // Introuvable, on garde la dictée : le champ est du texte libre, et
+      // refuser un contrat parce que le client n'est pas encore en fiche
+      // serait imposer un ordre de saisie que personne ne suit sur un
+      // chantier.
+      let clientName: string | null = intention.clientMentionne ?? null;
+      let certitude: OperationBrute["certitude"] = "aucune_resolution";
+      if (intention.clientMentionne) {
+        const r = resoudreMention(intention.clientMentionne, contexte.clients);
+        if (r.etat === "ambigu") {
+          questions.push({
+            question: `Quel client « ${intention.clientMentionne} » ?`,
+            candidats: r.candidats,
+            mention: intention.clientMentionne,
+          });
+          continue;
+        }
+        if (r.etat === "resolu") {
+          clientName = r.candidat.libelle;
+          certitude = r.certitude;
+        }
+      }
+      operations.push({
+        type: intention.type,
+        libelle:
+          `Créer le contrat ${intention.cadence} « ${intention.libelle} »` +
+          `${clientName ? ` pour ${clientName}` : ""} — montant à saisir`,
+        champs: {
+          libelle: intention.libelle,
+          cadence: intention.cadence,
+          clientName,
+          montantCents: null,
+        },
+        certitude,
       });
       continue;
     }
@@ -684,7 +850,14 @@ export function construirePlan(
 
   // Une seule question à la fois : trancher deux ambiguïtés d'un coup demande
   // à l'artisan de tenir deux choix en tête pendant qu'il conduit.
-  return { operations, questions: questions.slice(0, 1), nonCompris: incompris };
+  return {
+    operations: operations.map((o) => ({
+      ...o,
+      aCompleter: champsManquants(o.type, o.champs),
+    })),
+    questions: questions.slice(0, 1),
+    nonCompris: incompris,
+  };
 }
 
 // ── Persistance ──────────────────────────────────────────────────────────────
@@ -783,6 +956,43 @@ async function executerOperation(
         status: "PROSPECT",
         ...(op.champs["clientNom"] ? { clientName: op.champs["clientNom"] } : {}),
         ...(op.champs["dateDebut"] ? { startDate: op.champs["dateDebut"] } : {}),
+      });
+      return;
+    }
+    case "creer_article_catalogue": {
+      const prix = entierPositifRequis(op, "prixUnitaireHtCents");
+      await tx.insert(catalogueLignesTable).values({
+        tenantId,
+        libelle: op.champs["libelle"]!,
+        prixUnitaireHtCents: prix,
+        ...(op.champs["unite"] ? { unite: op.champs["unite"] } : {}),
+      });
+      return;
+    }
+    case "creer_charge_recurrente": {
+      const montant = entierPositifRequis(op, "montantCents");
+      await tx.insert(chargesRecurrentesTable).values({
+        tenantId,
+        label: op.champs["libelle"]!,
+        category: op.champs["categorie"] ?? "AUTRE",
+        cadence: op.champs["cadence"]!,
+        // La charge court à partir d'aujourd'hui : une date de début dictée
+        // serait une donnée de plus à entendre de travers, pour un réglage
+        // que l'écran change en deux gestes.
+        startDate: toDateString(new Date()),
+        amountCents: montant,
+      });
+      return;
+    }
+    case "creer_contrat": {
+      const montant = entierPositifRequis(op, "montantCents");
+      await tx.insert(contratsTable).values({
+        tenantId,
+        label: op.champs["libelle"]!,
+        cadence: op.champs["cadence"]!,
+        startDate: toDateString(new Date()),
+        amountCents: montant,
+        ...(op.champs["clientName"] ? { clientName: op.champs["clientName"] } : {}),
       });
       return;
     }
@@ -1032,6 +1242,18 @@ export type ResultatExecution =
   | { readonly kind: "introuvable" }
   /** Une correction portait sur un champ hors liste blanche : rien n'est écrit. */
   | { readonly kind: "correction_refusee"; readonly champs: readonly string[] }
+  /**
+   * Un champ que la voix laisse vide n'a pas été rempli (lot 4).
+   *
+   * Distinct du 409 « la cible a disparu » : rien n'est en conflit ici, il
+   * manque une donnée que seul l'humain détient. Confondre les deux dirait à
+   * l'utilisateur que ses données ont bougé, alors qu'il lui suffit de taper
+   * un prix.
+   */
+  | {
+      readonly kind: "champ_manquant";
+      readonly champs: readonly { readonly champ: string; readonly motif: "vide" | "format" }[];
+    }
   | { readonly kind: "expire" }
   | { readonly kind: "deja_applique"; readonly executeLe: Date }
   | { readonly kind: "ok"; readonly nbOperations: number };
@@ -1082,7 +1304,9 @@ export function appliquerCorrections(
       }
       champs[champ] = valeur;
     }
-    return { ...op, champs };
+    // Le champ réclamé qu'on vient de remplir ne l'est plus : recalculer,
+    // sans quoi l'écran continuerait de le réclamer après correction.
+    return { ...op, champs, aCompleter: champsManquants(op.type, champs) };
   });
   return { operations: sortie, refuses };
 }
@@ -1117,6 +1341,18 @@ export async function executerPlan(
       ? appliquerCorrections(brutes, corrections)
       : { operations: brutes, refuses: [] as readonly string[] };
     if (refuses.length > 0) return { kind: "correction_refusee" as const, champs: refuses };
+
+    // Avant d'ouvrir la moindre écriture : un plan dont un champ réclamé est
+    // vide, ou rempli avec autre chose qu'un entier de centimes, ne s'applique
+    // pas. `executerOperation` refuserait aussi, mais en cours de transaction,
+    // et l'utilisateur ne verrait qu'un « rien n'a été enregistré » sans savoir
+    // quoi corriger.
+    //
+    // Le format est vérifié ICI, et pas seulement le vide : « 45,00 » est
+    // exactement ce qu'on tape dans un champ prix, et le laisser tomber dans
+    // le refus générique dirait à l'utilisateur que ses données ont bougé.
+    const defauts = verifierChampsASaisir(operations);
+    if (defauts.length > 0) return { kind: "champ_manquant" as const, champs: defauts };
 
     // Le marquage se fait AVANT les écritures, sous condition `executeLe IS
     // NULL` : deux requêtes simultanées passent le contrôle ci-dessus, mais

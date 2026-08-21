@@ -34,7 +34,7 @@ import {
 } from "../routes/analytics.js";
 import { parsePeriode, toDateString } from "./analytics-periods.js";
 import type { OperationPlanifiee } from "./plan-vocal.js";
-import { affaireWords, estSecretProfessionnel, inactiveModuleTools } from "@nodaq/shared";
+import { affaireWords, estSecretProfessionnel, inactiveModuleTools, champsManquants } from "@nodaq/shared";
 import { modulesDuTenant } from "./modules-tenant.js";
 import { verticalDepuisTx, verticalDuTenant, vocabulaireAssistant } from "./vertical-tenant.js";
 import { montantsNonSources, MESSAGE_REFUS_CHIFFRAGE } from "./garde-montants.js";
@@ -596,6 +596,18 @@ export function proposerEcriture(
   name: string,
   args: Record<string, unknown>,
 ): OperationPlanifiee {
+  // Même dérivation que dans `construirePlan` : `aCompleter` se calcule, il
+  // ne s'écrit pas. Ce fichier est le SECOND endroit qui fabrique des
+  // opérations — c'est le compilateur qui l'a signalé quand le champ est
+  // devenu obligatoire, pas une relecture.
+  const op = proposerEcritureBrute(name, args);
+  return { ...op, aCompleter: champsManquants(op.type, op.champs) };
+}
+
+function proposerEcritureBrute(
+  name: string,
+  args: Record<string, unknown>,
+): Omit<OperationPlanifiee, "aCompleter"> {
   const texte = (cle: string): string | null => {
     const v = args[cle];
     return typeof v === "string" && v.trim().length > 0 ? v.trim() : null;

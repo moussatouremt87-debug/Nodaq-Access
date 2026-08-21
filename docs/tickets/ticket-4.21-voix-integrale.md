@@ -127,9 +127,66 @@ une erreur d'écoute. L'unicité réelle reste tenue par l'index de la migration
 crée un BROUILLON, sans numéro. L'émission scelle un document immuable et
 consomme un numéro de séquence : elle reste un geste d'écran.
 
-### Lot 4 — la configuration (à faire)
+### Lot 4 — la configuration (livré, sauf les paramètres — voir plus bas)
 
-Catalogue, contrats, charges récurrentes, paramètres.
+`creer_article_catalogue`, `creer_charge_recurrente`, `creer_contrat`.
+
+**Le mur, et la façon de le passer.** Les trois objets portent un **montant
+obligatoire**, et la garde « aucun schéma d'intention ne déclare de champ
+monétaire » interdit à la voix de le porter. Aux lots précédents, la parade
+était de faire *calculer* le chiffre par le serveur (le solde d'une facture, le
+total d'un devis signé) puis de le donner à corriger. Ici cette parade ne
+s'applique pas : le prix d'un article, le montant d'un loyer ou d'un contrat
+sont des **décisions commerciales**. Le serveur n'a rien à calculer, et le
+modèle n'a pas le droit d'inventer.
+
+D'où un mécanisme neuf, `CHAMPS_A_COMPLETER` : le champ reste **vide**, l'écran
+le réclame, et le serveur refuse d'écrire tant qu'il l'est. Ce n'est pas un
+demi-chemin — sur le catalogue c'est le seul chemin acceptable, parce qu'un
+prix entendu de travers n'abîme pas une ligne : il contamine **tous les devis à
+venir**, sans que rien ne le signale. Le rayon de dégât décide, pas la
+commodité.
+
+Deux propriétés, tenues par des tests plutôt que par la relecture :
+
+1. Tout champ réclamé est aussi corrigeable — sinon l'utilisateur le
+   remplirait et se verrait refuser, sans autre issue que d'annuler.
+2. Le refus est **côté serveur** (`422`, distinct du `409` « la cible a
+   disparu »). Le bouton grisé n'est qu'un confort : les corrections voyagent
+   depuis le navigateur et un plan attend en base jusqu'à une heure.
+
+**Le défaut que le mécanisme a failli introduire.** L'écran ne rendait que les
+champs `!= null` : un champ laissé vide ne s'affichait donc *pas*, et la
+validation restait bloquée sur un champ invisible. Le compilateur avait
+signalé le type manquant ; ce filtre-là, lui, n'aurait rien signalé. C'est le
+test de rendu qui le couvre désormais.
+
+**Un second site de construction d'opérations existait** — `mistralAgent.ts`,
+pour l'agent de chat. Le compilateur l'a révélé au moment où `aCompleter` est
+devenu obligatoire. `aCompleter` y est donc *dérivé* des champs, comme dans
+`construirePlan`, plutôt qu'écrit à la main sur chaque site.
+
+### Les paramètres restent HORS voix, et ce n'est pas un oubli
+
+Le lot 4 annonçait « catalogue, contrats, charges récurrentes, **paramètres** ».
+Les trois premiers sont livrés ; les paramètres sont écartés, délibérément.
+
+`PATCH /parametres` porte la raison sociale, le **SIRET**, l'**IBAN**, et les
+seuils d'objectif. Trois raisons de ne pas les dicter, et aucune n'est de la
+prudence de principe :
+
+- Une suite de chiffres dictée est précisément ce qu'une machine entend de
+  travers. Un IBAN faux **détourne des virements** ; il n'y a pas de version
+  dégradée acceptable.
+- La route elle-même refuse déjà les seuils hors bornes, et son commentaire
+  cite explicitement « une couche vocale » parmi les sources qu'elle se méfie —
+  un taux de 35 points de base au lieu de 3500 produisait un seuil de
+  rentabilité vingt fois trop grand, **affiché sans le moindre avertissement**.
+- Ce sont des gestes rares, faits assis, une fois. La voix n'y fait rien
+  gagner.
+
+C'est le même raisonnement que la section « ce qui restera hors voix » plus
+haut, appliqué à un cas qu'elle ne nommait pas encore.
 
 ## Dette assumée de ce ticket
 

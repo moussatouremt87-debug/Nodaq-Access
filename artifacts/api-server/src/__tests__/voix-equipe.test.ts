@@ -44,8 +44,15 @@ async function inscrire(nom: string): Promise<Locataire> {
 const interpreter = (l: Locataire, texte: string) =>
   request(app).post("/api/voix/interpreter").set("Cookie", l.cookie).send({ texte });
 
-const executer = (l: Locataire, planId: string) =>
-  request(app).post("/api/voix/executer").set("Cookie", l.cookie).send({ planId });
+const executer = (
+  l: Locataire,
+  planId: string,
+  corrections?: Record<number, Record<string, string>>,
+) =>
+  request(app)
+    .post("/api/voix/executer")
+    .set("Cookie", l.cookie)
+    .send({ planId, ...(corrections ? { corrections } : {}) });
 
 async function affaire(l: Locataire, label: string): Promise<string> {
   const id = crypto.randomUUID();
@@ -685,5 +692,121 @@ describe("j — facturer_devis emprunte LE module, pas une seconde conversion", 
       `SELECT count(*)::int AS n FROM factures WHERE devis_id = $1`, [d.id],
     );
     expect(rows[0].n).toBe(1);
+  });
+});
+
+// ── k. Lot 4 : la configuration, et le montant qui ne se dicte pas ──────────
+
+describe("k — un montant que la voix ne porte pas est RÉCLAMÉ, jamais deviné", () => {
+  test("catalogue : la désignation est dictée, le prix reste à saisir", async () => {
+    const t = await inscrire("cat-voix");
+    const { body } = await interpreter(t, "voix-test-catalogue").expect(200);
+
+    expect(body.operations).toHaveLength(1);
+    const op = body.operations[0];
+    expect(op.champs.libelle).toBe("Pose de placo");
+    expect(op.champs.unite).toBe("m2");
+    // Le prix est vide, et l'écran doit le réclamer. Ni le modèle (règle 3)
+    // ni le serveur (rien à calculer) n'ont le droit de le produire.
+    expect(op.champs.prixUnitaireHtCents).toBeNull();
+    expect(op.aCompleter).toEqual(["prixUnitaireHtCents"]);
+    expect(op.libelle).toContain("prix à saisir");
+  });
+
+  test("valider SANS le prix ne crée rien — le refus est côté serveur", async () => {
+    const t = await inscrire("cat-refus");
+    const { body } = await interpreter(t, "voix-test-catalogue").expect(200);
+
+    // Aucune correction : c'est le plan tel que la voix l'a produit. Le
+    // bouton grisé de l'écran n'est qu'un confort ; un plan rejoué sans la
+    // correction doit échouer, pas écrire un article à 0 €.
+    await executer(t, body.planId).expect(422);
+
+    const { rows } = await adminPool.query(
+      `SELECT count(*)::int AS n FROM catalogue_lignes WHERE tenant_id = $1`, [t.tenantId],
+    );
+    expect(rows[0].n).toBe(0);
+  });
+
+  test("le prix saisi à l’écran écrit l’article, en CENTIMES", async () => {
+    const t = await inscrire("cat-ok");
+    const { body } = await interpreter(t, "voix-test-catalogue").expect(200);
+
+    await executer(t, body.planId, { 0: { prixUnitaireHtCents: "4500" } }).expect(200);
+
+    const { rows } = await adminPool.query(
+      `SELECT libelle, unite, prix_unitaire_ht_cents FROM catalogue_lignes WHERE tenant_id = $1`,
+      [t.tenantId],
+    );
+    expect(rows).toHaveLength(1);
+    // 45 € s'écrit 4500. Accepter des euros ici diviserait tout par cent, en
+    // silence, sur la seule source de prix des devis.
+    expect(Number(rows[0].prix_unitaire_ht_cents)).toBe(4500);
+    expect(rows[0].libelle).toBe("Pose de placo");
+  });
+
+  test.each([
+    ["vide", ""],
+    ["des espaces", "   "],
+    ["des euros à virgule", "45,00"],
+    ["un négatif", "-100"],
+  ])("un prix %s est refusé, et rien n’est écrit", async (_nom, valeur) => {
+    const t = await inscrire(`cat-mauvais-${_nom.replace(/[^a-z]/gi, "")}`);
+    const { body } = await interpreter(t, "voix-test-catalogue").expect(200);
+
+    await executer(t, body.planId, { 0: { prixUnitaireHtCents: valeur } }).expect(422);
+
+    const { rows } = await adminPool.query(
+      `SELECT count(*)::int AS n FROM catalogue_lignes WHERE tenant_id = $1`, [t.tenantId],
+    );
+    expect(rows[0].n).toBe(0);
+  });
+
+  test("charge récurrente : libellé et cadence dictés, montant réclamé", async () => {
+    const t = await inscrire("charge-voix");
+    const { body } = await interpreter(t, "voix-test-charge").expect(200);
+
+    expect(body.operations[0].champs.cadence).toBe("mensuel");
+    expect(body.operations[0].champs.categorie).toBe("ASSURANCE");
+    expect(body.operations[0].aCompleter).toEqual(["montantCents"]);
+
+    await executer(t, body.planId, { 0: { montantCents: "12000" } }).expect(200);
+
+    const { rows } = await adminPool.query(
+      `SELECT label, cadence, category, amount_cents FROM charges_recurrentes WHERE tenant_id = $1`,
+      [t.tenantId],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].cadence).toBe("mensuel");
+    expect(Number(rows[0].amount_cents)).toBe(12000);
+  });
+
+  test("contrat : le client dicté est rapproché d’une fiche existante", async () => {
+    const t = await inscrire("contrat-voix");
+    await request(app).post("/api/clients").set("Cookie", t.cookie)
+      .send({ nom: "Menuiserie Delacroix" }).expect(201);
+
+    const { body } = await interpreter(t, "voix-test-contrat").expect(200);
+    // Le nom est écrit tel qu'il EXISTE, pas tel qu'il a été entendu : c'est
+    // tout l'intérêt du rapprochement sur un champ de texte libre.
+    expect(body.operations[0].champs.clientName).toBe("Menuiserie Delacroix");
+
+    await executer(t, body.planId, { 0: { montantCents: "50000" } }).expect(200);
+
+    const { rows } = await adminPool.query(
+      `SELECT label, client_name, cadence, amount_cents FROM contrats WHERE tenant_id = $1`,
+      [t.tenantId],
+    );
+    expect(rows[0].client_name).toBe("Menuiserie Delacroix");
+    expect(Number(rows[0].amount_cents)).toBe(50000);
+  });
+
+  test("un client inconnu n’empêche pas le contrat — le nom dicté est gardé", async () => {
+    const t = await inscrire("contrat-inconnu");
+    const { body } = await interpreter(t, "voix-test-contrat").expect(200);
+    // Refuser un contrat parce que la fiche client n'existe pas encore
+    // imposerait un ordre de saisie que personne ne suit sur un chantier.
+    expect(body.operations).toHaveLength(1);
+    expect(body.operations[0].champs.clientName).toBe("Delacroix");
   });
 });

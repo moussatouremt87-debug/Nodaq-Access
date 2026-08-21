@@ -193,6 +193,20 @@ router.post("/voix/executer", async (req, res): Promise<void> => {
       logger.warn({ champs: resultat.champs }, "[voix] correction hors liste blanche");
       res.status(400).json({ error: "Correction non autorisée sur ce champ." });
       return;
+    case "champ_manquant":
+      // 422 et pas 409 : rien n'est en conflit, il manque une donnée que la
+      // voix ne peut pas fournir et que seul l'utilisateur détient.
+      res.status(422).json({
+        error: resultat.champs
+          .map((c) =>
+            c.motif === "vide"
+              ? `Renseignez « ${c.champ} » avant de valider : je ne devine pas un montant, et je ne l'invente pas.`
+              : `« ${c.champ} » attend un montant en centimes, sans virgule : 45 € s'écrit 4500.`,
+          )
+          .join(" "),
+        champs: resultat.champs,
+      });
+      return;
     case "expire":
       res.status(410).json({
         error: "Ce plan a expiré. Redictez votre phrase — vos données ont pu changer entre-temps.",

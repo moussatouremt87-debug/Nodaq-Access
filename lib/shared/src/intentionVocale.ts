@@ -253,6 +253,85 @@ export const IntentionFacturerDevis = z
   })
   .strict();
 
+
+// ── Lot 4 : la configuration ────────────────────────────────────────────────
+//
+// Catalogue, charges récurrentes, contrats. Les trois portent un MONTANT
+// obligatoire, et aucun des trois ne peut le recevoir de la voix.
+//
+// ── Pourquoi, et pourquoi ce n'est pas une limitation ─────────────────────
+// Aux lots précédents, un montant dicté avait déjà été refusé par la garde
+// « aucun schéma d'intention ne déclare de champ monétaire », et la parade
+// était de faire CALCULER le chiffre par le serveur (le solde d'une facture,
+// le total d'un devis signé) pour le donner à corriger.
+//
+// Ici cette parade ne s'applique pas : le prix d'un article de catalogue, le
+// montant d'un loyer ou d'un contrat sont des DÉCISIONS de l'artisan. Le
+// serveur n'a rien à proposer, et le modèle n'a pas le droit d'inventer.
+//
+// Le champ reste donc VIDE, et l'écran de validation le réclame avant
+// d'écrire quoi que ce soit. Ce n'est pas un demi-chemin : sur le catalogue
+// c'est même le seul chemin acceptable, parce qu'un prix entendu de travers
+// n'abîme pas une ligne — il contamine tous les devis à venir, sans que rien
+// ne le signale. Le rayon de dégât est ce qui décide, pas la commodité.
+
+/**
+ * Ajouter un article au catalogue tarifaire.
+ *
+ * « Ajoute au catalogue la pose de placo, au mètre carré. » Le prix se tape à
+ * l'écran de validation — voir `CHAMPS_A_COMPLETER`.
+ */
+export const IntentionCreerArticleCatalogue = z
+  .object({
+    type: z.literal("creer_article_catalogue"),
+    designation: z.string().min(1).max(300),
+    /** « au mètre carré », « à l'heure », « au forfait ». Libre, court. */
+    unite: z.string().max(20).nullable().optional(),
+  })
+  .strict();
+
+export const CADENCES_DICTABLES = ["mensuel", "trimestriel", "semestriel", "annuel"] as const;
+export const CATEGORIES_CHARGE_DICTABLES = [
+  "LOYER",
+  "MASSE_SALARIALE",
+  "ABONNEMENT",
+  "ASSURANCE",
+  "AUTRE",
+] as const;
+
+/**
+ * Déclarer une charge récurrente. « Note une charge mensuelle, assurance
+ * décennale. »
+ *
+ * `categorie` est dictable et ce n'est pas une entorse : ranger « assurance
+ * décennale » dans ASSURANCE est une CLASSIFICATION dans une liste fermée,
+ * pas un calcul ni un prix. Une erreur de rangement se voit et se corrige ;
+ * un montant faux, non.
+ */
+export const IntentionCreerChargeRecurrente = z
+  .object({
+    type: z.literal("creer_charge_recurrente"),
+    libelle: z.string().min(1).max(300),
+    cadence: z.enum(CADENCES_DICTABLES),
+    categorie: z.enum(CATEGORIES_CHARGE_DICTABLES).nullable().optional(),
+  })
+  .strict();
+
+/**
+ * Créer un contrat récurrent. « Contrat d'entretien annuel chez Delacroix. »
+ *
+ * Le client est une MENTION, rapprochée par le serveur comme partout ailleurs
+ * — jamais un identifiant venu du modèle.
+ */
+export const IntentionCreerContrat = z
+  .object({
+    type: z.literal("creer_contrat"),
+    libelle: z.string().min(1).max(300),
+    cadence: z.enum(CADENCES_DICTABLES),
+    clientMentionne: Mention.nullable().optional(),
+  })
+  .strict();
+
 export const Intention = z.discriminatedUnion("type", [
   IntentionCreerAffaire,
   IntentionCreerProspect,
@@ -267,6 +346,9 @@ export const Intention = z.discriminatedUnion("type", [
   IntentionEnregistrerReglement,
   IntentionLancerRelance,
   IntentionFacturerDevis,
+  IntentionCreerArticleCatalogue,
+  IntentionCreerChargeRecurrente,
+  IntentionCreerContrat,
 ]);
 export type Intention = z.infer<typeof Intention>;
 
@@ -300,6 +382,9 @@ export const TYPES_INTENTION = [
   "enregistrer_reglement",
   "lancer_relance",
   "facturer_devis",
+  "creer_article_catalogue",
+  "creer_charge_recurrente",
+  "creer_contrat",
 ] as const;
 export type TypeIntention = (typeof TYPES_INTENTION)[number];
 
@@ -484,7 +569,66 @@ export const CHAMPS_CORRIGEABLES: Record<TypeIntention, readonly string[]> = {
   // du document signé. Corriger l'un ou l'autre reviendrait à facturer autre
   // chose que ce qui a été accepté.
   facturer_devis: [],
+  // Le PRIX se tape, il ne se dicte pas — voir `CHAMPS_A_COMPLETER`. La
+  // désignation et l'unité, elles, sortent de la bouche de l'artisan.
+  creer_article_catalogue: ["libelle", "unite", "prixUnitaireHtCents"],
+  creer_charge_recurrente: ["libelle", "montantCents"],
+  // `clientName` est du texte libre en base, pas une clé étrangère : il
+  // reste donc de la dictée, et se corrige. Contraste avec `affaireId` ou
+  // `devisId`, qui sont des rapprochements et n'ont rien à faire ici.
+  creer_contrat: ["libelle", "clientName", "montantCents"],
 };
+
+/**
+ * Champs que la voix laisse VOLONTAIREMENT vides, et que l'écran de
+ * validation doit réclamer avant d'écrire.
+ *
+ * ── En quoi c'est différent d'un champ corrigeable ────────────────────────
+ * Un champ corrigeable a une valeur, proposée par le serveur, qu'on rectifie
+ * si l'oreille a fauté. Un champ à compléter n'en a AUCUNE, et ne peut pas en
+ * avoir : ni le modèle (règle 3), ni le serveur (il n'a rien à calculer — le
+ * prix d'un article neuf est une décision commerciale). Il est vide parce
+ * qu'il doit l'être.
+ *
+ * Deux conséquences, et les deux sont tenues par des tests :
+ *
+ * 1. Tout champ listé ici est aussi listé dans `CHAMPS_CORRIGEABLES` — sans
+ *    quoi il serait réclamé à l'écran et refusé au retour, une impasse.
+ * 2. L'exécution REFUSE tant qu'il est vide. Le blocage du bouton à l'écran
+ *    n'est qu'un confort ; les corrections voyagent depuis le navigateur et
+ *    le plan attend en base jusqu'à une heure, donc c'est le serveur qui
+ *    tranche.
+ */
+export const CHAMPS_A_COMPLETER: Record<TypeIntention, readonly string[]> = {
+  creer_affaire: [],
+  creer_prospect: [],
+  creer_client: [],
+  maj_statut_affaire: [],
+  creer_echeance: [],
+  creer_entree_classeur: [],
+  consigner_activite: [],
+  declarer_absence: [],
+  affecter_membre: [],
+  pointer_heures: [],
+  enregistrer_reglement: [],
+  lancer_relance: [],
+  facturer_devis: [],
+  creer_article_catalogue: ["prixUnitaireHtCents"],
+  creer_charge_recurrente: ["montantCents"],
+  creer_contrat: ["montantCents"],
+};
+
+/** Les champs encore vides d'une opération, parmi ceux qu'elle réclame. */
+export function champsManquants(
+  type: string,
+  champs: Readonly<Record<string, string | null>>,
+): readonly string[] {
+  const requis = CHAMPS_A_COMPLETER[type as TypeIntention] ?? [];
+  return requis.filter((c) => {
+    const v = champs[c];
+    return v === null || v === undefined || v.trim() === "";
+  });
+}
 
 /** Le champ est-il corrigeable pour ce type d'opération ? */
 export function champCorrigeable(type: string, champ: string): boolean {
