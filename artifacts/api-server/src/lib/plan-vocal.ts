@@ -57,6 +57,7 @@ import {
   affectationsTable,
   teamMembersTable,
   journalDecisionsTable,
+  pointagesTable,
 } from "@workspace/db";
 import {
   type Intention,
@@ -146,6 +147,8 @@ function libelleOperation(intention: Intention, words: AffaireWords): string {
       return `Déclarer ${intention.typeAbsence} pour « ${intention.membreMentionne} »`;
     case "affecter_membre":
       return `Affecter « ${intention.membreMentionne} » sur « ${intention.affaireMentionnee} »`;
+    case "pointer_heures":
+      return `Pointer ${intention.heures} h sur « ${intention.affaireMentionnee} »`;
   }
 }
 
@@ -318,6 +321,68 @@ export function construirePlan(
       continue;
     }
 
+    if (intention.type === "pointer_heures") {
+      const rAffaire = resoudreMention(intention.affaireMentionnee, contexte.affaires);
+      if (rAffaire.etat === "ambigu") {
+        questions.push({
+          question: `Quelle ${contexte.words.singular} « ${intention.affaireMentionnee} » ?`,
+          candidats: rAffaire.candidats,
+          mention: intention.affaireMentionnee,
+        });
+        continue;
+      }
+      if (rAffaire.etat === "introuvable") {
+        incompris.push(`${contexte.words.singular} « ${intention.affaireMentionnee} » introuvable`);
+        continue;
+      }
+
+      // Le membre est FACULTATIF : « trois heures chez Delacroix » sans nom
+      // désigne celui qui parle. Le serveur tranchera à l'exécution — le
+      // modèle n'invente aucun identifiant.
+      let membreId: string | null = null;
+      let membreLibelle = "moi";
+      if (intention.membreMentionne) {
+        const rMembre = resoudreMention(intention.membreMentionne, contexte.membres);
+        if (rMembre.etat === "ambigu") {
+          questions.push({
+            question: `Quel membre « ${intention.membreMentionne} » ?`,
+            candidats: rMembre.candidats,
+            mention: intention.membreMentionne,
+          });
+          continue;
+        }
+        if (rMembre.etat === "introuvable") {
+          incompris.push(`membre « ${intention.membreMentionne} » introuvable`);
+          continue;
+        }
+        membreId = rMembre.candidat.id;
+        membreLibelle = rMembre.candidat.libelle;
+      }
+
+      // Sans date dictée, c'est aujourd'hui : on pointe en descendant du
+      // chantier, pas trois jours après.
+      const jour = intention.dateMentionnee
+        ? interpreterDate(intention.dateMentionnee, aujourdhui)
+        : toDateString(aujourdhui);
+      if (jour === null) {
+        incompris.push(`pointage : date « ${intention.dateMentionnee} » non comprise`);
+        continue;
+      }
+
+      operations.push({
+        type: intention.type,
+        libelle: `Pointer ${intention.heures} h pour « ${membreLibelle} » sur « ${rAffaire.candidat.libelle} » le ${jour}`,
+        champs: {
+          affaireId: rAffaire.candidat.id,
+          ...(membreId ? { membreId } : {}),
+          heures: String(intention.heures),
+          date: jour,
+        },
+        certitude: rAffaire.certitude,
+      });
+      continue;
+    }
+
     if (intention.type === "affecter_membre") {
       const rMembre = resoudreMention(intention.membreMentionne, contexte.membres);
       if (rMembre.etat === "ambigu") {
@@ -480,6 +545,9 @@ async function executerOperation(
   tx: Tx,
   tenantId: string,
   op: OperationPlanifiee,
+  /** Adresse de celui qui valide — sert à savoir qui pointe quand aucun nom
+   *  n'a été dicté. Absente pour les chemins qui n'en ont pas besoin. */
+  emailDecideur?: string,
 ): Promise<void> {
   switch (op.type) {
     case "creer_affaire": {
@@ -580,6 +648,51 @@ async function executerOperation(
       });
       return;
     }
+    case "pointer_heures": {
+      const affaireId = op.champs["affaireId"]!;
+      // Même garantie que pour l'affectation : `pointages` n'a pas de FK sur
+      // l'affaire côté membre, et une cible disparue entre la construction du
+      // plan et son exécution s'insérerait sans bruit.
+      const [affaire] = await tx.select({ id: affairesTable.id }).from(affairesTable).where(eq(affairesTable.id, affaireId));
+      if (!affaire) throw new Error(`Affaire ${affaireId} introuvable`);
+
+      // Membre non dicté = celui qui parle. Résolu ICI, côté serveur, par
+      // l'adresse de la session : le modèle n'a jamais désigné personne.
+      //
+      // `team_members` ne porte PAS de lien vers le compte utilisateur — seulement
+      // une adresse. Le rapprochement se fait donc sur elle, et son échec est
+      // EXPLICITE : mieux vaut refuser que pointer les heures de quelqu'un
+      // d'autre parce qu'une correspondance approximative a semblé plausible.
+      let membreId = op.champs["membreId"] ?? null;
+      if (!membreId) {
+        if (!emailDecideur) {
+          throw new Error("Sans nom dicté, il faut une adresse de session pour savoir qui pointe");
+        }
+        const [moi] = await tx
+          .select({ id: teamMembersTable.id })
+          .from(teamMembersTable)
+          .where(eq(teamMembersTable.email, emailDecideur));
+        if (!moi) {
+          throw new Error(
+            "Aucun membre d'équipe ne porte votre adresse : précisez le nom dans la dictée",
+          );
+        }
+        membreId = moi.id;
+      }
+
+      await tx.insert(pointagesTable).values({
+        tenantId,
+        membreId,
+        affaireId,
+        date: op.champs["date"]!,
+        heures: op.champs["heures"]!,
+        // « confirmé » et non « proposé » : ces heures viennent de la bouche
+        // de l'utilisateur, qui vient de valider le plan à l'écran. Une
+        // proposition serait une heure que personne n'a affirmée.
+        source: "confirme",
+      });
+      return;
+    }
     default: {
       // Garde de compilation : un type d'intention ajouté à l'union sans son
       // `case` ici ne doit PAS silencieusement no-oper — c'était, jusqu'à ce
@@ -658,7 +771,7 @@ export async function executerPlan(
     });
 
     for (const op of operations) {
-      await executerOperation(tx, tenantId, op);
+      await executerOperation(tx, tenantId, op, decideur?.email);
     }
 
     return { kind: "ok" as const, nbOperations: operations.length };

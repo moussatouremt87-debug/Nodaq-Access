@@ -125,6 +125,35 @@ export const IntentionAffecterMembre = z
   })
   .strict();
 
+
+/**
+ * Pointer des heures (ticket 4.21, lot 1).
+ *
+ * « Trois heures chez Delacroix aujourd'hui. » C'est la saisie qu'on repousse
+ * au vendredi et qu'on finit par faire de mémoire, donc mal — et c'est la
+ * seule qui se dicte naturellement en descendant du chantier, une main sur le
+ * volant posée.
+ *
+ * `heures` est un NOMBRE dicté, pas un nombre calculé : l'utilisateur le
+ * prononce, le modèle l'extrait, et la garde des chiffres inventés refuse
+ * tout ce qui n'était pas dans la phrase. La règle 3 interdit au modèle de
+ * calculer un total, pas de transcrire ce qu'il entend.
+ *
+ * Le rattachement est une MENTION, résolue par le serveur contre les affaires
+ * du tenant — jamais un identifiant fabriqué par le modèle.
+ */
+export const IntentionPointerHeures = z
+  .object({
+    type: z.literal("pointer_heures"),
+    affaireMentionnee: Mention,
+    membreMentionne: Mention.nullable().optional(),
+    /** Quart d'heure minimum, journée maximum : au-delà, c'est une erreur de
+     *  dictée, pas une longue journée. */
+    heures: z.number().min(0.25).max(24),
+    dateMentionnee: Mention.nullable().optional(),
+  })
+  .strict();
+
 export const Intention = z.discriminatedUnion("type", [
   IntentionCreerAffaire,
   IntentionCreerProspect,
@@ -134,6 +163,7 @@ export const Intention = z.discriminatedUnion("type", [
   IntentionConsignerActivite,
   IntentionDeclarerAbsence,
   IntentionAffecterMembre,
+  IntentionPointerHeures,
 ]);
 export type Intention = z.infer<typeof Intention>;
 
@@ -162,6 +192,7 @@ export const TYPES_INTENTION = [
   "consigner_activite",
   "declarer_absence",
   "affecter_membre",
+  "pointer_heures",
 ] as const;
 export type TypeIntention = (typeof TYPES_INTENTION)[number];
 

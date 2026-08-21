@@ -269,3 +269,85 @@ describe("f — declare_absence via l'agent de chat", () => {
     expect(final.rows).toHaveLength(1);
   });
 });
+
+// ── e. Pointer des heures à la voix (ticket 4.21, lot 1) ─────────────────────
+//
+// « Trois heures chez Delacroix aujourd'hui. » C'est la saisie qu'on repousse
+// au vendredi et qu'on finit par faire de mémoire, donc mal.
+
+describe("e — pointer_heures, aller-retour complet", () => {
+  test("membre et date dictés → une ligne réelle, source « confirmé »", async () => {
+    const t = await inscrire("pointage");
+    await createTestTeamMember(t.tenantId, "Sophie");
+    await affaire(t, "Dupont");
+
+    const { body } = await interpreter(t, "voix-test-pointage").expect(200);
+    expect(body.operations).toHaveLength(1);
+    // Le nombre vient de la PHRASE, pas d'un calcul : la règle 3 interdit au
+    // modèle de calculer un total, pas de transcrire ce qu'il entend.
+    expect(body.operations[0].champs.heures).toBe("7.5");
+
+    await executer(t, body.planId).expect(200);
+
+    const { rows } = await adminPool.query(
+      `SELECT heures::float AS heures, source, date FROM pointages WHERE tenant_id = $1::uuid`,
+      [t.tenantId],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].heures).toBe(7.5);
+    // « confirmé » : ces heures ont été affirmées puis validées à l'écran.
+    // « proposé » désignerait une heure que personne n'a dite.
+    expect(rows[0].source).toBe("confirme");
+  });
+
+  test("sans nom dicté, c'est CELUI QUI PARLE — résolu par le serveur", async () => {
+    const t = await inscrire("pointage-moi");
+    await affaire(t, "Dupont");
+
+    // Le membre d'équipe porte l'adresse du compte : c'est le seul lien
+    // existant entre un utilisateur et un membre (team_members n'a pas de
+    // colonne user_id), et le rapprochement se fait dessus.
+    const { rows: session } = await adminPool.query(
+      `SELECT u.email FROM users u
+         JOIN memberships m ON m.user_id = u.id
+        WHERE m.tenant_id = $1::uuid LIMIT 1`,
+      [t.tenantId],
+    );
+    await adminPool.query(
+      `INSERT INTO team_members (id, tenant_id, name, email) VALUES ($1, $2::uuid, 'Le patron', $3)`,
+      [crypto.randomUUID(), t.tenantId, session[0].email],
+    );
+
+    const { body } = await interpreter(t, "voix-test-pointage-sans-nom").expect(200);
+    expect(body.operations).toHaveLength(1);
+    await executer(t, body.planId).expect(200);
+
+    const { rows } = await adminPool.query(
+      `SELECT p.heures::float AS heures, m.name FROM pointages p
+         JOIN team_members m ON m.id = p.membre_id
+        WHERE p.tenant_id = $1::uuid`,
+      [t.tenantId],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].heures).toBe(3);
+    expect(rows[0].name).toBe("Le patron");
+  });
+
+  test("sans nom dicté ET sans membre correspondant → refus explicite, zéro ligne", async () => {
+    const t = await inscrire("pointage-orphelin");
+    await affaire(t, "Dupont");
+
+    const { body } = await interpreter(t, "voix-test-pointage-sans-nom").expect(200);
+    // Le plan se construit — c'est à l'EXÉCUTION que le rapprochement échoue.
+    // Mieux vaut refuser que pointer les heures de quelqu'un d'autre parce
+    // qu'une correspondance approximative a semblé plausible.
+    const r = await executer(t, body.planId);
+    expect(r.status).toBeGreaterThanOrEqual(400);
+
+    const { rows } = await adminPool.query(
+      `SELECT count(*)::int AS n FROM pointages WHERE tenant_id = $1::uuid`,
+      [t.tenantId],
+    );
+    expect(rows[0].n).toBe(0);
+  });
+});

@@ -74,6 +74,10 @@ export const BAREME_TEMPS_MANUEL: Record<Intention["type"], { readonly champs: n
   declarer_absence: { champs: 4 },
   // membreMentionne, affaireMentionnee, dateDebutMentionnee, dateFinMentionnee
   affecter_membre: { champs: 4 },
+  // affaireMentionnee, heures, dateMentionnee — le membre n'est PAS compté :
+  // sans nom dicté, c'est celui qui parle, et à l'écran il est déjà
+  // sélectionné. On sous-estime, comme partout dans ce barème.
+  pointer_heures: { champs: 3 },
 };
 
 /**
