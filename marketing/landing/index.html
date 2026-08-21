@@ -9,8 +9,11 @@
 
   PLACEHOLDERS — tous renseignés (prompt du fondateur, 17/08) :
 
-    DATE_CALENDRIER              RENSEIGNÉ : « À venir — Décembre 2026 »,
-                                 contenu « Paiement en USDC » (Section 5).
+    DATE_CALENDRIER              RÉSOLU puis RETIRÉ : le jalon « À venir —
+                                 Décembre 2026 / Paiement en USDC » a été
+                                 retiré de la page publique (signal de
+                                 risque pour la cible) — feuille de route
+                                 interne uniquement. S.05 = 2 colonnes.
     DATE_OUVERTURE_FONDATEURS    RENSEIGNÉ : « le 1er octobre 2026 »
                                  (Section 7, FAQ « Quand est-ce disponible ? »).
     ENDPOINT_FORMULAIRE          BRANCHÉ : FormSubmit (mode /ajax) relaie
@@ -571,7 +574,6 @@ button, input, textarea { font: inherit; color: inherit; }
   background: var(--lime);
   margin-top: 8px;
 }
-.status__col--future li::before { background: var(--text-mute); }
 .status__note { margin-top: 22px; font-size: 13px; color: var(--text-mute); }
 .placeholder-token {
   font-family: var(--mono);
@@ -784,7 +786,7 @@ button, input, textarea { font: inherit; color: inherit; }
 /* ── ≥ 1024 px ──────────────────────────────────────────────────────────── */
 @media (min-width: 1024px) {
   .section { padding: 104px 0; }
-  .status { grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .status { grid-template-columns: repeat(2, 1fr); gap: 20px; }
   .building { grid-template-columns: repeat(3, 1fr); }
   /* Problèmes en 2 colonnes : symptôme à gauche, coût à droite, réponse en
      pleine largeur — trois points d'ancrage par carte au survol. */
@@ -1068,12 +1070,9 @@ button, input, textarea { font: inherit; color: inherit; }
           <li>Échéancier fiscal et social</li>
         </ul>
       </div>
-      <div class="card status__col status__col--future reveal" style="--d:0.12s">
-        <h3>À venir — Décembre 2026</h3>
-        <ul>
-          <li>Paiement en USDC</li>
-        </ul>
-      </div>
+      <!-- La colonne « À venir — Décembre 2026 » (Paiement en USDC) est
+           retirée de la page publique : signal de risque pour la cible TPE
+           bâtiment. Le jalon reste dans la feuille de route interne. -->
     </div>
 
     <p class="status__note reveal">
