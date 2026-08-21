@@ -1,0 +1,19 @@
+{
+  // Les fichiers de CONFIGURATION du paquet, typés.
+  //
+  // Ils ne peuvent pas rejoindre `tsconfig.json` : son `rootDir` vaut `src`,
+  // et tout fichier hors de là fait échouer la compilation (TS6059). D'où ce
+  // projet séparé, sans émission — il ne construit rien, il vérifie.
+  //
+  // Ce qu'il aurait attrapé : `vitest.config.ts` déclarait `singleFork: true`,
+  // une option qui n'existe plus dans Vitest 4. Personne ne typait ce fichier,
+  // donc l'option était ignorée en silence et les tests tournaient à neuf forks
+  // au lieu d'un — la cause du flottement du ticket 4.22. Un fichier de
+  // configuration non typé peut mentir indéfiniment.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["vitest.config.ts"]
+}

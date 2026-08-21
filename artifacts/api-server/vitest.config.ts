@@ -7,10 +7,24 @@ export default defineConfig({
     testTimeout: 30_000,
     hookTimeout: 60_000,
 
-    // All RLS tests run sequentially in a single fork so they share
-    // admin-pool setup/teardown without port collisions.
+    // Les fichiers de test s'exécutent l'un APRÈS l'autre, jamais en parallèle.
+    //
+    // Deux raisons, et les deux ont fait des dégâts avant d'être comprises :
+    //   — Supertest monte un serveur `app.listen(0)` par requête, et ce paquet
+    //     en compte plus de 300. Plusieurs fichiers en vol puisent tous dans la
+    //     réserve de ports éphémères de la MACHINE : d'où des `ECONNRESET`
+    //     intermittents, sur un fichier différent à chaque fois.
+    //   — Tous les fichiers partagent UNE base PostgreSQL. Le nettoyage de fin
+    //     de fichier s'exécutait pendant qu'un autre était au milieu de ses
+    //     tests, d'où des « la ligne n'est pas là » : 404 sur une route qui
+    //     existe, compte à 0, 201 devenu 200.
+    //
+    // `fileParallelism: false` et NON `singleFork: true` : cette dernière était
+    // écrite ici depuis l'origine, n'existe plus dans Vitest 4, et était donc
+    // ignorée en silence. Les fichiers tournaient à neuf forks, exactement le
+    // contraire de ce que ce commentaire promettait. Voir ticket 4.22.
     pool: "forks",
-    singleFork: true,
+    fileParallelism: false,
 
     setupFiles: ["src/__tests__/vitest.setup.ts"],
     include: ["src/__tests__/**/*.test.ts",
