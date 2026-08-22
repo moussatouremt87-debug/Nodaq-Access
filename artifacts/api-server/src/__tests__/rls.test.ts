@@ -67,7 +67,7 @@ const BUSINESS_TABLES = [
   "tenant_invites",
   "pa_documents_recus", "pa_transmissions",
   "bank_connections", "bank_accounts",
-  "charges_recurrentes", "agent_feedback",
+  "charges_recurrentes", "agent_feedback", "onboarding_qualification",
 ] as const;
 
 // ────────────────────────────────────────────────────────────────────────────

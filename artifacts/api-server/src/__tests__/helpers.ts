@@ -238,7 +238,7 @@ const BUSINESS_TABLES = [
   "pa_documents_recus", "pa_transmissions",
   // bank_accounts référence bank_connections (connection_id) : avant elle.
   "bank_accounts", "bank_connections",
-  "charges_recurrentes", "agent_feedback",
+  "charges_recurrentes", "agent_feedback", "onboarding_qualification",
 ];
 
 export async function cleanupTenants(...tenantIds: string[]): Promise<void> {
@@ -403,6 +403,7 @@ export function tableInsertSql(table: string, tenantId: string, memberAId?: stri
       INSERT INTO bank_accounts (id, tenant_id, connection_id, label, balance_cents)
       SELECT $1, $2::uuid, c.id, 'RLS Compte', 1000 FROM c
       ON CONFLICT DO NOTHING`, [id, tenantId]],
+    onboarding_qualification: [`INSERT INTO onboarding_qualification (tenant_id, stade) VALUES ($1::uuid, 'EXISTANTE')`, [tenantId]],
     agent_feedback:       [`INSERT INTO agent_feedback (id, tenant_id, type_production, note) VALUES ($1, $2::uuid, 'devis_genere', 'POUCE_HAUT')`, [id, tenantId]],
     charges_recurrentes: [`INSERT INTO charges_recurrentes (id, tenant_id, label, category, cadence, start_date, amount_cents) VALUES ($1, $2::uuid, 'rls-test', 'AUTRE', 'mensuel', $3, 10000)`, [id, tenantId, now]],
     // tenant_invites : invited_by référence users(id), pas team_members(id)
