@@ -2,6 +2,7 @@ import { pgTable, text, timestamp, integer, real, json, uuid, boolean } from "dr
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { tenantsTable } from "./tenants";
+import type { GestionDechets } from "@nodaq/shared";
 
 export type DevisAddress = {
   street?: string;
@@ -73,6 +74,13 @@ export const devisTable = pgTable("devis", {
   clientId: text("client_id"),
   /** Dernière relance PROPOSÉE pour ce devis — évite de le reproposer. */
   derniereRelanceLe: text("derniere_relance_le"),
+  /**
+   * Bloc de gestion des déchets (loi AGEC, décret 2020-1817).
+   *
+   * `null` = non applicable (secteur hors travaux) ou devis antérieur au
+   * ticket 4.35 — les devis existants ne sont pas réécrits.
+   */
+  gestionDechets: json("gestion_dechets").$type<GestionDechets | null>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

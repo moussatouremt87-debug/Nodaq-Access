@@ -176,6 +176,7 @@ export * from "./pendingActionCatalog.js";
 export * from "./affaireMargin.js";
 export * from "./coutMainOeuvre.js";
 export * from "./rapprochementCatalogue.js";
+export * from "./gestionDechets.js";
 export * from "./glossaire.js";
 export * from "./relanceCommerciale.js";
 export * from "./intentionVocale.js";

@@ -28,7 +28,7 @@
 import { eq, sql } from "drizzle-orm";
 import { withTenant, devisTable, settingsTable } from "@workspace/db";
 import type { Devis, DevisLine } from "@workspace/db";
-import { verticalPack, type Vertical } from "@nodaq/shared";
+import { verticalPack, texteBlocDechets, type Vertical } from "@nodaq/shared";
 import {
   generateHumanPdf,
   type FactureForPdf,
@@ -109,6 +109,18 @@ export async function genererPdfDevis(devis: Devis, emetteur: SellerInfo): Promi
     autoliquidation: devis.autoliquidation,
     ...(devis.retenueGarantiePct ? { retenueGarantiePct: devis.retenueGarantiePct } : {}),
     ...(devis.notes ? { notes: devis.notes } : {}),
+    // Le bloc AGEC n'apparaît que s'il a été renseigné : un devis d'un secteur
+    // non concerné, ou antérieur au ticket 4.35, porte `null` et n'imprime
+    // rien de plus.
+    ...(devis.gestionDechets ? { gestionDechets: devis.gestionDechets } : {}),
+    ...(devis.gestionDechets
+      ? {
+          blocReglementaire: {
+            titre: "Gestion des déchets de chantier",
+            lignes: texteBlocDechets(devis.gestionDechets),
+          },
+        }
+      : {}),
   };
 
   return generateHumanPdf(donnees);
