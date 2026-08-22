@@ -102,7 +102,6 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: '/avoirs',     label: 'Avoirs',           icon: FileText,      testId: 'nav-avoirs',     requiredRoles: FINANCIAL_ROLES },
       { href: '/analytique', label: 'Activité',          icon: BarChart2,     testId: 'nav-analytique' },
       { href: '/pointages',  label: 'Heures',           icon: CalendarCheck, testId: 'nav-pointages', essentiel: true },
-      { href: '/devis/dictee', label: 'Devis dicté',    icon: Mic,           testId: 'nav-devis-dictee', essentiel: true },
       { href: '/marge',      label: 'Marge',            icon: TrendingUp,    testId: 'nav-marge',      requiredRoles: FINANCIAL_ROLES },
       { href: '/rapports',   label: 'Rapports',         icon: FileBarChart,  testId: 'nav-rapports',   requiredRoles: FINANCIAL_ROLES },
       { href: '/echeancier',      label: 'Échéancier fiscal',   icon: CalendarClock,   testId: 'nav-echeancier',      requiredRoles: FINANCIAL_ROLES },
@@ -163,10 +162,11 @@ export const MOBILE_NAV: Array<
   Pick<NavItem, 'href' | 'label' | 'icon' | 'requiredRoles' | 'essentiel'>
 > = [
   { href: '/',             label: 'Cockpit',    icon: LayoutDashboard, essentiel: true },
-  // Deuxième position, délibérément : le devis dicté est la fonction sur
-  // laquelle repose le produit, et l'artisan qui la veut est justement celui
-  // qui est sur un chantier avec son téléphone.
-  { href: '/devis/dictee', label: 'Devis dicté', icon: Mic, essentiel: true },
+  // Deuxième position, délibérément. C'était « Devis dicté » ; cet écran a été
+  // supprimé au ticket 4.24 et la voix est passée à l'agent unique. La PLACE
+  // reste celle de la fonction sur laquelle repose le produit — l'artisan qui
+  // la veut est sur un chantier, avec son téléphone.
+  { href: '/chat',         label: 'Agent IA',   icon: MessageSquare, essentiel: true },
   { href: '/affaires',     label: 'Affaires',   icon: Briefcase },
   { href: '/pointages',    label: 'Heures',     icon: CalendarCheck, essentiel: true },
 ];

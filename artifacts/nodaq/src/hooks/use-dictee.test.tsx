@@ -13,10 +13,10 @@
  * décider seul.
  */
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, waitFor } from '@testing-library/react';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { useDictee, CONTRAINTES_AUDIO } from '@/hooks/use-dictee';
+import { useDictee, CONTRAINTES_AUDIO, formatEnregistrementSupporte } from '@/hooks/use-dictee';
 
 // ── Le micro, bouchonné ────────────────────────────────────────────────────
 
@@ -130,5 +130,88 @@ describe('b — toute captation passe par la constante partagée', () => {
     // déjà plus rien.
     expect(appelants.length, `chemins de captation trouvés : ${appelants.join(', ')}`)
       .toBeGreaterThanOrEqual(2);
+  });
+});
+
+// ── c. Ticket 4.24 : « la commande vocale ne marche pas » ──────────────────
+
+describe('c — Safari, donc tout iPhone, sait enregistrer', () => {
+  const original = globalThis.MediaRecorder;
+  afterEach(() => { globalThis.MediaRecorder = original; });
+
+  /** Un navigateur qui ne connaît QUE le format de Safari. */
+  function simulerSafari() {
+    const faux = function () {} as unknown as typeof MediaRecorder;
+    (faux as unknown as { isTypeSupported: (t: string) => boolean }).isTypeSupported =
+      (t: string) => t === 'audio/mp4';
+    globalThis.MediaRecorder = faux;
+  }
+
+  test('sur Safari, un format supporté est trouvé', () => {
+    simulerSafari();
+    // Avant ce lot, la liste n'essayait que webm et ogg puis retombait sur
+    // 'audio/webm' EN DUR : le constructeur levait NotSupportedError, et la
+    // commande vocale ne pouvait pas fonctionner sur un iPhone.
+    expect(formatEnregistrementSupporte()).toBe('audio/mp4');
+  });
+
+  test('sur un navigateur qui ne connaît rien, on ne force RIEN', () => {
+    const faux = function () {} as unknown as typeof MediaRecorder;
+    (faux as unknown as { isTypeSupported: () => boolean }).isTypeSupported = () => false;
+    globalThis.MediaRecorder = faux;
+    // `undefined` laisse `MediaRecorder` choisir son propre format. Lui en
+    // imposer un qu'il refuse ne peut qu'échouer.
+    expect(formatEnregistrementSupporte()).toBeUndefined();
+  });
+
+  test('Chrome garde opus, qui reste le meilleur choix', () => {
+    const faux = function () {} as unknown as typeof MediaRecorder;
+    (faux as unknown as { isTypeSupported: (t: string) => boolean }).isTypeSupported =
+      (t: string) => t.startsWith('audio/webm');
+    globalThis.MediaRecorder = faux;
+    expect(formatEnregistrementSupporte()).toBe('audio/webm;codecs=opus');
+  });
+});
+
+describe('d — relâcher AVANT la fin du démarrage arrête bien le micro', () => {
+  test("l'appui bref n'abandonne pas un enregistreur qui tourne", async () => {
+    // LE défaut : `demarrer` est asynchrone (la demande de permission peut
+    // durer), et `arreter` rendait la main sans rien faire tant que
+    // l'enregistreur n'existait pas. L'enregistrement démarrait juste après et
+    // ne s'arrêtait JAMAIS — micro ouvert, pastille rouge, aucun texte.
+    const arrets: string[] = [];
+    const pistes = [{ stop: () => arrets.push('piste') }];
+    let resoudrePermission: (v: unknown) => void = () => {};
+    const permission = new Promise((r) => { resoudrePermission = r; });
+
+    const faux = function (this: Record<string, unknown>) {
+      this['start'] = () => {};
+      this['stop'] = () => arrets.push('recorder');
+      this['mimeType'] = 'audio/webm';
+    } as unknown as typeof MediaRecorder;
+    (faux as unknown as { isTypeSupported: () => boolean }).isTypeSupported = () => true;
+    globalThis.MediaRecorder = faux;
+
+    Object.defineProperty(globalThis.navigator, 'mediaDevices', {
+      configurable: true,
+      value: {
+        getUserMedia: async () => {
+          await permission;
+          return { getTracks: () => pistes };
+        },
+      },
+    });
+
+    const { result } = renderHook(() => useDictee(() => {}));
+
+    // L'utilisateur appuie… puis relâche pendant que le navigateur demande
+    // encore la permission.
+    const enCours = act(() => result.current.demarrer());
+    act(() => result.current.arreter());
+    resoudrePermission(null);
+    await enCours;
+
+    await waitFor(() => expect(arrets).toContain('recorder'));
+    expect(result.current.enregistre).toBe(false);
   });
 });
