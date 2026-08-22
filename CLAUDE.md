@@ -211,6 +211,19 @@ fichiers. Ni PDF, ni upload, ni cache qui doive survivre.
 `if (!process.env.X) return;` ont masqué sept tests de sécurité pendant des semaines.
 Le LLM est simulé par `vitest.setup.ts` : aucun test n'a besoin d'une clé réelle.
 
+**Changer une version dans un `package.json` sans régénérer le verrou casse la CI,
+et seulement la CI.** La CI installe avec `--frozen-lockfile` ; en local, `pnpm install`
+répare le verrou en silence, et `pnpm run typecheck` comme la suite de tests passent
+sur des paquets déjà installés. Le rouge n'apparaît donc qu'après la fusion.
+
+C'est arrivé en épinglant Vitest (ticket 4.22) : `pnpm-lock.yaml` gardait
+`specifier: latest` alors que les `package.json` disaient `4.1.10`, et
+`main` est resté cassé plusieurs PR durant.
+
+Après toute modification d'un `package.json` : `pnpm install --lockfile-only`, puis
+**`pnpm install --frozen-lockfile`** pour vérifier — c'est la commande que la CI
+exécute, et la seule qui prouve quelque chose ici.
+
 **Un vert obtenu avec une variable d'environnement locale n'est pas un vert.** Vérifier
 sans les secrets, sur une base vierge, comme la CI.
 

@@ -268,7 +268,7 @@ export default function Cockpit() {
               />
               <AnimatedKpi
                 testId="kpi-prospects-pipeline"
-                label="Prospects pipeline"
+                label="Contacts en discussion"
                 target={kpis?.prospectsPipeline ?? 0}
                 format={fmtCount}
                 icon={Users}

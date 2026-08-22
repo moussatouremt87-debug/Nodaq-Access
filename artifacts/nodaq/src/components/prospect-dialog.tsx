@@ -118,7 +118,7 @@ export function ProspectDialog({
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Modifier le prospect' : 'Nouveau prospect'}</DialogTitle>
           <DialogDescription>
-            {isEdit ? 'Mettez à jour ce contact.' : 'Ajoutez un nouveau contact au pipeline.'}
+            {isEdit ? 'Mettez à jour ce contact.' : 'Ajoutez un nouveau contact commercial.'}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>

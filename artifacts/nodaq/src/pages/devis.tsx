@@ -87,7 +87,17 @@ export default function DevisPage() {
   const { toast } = useToast();
   const { proposalWord } = useVertical();
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('ALL');
+  /**
+   * Le filtre de départ vient de l'URL quand elle en porte un.
+   *
+   * Sans ça, un lien « Voir les 3 devis en attente » ouvrait la liste COMPLÈTE :
+   * l'écran était le bon, mais le compte annoncé ne correspondait à rien de ce
+   * qui s'affichait, ce qui est une autre façon de mentir.
+   */
+  const [statusFilter, setStatusFilter] = useState(() => {
+    const depuisUrl = new URLSearchParams(window.location.search).get('statut');
+    return depuisUrl && depuisUrl in STATUS_META ? depuisUrl : 'ALL';
+  });
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Devis | null>(null);
   /** Rempli par la réponse à l'envoi — la seule occasion de voir le lien. */

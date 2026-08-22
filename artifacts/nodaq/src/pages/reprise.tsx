@@ -3,7 +3,7 @@
  *
  * Ordre fixe :
  *   ① Chantiers en cours      ② Factures impayées
- *   ③ Devis en attente        ④ CA YTD (2 champs)
+ *   ③ Devis en attente        ④ CA depuis le 1er janvier (2 champs)
  *   ⑤ Équipe + congés          ⑥ Planning déduit
  *
  * Règles :
@@ -39,7 +39,8 @@ const API = '/api';
 const BLOC_LABELS: Record<string, string> = {
   'impayés': 'Factures impayées',
   devis: 'Devis en attente',
-  ca_ytd: 'Chiffre d\'affaires YTD',
+  // « YTD » signalé au test du 22/08 : la période se dit, elle ne se sigle pas.
+  ca_ytd: 'Chiffre d\'affaires depuis le 1er janvier',
   equipe: 'Équipe',
   planning: 'Planning déduit',
 };

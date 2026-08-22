@@ -27,7 +27,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 import { useVertical } from '@/hooks/use-vertical';
-import { habilitationsSuggereesParVertical, type AffaireWords } from '@nodaq/shared';
+import { habilitationsSuggereesParVertical, type AffaireWords , articleEtNom, accorder } from '@nodaq/shared';
 import { cn } from '@/lib/utils';
 import { apiFetch } from '@/lib/auth';
 import { toDateString } from '@/lib/format';
@@ -421,14 +421,17 @@ function DevisActionCard({ devis }: { devis: { count: number; semainesPotentiell
     <div className="mx-5 mb-5 mt-2 rounded-xl bg-sidebar text-sidebar-foreground p-4">
       <p className="font-serif text-[17px] leading-snug">
         <span className="text-amber-300 font-semibold">{devis.count} devis</span>{' '}
-        {devis.count > 1 ? 'attendent' : 'attend'} une réponse. Ensemble, ils rempliraient{' '}
-        <span className="text-amber-300 font-semibold">{devis.semainesPotentielles} semaine{devis.semainesPotentielles > 1 ? 's' : ''}</span>.
+        {accorder(devis.count, 'attend', 'attendent')} une réponse. Ensemble, ils rempliraient{' '}
+        <span className="text-amber-300 font-semibold">{devis.semainesPotentielles} {accorder(devis.semainesPotentielles, 'semaine')}</span>.
       </p>
       <button
-        onClick={() => setLocation('/affaires?statut=DEVIS_ENVOYE')}
+        // Vers les DEVIS, pas vers les chantiers. Le lien menait à
+        // /affaires : l'étiquette promettait des devis et l'écran en montrait
+        // autre chose.
+        onClick={() => setLocation('/devis?statut=ENVOYE')}
         className="mt-3 w-full text-center py-2.5 rounded-lg bg-sidebar-foreground/10 hover:bg-sidebar-foreground/20 font-semibold text-sm transition-colors"
       >
-        Voir les {devis.count} devis →
+        Voir {articleEtNom(devis.count, 'devis')} →
       </button>
     </div>
   );
