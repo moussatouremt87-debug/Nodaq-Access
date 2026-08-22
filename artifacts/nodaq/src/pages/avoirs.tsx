@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { CurrencyInput } from '@/components/currency-input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -168,16 +169,17 @@ function AvoirDialog({ open, onOpenChange, onSave, saving }: {
   saving: boolean;
 }) {
   const [factureRefId, setFactureRefId] = useState('');
-  const [montantHT, setMontantHT] = useState('');
-  const [montantTVA, setMontantTVA] = useState('0');
+  // En CENTIMES : la conversion vit dans `CurrencyInput`, à un seul endroit.
+  const [montantHT, setMontantHT] = useState(0);
+  const [montantTVA, setMontantTVA] = useState(0);
   const [motif, setMotif] = useState('');
 
   const handleSave = () => {
-    if (!factureRefId.trim() || !montantHT || !motif.trim()) return;
+    if (!factureRefId.trim() || montantHT <= 0 || !motif.trim()) return;
     onSave({
       factureRefId: factureRefId.trim(),
-      montantHtCents: Math.round(Number(montantHT) * 100),
-      montantTvaCents: Math.round(Number(montantTVA) * 100),
+      montantHtCents: montantHT,
+      montantTvaCents: montantTVA,
       motif: motif.trim(),
     });
   };
@@ -200,13 +202,11 @@ function AvoirDialog({ open, onOpenChange, onSave, saving }: {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label>Montant HT de l'avoir (€) *</Label>
-              <Input type="number" value={montantHT} onChange={e => setMontantHT(e.target.value)}
-                placeholder="0.00" min={0} step={0.01} />
+              <CurrencyInput valueCents={montantHT} onChangeCents={setMontantHT} />
             </div>
             <div className="space-y-1.5">
               <Label>TVA (€)</Label>
-              <Input type="number" value={montantTVA} onChange={e => setMontantTVA(e.target.value)}
-                placeholder="0.00" min={0} step={0.01} />
+              <CurrencyInput valueCents={montantTVA} onChangeCents={setMontantTVA} />
             </div>
           </div>
           <div className="space-y-1.5">

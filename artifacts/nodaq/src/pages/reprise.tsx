@@ -19,6 +19,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Check, ChevronRight, SkipForward, Plus, Trash2, Users, Calculator } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { CurrencyInput } from '@/components/currency-input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { useVertical } from '@/hooks/use-vertical';
@@ -110,7 +111,8 @@ interface ChantierRow {
   id: string;
   label: string;
   client: string;
-  montantHt: string;
+  /** En CENTIMES — `CurrencyInput` porte la conversion. */
+  montantHtCents: number;
   avancement: string;
   dateFinPrevue: string;
 }
@@ -118,15 +120,19 @@ interface ChantierRow {
 function BlocChantiers({ onValidate }: { onValidate: (data: Record<string, unknown>) => void }) {
   const { words } = useVertical();
   const [rows, setRows] = useState<ChantierRow[]>([
-    { id: crypto.randomUUID(), label: '', client: '', montantHt: '', avancement: '', dateFinPrevue: '' },
+    { id: crypto.randomUUID(), label: '', client: '', montantHtCents: 0, avancement: '', dateFinPrevue: '' },
   ]);
 
   const addRow = () => setRows(r => [...r, {
-    id: crypto.randomUUID(), label: '', client: '', montantHt: '', avancement: '', dateFinPrevue: '',
+    id: crypto.randomUUID(), label: '', client: '', montantHtCents: 0, avancement: '', dateFinPrevue: '',
   }]);
   const removeRow = (id: string) => setRows(r => r.filter(x => x.id !== id));
-  const update = (id: string, field: keyof ChantierRow, val: string) =>
+  const update = (id: string, field: Exclude<keyof ChantierRow, 'montantHtCents' | 'id'>, val: string) =>
     setRows(r => r.map(x => x.id === id ? { ...x, [field]: val } : x));
+  // Le montant a son propre setter : il est en centimes, pas en texte, et le
+  // mélanger au `update` générique redonnerait un champ à chaînes.
+  const majMontant = (id: string, cents: number) =>
+    setRows(r => r.map(x => x.id === id ? { ...x, montantHtCents: cents } : x));
 
   const handleValidate = () => {
     const chantiers = rows
@@ -134,7 +140,7 @@ function BlocChantiers({ onValidate }: { onValidate: (data: Record<string, unkno
       .map(r => ({
         label: r.label,
         client: r.client,
-        montantVenduHt: r.montantHt ? Math.round(Number(r.montantHt) * 100) : null,
+        montantVenduHt: r.montantHtCents > 0 ? r.montantHtCents : null,
         avancementPct: r.avancement ? Number(r.avancement) : null,
         dateFinPrevue: r.dateFinPrevue || null,
       }));
@@ -169,9 +175,11 @@ function BlocChantiers({ onValidate }: { onValidate: (data: Record<string, unkno
                     placeholder="Client" className="h-8 text-sm border-0 bg-transparent px-0 focus-visible:ring-0" />
                 </td>
                 <td className="py-1.5 px-2">
-                  <Input type="number" value={row.montantHt}
-                    onChange={e => update(row.id, 'montantHt', e.target.value)}
-                    placeholder="0" className="h-8 text-sm text-right border-0 bg-transparent px-0 focus-visible:ring-0" min={0} />
+                  <CurrencyInput
+                    valueCents={row.montantHtCents}
+                    onChangeCents={(c) => majMontant(row.id, c)}
+                    className="h-8 text-sm text-right border-0 bg-transparent px-0 focus-visible:ring-0"
+                  />
                 </td>
                 <td className="py-1.5 px-2">
                   <Input type="number" value={row.avancement}
@@ -207,16 +215,18 @@ function BlocChantiers({ onValidate }: { onValidate: (data: Record<string, unkno
 
 function BlocImpayés({ onValidate }: { onValidate: (data: Record<string, unknown>) => void }) {
   const [rows, setRows] = useState([
-    { id: crypto.randomUUID(), client: '', montant: '', dateFacture: '' },
+    { id: crypto.randomUUID(), client: '', montantCents: 0, dateFacture: '' },
   ]);
 
-  const addRow = () => setRows(r => [...r, { id: crypto.randomUUID(), client: '', montant: '', dateFacture: '' }]);
+  const addRow = () => setRows(r => [...r, { id: crypto.randomUUID(), client: '', montantCents: 0, dateFacture: '' }]);
   const removeRow = (id: string) => setRows(r => r.filter(x => x.id !== id));
-  const update = (id: string, field: 'client' | 'montant' | 'dateFacture', val: string) =>
+  const update = (id: string, field: 'client' | 'dateFacture', val: string) =>
     setRows(r => r.map(x => x.id === id ? { ...x, [field]: val } : x));
+  const majMontant = (id: string, cents: number) =>
+    setRows(r => r.map(x => x.id === id ? { ...x, montantCents: cents } : x));
 
   const today = new Date();
-  const totalCents = rows.reduce((s, r) => s + (Number(r.montant) * 100 || 0), 0);
+  const totalCents = rows.reduce((s, r) => s + r.montantCents, 0);
 
   const getJoursRetard = (dateFacture: string) => {
     if (!dateFacture) return null;
@@ -235,18 +245,18 @@ function BlocImpayés({ onValidate }: { onValidate: (data: Record<string, unknow
             <div key={row.id} className="grid grid-cols-[1fr_120px_120px_auto] gap-2 items-center">
               <Input value={row.client} onChange={e => update(row.id, 'client', e.target.value)}
                 placeholder="Nom du client" className="h-8 text-sm" />
-              <Input type="number" value={row.montant}
-                onChange={e => update(row.id, 'montant', e.target.value)}
-                placeholder="Montant (€)" className="h-8 text-sm text-right" min={0} />
+              <CurrencyInput valueCents={row.montantCents}
+                onChangeCents={(c) => majMontant(row.id, c)}
+                className="h-8 text-sm text-right" />
               <Input type="date" aria-label="Date de la facture" value={row.dateFacture}
                 onChange={e => update(row.id, 'dateFacture', e.target.value)}
                 className="h-8 text-sm" />
               <button onClick={() => removeRow(row.id)} aria-label="Supprimer la ligne" className="text-muted-foreground hover:text-destructive shrink-0">
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
-              {jours !== null && row.montant && (
+              {jours !== null && row.montantCents > 0 && (
                 <div className="col-span-4 text-xs text-amber-600 dark:text-amber-400 -mt-1">
-                  {fmtEUR(Number(row.montant) * 100)} — en retard depuis {jours} jour{jours > 1 ? 's' : ''}
+                  {fmtEUR(row.montantCents)} — en retard depuis {jours} jour{jours > 1 ? 's' : ''}
                 </div>
               )}
             </div>
@@ -263,7 +273,7 @@ function BlocImpayés({ onValidate }: { onValidate: (data: Record<string, unknow
           </span>
         )}
       </div>
-      <Button size="sm" onClick={() => onValidate({ impayés: rows.filter(r => r.client && r.montant) })} className="gap-1.5">
+      <Button size="sm" onClick={() => onValidate({ impayés: rows.filter(r => r.client && r.montantCents > 0) })} className="gap-1.5">
         <Check className="h-3.5 w-3.5" /> Valider
       </Button>
     </div>
@@ -272,11 +282,13 @@ function BlocImpayés({ onValidate }: { onValidate: (data: Record<string, unknow
 
 function BlocDevis({ onValidate }: { onValidate: (data: Record<string, unknown>) => void }) {
   const [rows, setRows] = useState([
-    { id: crypto.randomUUID(), client: '', montant: '', dateEnvoi: '' },
+    { id: crypto.randomUUID(), client: '', montantCents: 0, dateEnvoi: '' },
   ]);
-  const addRow = () => setRows(r => [...r, { id: crypto.randomUUID(), client: '', montant: '', dateEnvoi: '' }]);
-  const update = (id: string, field: 'client' | 'montant' | 'dateEnvoi', val: string) =>
+  const addRow = () => setRows(r => [...r, { id: crypto.randomUUID(), client: '', montantCents: 0, dateEnvoi: '' }]);
+  const update = (id: string, field: 'client' | 'dateEnvoi', val: string) =>
     setRows(r => r.map(x => x.id === id ? { ...x, [field]: val } : x));
+  const majMontant = (id: string, cents: number) =>
+    setRows(r => r.map(x => x.id === id ? { ...x, montantCents: cents } : x));
 
   return (
     <div className="space-y-3">
@@ -285,9 +297,9 @@ function BlocDevis({ onValidate }: { onValidate: (data: Record<string, unknown>)
         <div key={row.id} className="grid grid-cols-[1fr_120px_120px] gap-2">
           <Input value={row.client} onChange={e => update(row.id, 'client', e.target.value)}
             placeholder="Client" className="h-8 text-sm" />
-          <Input type="number" value={row.montant}
-            onChange={e => update(row.id, 'montant', e.target.value)}
-            placeholder="Montant HT (€)" className="h-8 text-sm text-right" min={0} />
+          <CurrencyInput valueCents={row.montantCents}
+            onChangeCents={(c) => majMontant(row.id, c)}
+            className="h-8 text-sm text-right" />
           <Input type="date" aria-label="Date d'envoi" value={row.dateEnvoi}
             onChange={e => update(row.id, 'dateEnvoi', e.target.value)}
             className="h-8 text-sm" />
