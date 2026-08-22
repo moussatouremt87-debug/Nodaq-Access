@@ -481,12 +481,45 @@ function EcranRecherche({
 
 function EcranClasseur({ onNext, onSkip }: { onNext: () => void; onSkip: () => void }) {
   const [file, setFile] = useState<File | null>(null);
+  const [etat, setEtat] = useState<'attente' | 'envoi' | 'range' | 'echec'>('attente');
+  const [motifEchec, setMotifEchec] = useState<string | null>(null);
 
-  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  /**
+   * Le fichier est RÉELLEMENT rangé dans le classeur.
+   *
+   * ── Le défaut que ça corrige ──────────────────────────────────────────
+   * « J'avais ajouté une facture au tout début mais elle n'apparaît pas dans
+   * le classeur. » Cet écran annonçait « Elle sera rangée dans votre
+   * classeur » et ne faisait RIEN du fichier : il l'affichait comme
+   * « Sélectionné » et l'oubliait au changement d'écran.
+   *
+   * La route `/api/classeur` existait pourtant et fonctionnait. Il ne
+   * manquait que l'appel.
+   */
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
     setFile(f);
-    // Aucun upload effectué — le fichier reste en mémoire locale uniquement.
+    setEtat('envoi');
+    setMotifEchec(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', f);
+      // Rangée dans FACTURES : c'est ce que l'écran demande, et une
+      // catégorie juste évite d'avoir à reclasser après coup.
+      fd.append('category', 'FACTURES');
+      const res = await apiFetch(`${API}/classeur`, { method: 'POST', body: fd });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(j.error ?? `Envoi refusé (${res.status})`);
+      }
+      setEtat('range');
+    } catch (err) {
+      // Un échec se DIT. Laisser croire au rangement était exactement le
+      // défaut d'origine.
+      setEtat('echec');
+      setMotifEchec(err instanceof Error ? err.message : 'Erreur inconnue');
+    }
   };
 
   return (
@@ -508,19 +541,29 @@ function EcranClasseur({ onNext, onSkip }: { onNext: () => void; onSkip: () => v
       </label>
 
       {file && (
-        <div className="flex items-center gap-2 rounded-lg bg-muted/50 border border-border px-3 py-2 text-sm">
+        <div className="flex items-center gap-2 rounded-lg bg-muted/50 border border-border px-3 py-2 text-sm" data-testid="etat-depot">
           <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
           <span className="truncate text-foreground">{file.name}</span>
           <span className="text-muted-foreground ml-auto shrink-0 text-xs">
-            Sélectionné
+            {etat === 'envoi' ? 'Envoi…' : etat === 'range' ? 'Rangé dans le classeur' : etat === 'echec' ? 'Non rangé' : 'Sélectionné'}
           </span>
         </div>
       )}
 
-      {/* Message honnête : upload et OCR non disponibles */}
+      {etat === 'echec' && (
+        <div className="rounded-lg bg-destructive/10 border border-destructive/25 px-3 py-2 text-xs text-destructive">
+          Le document n'a pas pu être rangé — {motifEchec}. Vous pourrez le déposer
+          depuis le Classeur plus tard.
+        </div>
+      )}
+
+      {/* L'extraction automatique (OCR) reste à venir : le document est rangé,
+          pas encore lu. Le dire évite d'attendre une numérotation qui ne sera
+          pas devinée. */}
       <div className="rounded-lg bg-amber-500/10 border border-amber-500/25 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-        L'upload de fichiers et l'extraction automatique (OCR) ne sont pas encore disponibles.
-        Cliquez sur "Continuer" — vous saisirez votre numérotation directement dans vos futurs devis.
+        Le document est rangé dans votre classeur, mais sa lecture automatique (OCR)
+        n'est pas encore disponible : vous saisirez votre numérotation directement
+        dans vos futurs devis.
       </div>
 
       <div className="flex gap-2">

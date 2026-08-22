@@ -142,7 +142,7 @@ export function ProspectDialog({
                 name="companyName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Société</FormLabel>
+                    <FormLabel>Société (si professionnel)</FormLabel>
                     <FormControl>
                       <Input placeholder="Dumont Architecture" data-testid="input-prospect-company" {...field} />
                     </FormControl>

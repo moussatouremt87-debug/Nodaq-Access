@@ -229,7 +229,7 @@ export function ContratDialog({
                 name="startDate"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Date de début</FormLabel>
+                    <FormLabel>Date de début du contrat</FormLabel>
                     <FormControl>
                       <Input type="date" data-testid="input-contrat-start" {...field} />
                     </FormControl>

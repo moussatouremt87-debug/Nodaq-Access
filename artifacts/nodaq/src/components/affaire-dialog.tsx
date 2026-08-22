@@ -263,10 +263,18 @@ export function AffaireDialog({
                 name="startDate"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Date de début</FormLabel>
+                    <FormLabel>Date de début des travaux</FormLabel>
                     <FormControl>
                       <Input type="date" data-testid="input-affaire-start" {...field} />
                     </FormControl>
+                    {/* « Date de début doit correspondre à quoi ? (date de début
+                        du chantier ? date de saisie du chantier ?) » — la
+                        question a été posée telle quelle au test. La date de
+                        SAISIE est une métadonnée système, elle ne se demande
+                        jamais. */}
+                    <p className="text-xs text-muted-foreground">
+                      Laissez vide si la date n'est pas encore fixée.
+                    </p>
                     <FormMessage />
                   </FormItem>
                 )}
