@@ -1376,6 +1376,9 @@ export const ListMembresResponse = zod.object({
   "libelle": zod.string().nullish(),
   "expiresAt": zod.coerce.date().describe('Validité du LIEN d\'invitation (7 jours) — à ne pas confondre avec accesExpireAt.'),
   "accesExpireAt": zod.coerce.date().nullish().describe('Échéance de l\'ACCÈS une fois l\'invitation acceptée (US-A5.4), reportée sur le membership. Obligatoire pour un VIEWER.'),
+  "envoye": zod.boolean().describe('L\'e-mail d\'invitation est-il RÉELLEMENT parti. `false` quand aucun SMTP n\'est configuré sur le déploiement, ou que l\'envoi a échoué. L\'écran doit le dire : afficher « invitation envoyée » alors que rien n\'est parti fait attendre indéfiniment un courrier qui n\'arrivera pas.'),
+  "motifEchec": zod.string().nullish().describe('Pourquoi l\'envoi a échoué, quand `envoye` vaut false.'),
+  "lienInvitation": zod.string().describe('Le lien d\'invitation en clair, à copier quand le courrier n\'est pas parti. Rendu à l\'OWNER qui vient de créer l\'invitation, et à lui seul — c\'est le même secret que celui expédié par e-mail, pas une information supplémentaire. Il n\'est PAS re-consultable ensuite : seul son condensat SHA-256 est conservé.'),
   "createdAt": zod.coerce.date()
 }))
 })
@@ -1398,6 +1401,9 @@ export const InviterMembreResponse = zod.object({
   "libelle": zod.string().nullish(),
   "expiresAt": zod.coerce.date().describe('Validité du LIEN d\'invitation (7 jours) — à ne pas confondre avec accesExpireAt.'),
   "accesExpireAt": zod.coerce.date().nullish().describe('Échéance de l\'ACCÈS une fois l\'invitation acceptée (US-A5.4), reportée sur le membership. Obligatoire pour un VIEWER.'),
+  "envoye": zod.boolean().describe('L\'e-mail d\'invitation est-il RÉELLEMENT parti. `false` quand aucun SMTP n\'est configuré sur le déploiement, ou que l\'envoi a échoué. L\'écran doit le dire : afficher « invitation envoyée » alors que rien n\'est parti fait attendre indéfiniment un courrier qui n\'arrivera pas.'),
+  "motifEchec": zod.string().nullish().describe('Pourquoi l\'envoi a échoué, quand `envoye` vaut false.'),
+  "lienInvitation": zod.string().describe('Le lien d\'invitation en clair, à copier quand le courrier n\'est pas parti. Rendu à l\'OWNER qui vient de créer l\'invitation, et à lui seul — c\'est le même secret que celui expédié par e-mail, pas une information supplémentaire. Il n\'est PAS re-consultable ensuite : seul son condensat SHA-256 est conservé.'),
   "createdAt": zod.coerce.date()
 })
 
