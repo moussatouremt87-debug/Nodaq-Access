@@ -58,6 +58,7 @@ import souveraineteRouter from "./souverainete";
 import { modulesReadRouter, modulesWriteRouter } from "./modules";
 import { reglesRelanceReadRouter, reglesRelanceWriteRouter } from "./regles-relance";
 import relanceCommercialeRouter from "./relance-commerciale";
+import agentFeedbackRouter from "./agent-feedback";
 import { campagnesRelanceReadRouter, campagnesRelanceWriteRouter } from "./campagnes-relance";
 import { liensPaiementReadRouter, liensPaiementWriteRouter } from "./liens-paiement";
 import relanceFormulationRouter from "./relance-formulation";
@@ -143,6 +144,9 @@ const financierOnly: RequestHandler[] = [...biz, requireRole(FINANCIAL_ROLES)];
 // de travail qu'un MEMBER doit voir (libellé, client, statut, dates) à des
 // champs monétaires. Le masquage se fait CHAMP PAR CHAMP dans ces routeurs
 // eux-mêmes (voir maskFinancialFields), pas en bloquant l'accès au routeur.
+// Juger une production de l'agent est ouvert à tout membre : c'est celui
+// qui s'en sert qui sait si c'était bon.
+router.use(biz, agentFeedbackRouter);
 router.use(biz, cockpitRouter);
 router.use(biz, affairesRouter);
 router.use(biz, contratsRouter);

@@ -47,3 +47,4 @@ export * from "./regles_relance";
 export * from "./campagnes_relance";
 export * from "./appels_relance";
 export * from "./liens_paiement";
+export * from "./agent_feedback";
