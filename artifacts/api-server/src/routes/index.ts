@@ -57,6 +57,7 @@ import journalDecisionsRouter from "./journal-decisions";
 import souveraineteRouter from "./souverainete";
 import { modulesReadRouter, modulesWriteRouter } from "./modules";
 import { reglesRelanceReadRouter, reglesRelanceWriteRouter } from "./regles-relance";
+import relanceCommercialeRouter from "./relance-commerciale";
 import { campagnesRelanceReadRouter, campagnesRelanceWriteRouter } from "./campagnes-relance";
 import { liensPaiementReadRouter, liensPaiementWriteRouter } from "./liens-paiement";
 import relanceFormulationRouter from "./relance-formulation";
@@ -218,6 +219,9 @@ router.use(ownerOnly, souveraineteRouter);
 // clique : c'est une décision de propriétaire.
 router.use(ownerOnly, modulesWriteRouter);
 router.use(ownerOnly, reglesRelanceWriteRouter);
+// Proposer une relance commerciale engage le nom de l'entreprise : réservé à
+// qui décide, comme les règles de relance elles-mêmes.
+router.use(ownerOnly, relanceCommercialeRouter);
 // Proposer une campagne engage le compte : c'est une décision de propriétaire.
 router.use(ownerOnly, campagnesRelanceWriteRouter);
 // Renvoyer un SMS à un débiteur engage le compte : décision de propriétaire.

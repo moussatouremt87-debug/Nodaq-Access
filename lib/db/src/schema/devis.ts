@@ -71,6 +71,8 @@ export const devisTable = pgTable("devis", {
    * réécrire un document déjà imprimé.
    */
   clientId: text("client_id"),
+  /** Dernière relance PROPOSÉE pour ce devis — évite de le reproposer. */
+  derniereRelanceLe: text("derniere_relance_le"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
