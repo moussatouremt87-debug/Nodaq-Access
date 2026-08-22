@@ -29,9 +29,10 @@ import {
   teamMembersTable,
   facturesTable,
   devisTable,
+  onboardingQualificationTable,
 } from "@workspace/db";
 import { eq, and, count } from "drizzle-orm";
-import { toDateString, compteDansCapacite } from "@nodaq/shared";
+import { toDateString, compteDansCapacite , PROFIL_VIDE, peutEmettreDocumentLegal, messageSirenManquant, premiereAction, STADES_ENTREPRISE, EFFECTIFS, GESTIONS_ACTUELLES, IRRITANTS } from "@nodaq/shared";
 
 // ── Validation SIRET (Luhn, inlinée pour éviter la dépendance circulaire) ────
 
@@ -197,6 +198,45 @@ export type BlocId = typeof BLOCS[number];
 export const onboardingReadRouter: IRouter = Router();
 
 /** Lire le profil entreprise (tous les membres voient si le profil est complet). */
+/**
+ * GET /onboarding/qualification — les réponses, et ce qu'elles impliquent.
+ *
+ * Rend AUSSI `peutEmettre` et le message associé : l'écran doit pouvoir dire
+ * « il vous manque votre SIREN » AVANT que l'utilisateur remplisse un devis
+ * entier pour buter sur un refus technique à l'émission.
+ *
+ * La garde réelle reste `REGLES_MENTIONS`, bloquante et côté serveur. Ceci ne
+ * la double pas : ça l'explique.
+ */
+onboardingReadRouter.get("/onboarding/qualification", async (req, res): Promise<void> => {
+  const tenantId = req.tenantId!;
+  const data = await withTenant(tenantId, async (tx) => {
+    const [q] = await tx
+      .select()
+      .from(onboardingQualificationTable)
+      .where(eq(onboardingQualificationTable.tenantId, tenantId));
+    const reglages = await tx
+      .select()
+      .from(settingsTable)
+      .where(eq(settingsTable.key, "company.siret"));
+    return { q, siret: reglages[0]?.value ?? "" };
+  });
+
+  const profil = {
+    ...PROFIL_VIDE,
+    ...(data.q ?? {}),
+    termineeLe: data.q?.termineeLe ? data.q.termineeLe.toISOString() : null,
+  };
+  const siretRenseigne = data.siret.replace(/\D/g, "").length > 0;
+
+  res.json({
+    profil,
+    peutEmettre: peutEmettreDocumentLegal(profil, siretRenseigne),
+    messageSiren: siretRenseigne ? null : messageSirenManquant(profil.stade),
+    premiereAction: premiereAction(profil),
+  });
+});
+
 onboardingReadRouter.get("/onboarding/profil", async (req, res): Promise<void> => {
   const tenantId = req.tenantId!;
   const rows = await withTenant(tenantId, (tx) =>
@@ -318,6 +358,52 @@ onboardingWriteRouter.post("/onboarding/profil/confirmer", async (req, res): Pro
 });
 
 const PatchProfileBody = z.record(z.string(), z.string());
+
+const CorpsQualification = z.object({
+  // Tout est FACULTATIF : chaque écran est passable, et un onboarding
+  // bloquant est un onboarding qu'on abandonne.
+  stade: z.enum(STADES_ENTREPRISE).nullable().optional(),
+  effectif: z.enum(EFFECTIFS).nullable().optional(),
+  gestionActuelle: z.enum(GESTIONS_ACTUELLES).nullable().optional(),
+  logicielActuel: z.string().trim().max(120).nullable().optional(),
+  irritant: z.enum(IRRITANTS).nullable().optional(),
+  irritantVerbatim: z.string().trim().max(1000).nullable().optional(),
+  terminee: z.boolean().optional(),
+}).strict();
+
+/**
+ * PATCH /onboarding/qualification — enregistre une réponse à la fois.
+ *
+ * Une par écran, et non un envoi final : quelqu'un qui abandonne à la
+ * quatrième question doit laisser ses trois premières réponses. Un formulaire
+ * qui perd tout à l'abandon ne mesure que les gens qui vont au bout.
+ */
+onboardingWriteRouter.patch("/onboarding/qualification", async (req, res): Promise<void> => {
+  const parsed = CorpsQualification.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const tenantId = req.tenantId!;
+  const d = parsed.data;
+
+  const champs = {
+    ...(d.stade !== undefined ? { stade: d.stade } : {}),
+    ...(d.effectif !== undefined ? { effectif: d.effectif } : {}),
+    ...(d.gestionActuelle !== undefined ? { gestionActuelle: d.gestionActuelle } : {}),
+    ...(d.logicielActuel !== undefined ? { logicielActuel: d.logicielActuel } : {}),
+    ...(d.irritant !== undefined ? { irritant: d.irritant } : {}),
+    ...(d.irritantVerbatim !== undefined ? { irritantVerbatim: d.irritantVerbatim } : {}),
+    ...(d.terminee ? { termineeLe: new Date() } : {}),
+    updatedAt: new Date(),
+  };
+
+  const [ligne] = await withTenant(tenantId, (tx) =>
+    tx.insert(onboardingQualificationTable)
+      .values({ tenantId, ...champs })
+      .onConflictDoUpdate({ target: onboardingQualificationTable.tenantId, set: champs })
+      .returning(),
+  );
+
+  res.json({ profil: { ...PROFIL_VIDE, ...ligne, termineeLe: ligne?.termineeLe?.toISOString() ?? null } });
+});
 
 onboardingWriteRouter.patch("/onboarding/profil", async (req, res): Promise<void> => {
   const parsed = PatchProfileBody.safeParse(req.body);
