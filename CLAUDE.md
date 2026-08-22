@@ -221,6 +221,23 @@ intermittents, sur un test différent à chaque fois, jamais reproductibles en i
 D'où `--workspace-concurrency=1`. Ne jamais « régler » un flottement avec `retry` — une
 garde l'interdit dans `flottements-suite.test.ts`.
 
+> **Ce paragraphe est incomplet, et le savoir évite de perdre une journée.** Le mécanisme
+> décrit est réel et chiffré (ticket 4.22 : 16 384 ports, `TIME_WAIT` de 30 s, ~28 000
+> sockets par exécution), mais `--workspace-concurrency=1` ne sérialise que les PAQUETS.
+> À l'intérieur d'`api-server`, les fichiers tournaient eux aussi en parallèle — neuf
+> forks — parce que le `singleFork: true` de `vitest.config.ts` n'existe plus dans
+> Vitest 4 et était ignoré en silence. C'est corrigé.
+>
+> **Mais sérialiser n'a pas supprimé le flottement** : 3 exécutions rouges sur 12 après,
+> contre 2 sur 12 avant. Et une seconde famille de symptômes reste **inexpliquée** — « la
+> ligne n'est pas là » : un 404 sur une route qui existe, un compte à 0, un 201 devenu
+> 200. Ce n'est ni une fuite de contexte tenant (toutes les `set_config` passent bien
+> `true`), ni une collision de fixtures (chaque fichier isole par `tenant_id`).
+>
+> Si un rouge inexplicable tombe sur un fichier sans rapport avec votre changement :
+> mesurez avec `scripts/flottement-suite.mjs` avant de conclure quoi que ce soit, et
+> n'attribuez pas d'office aux ports. Voir `docs/tickets/ticket-4.22-flottement-suite.md`.
+
 ---
 
 ## Méthode de travail
