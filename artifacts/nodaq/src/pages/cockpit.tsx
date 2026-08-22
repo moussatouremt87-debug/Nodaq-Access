@@ -41,6 +41,7 @@ import { LiensPaiement } from '@/components/liens-paiement';
 import { AnimatedKpi } from '@/components/animated-kpi';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
+import { BanniereConformite } from '@/components/banniere-conformite';
 import {
   Empty,
   EmptyHeader,
@@ -169,6 +170,10 @@ export default function Cockpit() {
           </Button>
         }
       />
+
+      {/* Ticket 4.36 lot B — jamais anxiogène, fermable, et de retour à
+          l'approche de l'échéance. Voir `messageConformite`. */}
+      <div className="mb-4"><BanniereConformite /></div>
 
       <div className="px-5 md:px-8 pt-6 space-y-6">
         {kpisError && (

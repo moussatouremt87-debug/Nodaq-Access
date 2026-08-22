@@ -40,6 +40,12 @@ export const TERMES_INTERDITS: Readonly<Record<string, string>> = {
   forecast: "Prévision",
   runway: "Trésorerie devant soi",
   burn: "Dépenses mensuelles",
+  // Sigles de la réforme de la facturation électronique. Ils ne disent RIEN à
+  // quelqu'un qui pose des ardoises, et le ticket 4.36 les interdit
+  // explicitement dans l'interface tant qu'ils ne sont pas expliqués. On dit
+  // ce que la chose FAIT, pas comment l'administration la nomme.
+  PDP: "Le réseau officiel des factures électroniques",
+  PPF: "Le service public de facturation",
 };
 
 /**
