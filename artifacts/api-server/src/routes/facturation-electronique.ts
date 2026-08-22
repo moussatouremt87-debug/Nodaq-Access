@@ -15,10 +15,13 @@ import { Router, type IRouter, type RequestHandler } from "express";
 import multer from "multer";
 import crypto from "node:crypto";
 import { z } from "zod";
+import { inArray } from "drizzle-orm";
+import { toDateString } from "@nodaq/shared";
 import { eq, desc } from "drizzle-orm";
 import {
   withTenant,
   paDocumentsRecusTable,
+  settingsTable,
   CLE_PA_API_KEY,
   CLE_PA_WEBHOOK_SECRET,
 } from "@workspace/db";
@@ -36,6 +39,81 @@ router.get("/facturation-electronique", async (req, res): Promise<void> => {
     secretExiste(tenantId, CLE_PA_WEBHOOK_SECRET),
   ]);
   res.json({ paConfiguree, webhookConfigure });
+});
+
+/**
+ * GET /facturation-electronique/conformite — ce que la bannière doit dire.
+ *
+ * ── Pourquoi « confirmé » et non « configuré » ────────────────────────────
+ * `paConfiguree` dit qu'une clé d'API existe. Ça ne prouve RIEN sur le
+ * raccordement : c'est la plateforme qui sait si l'adresse de réception du
+ * tenant existe dans l'annuaire. Afficher « vous êtes prêt » sur la foi d'une
+ * clé saisie serait la pire des issues — le dirigeant cesserait de s'en
+ * occuper en croyant l'affaire réglée.
+ *
+ * Tant que la confirmation n'est pas remontée par la plateforme (ticket 4.37),
+ * ce champ reste faux, et la bannière dit la vérité.
+ */
+router.get("/facturation-electronique/conformite", async (req, res): Promise<void> => {
+  const tenantId = req.tenantId!;
+  const reglages = await withTenant(tenantId, (tx) =>
+    tx.select().from(settingsTable).where(
+      inArray(settingsTable.key, [CLE_LISTE_ATTENTE, CLE_BANNIERE_FERMEE]),
+    ),
+  );
+  const valeur = (cle: string): string | null =>
+    reglages.find((r) => r.key === cle)?.value ?? null;
+
+  res.json({
+    situation: {
+      // Le raccordement confirmé viendra du 4.37 : aucune plateforme n'est
+      // encore branchée, donc personne n'est « prêt », et le dire est plus
+      // honnête que de le laisser croire.
+      raccordementConfirme: false,
+      inscritListeAttenteLe: valeur(CLE_LISTE_ATTENTE),
+    },
+    bannièreFermeeLe: valeur(CLE_BANNIERE_FERMEE),
+  });
+});
+
+/** Clés de réglage — le magasin clé-valeur existant, pas une table de plus. */
+const CLE_LISTE_ATTENTE = "conformite.listeAttenteLe";
+const CLE_BANNIERE_FERMEE = "conformite.banniereFermeeLe";
+
+/**
+ * POST /facturation-electronique/liste-attente — « prévenez-moi ».
+ *
+ * Le ticket l'exige : tant que le raccordement réel n'existe pas, le bouton
+ * inscrit sur une liste datée. « Honnêteté avant tout, pas de bouton qui ne
+ * fait rien » — un bouton décoratif se remarque, et il coûte plus cher en
+ * confiance qu'une fonctionnalité absente.
+ */
+router.post("/facturation-electronique/liste-attente", async (req, res): Promise<void> => {
+  const tenantId = req.tenantId!;
+  const aujourdhui = toDateString(new Date());
+  await withTenant(tenantId, (tx) =>
+    tx.insert(settingsTable)
+      .values({ tenantId, key: CLE_LISTE_ATTENTE, value: aujourdhui })
+      // Une seconde inscription ne réécrit pas la première : la date d'origine
+      // est ce qui donnera l'ordre de passage.
+      .onConflictDoNothing(),
+  );
+  res.status(201).json({ inscritLe: aujourdhui });
+});
+
+/** POST …/banniere-fermee — « pas maintenant », jamais « plus jamais ». */
+router.post("/facturation-electronique/banniere-fermee", async (req, res): Promise<void> => {
+  const tenantId = req.tenantId!;
+  const aujourdhui = toDateString(new Date());
+  await withTenant(tenantId, async (tx) => {
+    await tx.insert(settingsTable)
+      .values({ tenantId, key: CLE_BANNIERE_FERMEE, value: aujourdhui })
+      .onConflictDoUpdate({
+        target: [settingsTable.tenantId, settingsTable.key],
+        set: { value: aujourdhui },
+      });
+  });
+  res.status(204).end();
 });
 
 const ParametresBody = z.object({

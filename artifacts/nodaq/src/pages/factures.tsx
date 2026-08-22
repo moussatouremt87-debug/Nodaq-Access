@@ -30,6 +30,7 @@ import {
   Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent,
 } from '@/components/ui/empty';
 import { ToastAction } from '@/components/ui/toast';
+import { BanniereConformite } from '@/components/banniere-conformite';
 import { useToast } from '@/hooks/use-toast';
 import { useLectureSeule } from '@/hooks/use-auth';
 import { fmtEUR, fmtDate, toDateString } from '@/lib/format';
@@ -544,6 +545,10 @@ export default function FacturesPage() {
           )
         }
       />
+
+      {/* Ticket 4.36 lot B — sur le cockpit ET ici : c'est l'écran où l'on
+          pense à ses factures, donc celui où l'information trouve son moment. */}
+      <div className="mb-4"><BanniereConformite /></div>
 
       <div className="px-5 md:px-8 pt-6 space-y-6">
         {/* Stats */}
