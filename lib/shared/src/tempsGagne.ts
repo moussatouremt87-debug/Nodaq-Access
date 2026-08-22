@@ -95,6 +95,9 @@ export const BAREME_TEMPS_MANUEL: Record<Intention["type"], { readonly champs: n
   creer_charge_recurrente: { champs: 3 },
   creer_contrat: { champs: 3 },
   maj_etape_prospect: { champs: 2 },
+  // Un devis dicté remplace la saisie d'un en-tête ET de chaque ligne.
+  creer_devis: { champs: 8 },
+  creer_facture: { champs: 8 },
 };
 
 /**

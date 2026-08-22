@@ -355,6 +355,58 @@ export const TOOLS: LlmTool[] = [
   {
     type: "function",
     function: {
+      name: "create_devis",
+      description: "Crée un DEVIS en brouillon à partir de lignes dictées. Tu donnes le libellé, la quantité et l'unité de chaque ligne — JAMAIS un prix : le serveur les chiffre depuis le catalogue du tenant.",
+      parameters: {
+        type: "object",
+        properties: {
+          clientName: { type: "string" },
+          lignes: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                libelle: { type: "string", description: "Ce qui est à faire, tel que dit." },
+                quantite: { type: "number" },
+                unite: { type: "string", description: "m², ml, heure, forfait…" },
+              },
+              required: ["libelle"],
+            },
+          },
+        },
+        required: ["lignes"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "create_facture",
+      description: "Crée une FACTURE en brouillon (sans numéro) à partir de lignes dictées. Même règle que create_devis : aucun prix de ta part, le catalogue chiffre.",
+      parameters: {
+        type: "object",
+        properties: {
+          clientName: { type: "string" },
+          lignes: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                libelle: { type: "string" },
+                quantite: { type: "number" },
+                unite: { type: "string" },
+              },
+              required: ["libelle"],
+            },
+          },
+        },
+        required: ["lignes"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "facturer_devis",
       description: "Établit la facture d'un devis ACCEPTÉ. Crée un BROUILLON — l'émission reste un geste d'écran. Les montants viennent du devis signé, jamais de toi.",
       parameters: {
@@ -785,6 +837,8 @@ export const OUTILS_ECRITURE = [
   "create_article_catalogue",
   "create_charge_recurrente",
   "create_contrat",
+  "create_devis",
+  "create_facture",
 ] as const;
 
 /**
@@ -909,6 +963,34 @@ function proposerEcritureBrute(
         champs: { prospectId: texte("id") ?? "", etape: texte("stage") ?? "NOUVEAU" },
         certitude: "aucune_resolution",
       };
+    case "create_devis":
+    case "create_facture": {
+      // Les lignes ne portent AUCUN prix : le serveur les chiffre depuis le
+      // catalogue du tenant (`rapprocherDictee`). C'est la règle 3 appliquée
+      // à la lettre — « il s'appuie sur le catalogue du tenant ».
+      const brutes = Array.isArray(args["lignes"]) ? (args["lignes"] as unknown[]) : [];
+      const lignes = brutes
+        .filter((l): l is Record<string, unknown> => typeof l === "object" && l !== null)
+        .map((l) => ({
+          libelle: typeof l["libelle"] === "string" ? l["libelle"] : "",
+          quantite: typeof l["quantite"] === "number" ? l["quantite"] : null,
+          unite: typeof l["unite"] === "string" ? l["unite"] : null,
+        }))
+        .filter((l) => l.libelle.trim().length > 0);
+      const mot = name === "create_devis" ? "devis" : "facture";
+      return {
+        type: name === "create_devis" ? "creer_devis" : "creer_facture",
+        libelle: `Créer un ${mot} de ${lignes.length} ligne(s)`,
+        champs: {
+          clientName: texte("clientName"),
+          // Même clé que le chemin vocal : le chiffrage a lieu dans
+          // `executerPlan`, qui relit le catalogue. Cette fonction ne le voit
+          // pas, et c'est voulu — un seul endroit fixe les prix.
+          lignesDicteesJson: JSON.stringify(lignes),
+        },
+        certitude: "aucune_resolution",
+      };
+    }
     case "facturer_devis":
       return {
         type: "facturer_devis",

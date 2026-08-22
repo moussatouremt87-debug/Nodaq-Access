@@ -880,3 +880,88 @@ describe("l — recopier un montant dit n'est pas le fixer", () => {
     expect(body.operations[0].libelle).toContain("solde restant");
   });
 });
+
+// ── m. Créer un devis / une facture depuis des lignes dictées ───────────────
+
+describe("m — le devis dicté : le catalogue chiffre, jamais le modèle", () => {
+  /** Une ligne de catalogue, par la vraie route. */
+  async function catalogue(l: Locataire, libelle: string, prixCents: number): Promise<void> {
+    await request(app).post("/api/catalogue").set("Cookie", l.cookie)
+      .send({ libelle, unite: "m2", prixUnitaireHtCents: prixCents, tauxTva: 10 })
+      .expect(201);
+  }
+
+  test("les lignes connues sont chiffrées, l’inconnue est annoncée", async () => {
+    const t = await inscrire("devis-dicte");
+    await catalogue(t, "Pose de placo", 8900);
+
+    const { body } = await interpreter(t, "voix-test-devis").expect(200);
+    const op = body.operations[0];
+
+    // 90 × 89,00 € = 8 010,00 € — un calcul du SERVEUR, depuis le catalogue.
+    expect(op.libelle).toContain("8010.00 €");
+    expect(op.libelle).toContain("1 ligne(s) chiffrée(s)");
+    // La ligne inconnue n'est pas passée sous silence : l'annoncer est ce qui
+    // évite d'envoyer un devis moins cher que la réalité.
+    expect(op.libelle).toContain("1 ligne(s) sans prix");
+    // Et surtout : aucun prix n'a transité par le modèle.
+    expect(JSON.stringify(op.champs)).not.toContain("8900");
+  });
+
+  test("valider crée un devis BROUILLON avec ses lignes", async () => {
+    const t = await inscrire("devis-dicte-ok");
+    await catalogue(t, "Pose de placo", 8900);
+
+    const { body } = await interpreter(t, "voix-test-devis").expect(200);
+    await executer(t, body.planId).expect(200);
+
+    const { rows } = await adminPool.query(
+      `SELECT reference, status, client_name, lines, total_ht_cents FROM devis WHERE tenant_id = $1`,
+      [t.tenantId],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].status).toBe("BROUILLON");
+    expect(rows[0].reference).toMatch(/^DEV-\d{4}-\d{4}$/);
+    expect(rows[0].lines).toHaveLength(2);
+    expect(Number(rows[0].total_ht_cents)).toBe(90 * 8900);
+    // La ligne inconnue entre à 0 : c'est un brouillon, il reste à finir, et
+    // il ne part chez personne en l'état.
+    expect(rows[0].lines[1].unitPriceCents).toBe(0);
+  });
+
+  test("un prix corrigé au catalogue APRÈS le plan est celui qui s’écrit", async () => {
+    const t = await inscrire("devis-prix-bouge");
+    await catalogue(t, "Pose de placo", 8900);
+
+    const { body } = await interpreter(t, "voix-test-devis").expect(200);
+    // Le tarif change entre la proposition et la validation — un plan attend
+    // jusqu'à une heure. C'est le catalogue du moment qui fait foi.
+    await adminPool.query(
+      `UPDATE catalogue_lignes SET prix_unitaire_ht_cents = 9500 WHERE tenant_id = $1`, [t.tenantId],
+    );
+
+    await executer(t, body.planId).expect(200);
+    const { rows } = await adminPool.query(
+      `SELECT total_ht_cents FROM devis WHERE tenant_id = $1`, [t.tenantId],
+    );
+    expect(Number(rows[0].total_ht_cents)).toBe(90 * 9500);
+  });
+
+  test("une facture dictée reste un BROUILLON, sans numéro", async () => {
+    const t = await inscrire("facture-dictee");
+    await catalogue(t, "Pose de placo", 8900);
+
+    const { body } = await interpreter(t, "voix-test-facture-lignes").expect(200);
+    await executer(t, body.planId).expect(200);
+
+    const { rows } = await adminPool.query(
+      `SELECT statut, number, amount_cents FROM factures WHERE tenant_id = $1`, [t.tenantId],
+    );
+    expect(rows[0].statut).toBe("BROUILLON");
+    // L'émission scelle un document immuable et consomme un numéro : elle ne
+    // se dicte pas.
+    expect(rows[0].number).toBe("");
+    // 10 × 89 € HT + 10 % de TVA = 979,00 €
+    expect(Number(rows[0].amount_cents)).toBe(97900);
+  });
+});
