@@ -1,14 +1,23 @@
 /**
  * Onboarding 4.8 — Profil d'entreprise.
  *
- * Quatre écrans non bloquants :
+ * Des écrans non bloquants, dans cet ordre :
  *   Écran 0 : Secteur d'activité (US-A1.1) — LA question fondatrice : sans
  *             elle, tout le vocabulaire qui suit (« chantier », « devis »)
- *             présume du bâtiment pour un secteur qui n'en est pas.
- *   Écran 1 : Recherche SIRET / nom → confirmation → détection de pack
- *             + formulaire manuel si l'API est indisponible ou renvoie aucun résultat
- *   Écran 2 : Dépôt ancienne facture (stub OCR honnête) + bouton "Plus tard"
- *   Écran 3 : Décennale + table équipe + taux horaire
+ *             présume du bâtiment pour un secteur qui n'en est pas. Elle reste
+ *             la première, avant même la qualification.
+ *   Écrans 1-4 : Qualification (ticket 4.36) — stade, effectif, gestion
+ *             actuelle, irritant. Posés APRÈS le secteur pour hériter de son
+ *             vocabulaire, et AVANT la recherche SIREN parce que le stade
+ *             décide si cette recherche a seulement lieu d'être.
+ *   Écran 5 : Recherche SIRET / nom → confirmation → détection de pack
+ *             + formulaire manuel si l'API est indisponible ou renvoie aucun résultat.
+ *             SAUTÉ pour une entreprise encore à l'état de projet : lui
+ *             demander son SIRET n'aurait aucun sens.
+ *   Écran 6 : Dépôt ancienne facture (stub OCR honnête) + bouton "Plus tard"
+ *   Écran 7 : Décennale + table équipe + taux horaire
+ *   Fin     : la première action, choisie par le serveur d'après l'irritant —
+ *             plus jamais un cockpit vide.
  *
  * Règles :
  * - Aucun écran n'est bloquant (bouton "Plus tard" partout), y compris le
@@ -900,7 +909,7 @@ type Screen =
   | 'secteur' | 'recherche' | 'classeur' | 'metier' | 'done';
 
 export default function OnboardingPage() {
-  const [screen, setScreen] = useState<Screen>('stade');
+  const [screen, setScreen] = useState<Screen>('secteur');
   const [_, navigate] = useLocation();
   const { toast } = useToast();
   /**
@@ -910,7 +919,7 @@ export default function OnboardingPage() {
    */
   const [stade, setStade] = useState<StadeEntreprise | null>(null);
   const sansSiren = stade === 'EN_PROJET';
-  const apresSecteur = (): Screen => (sansSiren ? 'classeur' : 'recherche');
+  const apresQualification = (): Screen => (sansSiren ? 'classeur' : 'recherche');
 
   const confirmMut = useMutation({
     mutationFn: async (entreprise: EntrepriseResult) => {
@@ -943,20 +952,25 @@ export default function OnboardingPage() {
   });
 
   const STEPS: { id: Screen; label: string }[] = [
-    { id: 'stade', label: 'Vous' },
-    { id: 'effectif', label: 'Vous' },
-    { id: 'gestion', label: 'Vous' },
-    { id: 'irritant', label: 'Vous' },
     { id: 'secteur', label: 'Secteur' },
+    { id: 'stade', label: 'Votre situation' },
+    { id: 'effectif', label: 'Votre situation' },
+    { id: 'gestion', label: 'Votre situation' },
+    { id: 'irritant', label: 'Votre situation' },
     ...(sansSiren ? [] : [{ id: 'recherche' as Screen, label: 'Entreprise' }]),
     { id: 'classeur', label: 'Documents' },
     { id: 'metier', label: 'Métier' },
   ];
   // Les quatre questions de qualification comptent pour UNE étape au fil
-  // d'Ariane : afficher « 1/8 » ferait paraître le parcours deux fois plus
+  // d'Ariane : afficher huit étapes ferait paraître le parcours deux fois plus
   // long qu'il ne l'est, et c'est un abandon de plus.
-  const FIL = STEPS.filter((s, i) => s.label !== 'Vous' || i === 0);
-  const currentIdx = FIL.findIndex(s => s.label === STEPS.find(t => t.id === screen)?.label);
+  //
+  // On dédoublonne donc par libellé — et surtout PAS en écartant les libellés
+  // répétés, ce qui les ferait disparaître tous les quatre et laisserait le
+  // fil d'Ariane sans étape courante pendant quatre écrans d'affilée.
+  const FIL = STEPS.filter((s, i) => STEPS.findIndex(t => t.label === s.label) === i);
+  const etapeCourante = STEPS.find(t => t.id === screen)?.label;
+  const currentIdx = FIL.findIndex(s => s.label === etapeCourante);
 
   // Le parcours ne se termine plus sur un cockpit vide : il se termine sur
   // l'action que l'irritant déclaré au deuxième écran a choisie.
@@ -1005,14 +1019,14 @@ export default function OnboardingPage() {
             )}
             {screen === 'irritant' && (
               <EcranIrritant
-                onNext={() => setScreen('secteur')}
-                onSkip={() => setScreen('secteur')}
+                onNext={() => setScreen(apresQualification())}
+                onSkip={() => setScreen(apresQualification())}
               />
             )}
             {screen === 'secteur' && (
               <EcranSecteur
-                onNext={() => setScreen(apresSecteur())}
-                onSkip={() => setScreen(apresSecteur())}
+                onNext={() => setScreen('stade')}
+                onSkip={() => setScreen('stade')}
               />
             )}
             {screen === 'recherche' && (

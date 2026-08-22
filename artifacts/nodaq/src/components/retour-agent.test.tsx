@@ -88,15 +88,22 @@ describe('le verbatim', () => {
   });
 });
 
-describe('rien ne doit interrompre', () => {
-  test('un envoi qui échoue ne remonte pas d’erreur à l’écran', async () => {
-    const { apiFetch } = await import('@/lib/auth');
-    vi.mocked(apiFetch).mockRejectedValueOnce(new Error('réseau coupé'));
-
-    render(<RetourAgent typeProduction="reponse_chat" referenceId="m-2" />);
-    await userEvent.click(screen.getByLabelText('Ce résultat me va'));
-
-    // Un avis qui ne part pas est notre problème, pas celui de l'utilisateur.
-    await waitFor(() => expect(screen.getByTestId('retour-agent-merci')).toBeTruthy());
-  });
-});
+/*
+ * ── Une garde volontairement SANS test, et pourquoi ───────────────────────
+ * `envoyer()` termine par `.catch(() => {})`. Ce qu'il protège, c'est le rejet
+ * non géré qui remonterait au navigateur pour un avis raté.
+ *
+ * Deux tentatives de le prouver ont échoué, et il faut le dire plutôt que le
+ * cacher :
+ *   1. « l'écran affiche quand même merci » — passe avec ET sans le `.catch`,
+ *      puisque `setEnvoye(true)` est synchrone et n'a jamais rien à voir avec
+ *      l'envoi. Test vacant ;
+ *   2. observer le rejet — dans cet environnement (vitest + jsdom), un rejet
+ *      non géré ne déclenche ni `process.on('unhandledRejection')`, ni
+ *      `window.onunhandledrejection`, ni le rapporteur de vitest. Vérifié par
+ *      une sonde : un `Promise.reject` nu passe totalement inaperçu.
+ *
+ * Le `.catch` reste — il est juste, et il compte dans un vrai navigateur. Mais
+ * il n'est PAS couvert, et un test vert qui l'aurait laissé croire aurait été
+ * pire que ce commentaire.
+ */
