@@ -737,6 +737,122 @@ router.post("/factures/:id/payer", async (req, res): Promise<void> => {
 });
 
 /**
+ * POST /api/factures/:id/annuler-paiement — défait un « marquer comme payée ».
+ *
+ * ── Pourquoi cette route existe ───────────────────────────────────────────
+ * « J'ai cliqué sur "marquer comme payée" par accident mais je n'ai pas de
+ * moyen de revenir en arrière. » Une action qui change un état FINANCIER et
+ * qu'on ne peut pas défaire transforme un geste de trop en écriture fausse
+ * définitive.
+ *
+ * ── Ce qu'elle défait, et rien d'autre ────────────────────────────────────
+ * Le DERNIER encaissement de la facture, celui qu'on vient de créer. Pas
+ * « tous les règlements » : un client qui a réellement versé un acompte
+ * garderait sa ligne, et l'effacer serait une seconde erreur pour en corriger
+ * une première.
+ *
+ * Elle écrit une CONTRE-PASSATION, elle ne supprime rien.
+ *
+ * La première version de cette route supprimait la ligne, au motif qu'un
+ * règlement saisi par erreur n'a jamais eu lieu. Le moteur a refusé :
+ * `app_user` n'a que SELECT et INSERT sur `paiements`, qui figure dans
+ * `APPEND_ONLY_TABLES` de `create-app-role.cjs`, au même titre que les PDF
+ * archivés. Le journal des règlements est immuable par construction, et le
+ * script ré-applique cette révocation à chaque provisionnement pour qu'elle
+ * survive.
+ *
+ * C'est le moteur qui avait raison. Un journal qu'on peut réécrire ne prouve
+ * rien, et « ça n'a jamais eu lieu » est précisément ce qu'un journal comptable
+ * n'a pas le droit de dire à la place de l'histoire réelle. La correction
+ * s'écrit donc en sens inverse — ANNULATION du même montant, un sens créé
+ * pour ça par la migration 050 — et
+ * `encaisseSurFacture` la compte déjà en négatif.
+ *
+ * Le statut n'est PAS écrit à la main : `recalculerFacture` le redéduit du
+ * journal, comme partout ailleurs. Deux façons d'écrire le même fait sont deux
+ * façons de le rendre faux.
+ */
+router.post("/factures/:id/annuler-paiement", async (req, res): Promise<void> => {
+  const tenantId = req.tenantId!;
+  const { id } = req.params;
+
+  const result = await withTenant(tenantId, async tx => {
+    const [f] = await tx.select().from(facturesTable).where(eq(facturesTable.id, id!));
+    if (!f) return { kind: "not_found" as const };
+    // Une facture annulée par avoir ne se « dépaye » pas : l'avoir est le
+    // document qui fait foi, et le toucher ici casserait la chaîne comptable.
+    if (f.statut === "ANNULEE_PAR_AVOIR") {
+      return { kind: "wrong_status" as const, statut: f.statut };
+    }
+
+    // Le dernier encaissement PAS ENCORE contre-passé. Le lien se fait par
+    // `reference` : sans lui, deux clics d'annulation successifs annuleraient
+    // deux fois le même règlement et créeraient un solde négatif.
+    const dejaAnnules = await tx
+      .select({ reference: paiementsTable.reference })
+      .from(paiementsTable)
+      .where(and(eq(paiementsTable.factureId, id!), eq(paiementsTable.sens, "ANNULATION")));
+    const annulees = new Set(
+      dejaAnnules.map((d) => d.reference).filter((r): r is string => !!r),
+    );
+
+    const encaissements = await tx
+      .select()
+      .from(paiementsTable)
+      .where(and(eq(paiementsTable.factureId, id!), eq(paiementsTable.sens, "ENCAISSEMENT")))
+      .orderBy(desc(paiementsTable.createdAt));
+    const dernier = encaissements.find((e) => !annulees.has(`annulation:${e.id}`));
+    if (!dernier) return { kind: "rien_a_annuler" as const };
+
+    const statutAvant = f.statut;
+    await tx.insert(paiementsTable).values({
+      tenantId,
+      factureId: id!,
+      clientId: f.clientId ?? null,
+      affaireId: f.affaireId ?? null,
+      date: toDateString(new Date()),
+      montantCents: dernier.montantCents,
+      sens: "ANNULATION",
+      moyen: dernier.moyen,
+      nature: dernier.nature,
+      // Le lien vers l'écriture corrigée : c'est ce qui rend l'annulation
+      // idempotente et le journal relisable.
+      reference: `annulation:${dernier.id}`,
+    });
+    await recalculerFacture(tx, id!);
+    const [apres] = await tx.select().from(facturesTable).where(eq(facturesTable.id, id!));
+
+    // Trace : qui, quand, quoi, avant → après. Dans `activity` et non dans
+    // `journal_decisions`, dont la colonne `decision` porte une contrainte
+    // CHECK à trois valeurs (APPROUVEE | REJETEE | EXPIREE) : c'est le journal
+    // des VALIDATIONS d'actions agentiques, pas un audit général. L'y forcer
+    // demanderait de relâcher sa contrainte, donc d'affaiblir une garde pour
+    // un usage qu'elle n'a jamais visé.
+    await tx.insert(activityTable).values({
+      tenantId,
+      type: "facture_paiement_annule",
+      label: `Règlement annulé sur la facture ${f.number || "(brouillon)"}`,
+      meta: `${(dernier.montantCents / 100).toFixed(2)} € — ${statutAvant} → ${apres!.statut} — ${req.session?.email ?? "inconnu"}`,
+    });
+
+    return { kind: "ok" as const, facture: apres!, montantAnnuleCents: dernier.montantCents };
+  });
+
+  if (result.kind === "not_found") { res.status(404).json({ error: "Facture introuvable" }); return; }
+  if (result.kind === "wrong_status") {
+    res.status(409).json({
+      error: "Une facture annulée par avoir ne peut pas être dépayée : c'est l'avoir qui fait foi.",
+    });
+    return;
+  }
+  if (result.kind === "rien_a_annuler") {
+    res.status(409).json({ error: "Aucun règlement à annuler sur cette facture." });
+    return;
+  }
+  res.json(result);
+});
+
+/**
  * POST /devis/:id/facturer — la facture issue d'un devis accepté.
  *
  * ── Ce que cette route REFUSE de faire ────────────────────────────────────
