@@ -30,7 +30,9 @@ export const reglesRelanceTable = pgTable(
     retardMaxJours: integer("retard_max_jours").notNull().default(30),
     lienPaiementAutorise: boolean("lien_paiement_autorise").notNull().default(false),
     /** Défaut FALSE, et il faut un geste délibéré pour l'ouvrir (US-9). */
-    remiseAutorisee: boolean("remise_autorisee").notNull().default(false),
+    /** Jours sans réponse avant de proposer une relance d'un devis envoyé. */
+  relanceDevisJours: integer("relance_devis_jours").notNull().default(7),
+  remiseAutorisee: boolean("remise_autorisee").notNull().default(false),
 
     /**
      * Instantané de l'auteur, sans clé étrangère — même doctrine que

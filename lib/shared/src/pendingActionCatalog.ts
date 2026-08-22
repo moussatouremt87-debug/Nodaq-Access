@@ -72,7 +72,7 @@ export const PENDING_ACTION_GROUPS: readonly PendingActionGroup[] = [
   {
     id: "relances",
     label: "Relances",
-    types: ["send_dunning", "call_dunning"],
+    types: ["send_dunning", "call_dunning", "relance_devis"],
     module: null,
     // Un impayé bouge vite : la facture a pu être réglée entre-temps, et la
     // lettre proposée nomme quelqu'un en lui réclamant de l'argent.
