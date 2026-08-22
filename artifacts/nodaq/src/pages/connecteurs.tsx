@@ -46,6 +46,45 @@ const CONNECTOR_FIELDS: Record<string, { key: string; label: string; placeholder
   ZAPIER:       [{ key: 'webhookUrl', label: 'Webhook URL Zapier', placeholder: 'https://hooks.zapier.com/...', type: 'password' }],
 };
 
+/**
+ * Ce que chaque connexion APPORTE, dit du point de vue de l'artisan.
+ *
+ * ── Pourquoi ce texte est ici et pas en base ──────────────────────────────
+ * « Beaucoup trop compliqué pour des artisans d'intégrer leurs outils de cette
+ * manière. » Les descriptions stockées décrivent la MÉCANIQUE
+ * (« Synchronisation des transactions bancaires », « Automatisation de
+ * workflows ») : elles disent ce que le logiciel fait, pas ce que
+ * l'utilisateur y gagne.
+ *
+ * Un libellé est de la présentation. Le mettre ici plutôt qu'en base le rend
+ * corrigeable sans migration, et l'applique aux tenants existants — dont les
+ * lignes portent déjà l'ancien texte, qu'aucun changement de valeur par défaut
+ * ne réécrira.
+ */
+const BENEFICES: Record<string, string> = {
+  BANQUE: "Vos paiements reçus se pointent tout seuls sur vos factures.",
+  PENNYLANE: "Votre comptable reçoit vos factures sans que vous les lui envoyiez.",
+  STRIPE: "Encaissez par carte, et voyez le règlement arriver sur la facture.",
+  GOOGLE_DRIVE: "Vos devis et factures sauvegardés dans votre Drive, automatiquement.",
+  SLACK: "Votre équipe prévenue quand un devis est accepté ou un paiement reçu.",
+  ZAPIER: "Reliez nodaq aux autres outils que vous utilisez déjà.",
+};
+
+/**
+ * Où trouver chaque identifiant demandé.
+ *
+ * « Pourquoi ces messages d'erreur ? Il faut connecter quoi ? » Demander une
+ * « Secret key » sans dire où elle se trouve, c'est demander à quelqu'un de
+ * chercher un objet qu'il n'a jamais vu.
+ */
+const OU_TROUVER: Record<string, string> = {
+  PENNYLANE: "Dans Pennylane : Paramètres → API → Créer une clé.",
+  STRIPE: "Dans Stripe : Développeurs → Clés API. Prenez la clé secrète, pas la publique.",
+  GOOGLE_DRIVE: "Dans Google Cloud : APIs et services → Identifiants → ID client OAuth.",
+  SLACK: "Dans Slack : Paramètres de l'espace → Applications → Webhooks entrants.",
+  ZAPIER: "Dans Zapier : créez un Zap déclenché par « Webhooks », puis copiez son adresse.",
+};
+
 const STATUS_META: Record<string, { label: string; color: string; icon: React.ElementType }> = {
   CONNECTE:      { label: 'Connecté',       color: 'text-primary',      icon: CheckCircle2 },
   NON_CONNECTE:  { label: 'Non connecté',   color: 'text-muted-foreground', icon: Link2Off },
@@ -89,9 +128,17 @@ export default function ConnecteursPage() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['connecteurs'] });
-      toast({ title: 'Connecteur déconnecté' });
+      toast({
+        title: 'Déconnecté',
+        description: "Vos données restent dans nodaq ; c'est l'échange automatique qui s'arrête.",
+      });
     },
-    onError: (err: Error) => toast({ title: 'Erreur', description: err.message, variant: 'destructive' }),
+    onError: (err: Error) =>
+      toast({
+        title: "La déconnexion n'a pas abouti",
+        description: `${err.message} Réessayez dans un instant ; rien n'a été modifié.`,
+        variant: 'destructive',
+      }),
   });
 
   const openConfig = (c: Connector) => { setSelected(c); setConfigOpen(true); };
@@ -111,7 +158,12 @@ export default function ConnecteursPage() {
       // bancaires — jamais dans un iframe NODAQ.
       window.location.href = url;
     },
-    onError: (err: Error) => toast({ title: 'Erreur', description: err.message, variant: 'destructive' }),
+    onError: (err: Error) =>
+      toast({
+        title: "La connexion à votre banque n'a pas pu démarrer",
+        description: `${err.message} Si cela persiste, votre banque n'est peut-être pas encore disponible — écrivez-nous, on regarde.`,
+        variant: 'destructive',
+      }),
   });
 
   return (
@@ -169,13 +221,22 @@ export default function ConnecteursPage() {
                     }`}>
                       <Icon className="h-5 w-5" />
                     </div>
-                    <span className={`inline-flex items-center gap-1 text-xs font-medium ${meta.color}`}>
-                      <StatusIcon className="h-3.5 w-3.5" /> {meta.label}
-                    </span>
+                    {/* Rien à afficher tant que l'utilisateur n'a rien tenté :
+                        une intégration non connectée est un état NORMAL, et
+                        l'annoncer sur chaque tuile transforme six choix
+                        possibles en six manques. Le bouton « Connecter » dit
+                        déjà où on en est. */}
+                    {c.status !== 'NON_CONNECTE' && (
+                      <span className={`inline-flex items-center gap-1 text-xs font-medium ${meta.color}`}>
+                        <StatusIcon className="h-3.5 w-3.5" /> {meta.label}
+                      </span>
+                    )}
                   </div>
                   <div>
                     <div className="font-semibold text-foreground">{c.label}</div>
-                    {c.description && <div className="text-xs text-muted-foreground mt-0.5">{c.description}</div>}
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      {BENEFICES[c.type] ?? c.description}
+                    </div>
                     {isConnected && c.lastSyncAt && (
                       <div className="text-[10px] text-muted-foreground mt-1">
                         Sync. {fmtDate(c.lastSyncAt)}
@@ -264,13 +325,24 @@ function ConnectorConfigDialog({ open, onOpenChange, connector, onSaved }: {
         body: JSON.stringify({ status: 'CONNECTE', config: fields }),
       });
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        toast({ title: 'Erreur', description: (err as any).error ?? 'Connexion échouée', variant: 'destructive' });
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        // Un message d'erreur dit QUOI FAIRE, pas seulement ce qui a raté.
+        // « Erreur » tout court laisse l'utilisateur devant un mur.
+        toast({
+          title: `${connector.label} n'a pas pu être connecté`,
+          description:
+            (err.error ?? "La clé a été refusée.") +
+            " Vérifiez que vous avez copié la clé en entier, sans espace avant ni après.",
+          variant: 'destructive',
+        });
         return;
       }
       onSaved();
       onOpenChange(false);
-      toast({ title: `${connector.label} connecté`, description: 'La synchronisation est activée.' });
+      toast({
+        title: `${connector.label} connecté`,
+        description: BENEFICES[connector.type] ?? 'La synchronisation est activée.',
+      });
     } finally {
       setSaving(false);
     }
@@ -288,7 +360,17 @@ function ConnectorConfigDialog({ open, onOpenChange, connector, onSaved }: {
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
-          <p className="text-sm text-muted-foreground">{connector.description}</p>
+          <p className="text-sm text-muted-foreground">
+            {BENEFICES[connector.type] ?? connector.description}
+          </p>
+          {/* Où trouver ce qu'on demande. Réclamer une « Secret key » sans dire
+              où elle se trouve, c'est demander de chercher un objet qu'on n'a
+              jamais vu. */}
+          {OU_TROUVER[connector.type] && (
+            <p className="rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+              {OU_TROUVER[connector.type]}
+            </p>
+          )}
           {configFields.map(f => (
             <div key={f.key} className="space-y-1.5">
               <Label>{f.label}</Label>
