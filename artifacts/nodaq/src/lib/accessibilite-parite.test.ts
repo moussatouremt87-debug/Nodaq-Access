@@ -20,9 +20,22 @@ import { ECRANS_AUDITES, SOCLE_CONNU, REGLES_WCAG } from './accessibilite';
 
 const SOURCE_APP = readFileSync(join(__dirname, '..', 'App.tsx'), 'utf8');
 
-/** Tous les `path="…"` déclarés dans `App.tsx`. */
+/**
+ * Les routes qui ne font que REDIRIGER — reconnues à l'absence de `component=`
+ * et à la présence de `<Redirect`. Elles n'ont aucun écran à auditer : ce sont
+ * des adresses conservées en vie pour un favori (ticket 4.24), pas des pages.
+ */
+function cheminsRedirection(): string[] {
+  return [...SOURCE_APP.matchAll(/<Route\s+path="([^"]+)"\s*>\s*\{\s*\(\)\s*=>\s*<Redirect/g)]
+    .map((m) => m[1]!);
+}
+
+/** Tous les `path="…"` déclarés dans `App.tsx` qui portent un ÉCRAN. */
 function cheminsDeclares(): string[] {
-  const trouves = [...SOURCE_APP.matchAll(/<Route\s+path="([^"]+)"/g)].map((m) => m[1]!);
+  const redirections = new Set(cheminsRedirection());
+  const trouves = [...SOURCE_APP.matchAll(/<Route\s+path="([^"]+)"/g)]
+    .map((m) => m[1]!)
+    .filter((c) => !redirections.has(c));
   expect(
     trouves.length,
     'aucune route lue dans App.tsx — la garde ne compare plus rien',

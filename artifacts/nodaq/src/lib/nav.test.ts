@@ -37,6 +37,18 @@ function routesDeclarees(): string[] {
   );
 }
 
+/**
+ * Les routes qui ne font que REDIRIGER, lues dans la source.
+ *
+ * Reconnues à leur forme `<Route path="…">{() => <Redirect …/>}</Route>` : pas
+ * de `component=`, donc pas d'écran. Elles gardent en vie une adresse qui a pu
+ * être mise en favori, sans mériter une entrée de menu.
+ */
+function routesRedirigees(): string[] {
+  return [...SOURCE_APP.matchAll(/<Route\s+path="([^"]+)"\s*>\s*\{\s*\(\)\s*=>\s*<Redirect/g)]
+    .map((m) => m[1]!);
+}
+
 /** Extrait les `href` d'un bloc nommé du fichier nav.ts. */
 function hrefsDe(nomDuBloc: string): string[] {
   const debut = SOURCE_NAV.indexOf(`export const ${nomDuBloc}`);
@@ -76,8 +88,13 @@ describe("navigation — cohérence avec les routes", () => {
   test("aucune route n'est absente des DEUX listes de navigation", () => {
     // Une route qui n'apparaît nulle part n'est atteignable qu'en tapant l'URL.
     const dansUnMenu = new Set([...NAV_SECTIONS_HREFS, ...MOBILE_NAV_HREFS]);
+    // Une route de REDIRECTION n'est pas un écran : elle existe pour qu'une
+    // adresse mise en favori continue de mener quelque part, pas pour être
+    // proposée dans un menu. L'exiger dans la navigation reviendrait à
+    // remettre l'entrée qu'on vient de retirer (ticket 4.24).
+    const redirections = new Set(routesRedirigees());
     const inatteignables = routesDeclarees()
-      .filter((route) => !dansUnMenu.has(route))
+      .filter((route) => !dansUnMenu.has(route) && !redirections.has(route))
       .sort();
 
     expect(
@@ -89,17 +106,28 @@ describe("navigation — cohérence avec les routes", () => {
 });
 
 describe("navigation mobile — les fonctions principales sont atteignables", () => {
-  // Le trou d'origine, nommé explicitement : ces deux écrans étaient dans
-  // NAV_SECTIONS et absents de MOBILE_NAV.
-  test("le devis dicté figure dans la barre mobile", () => {
-    expect(
-      MOBILE_NAV_HREFS,
-      "Le devis dicté est la fonction principale, et son utilisateur est sur un chantier avec son téléphone.",
-    ).toContain("/devis/dictee");
+  // ── L'écran « Devis dicté » a été SUPPRIMÉ (ticket 4.24) ────────────────
+  //
+  // Cette garde exigeait sa présence en deuxième position dans la barre
+  // mobile, et elle avait raison à l'époque : l'écran existait sans être
+  // atteignable. La décision produit a changé — la voix est portée par l'agent
+  // unique, qui comprend l'intention quel que soit le sujet.
+  //
+  // La garde est donc RETOURNÉE, pas retirée : elle interdit maintenant que
+  // l'écran réapparaisse à moitié. Un menu qui pointe vers une route
+  // redirigée envoie l'utilisateur ailleurs que là où l'étiquette promet.
+  test("le devis dicté n'est plus proposé nulle part dans les menus", () => {
+    expect(MOBILE_NAV_HREFS).not.toContain("/devis/dictee");
+    expect(NAV_SECTIONS_HREFS).not.toContain("/devis/dictee");
   });
 
-  test("le devis dicté est en DEUXIÈME position, pas en fin de liste", () => {
-    expect(MOBILE_NAV_HREFS[1]).toBe("/devis/dictee");
+  test("l'agent, qui le remplace, est bien atteignable au doigt", () => {
+    // Ce que l'écran supprimé assurait doit être assuré par son remplaçant,
+    // sinon on a retiré une fonction au lieu de la déplacer.
+    expect(
+      MOBILE_NAV_HREFS,
+      "La voix passe désormais par l'agent : s'il n'est pas dans la barre mobile, la fonction est perdue sur téléphone.",
+    ).toContain("/chat");
   });
 
   test("le paramétrage d'envoi figure explicitement dans les menus", () => {

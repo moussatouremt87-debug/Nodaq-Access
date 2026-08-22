@@ -1,4 +1,4 @@
-import { Switch, Route, useLocation } from 'wouter';
+import { Switch, Route, useLocation , Redirect } from 'wouter';
 import { routeOuverteEnLectureSeule } from '@nodaq/shared';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -22,7 +22,6 @@ import Devis from '@/pages/devis';
 import Classeur from '@/pages/classeur';
 import Marge from '@/pages/marge';
 import Pointages from '@/pages/pointages';
-import DevisDictee from '@/pages/devis-dictee';
 import ParametresEnvoi from '@/pages/parametres-envoi';
 import Analytique from '@/pages/analytique';
 import Rapports from '@/pages/rapports';
@@ -238,7 +237,12 @@ function ApplicationInterne() {
               <Route path="/analytique" component={PlatformRoute(Analytique)} />
               <Route path="/marge" component={RoleRoute(Marge, FINANCIAL_ROLES)} />
               <Route path="/pointages" component={PlatformRoute(Pointages)} />
-              <Route path="/devis/dictee" component={PlatformRoute(DevisDictee)} />
+              {/* L'écran « Devis dicté » est supprimé (ticket 4.24) : la voix
+                  est portée par l'agent unique, qui comprend l'intention quel
+                  que soit le sujet. La route est CONSERVÉE en redirection —
+                  elle a pu être mise en favori, et un 404 sur une adresse qui
+                  marchait hier est une régression pour celui qui la tape. */}
+              <Route path="/devis/dictee">{() => <Redirect to="/chat" />}</Route>
               <Route path="/parametres/envoi" component={PlatformRoute(ParametresEnvoi)} />
               <Route path="/rapports" component={RoleRoute(Rapports, FINANCIAL_ROLES)} />
               <Route path="/compte-resultat" component={RoleRoute(CompteResultat, FINANCIAL_ROLES)} />
