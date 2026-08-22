@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, FileText, ExternalLink, Send, CheckCircle2, XCircle, Clock,
-  AlertCircle, MoreVertical, Trash2, Receipt,
+  AlertCircle, MoreVertical, Trash2, Receipt, Undo2,
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PageHeader } from '@/components/page-header';
@@ -29,6 +29,7 @@ import {
 import {
   Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent,
 } from '@/components/ui/empty';
+import { ToastAction } from '@/components/ui/toast';
 import { useToast } from '@/hooks/use-toast';
 import { useLectureSeule } from '@/hooks/use-auth';
 import { fmtEUR, fmtDate, toDateString } from '@/lib/format';
@@ -454,14 +455,46 @@ export default function FacturesPage() {
     statutFilter !== 'ALL' ? statutFilter : undefined,
   );
 
+  /**
+   * Annule le dernier règlement. Le serveur écrit une contre-passation — le
+   * journal des règlements est en ajout seul, rien n'y est jamais supprimé.
+   */
+  const annulerPaiementMut = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`${API}/factures/${id}/annuler-paiement`, { method: 'POST' });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(j.error ?? "Annulation impossible");
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['factures'] });
+      toast({ title: 'Règlement annulé', description: 'La facture est de nouveau à encaisser.' });
+    },
+    onError: (e: Error) =>
+      toast({ title: "Rien n'a été annulé", description: e.message, variant: 'destructive' }),
+  });
+
   const payerMut = useMutation({
     mutationFn: async (id: string) => {
       const res = await fetch(`${API}/factures/${id}/payer`, { method: 'POST' });
       if (!res.ok) throw new Error('Erreur');
+      return id;
     },
-    onSuccess: () => {
+    onSuccess: (id) => {
       qc.invalidateQueries({ queryKey: ['factures'] });
-      toast({ title: 'Facture marquée comme payée' });
+      // Le retour en arrière est proposé AU MOMENT du geste, pas caché dans un
+      // menu qu'il faudra retrouver. « J'ai cliqué par accident » se répare là
+      // où l'accident vient d'avoir lieu.
+      toast({
+        title: 'Facture marquée comme payée',
+        description: 'Ce n’était pas voulu ? Annulez tout de suite.',
+        action: (
+          <ToastAction altText="Annuler le règlement" onClick={() => annulerPaiementMut.mutate(id)}>
+            Annuler
+          </ToastAction>
+        ),
+      });
     },
   });
 
@@ -620,6 +653,7 @@ export default function FacturesPage() {
                           facture={f}
                           onEmettre={() => { setSelectedFacture(f); setEmettreOpen(true); }}
                           onPayer={() => payerMut.mutate(f.id)}
+                          onAnnulerPaiement={() => annulerPaiementMut.mutate(f.id)}
                           onDelete={() => deleteMut.mutate(f.id)}
                         />
                       </td>
@@ -642,10 +676,11 @@ export default function FacturesPage() {
   );
 }
 
-function FactureRowMenu({ facture, onEmettre, onPayer, onDelete }: {
+function FactureRowMenu({ facture, onEmettre, onPayer, onAnnulerPaiement, onDelete }: {
   facture: Facture;
   onEmettre: () => void;
   onPayer: () => void;
+  onAnnulerPaiement: () => void;
   onDelete: () => void;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -655,6 +690,9 @@ function FactureRowMenu({ facture, onEmettre, onPayer, onDelete }: {
   // supprimer) disparaissent ; le serveur les refuserait de toute façon.
   const isBrouillon = facture.statut === 'BROUILLON' && !lectureSeule;
   const isEmise = facture.statut === 'EMISE' && !lectureSeule;
+  // Le bandeau d'annulation immédiate ne couvre que l'instant du clic. Celui
+  // qui s'en aperçoit le lendemain doit pouvoir revenir en arrière aussi.
+  const isPayee = facture.statut === 'PAYEE' && !lectureSeule;
 
   return (
     <>
@@ -673,6 +711,11 @@ function FactureRowMenu({ facture, onEmettre, onPayer, onDelete }: {
           {isEmise && (
             <DropdownMenuItem onClick={onPayer}>
               <CheckCircle2 className="h-3.5 w-3.5 mr-2" /> Marquer payée
+            </DropdownMenuItem>
+          )}
+          {isPayee && (
+            <DropdownMenuItem onClick={onAnnulerPaiement} data-testid="annuler-paiement">
+              <Undo2 className="h-3.5 w-3.5 mr-2" /> Annuler le règlement
             </DropdownMenuItem>
           )}
           {facture.pdfSha256 && (
