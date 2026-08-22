@@ -104,8 +104,10 @@ export default function Contrats() {
       <div className="px-5 md:px-8 pt-6 space-y-6">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="rounded-xl border border-card-border bg-card p-4">
+            {/* « MRR » a été signalé nommément au test du 22/08 : l'artisan
+                qui pose des ardoises n'a pas à traduire un sigle de startup. */}
             <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              MRR équivalent (actifs)
+              Revenus par mois (contrats actifs)
             </div>
             <div className="font-mono-nums text-2xl font-semibold mt-1 text-primary">
               {fmtEUR(Math.round(totalMonthlyValue))}

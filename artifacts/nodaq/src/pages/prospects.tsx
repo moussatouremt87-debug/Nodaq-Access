@@ -66,7 +66,7 @@ export default function Prospects() {
       <PageHeader
         eyebrow="CRM"
         title="Prospects"
-        description="Votre pipeline commercial, étape par étape."
+        description="Vos contacts commerciaux, étape par étape."
         actions={
           <Button onClick={openCreate} data-testid="button-create-prospect" className="gap-1.5">
             <Plus className="h-4 w-4" /> Nouveau prospect
@@ -78,7 +78,7 @@ export default function Prospects() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="rounded-xl border border-card-border bg-card p-4">
             <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              Valeur du pipeline
+              Total des affaires en discussion
             </div>
             <div className="font-mono-nums text-2xl font-semibold mt-1 text-primary">
               {fmtEUR(totalPipelineValue)}
@@ -110,7 +110,7 @@ export default function Prospects() {
               <EmptyMedia variant="icon">
                 <Users />
               </EmptyMedia>
-              <EmptyTitle>Pipeline vide</EmptyTitle>
+              <EmptyTitle>Aucun contact commercial</EmptyTitle>
               <EmptyDescription>Ajoutez votre premier prospect pour démarrer.</EmptyDescription>
             </EmptyHeader>
             <EmptyContent>
