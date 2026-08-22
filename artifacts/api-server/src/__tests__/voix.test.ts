@@ -21,7 +21,7 @@ import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import crypto from "node:crypto";
 import app from "../app";
-import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner } from "./helpers";
+import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner, serveurTest } from "./helpers";
 
 interface Locataire { cookie: string; tenantId: string }
 
@@ -34,22 +34,22 @@ let b: Locataire;
 async function inscrire(nom: string): Promise<Locataire> {
   const email = `voix-${nom}-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@test.nodaq`;
   cleanupEmails.push(email);
-  const reg = await request(app)
+  const reg = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: `Patron ${nom}`, tenantNom: `Tenant ${nom}` })
     .expect(201);
   await completeMfaForRegisteredOwner(reg.body.userId);
   const cookie = reg.headers["set-cookie"]?.[0] ?? "";
-  const { body: me } = await request(app).get("/api/auth/me").set("Cookie", cookie).expect(200);
+  const { body: me } = await request(serveurTest(app)).get("/api/auth/me").set("Cookie", cookie).expect(200);
   cleanupTenantIds.push(me.tenantId);
   return { cookie, tenantId: me.tenantId };
 }
 
 const interpreter = (l: Locataire, texte: string) =>
-  request(app).post("/api/voix/interpreter").set("Cookie", l.cookie).send({ texte });
+  request(serveurTest(app)).post("/api/voix/interpreter").set("Cookie", l.cookie).send({ texte });
 
 const executer = (l: Locataire, planId: string) =>
-  request(app).post("/api/voix/executer").set("Cookie", l.cookie).send({ planId });
+  request(serveurTest(app)).post("/api/voix/executer").set("Cookie", l.cookie).send({ planId });
 
 async function affaire(l: Locataire, label: string): Promise<string> {
   const id = crypto.randomUUID();
@@ -241,7 +241,7 @@ describe("g — l'agent PROPOSE, il n'exécute pas", () => {
       `SELECT count(*)::int AS n FROM prospects WHERE tenant_id = $1::uuid`, [a.tenantId],
     );
 
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .post("/api/chat/messages")
       .set("Cookie", a.cookie)
       .send({ content: "Crée un prospect Jean Dupont au 0612345678" })
@@ -318,7 +318,7 @@ describe("h — dicter deux fois la même intention ne pose pas deux plans", () 
   test("« OK » en langage naturel, plan déjà en attente → même plan, pas un doublon ; une fois décidé, la suivante en pose un nouveau", async () => {
     const contenu = "Crée un prospect Jean Dupont au 0612345678";
 
-    const premier = await request(app)
+    const premier = await request(serveurTest(app))
       .post("/api/chat/messages")
       .set("Cookie", b.cookie)
       .send({ content: contenu })
@@ -329,7 +329,7 @@ describe("h — dicter deux fois la même intention ne pose pas deux plans", () 
     // exactement la même opération — c'est le scénario réel d'un « OK » en
     // langage naturel : il n'a pas de mécanisme pour « approuver », donc il
     // redécrit ce qu'il a déjà proposé.
-    const second = await request(app)
+    const second = await request(serveurTest(app))
       .post("/api/chat/messages")
       .set("Cookie", b.cookie)
       .send({ content: contenu })
@@ -348,7 +348,7 @@ describe("h — dicter deux fois la même intention ne pose pas deux plans", () 
     // contre les doublons ne doit empêcher que le vrai doublon, pas toute
     // création future.
     await executer(b, premier.body.planId).expect(200);
-    const troisieme = await request(app)
+    const troisieme = await request(serveurTest(app))
       .post("/api/chat/messages")
       .set("Cookie", b.cookie)
       .send({ content: contenu })

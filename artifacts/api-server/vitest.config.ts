@@ -7,24 +7,20 @@ export default defineConfig({
     testTimeout: 30_000,
     hookTimeout: 60_000,
 
-    // Les fichiers de test s'exécutent l'un APRÈS l'autre, jamais en parallèle.
+    // Les fichiers s'exécutent EN PARALLÈLE, et c'est le défaut de Vitest.
     //
-    // Deux raisons, et les deux ont fait des dégâts avant d'être comprises :
-    //   — Supertest monte un serveur `app.listen(0)` par requête, et ce paquet
-    //     en compte plus de 300. Plusieurs fichiers en vol puisent tous dans la
-    //     réserve de ports éphémères de la MACHINE : d'où des `ECONNRESET`
-    //     intermittents, sur un fichier différent à chaque fois.
-    //   — Tous les fichiers partagent UNE base PostgreSQL. Le nettoyage de fin
-    //     de fichier s'exécutait pendant qu'un autre était au milieu de ses
-    //     tests, d'où des « la ligne n'est pas là » : 404 sur une route qui
-    //     existe, compte à 0, 201 devenu 200.
+    // Ils ont été sérialisés au ticket 4.22 pour endiguer des `ECONNRESET`
+    // intermittents, sur la foi d'un diagnostic — l'épuisement des ports
+    // éphémères — qui s'est révélé FAUX à la mesure : le pic observé pendant
+    // une exécution complète est de 677 sockets en TIME_WAIT, sur 16 384
+    // disponibles. La sérialisation coûtait un facteur trois sur la CI sans
+    // rien régler (3 exécutions rouges sur 12 après, contre 2 sur 12 avant).
     //
-    // `fileParallelism: false` et NON `singleFork: true` : cette dernière était
-    // écrite ici depuis l'origine, n'existe plus dans Vitest 4, et était donc
-    // ignorée en silence. Les fichiers tournaient à neuf forks, exactement le
-    // contraire de ce que ce commentaire promettait. Voir ticket 4.22.
-    pool: "forks",
-    fileParallelism: false,
+    // La vraie cause était le RECYCLAGE des ports, provoqué par un serveur
+    // HTTP créé PAR REQUÊTE — plus de 28 000 par exécution. Elle est traitée
+    // à la source dans `helpers.ts` (`serveurTest`), et le parallélisme n'a
+    // plus lieu d'être retiré.
+    fileParallelism: true,
 
     setupFiles: ["src/__tests__/vitest.setup.ts"],
     include: ["src/__tests__/**/*.test.ts",

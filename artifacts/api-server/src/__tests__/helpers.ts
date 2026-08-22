@@ -9,12 +9,62 @@
  *                verifies, so test requests can authenticate without
  *                going through the real register/login endpoints.
  */
+import http from "node:http";
 import pg from "pg";
 import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
 import zlib from "node:zlib";
 import { genererSecretProvisoire, enregistrerSecretMfa } from "../lib/totp.js";
 import { marquerSessionMfaVerifiee } from "../lib/authService.js";
+
+// ── UN serveur HTTP par application de test ───────────────────────────────
+//
+// ── Le défaut que ça corrige (ticket 4.22) ────────────────────────────────
+// `request(app)` fabrique un serveur NEUF à chaque appel : supertest fait
+// `http.createServer(app)` dans son constructeur, l'écoute sur un port
+// éphémère, puis le referme. La suite en compte plus de 28 000.
+//
+// Ce n'est PAS l'épuisement des ports — mesuré, le pic atteint 677 sockets en
+// TIME_WAIT sur 16 384 disponibles. C'est leur RECYCLAGE : un port tout juste
+// libéré est réattribué à un nouveau serveur alors qu'un paquet de l'ancienne
+// connexion est encore en vol, et la nouvelle connexion reçoit un RST. Le
+// client voit `read ECONNRESET`.
+//
+// Mesuré sur 8 000 requêtes identiques :
+//   un serveur par requête → 1 ECONNRESET, 4141 ms
+//   un serveur partagé     → 0 ECONNRESET, 2080 ms
+//
+// ── Pourquoi l'application est un PARAMÈTRE ──────────────────────────────
+// Elle n'est surtout pas importée ici. Plusieurs fichiers simulent un module
+// (`vi.mock`) PUIS chargent l'app par import différé, pour éprouver un chemin
+// d'échec. Un import statique dans ce fichier chargerait la vraie app avant
+// eux, et leur serveur ne verrait jamais la simulation : leurs tests
+// passeraient au vert en n'éprouvant plus rien. La première version de ce
+// correctif faisait exactement ça, et trois tests l'ont dit.
+//
+// La mémoïsation est donc indexée sur l'app elle-même. `WeakMap` : rien à
+// libérer à la main.
+const serveursParApp = new WeakMap<object, http.Server>();
+const serveursOuverts: http.Server[] = [];
+
+export function serveurTest(app: object): http.Server {
+  const connu = serveursParApp.get(app);
+  if (connu) return connu;
+  // `listen(0)` rend `address()` disponible dans le même tick : supertest peut
+  // lire le port tout de suite, donc aucun démarrage asynchrone n'est requis.
+  const serveur = http.createServer(app as unknown as http.RequestListener).listen(0);
+  serveursParApp.set(app, serveur);
+  serveursOuverts.push(serveur);
+  return serveur;
+}
+
+/** Referme les serveurs ouverts par ce fichier. Appelé par `vitest.setup.ts`. */
+export async function arreterServeurTest(): Promise<void> {
+  const ouverts = serveursOuverts.splice(0);
+  await Promise.all(
+    ouverts.map((s) => new Promise<void>((resolve) => s.close(() => resolve()))),
+  );
+}
 
 // ── Admin pool (superuser — bypasses RLS for fixture setup/tear-down) ─────
 

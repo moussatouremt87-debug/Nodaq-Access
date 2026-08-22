@@ -29,6 +29,7 @@ import {
   cleanupTenants,
   cleanupUsers,
   completeMfaForRegisteredOwner,
+  serveurTest,
 } from "./helpers";
 
 const tenantIds: string[] = [];
@@ -49,7 +50,7 @@ const REGLE_OUVERTE = {
 beforeAll(async () => {
   const email = `rr-owner-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@test.nodaq`;
   emails.push(email);
-  const reg = await request(app)
+  const reg = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: "Patron", tenantNom: "Relance SARL" })
     .expect(201);
@@ -75,7 +76,7 @@ afterAll(async () => {
 
 describe("a — sans réglage, l'agent ne concède rien", () => {
   test("la règle par défaut ferme l'échelonnement et la remise", async () => {
-    const r = await request(app)
+    const r = await request(serveurTest(app))
       .get("/api/relance/regles")
       .set("Cookie", ownerCookie)
       .expect(200);
@@ -91,7 +92,7 @@ describe("a — sans réglage, l'agent ne concède rien", () => {
   });
 
   test("le résumé dit explicitement que rien n'est accordé", async () => {
-    const r = await request(app).get("/api/relance/regles").set("Cookie", ownerCookie);
+    const r = await request(serveurTest(app)).get("/api/relance/regles").set("Cookie", ownerCookie);
     expect(r.body.resume).toMatch(/n'accorde rien d'autre/i);
   });
 });
@@ -100,7 +101,7 @@ describe("a — sans réglage, l'agent ne concède rien", () => {
 
 describe("b — chaque modification pose une version, l'ancienne survit", () => {
   test("enregistrer incrémente la version et n'écrase pas la précédente", async () => {
-    const un = await request(app)
+    const un = await request(serveurTest(app))
       .put("/api/relance/regles")
       .set("Cookie", ownerCookie)
       .send(REGLE_OUVERTE)
@@ -108,7 +109,7 @@ describe("b — chaque modification pose une version, l'ancienne survit", () => 
     expect(un.body.version).toBe(1);
     expect(un.body.echelonnementAutorise).toBe(true);
 
-    const deux = await request(app)
+    const deux = await request(serveurTest(app))
       .put("/api/relance/regles")
       .set("Cookie", ownerCookie)
       .send({ ...REGLE_OUVERTE, echelonnementAutorise: false })
@@ -130,12 +131,12 @@ describe("b — chaque modification pose une version, l'ancienne survit", () => 
   });
 
   test("la version courante est celle de numéro le plus élevé", async () => {
-    const r = await request(app).get("/api/relance/regles").set("Cookie", ownerCookie);
+    const r = await request(serveurTest(app)).get("/api/relance/regles").set("Cookie", ownerCookie);
     expect(r.body.version).toBe(2);
   });
 
   test("l'auteur de la version est conservé", async () => {
-    const r = await request(app).get("/api/relance/regles").set("Cookie", ownerCookie);
+    const r = await request(serveurTest(app)).get("/api/relance/regles").set("Cookie", ownerCookie);
     expect(r.body.poseeParEmail).toContain("@test.nodaq");
     expect(r.body.poseeLe).toBeTruthy();
   });
@@ -164,13 +165,13 @@ describe("c — une version posée ne se réécrit pas", () => {
 
 describe("d — un MEMBER lit la règle, il ne la pose pas", () => {
   test("un MEMBER peut la lire — il valide des campagnes dans son cadre", async () => {
-    const r = await request(app).get("/api/relance/regles").set("Cookie", membreCookie);
+    const r = await request(serveurTest(app)).get("/api/relance/regles").set("Cookie", membreCookie);
     expect(r.status).toBe(200);
     expect(r.body.version).toBe(2);
   });
 
   test("un MEMBER ne peut pas l'écrire", async () => {
-    const r = await request(app)
+    const r = await request(serveurTest(app))
       .put("/api/relance/regles")
       .set("Cookie", membreCookie)
       .send(REGLE_OUVERTE);
@@ -178,7 +179,7 @@ describe("d — un MEMBER lit la règle, il ne la pose pas", () => {
   });
 
   test("sans session, rien", async () => {
-    await request(app).get("/api/relance/regles").expect(401);
+    await request(serveurTest(app)).get("/api/relance/regles").expect(401);
   });
 });
 
@@ -186,7 +187,7 @@ describe("d — un MEMBER lit la règle, il ne la pose pas", () => {
 
 describe("e — une règle incohérente est refusée avec un message lisible", () => {
   test("un échelonnement à un seul versement n'est pas un échelonnement", async () => {
-    const r = await request(app)
+    const r = await request(serveurTest(app))
       .put("/api/relance/regles")
       .set("Cookie", ownerCookie)
       .send({ ...REGLE_OUVERTE, echelonnementAutorise: true, maxVersements: 1 });
@@ -198,7 +199,7 @@ describe("e — une règle incohérente est refusée avec un message lisible", (
   });
 
   test("une borne hors limites est refusée", async () => {
-    const r = await request(app)
+    const r = await request(serveurTest(app))
       .put("/api/relance/regles")
       .set("Cookie", ownerCookie)
       .send({ ...REGLE_OUVERTE, retardMaxJours: 900 });
@@ -207,12 +208,12 @@ describe("e — une règle incohérente est refusée avec un message lisible", (
   });
 
   test("un refus n'a rien écrit", async () => {
-    const r = await request(app).get("/api/relance/regles").set("Cookie", ownerCookie);
+    const r = await request(serveurTest(app)).get("/api/relance/regles").set("Cookie", ownerCookie);
     expect(r.body.version, "une version aurait été posée malgré le refus").toBe(2);
   });
 
   test("un corps mal typé est refusé", async () => {
-    const r = await request(app)
+    const r = await request(serveurTest(app))
       .put("/api/relance/regles")
       .set("Cookie", ownerCookie)
       .send({ ...REGLE_OUVERTE, echelonnementAutorise: "oui" });

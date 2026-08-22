@@ -27,6 +27,7 @@ import {
   createTestSession,
   cleanupTenants,
   cleanupUsers,
+  serveurTest,
 } from "./helpers";
 
 // ── Shared fixtures ───────────────────────────────────────────────────────────
@@ -63,11 +64,11 @@ afterAll(async () => {
 
 const api = (cookie: string) => ({
   get: (url: string) =>
-    request(app).get(url).set("Cookie", cookie),
+    request(serveurTest(app)).get(url).set("Cookie", cookie),
   post: (url: string, body: unknown) =>
-    request(app).post(url).set("Cookie", cookie).send(body as Record<string, unknown>),
+    request(serveurTest(app)).post(url).set("Cookie", cookie).send(body as Record<string, unknown>),
   patch: (url: string, body: unknown) =>
-    request(app).patch(url).set("Cookie", cookie).send(body as Record<string, unknown>),
+    request(serveurTest(app)).patch(url).set("Cookie", cookie).send(body as Record<string, unknown>),
 });
 
 // ── GET /reprise/blocs ────────────────────────────────────────────────────────

@@ -18,7 +18,7 @@ import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import crypto from "node:crypto";
 import app from "../app";
-import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner } from "./helpers";
+import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner, serveurTest } from "./helpers";
 
 const SECRET = "secret-webhook-test";
 const tenantIds: string[] = [];
@@ -40,7 +40,7 @@ function signe(corps: object, options: { t?: number; secret?: string } = {}): {
 
 const poster = (corps: object, entete?: string) => {
   const { brut, entete: calcule } = signe(corps);
-  return request(app)
+  return request(serveurTest(app))
     .post("/api/webhooks/agent-vocal")
     .set("Content-Type", "application/json")
     .set("ElevenLabs-Signature", entete ?? calcule)
@@ -81,7 +81,7 @@ beforeAll(async () => {
 
   const email = `wh-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@test.nodaq`;
   emails.push(email);
-  const reg = await request(app)
+  const reg = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: "P", tenantNom: "Webhook SARL" })
     .expect(201);
@@ -89,7 +89,7 @@ beforeAll(async () => {
   const cookie = reg.headers["set-cookie"][0];
   tenantIds.push(reg.body.tenantId);
 
-  const { body } = await request(app)
+  const { body } = await request(serveurTest(app))
     .post("/api/relance/campagnes")
     .set("Cookie", cookie)
     .send({
@@ -104,7 +104,7 @@ beforeAll(async () => {
       ],
     })
     .expect(201);
-  await request(app)
+  await request(serveurTest(app))
     .post(`/api/pending-actions/${body.pendingActionId}/approve`)
     .set("Cookie", cookie)
     .expect(200);
@@ -124,7 +124,7 @@ describe("a — rien n'entre sans signature", () => {
     const { conversationId } = await appelAvecConversation();
     const corps = evenement(conversationId, []);
 
-    const sans = await request(app)
+    const sans = await request(serveurTest(app))
       .post("/api/webhooks/agent-vocal")
       .set("Content-Type", "application/json")
       .send(JSON.stringify(corps));
@@ -136,7 +136,7 @@ describe("a — rien n'entre sans signature", () => {
     // Périmée : signée correctement, mais il y a une heure — au-delà des 30
     // minutes de tolérance de la plateforme.
     const vieille = signe(corps, { t: Math.floor(Date.now() / 1000) - 3600 });
-    const perimee = await request(app)
+    const perimee = await request(serveurTest(app))
       .post("/api/webhooks/agent-vocal")
       .set("Content-Type", "application/json")
       .set("ElevenLabs-Signature", vieille.entete)
@@ -153,7 +153,7 @@ describe("a — rien n'entre sans signature", () => {
     const { conversationId } = await appelAvecConversation();
     const { entete } = signe(evenement(conversationId, []));
     const autre = JSON.stringify(evenement(conversationId, [{ role: "agent", message: "forgé" }]));
-    const r = await request(app)
+    const r = await request(serveurTest(app))
       .post("/api/webhooks/agent-vocal")
       .set("Content-Type", "application/json")
       .set("ElevenLabs-Signature", entete)

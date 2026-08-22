@@ -29,6 +29,7 @@ import {
   cleanupTenants,
   cleanupUsers,
   completeMfaForRegisteredOwner,
+  serveurTest,
 } from "./helpers";
 
 const tenantIds: string[] = [];
@@ -39,7 +40,7 @@ interface Locataire { cookie: string; tenantId: string }
 async function inscrire(nom: string): Promise<Locataire> {
   const email = `a61-${nom}-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@test.nodaq`;
   emails.push(email);
-  const reg = await request(app)
+  const reg = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: `Patron ${nom}`, tenantNom: `Tenant ${nom}` })
     .expect(201);
@@ -104,13 +105,13 @@ afterAll(async () => {
 describe("a — AC1 : le prompt porte le vocabulaire du secteur déclaré", () => {
   test("agent conversationnel : « chantier » pour le bâtiment, « mission » pour le conseil", async () => {
     const pourBatiment = await capterPromptsSysteme(() =>
-      request(app).post("/api/chat/messages").set("Cookie", batiment.cookie).send({ content: "Bonjour" }),
+      request(serveurTest(app)).post("/api/chat/messages").set("Cookie", batiment.cookie).send({ content: "Bonjour" }),
     );
     expect(pourBatiment.length).toBeGreaterThan(0);
     expect(pourBatiment.join("\n")).toContain("chantier");
 
     const pourConseil = await capterPromptsSysteme(() =>
-      request(app).post("/api/chat/messages").set("Cookie", conseil.cookie).send({ content: "Bonjour" }),
+      request(serveurTest(app)).post("/api/chat/messages").set("Cookie", conseil.cookie).send({ content: "Bonjour" }),
     );
     expect(pourConseil.length).toBeGreaterThan(0);
     const texteConseil = pourConseil.join("\n");
@@ -123,7 +124,7 @@ describe("a — AC1 : le prompt porte le vocabulaire du secteur déclaré", () =
 
   test("dictée vocale : idem, sur son propre prompt", async () => {
     const pourConseil = await capterPromptsSysteme(() =>
-      request(app).post("/api/voix/interpreter").set("Cookie", conseil.cookie).send({ texte: "voix-test-vocabulaire" }),
+      request(serveurTest(app)).post("/api/voix/interpreter").set("Cookie", conseil.cookie).send({ texte: "voix-test-vocabulaire" }),
     );
     const texte = pourConseil.join("\n");
     expect(texte).toContain("mission");
@@ -134,7 +135,7 @@ describe("a — AC1 : le prompt porte le vocabulaire du secteur déclaré", () =
 
   test("dictée de devis : idem, y compris dans l'exemple travaillé", async () => {
     const pourConseil = await capterPromptsSysteme(() =>
-      request(app)
+      request(serveurTest(app))
         .post("/api/devis/dictee/proposer")
         .set("Cookie", conseil.cookie)
         .send({ texte: "trois heures de diagnostic" }),
@@ -157,7 +158,7 @@ describe("b — AC3 : le changement de secteur s'applique sans redémarrage", ()
     await declarerSecteur(t.tenantId, "batiment");
 
     const avant = await capterPromptsSysteme(() =>
-      request(app).post("/api/chat/messages").set("Cookie", t.cookie).send({ content: "Bonjour" }),
+      request(serveurTest(app)).post("/api/chat/messages").set("Cookie", t.cookie).send({ content: "Bonjour" }),
     );
     expect(avant.join("\n")).toContain("chantier");
 
@@ -165,7 +166,7 @@ describe("b — AC3 : le changement de secteur s'applique sans redémarrage", ()
     await declarerSecteur(t.tenantId, "services_projet");
 
     const apres = await capterPromptsSysteme(() =>
-      request(app).post("/api/chat/messages").set("Cookie", t.cookie).send({ content: "Bonjour" }),
+      request(serveurTest(app)).post("/api/chat/messages").set("Cookie", t.cookie).send({ content: "Bonjour" }),
     );
     const texte = apres.join("\n");
     expect(texte).toContain("mission");
@@ -177,7 +178,7 @@ describe("b — AC3 : le changement de secteur s'applique sans redémarrage", ()
 
 describe("c — AC2 : le libellé d'une action à valider emploie le mot du secteur", () => {
   test("une création dictée chez un consultant se lit « Créer la mission … »", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/voix/interpreter")
       .set("Cookie", conseil.cookie)
       .send({ texte: "voix-test-libelle" })
@@ -193,7 +194,7 @@ describe("c — AC2 : le libellé d'une action à valider emploie le mot du sect
   });
 
   test("chez un tenant bâtiment, le même chemin dit « chantier »", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/voix/interpreter")
       .set("Cookie", batiment.cookie)
       .send({ texte: "voix-test-libelle" })

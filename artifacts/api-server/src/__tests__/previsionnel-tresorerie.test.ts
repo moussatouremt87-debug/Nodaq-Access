@@ -21,6 +21,7 @@ import {
   cookieHeader,
   cleanupTenants,
   cleanupUsers,
+  serveurTest,
 } from "./helpers";
 
 const cleanupTenantIds: string[] = [];
@@ -48,7 +49,7 @@ describe("a — pas de compte bancaire connecté", () => {
     await createTestMembership(owner.id, tenant.id, "OWNER");
     const cookie = cookieHeader((await createTestSession(owner.id, tenant.id)).id);
 
-    const res = await request(app).get("/api/previsionnel-tresorerie").set("Cookie", cookie);
+    const res = await request(serveurTest(app)).get("/api/previsionnel-tresorerie").set("Cookie", cookie);
     expect(res.status).toBe(200);
     expect(res.body.donneesInsuffisantes).toBe(true);
     expect(res.body.soldeDepartCents).toBeNull();
@@ -101,14 +102,14 @@ describe("b — peuplé, calcul de bout en bout", () => {
   }, 30_000);
 
   test("le solde de départ est le vrai solde bancaire", async () => {
-    const res = await request(app).get("/api/previsionnel-tresorerie").set("Cookie", cookie);
+    const res = await request(serveurTest(app)).get("/api/previsionnel-tresorerie").set("Cookie", cookie);
     expect(res.status).toBe(200);
     expect(res.body.donneesInsuffisantes).toBe(false);
     expect(res.body.soldeDepartCents).toBe(500_000);
   });
 
   test("la facture, l'échéance et la charge apparaissent dans les totaux", async () => {
-    const res = await request(app).get("/api/previsionnel-tresorerie").set("Cookie", cookie);
+    const res = await request(serveurTest(app)).get("/api/previsionnel-tresorerie").set("Cookie", cookie);
     const totalEntrees = res.body.semaines.reduce((a: number, s: { entreesCents: number }) => a + s.entreesCents, 0);
     const totalSorties = res.body.semaines.reduce((a: number, s: { sortiesCents: number }) => a + s.sortiesCents, 0);
     expect(totalEntrees).toBe(100_000);
@@ -116,7 +117,7 @@ describe("b — peuplé, calcul de bout en bout", () => {
   });
 
   test("le solde de la dernière semaine reflète le cumul", async () => {
-    const res = await request(app).get("/api/previsionnel-tresorerie").set("Cookie", cookie);
+    const res = await request(serveurTest(app)).get("/api/previsionnel-tresorerie").set("Cookie", cookie);
     const derniere = res.body.semaines[res.body.semaines.length - 1];
     expect(derniere.soldeFinCents).toBe(500_000 + 100_000 - 45_000 - 80_000);
   });
@@ -132,7 +133,7 @@ describe("c — financierOnly", () => {
     await createTestMembership(member.id, tenant.id, "MEMBER");
     const cookie = cookieHeader((await createTestSession(member.id, tenant.id)).id);
 
-    const res = await request(app).get("/api/previsionnel-tresorerie").set("Cookie", cookie);
+    const res = await request(serveurTest(app)).get("/api/previsionnel-tresorerie").set("Cookie", cookie);
     expect(res.status).toBe(403);
   });
 });

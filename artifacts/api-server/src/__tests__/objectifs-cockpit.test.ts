@@ -14,7 +14,7 @@
 import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import app from "../app";
-import { adminPool, cleanupTenants, cleanupUsers, createTestUser, createTestMembership, completeMfaForRegisteredOwner } from "./helpers";
+import { adminPool, cleanupTenants, cleanupUsers, createTestUser, createTestMembership, completeMfaForRegisteredOwner, serveurTest } from "./helpers";
 
 let cookieOwnerA: string;
 let cookieMemberA: string;
@@ -59,13 +59,13 @@ beforeAll(async () => {
   for (const [nom, cible] of [["a", "A"], ["b", "B"]] as const) {
     const email = `objectifs-${nom}-${Date.now()}@test.nodaq`;
     cleanupEmails.push(email);
-    const reg = await request(app)
+    const reg = await request(serveurTest(app))
       .post("/api/auth/register")
       .send({ email, password: "test-pass-1234", nom: `Patron ${cible}`, tenantNom: `Tenant ${cible}` })
       .expect(201);
     await completeMfaForRegisteredOwner(reg.body.userId);
     const cookie = reg.headers["set-cookie"]?.[0] ?? "";
-    const { body: me } = await request(app).get("/api/auth/me").set("Cookie", cookie).expect(200);
+    const { body: me } = await request(serveurTest(app)).get("/api/auth/me").set("Cookie", cookie).expect(200);
     if (cible === "A") { cookieOwnerA = cookie; tenantA = me.tenantId; }
     else { cookieOwnerB = cookie; tenantB = me.tenantId; }
     cleanupTenantIds.push(me.tenantId);
@@ -81,7 +81,7 @@ beforeAll(async () => {
   const utilisateurMembre = await createTestUser(emailMember);
   await createTestMembership(utilisateurMembre.id, tenantA, "MEMBER");
 
-  const connexion = await request(app)
+  const connexion = await request(serveurTest(app))
     .post("/api/auth/login")
     .send({ email: emailMember, password: utilisateurMembre.password })
     .expect(200);
@@ -109,7 +109,7 @@ describe("0 — CA du cockpit : émission, et facturé", () => {
       createdAt: `${anneeCourante - 1}-12-28T10:00:00Z`,
     });
 
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get("/api/cockpit/kpis")
       .set("Cookie", cookieOwnerA)
       .expect(200);
@@ -121,7 +121,7 @@ describe("0 — CA du cockpit : émission, et facturé", () => {
     // Le défaut : la requête filtrait sur settled = true, ce qui donnait
     // l'encaissé sous le nom de « chiffre d'affaires ». Un artisan qui dit
     // « dépasser le CA de l'an dernier » parle du facturé.
-    const avant = (await request(app).get("/api/cockpit/kpis").set("Cookie", cookieOwnerB).expect(200)).body.ytd.caYtdCents;
+    const avant = (await request(serveurTest(app)).get("/api/cockpit/kpis").set("Cookie", cookieOwnerB).expect(200)).body.ytd.caYtdCents;
 
     await facture(tenantB, {
       issuedDate: `${anneeCourante}-02-10`,
@@ -129,7 +129,7 @@ describe("0 — CA du cockpit : émission, et facturé", () => {
       settled: false,
     });
 
-    const apres = (await request(app).get("/api/cockpit/kpis").set("Cookie", cookieOwnerB).expect(200)).body.ytd.caYtdCents;
+    const apres = (await request(serveurTest(app)).get("/api/cockpit/kpis").set("Cookie", cookieOwnerB).expect(200)).body.ytd.caYtdCents;
     expect(apres - avant).toBe(400_000);
   });
 });
@@ -138,7 +138,7 @@ describe("0 — CA du cockpit : émission, et facturé", () => {
 
 describe("a — VISIBILITÉ : le corps de réponse, pas l'affichage", () => {
   test("l'OWNER du tenant A reçoit le bloc", async () => {
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get("/api/cockpit/objectifs")
       .set("Cookie", cookieOwnerA)
       .expect(200);
@@ -147,7 +147,7 @@ describe("a — VISIBILITÉ : le corps de réponse, pas l'affichage", () => {
   });
 
   test("l'OWNER du tenant B ne voit RIEN des objectifs du tenant A", async () => {
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get("/api/cockpit/objectifs")
       .set("Cookie", cookieOwnerB)
       .expect(200);
@@ -157,7 +157,7 @@ describe("a — VISIBILITÉ : le corps de réponse, pas l'affichage", () => {
 
   test("un MEMBER du tenant A reçoit un corps VIDE en owner_only", async () => {
     await reglage(tenantA, "objectifs.visibilite", "owner_only");
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get("/api/cockpit/objectifs")
       .set("Cookie", cookieMemberA)
       .expect(200);
@@ -168,7 +168,7 @@ describe("a — VISIBILITÉ : le corps de réponse, pas l'affichage", () => {
 
   test("en visibilité « equipe », le MEMBER reçoit le bloc", async () => {
     await reglage(tenantA, "objectifs.visibilite", "equipe");
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get("/api/cockpit/objectifs")
       .set("Cookie", cookieMemberA)
       .expect(200);
@@ -178,7 +178,7 @@ describe("a — VISIBILITÉ : le corps de réponse, pas l'affichage", () => {
 
   test("objectifs.actif = false masque le bloc pour le patron lui-même", async () => {
     await reglage(tenantA, "objectifs.actif", "false");
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get("/api/cockpit/objectifs")
       .set("Cookie", cookieOwnerA)
       .expect(200);
@@ -191,7 +191,7 @@ describe("a — VISIBILITÉ : le corps de réponse, pas l'affichage", () => {
 
 describe("b — SILENCE : aucun seuil inventé", () => {
   test("sans charges ni taux saisis : configurable, et AUCUNE valeur de seuil", async () => {
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get("/api/cockpit/objectifs")
       .set("Cookie", cookieOwnerA)
       .expect(200);
@@ -206,7 +206,7 @@ describe("b — SILENCE : aucun seuil inventé", () => {
 
   test("un taux saisi SANS charges reste un silence", async () => {
     await reglage(tenantA, "objectifs.taux_marge_bp", "3500");
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get("/api/cockpit/objectifs")
       .set("Cookie", cookieOwnerA)
       .expect(200);
@@ -218,7 +218,7 @@ describe("b — SILENCE : aucun seuil inventé", () => {
   test("les deux saisis : le seuil apparaît, avec sa provenance", async () => {
     await reglage(tenantA, "objectifs.charges_fixes_annuelles_cents", "12000000");
     await reglage(tenantA, "objectifs.taux_marge_bp", "3500");
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get("/api/cockpit/objectifs")
       .set("Cookie", cookieOwnerA)
       .expect(200);
@@ -283,7 +283,7 @@ describe("c — FRANCHISSEMENT enregistré une seule fois", () => {
 
 describe("e — CONVERSION en chantiers sous cinq affaires", () => {
   test("moins de cinq affaires terminées → aucune conversion", async () => {
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get("/api/cockpit/objectifs")
       .set("Cookie", cookieOwnerA)
       .expect(200);
@@ -295,7 +295,7 @@ describe("e — CONVERSION en chantiers sous cinq affaires", () => {
   });
 
   test("le seuil minimal est annoncé au front, pas deviné", async () => {
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get("/api/cockpit/objectifs")
       .set("Cookie", cookieOwnerA)
       .expect(200);
@@ -318,7 +318,7 @@ describe("f — RÉPARTITION DE MARGE PAR CATÉGORIE (US-A3.3)", () => {
       { libelle: "Bazar", tauxMargeBps: 5000, partCaBps: 4000 },
     ]));
 
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get("/api/cockpit/objectifs")
       .set("Cookie", cookieOwnerA)
       .expect(200);
@@ -330,7 +330,7 @@ describe("f — RÉPARTITION DE MARGE PAR CATÉGORIE (US-A3.3)", () => {
   test("une répartition vide ([]) éteint le mode et replie sur le taux unique", async () => {
     await reglage(tenantA, "objectifs.repartition_marge_json", "[]");
 
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get("/api/cockpit/objectifs")
       .set("Cookie", cookieOwnerA)
       .expect(200);
@@ -340,7 +340,7 @@ describe("f — RÉPARTITION DE MARGE PAR CATÉGORIE (US-A3.3)", () => {
   });
 
   test("PATCH /api/parametres refuse une répartition invalide", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .patch("/api/parametres")
       .set("Cookie", cookieOwnerA)
       .send({ "objectifs.repartition_marge_json": JSON.stringify([{ libelle: "", tauxMargeBps: 2000, partCaBps: 5000 }]) });
@@ -348,7 +348,7 @@ describe("f — RÉPARTITION DE MARGE PAR CATÉGORIE (US-A3.3)", () => {
   });
 
   test("PATCH /api/parametres accepte une répartition valide", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .patch("/api/parametres")
       .set("Cookie", cookieOwnerA)
       .send({

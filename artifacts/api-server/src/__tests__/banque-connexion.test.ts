@@ -26,6 +26,7 @@ import {
   cookieHeader,
   cleanupTenants,
   cleanupUsers,
+  serveurTest,
 } from "./helpers";
 
 const cleanupTenantIds: string[] = [];
@@ -72,7 +73,7 @@ describe("a — POST /connecteurs/banque/session sans Bridge configuré", () => 
   test("503, jamais un 500", async () => {
     delete process.env["BRIDGE_CLIENT_ID"];
     const { cookie } = await ownerConnecte();
-    const res = await request(app).post("/api/connecteurs/banque/session").set("Cookie", cookie);
+    const res = await request(serveurTest(app)).post("/api/connecteurs/banque/session").set("Cookie", cookie);
     expect(res.status).toBe(503);
   });
 });
@@ -105,7 +106,7 @@ describe("b — POST /connecteurs/banque/session", () => {
       }),
     );
 
-    const res1 = await request(app).post("/api/connecteurs/banque/session").set("Cookie", cookie);
+    const res1 = await request(serveurTest(app)).post("/api/connecteurs/banque/session").set("Cookie", cookie);
     expect(res1.status).toBe(200);
     expect(res1.body.url).toBe("https://connect.bridgeapi.io/session-1");
     expect(calls.filter((u) => u.endsWith("/users"))).toHaveLength(1);
@@ -119,7 +120,7 @@ describe("b — POST /connecteurs/banque/session", () => {
     expect(rows[0]!.statut).toBe("en_attente");
 
     // Second appel : même connexion déjà en base, PAS de second POST /users.
-    const res2 = await request(app).post("/api/connecteurs/banque/session").set("Cookie", cookie);
+    const res2 = await request(serveurTest(app)).post("/api/connecteurs/banque/session").set("Cookie", cookie);
     expect(res2.status).toBe(200);
     expect(calls.filter((u) => u.endsWith("/users"))).toHaveLength(1);
   });
@@ -139,7 +140,7 @@ function signer(corps: string, secret: string): string {
 
 describe("c — POST /webhooks/banque — authentification", () => {
   test("signature absente → 401", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/webhooks/banque")
       .send({ type: "item.created", content: { user_uuid: "x" } });
     expect(res.status).toBe(401);
@@ -147,7 +148,7 @@ describe("c — POST /webhooks/banque — authentification", () => {
 
   test("signature forgée (mauvais secret) → 401", async () => {
     const corps = JSON.stringify({ type: "item.created", content: { user_uuid: "x" } });
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/webhooks/banque")
       .set("Content-Type", "application/json")
       .set("BridgeApi-Signature", signer(corps, "mauvais-secret"))
@@ -157,7 +158,7 @@ describe("c — POST /webhooks/banque — authentification", () => {
 
   test("signature valide, mais aucun tenant ne porte ce user_uuid → 404", async () => {
     const corps = JSON.stringify({ type: "item.created", content: { user_uuid: "user-uuid-inconnu" } });
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/webhooks/banque")
       .set("Content-Type", "application/json")
       .set("BridgeApi-Signature", signer(corps, REQUIRED_ENV.BRIDGE_WEBHOOK_SECRET))
@@ -182,7 +183,7 @@ describe("d — POST /webhooks/banque — événements", () => {
 
   function envoyerWebhook(corps: Record<string, unknown>) {
     const raw = JSON.stringify(corps);
-    return request(app)
+    return request(serveurTest(app))
       .post("/api/webhooks/banque")
       .set("Content-Type", "application/json")
       .set("BridgeApi-Signature", signer(raw, REQUIRED_ENV.BRIDGE_WEBHOOK_SECRET))

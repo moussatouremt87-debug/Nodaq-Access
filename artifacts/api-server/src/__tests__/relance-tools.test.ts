@@ -17,7 +17,7 @@ import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import crypto from "node:crypto";
 import app from "../app";
-import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner } from "./helpers";
+import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner, serveurTest } from "./helpers";
 
 const tenantIds: string[] = [];
 const emails: string[] = [];
@@ -56,7 +56,7 @@ async function appelPlanifie(): Promise<{ appelId: string; jeton: string }> {
 }
 
 const outil = (jeton: string, chemin: string, corps: Record<string, unknown> = {}) =>
-  request(app)
+  request(serveurTest(app))
     .post(`/api/relance/appel/${chemin}`)
     .set("Authorization", `Bearer ${jeton}`)
     .send(corps);
@@ -72,7 +72,7 @@ beforeAll(async () => {
 
   const email = `tools-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@test.nodaq`;
   emails.push(email);
-  const reg = await request(app)
+  const reg = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: "Patron", tenantNom: "Tools SARL" })
     .expect(201);
@@ -80,14 +80,14 @@ beforeAll(async () => {
   const cookie = reg.headers["set-cookie"][0];
   tenantIds.push(reg.body.tenantId);
 
-  await request(app).put("/api/relance/regles").set("Cookie", cookie).send(REGLE).expect(200);
-  await request(app)
+  await request(serveurTest(app)).put("/api/relance/regles").set("Cookie", cookie).send(REGLE).expect(200);
+  await request(serveurTest(app))
     .patch("/api/parametres")
     .set("Cookie", cookie)
     .send({ "company.raison_sociale": "Tools SARL" })
     .expect(200);
 
-  const { body } = await request(app)
+  const { body } = await request(serveurTest(app))
     .post("/api/relance/campagnes")
     .set("Cookie", cookie)
     .send({
@@ -102,7 +102,7 @@ beforeAll(async () => {
       ],
     })
     .expect(201);
-  await request(app)
+  await request(serveurTest(app))
     .post(`/api/pending-actions/${body.pendingActionId}/approve`)
     .set("Cookie", cookie)
     .expect(200);
@@ -227,7 +227,7 @@ describe("b — les clôtures écrivent l'issue, l'opposition radie le numéro",
     await outil(jeton, "opposition").expect(200);
 
     // US-7 « effectif immédiatement » : la planification suivante échoue.
-    const r = await request(app)
+    const r = await request(serveurTest(app))
       .post(`/api/relance/campagnes/${proprio.campagneId}/appels`)
       .set("Cookie", proprio.cookie)
       .send({ factureId: "F-TOOLS", numero: NUMERO_TEST });
@@ -255,7 +255,7 @@ describe("b — les clôtures écrivent l'issue, l'opposition radie le numéro",
 
 describe("c — liste blanche tant que l'appelant est américain", () => {
   test("un numéro hors liste est refusé à la PLANIFICATION", async () => {
-    const r = await request(app)
+    const r = await request(serveurTest(app))
       .post(`/api/relance/campagnes/${proprio.campagneId}/appels`)
       .set("Cookie", proprio.cookie)
       .send({ factureId: "F-TOOLS", numero: "+33611111111" });
@@ -267,7 +267,7 @@ describe("c — liste blanche tant que l'appelant est américain", () => {
     const avant = process.env["VOICE_TEST_NUMBERS"];
     process.env["VOICE_TEST_NUMBERS"] = "";
     try {
-      const r = await request(app)
+      const r = await request(serveurTest(app))
         .post(`/api/relance/campagnes/${proprio.campagneId}/appels`)
         .set("Cookie", proprio.cookie)
         .send({ factureId: "F-TOOLS", numero: NUMERO_TEST });
@@ -281,7 +281,7 @@ describe("c — liste blanche tant que l'appelant est américain", () => {
     const avant = process.env["TELEPHONY_CALLER_ID"];
     process.env["TELEPHONY_CALLER_ID"] = "+33912345678";
     try {
-      const r = await request(app)
+      const r = await request(serveurTest(app))
         .post(`/api/relance/campagnes/${proprio.campagneId}/appels`)
         .set("Cookie", proprio.cookie)
         .send({ factureId: "F-TOOLS", numero: "+33622222222" });
@@ -304,7 +304,7 @@ describe("d — sans jeton d'appel, rien", () => {
       "opposition",
       "lien-paiement",
     ]) {
-      await request(app).post(`/api/relance/appel/${chemin}`).send({}).expect(401);
+      await request(serveurTest(app)).post(`/api/relance/appel/${chemin}`).send({}).expect(401);
     }
   });
 });

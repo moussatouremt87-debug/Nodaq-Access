@@ -14,7 +14,7 @@ import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import app from "../app";
 import { toDateString } from "@nodaq/shared";
-import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner } from "./helpers";
+import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner, serveurTest } from "./helpers";
 
 interface Locataire { cookie: string; tenantId: string }
 
@@ -25,7 +25,7 @@ async function inscrire(nom: string): Promise<Locataire> {
   const suffix = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const email = `impaye-sig-${nom}-${suffix}@test.nodaq`;
   cleanupEmails.push(email);
-  const reg = await request(app).post("/api/auth/register")
+  const reg = await request(serveurTest(app)).post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: `Patron ${nom}`, tenantNom: `Tenant ${nom} ${suffix}` })
     .expect(201);
   await completeMfaForRegisteredOwner(reg.body.userId);
@@ -41,7 +41,7 @@ async function inscrire(nom: string): Promise<Locataire> {
   // Le SIRET est obligatoire (`auditMentionsFR`) pour émettre une facture —
   // même SIRET déjà validé Luhn qu'ailleurs dans la suite (settings scopé
   // par tenant, pas de contrainte d'unicité globale).
-  await request(app).post("/api/onboarding/profil/confirmer").set("Cookie", cookie)
+  await request(serveurTest(app)).post("/api/onboarding/profil/confirmer").set("Cookie", cookie)
     .send({
       siret: "81234567600009", siren: "812345676", raison_sociale: `${nom} SARL`,
       adresse: "9 rue des Artisans", code_postal: "69001", commune: "Lyon",
@@ -52,7 +52,7 @@ async function inscrire(nom: string): Promise<Locataire> {
 }
 
 async function definirVertical(l: Locataire, metier: string): Promise<void> {
-  await request(app).patch("/api/votre-metier").set("Cookie", l.cookie).send({ metier }).expect(200);
+  await request(serveurTest(app)).patch("/api/votre-metier").set("Cookie", l.cookie).send({ metier }).expect(200);
 }
 
 /** Facture émise, en retard de 15 jours pile (dueDate = aujourd'hui − 15 j). */
@@ -62,13 +62,13 @@ async function factureEnRetard15Jours(l: Locataire): Promise<void> {
   // Composantes LOCALES, jamais toISOString() (décale le jour hors UTC).
   const dueDate = toDateString(il15Jours);
 
-  const { body: f } = await request(app).post("/api/factures").set("Cookie", l.cookie)
+  const { body: f } = await request(serveurTest(app)).post("/api/factures").set("Cookie", l.cookie)
     .send({
       customerName: "Client Retard", issuedDate: dueDate, dueDate,
       lines: [{ description: "Prestation", quantity: 1, unitPriceCents: 100_000, vatRate: 20, vatCategory: "S" }],
     })
     .expect(201);
-  await request(app).post(`/api/factures/${f.id}/emettre`).set("Cookie", l.cookie)
+  await request(serveurTest(app)).post(`/api/factures/${f.id}/emettre`).set("Cookie", l.cookie)
     .send({ issuedDate: dueDate, dueDate }).expect(200);
 }
 
@@ -92,14 +92,14 @@ afterAll(async () => {
 
 describe("totalImpayeSignificatifCents — calibré par le délai usuel du secteur", () => {
   test("commerce (délai usuel 0j) : un retard de 15 jours est significatif", async () => {
-    const { body } = await request(app).get("/api/cockpit/kpis").set("Cookie", commerce.cookie).expect(200);
+    const { body } = await request(serveurTest(app)).get("/api/cockpit/kpis").set("Cookie", commerce.cookie).expect(200);
     expect(body.delaiPaiementUsuelJours).toBe(0);
     expect(body.totalImpayeCents).toBeGreaterThan(0);
     expect(body.totalImpayeSignificatifCents).toBe(body.totalImpayeCents);
   });
 
   test("bâtiment (délai usuel 30j) : le même retard de 15 jours n'est PAS significatif", async () => {
-    const { body } = await request(app).get("/api/cockpit/kpis").set("Cookie", btp.cookie).expect(200);
+    const { body } = await request(serveurTest(app)).get("/api/cockpit/kpis").set("Cookie", btp.cookie).expect(200);
     expect(body.delaiPaiementUsuelJours).toBe(30);
     expect(body.totalImpayeCents).toBeGreaterThan(0);
     expect(body.totalImpayeSignificatifCents).toBe(0);

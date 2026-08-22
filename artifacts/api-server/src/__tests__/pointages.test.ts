@@ -19,6 +19,7 @@ import {
   cleanupTenants,
   cleanupUsers,
   completeMfaForRegisteredOwner,
+  serveurTest,
 } from "./helpers";
 
 let cookie: string;
@@ -42,14 +43,14 @@ const jourDeLaSemaine = (offset: number): string => {
 beforeAll(async () => {
   const email = `pointages-${Date.now()}@test.nodaq`;
   cleanupEmails.push(email);
-  const reg = await request(app)
+  const reg = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: "Chef", tenantNom: "Toiture Test" })
     .expect(201);
   await completeMfaForRegisteredOwner(reg.body.userId);
   cookie = reg.headers["set-cookie"]?.[0] ?? "";
 
-  const { body: me } = await request(app).get("/api/auth/me").set("Cookie", cookie).expect(200);
+  const { body: me } = await request(serveurTest(app)).get("/api/auth/me").set("Cookie", cookie).expect(200);
   tenantId = me.tenantId;
   cleanupTenantIds.push(tenantId);
 
@@ -82,9 +83,9 @@ describe("a — UNICITÉ (membre, affaire, jour)", () => {
     const jour = jourDeLaSemaine(0);
     const corps = { membreId, affaireId, date: jour, heures: 7 };
 
-    await request(app).post("/api/pointages").set("Cookie", cookie).send(corps).expect(201);
+    await request(serveurTest(app)).post("/api/pointages").set("Cookie", cookie).send(corps).expect(201);
 
-    const doublon = await request(app)
+    const doublon = await request(serveurTest(app))
       .post("/api/pointages")
       .set("Cookie", cookie)
       .send({ ...corps, heures: 3 });
@@ -93,7 +94,7 @@ describe("a — UNICITÉ (membre, affaire, jour)", () => {
     expect(doublon.body.error).toMatch(/existe déjà/i);
 
     // Et la valeur d'origine n'a pas bougé.
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get(`/api/pointages?debut=${jour}&fin=${jour}`)
       .set("Cookie", cookie)
       .expect(200);
@@ -103,7 +104,7 @@ describe("a — UNICITÉ (membre, affaire, jour)", () => {
 
   test("heures nulles ou négatives refusées", async () => {
     for (const heures of [0, -3]) {
-      const res = await request(app)
+      const res = await request(serveurTest(app))
         .post("/api/pointages")
         .set("Cookie", cookie)
         .send({ membreId, affaireId, date: jourDeLaSemaine(4), heures });
@@ -123,7 +124,7 @@ describe("b — MARGE NON MESURÉE quand aucune heure n'est pointée", () => {
     );
     const sansPointage = rows[0]!.id;
 
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get(`/api/pointages?affaireId=${sansPointage}`)
       .set("Cookie", cookie)
       .expect(200);
@@ -134,7 +135,7 @@ describe("b — MARGE NON MESURÉE quand aucune heure n'est pointée", () => {
 
     // Et l'indicateur de marge ne présente jamais ce cas comme une marge exacte :
     // il est marqué « estimé » (borne supérieure), cf. analytics.
-    const analytics = await request(app)
+    const analytics = await request(serveurTest(app))
       .get("/api/analytics/indicateurs?ids=marge_pour_100_euros&periode=12_mois")
       .set("Cookie", cookie)
       .expect(200);
@@ -161,12 +162,12 @@ describe("c — MARGE sur un cas construit à la main", () => {
     );
     const cible = rows[0]!.id;
 
-    await request(app).post("/api/pointages").set("Cookie", cookie)
+    await request(serveurTest(app)).post("/api/pointages").set("Cookie", cookie)
       .send({ membreId, affaireId: cible, date: jourDeLaSemaine(1), heures: 7 }).expect(201);
-    await request(app).post("/api/pointages").set("Cookie", cookie)
+    await request(serveurTest(app)).post("/api/pointages").set("Cookie", cookie)
       .send({ membreId, affaireId: cible, date: jourDeLaSemaine(2), heures: 7 }).expect(201);
 
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get(`/api/pointages?affaireId=${cible}`)
       .set("Cookie", cookie)
       .expect(200);
@@ -185,7 +186,7 @@ describe("c — MARGE sur un cas construit à la main", () => {
 describe("d — RÉCAPITULATIF DE SEMAINE", () => {
   test("les bornes vont du lundi au dimanche, quel que soit le jour demandé", async () => {
     const mercredi = jourDeLaSemaine(2);
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get(`/api/pointages/recapitulatif-semaine?date=${mercredi}`)
       .set("Cookie", cookie)
       .expect(200);
@@ -196,7 +197,7 @@ describe("d — RÉCAPITULATIF DE SEMAINE", () => {
 
   test("un dimanche appartient à la semaine qui s'achève", async () => {
     const dimanche = jourDeLaSemaine(6);
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get(`/api/pointages/recapitulatif-semaine?date=${dimanche}`)
       .set("Cookie", cookie)
       .expect(200);
@@ -204,7 +205,7 @@ describe("d — RÉCAPITULATIF DE SEMAINE", () => {
   });
 
   test("les heures déjà pointées apparaissent comme « pointe », pas « propose »", async () => {
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get(`/api/pointages/recapitulatif-semaine?date=${LUNDI}`)
       .set("Cookie", cookie)
       .expect(200);
@@ -219,19 +220,19 @@ describe("d — RÉCAPITULATIF DE SEMAINE", () => {
     const jour = jourDeLaSemaine(3);
     const ligne = { membreId, affaireId, date: jour, heures: 5 };
 
-    await request(app)
+    await request(serveurTest(app))
       .post("/api/pointages/recapitulatif-semaine/confirmer")
       .set("Cookie", cookie)
       .send({ date: jour, lignes: [ligne] })
       .expect(200);
 
-    await request(app)
+    await request(serveurTest(app))
       .post("/api/pointages/recapitulatif-semaine/confirmer")
       .set("Cookie", cookie)
       .send({ date: jour, lignes: [{ ...ligne, heures: 8 }] })
       .expect(200);
 
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get(`/api/pointages?debut=${jour}&fin=${jour}`)
       .set("Cookie", cookie)
       .expect(200);
@@ -243,13 +244,13 @@ describe("d — RÉCAPITULATIF DE SEMAINE", () => {
 
   test("une ligne à 0 heure retire le pointage", async () => {
     const jour = jourDeLaSemaine(3);
-    await request(app)
+    await request(serveurTest(app))
       .post("/api/pointages/recapitulatif-semaine/confirmer")
       .set("Cookie", cookie)
       .send({ date: jour, lignes: [{ membreId, affaireId, date: jour, heures: 0 }] })
       .expect(200);
 
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get(`/api/pointages?debut=${jour}&fin=${jour}`)
       .set("Cookie", cookie)
       .expect(200);
@@ -262,7 +263,7 @@ describe("d — RÉCAPITULATIF DE SEMAINE", () => {
     // par affaire intégrait alors du temps que personne n'a travaillé.
     const semaineProchaine = jourDeLaSemaine(7);
 
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/pointages/recapitulatif-semaine/confirmer")
       .set("Cookie", cookie)
       .send({
@@ -274,7 +275,7 @@ describe("d — RÉCAPITULATIF DE SEMAINE", () => {
     expect(res.body.error).toMatch(/n'a pas encore eu lieu/i);
 
     // ZÉRO ligne : le refus doit être total, pas partiel.
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get(`/api/pointages?debut=${semaineProchaine}&fin=${jourDeLaSemaine(13)}`)
       .set("Cookie", cookie)
       .expect(200);
@@ -283,7 +284,7 @@ describe("d — RÉCAPITULATIF DE SEMAINE", () => {
 
   test("la semaine EN COURS reste acceptée", async () => {
     const jour = jourDeLaSemaine(2);
-    await request(app)
+    await request(serveurTest(app))
       .post("/api/pointages/recapitulatif-semaine/confirmer")
       .set("Cookie", cookie)
       .send({ date: jour, lignes: [{ membreId, affaireId, date: jour, heures: 6 }] })
@@ -292,7 +293,7 @@ describe("d — RÉCAPITULATIF DE SEMAINE", () => {
 
   test("une semaine PASSÉE reste acceptée — on rattrape un oubli", async () => {
     const semainePassee = jourDeLaSemaine(-7);
-    await request(app)
+    await request(serveurTest(app))
       .post("/api/pointages/recapitulatif-semaine/confirmer")
       .set("Cookie", cookie)
       .send({
@@ -305,7 +306,7 @@ describe("d — RÉCAPITULATIF DE SEMAINE", () => {
   test("une ligne hors de la semaine annoncée est REFUSÉE", async () => {
     const jour = jourDeLaSemaine(0);
     const horsSemaine = jourDeLaSemaine(20);
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/pointages/recapitulatif-semaine/confirmer")
       .set("Cookie", cookie)
       .send({ date: jour, lignes: [{ membreId, affaireId, date: horsSemaine, heures: 4 }] });
@@ -338,7 +339,7 @@ describe("e — RATTACHEMENT CLIENT DIRECT (US-A4.1)", () => {
   });
 
   test("un pointage peut être créé directement sur un client, sans affaire", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/pointages")
       .set("Cookie", cookie)
       .send({ membreId, clientId, date: jourDeLaSemaine(5), heures: 4 });
@@ -348,7 +349,7 @@ describe("e — RATTACHEMENT CLIENT DIRECT (US-A4.1)", () => {
   });
 
   test("ni affaire ni client → REFUSÉ", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/pointages")
       .set("Cookie", cookie)
       .send({ membreId, date: jourDeLaSemaine(5), heures: 4 });
@@ -356,7 +357,7 @@ describe("e — RATTACHEMENT CLIENT DIRECT (US-A4.1)", () => {
   });
 
   test("affaire ET client à la fois → REFUSÉ", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/pointages")
       .set("Cookie", cookie)
       .send({ membreId, affaireId, clientId, date: jourDeLaSemaine(5), heures: 4 });
@@ -365,13 +366,13 @@ describe("e — RATTACHEMENT CLIENT DIRECT (US-A4.1)", () => {
 
   test("un second pointage même membre/client/jour est REFUSÉ (unicité partielle)", async () => {
     const jour = jourDeLaSemaine(6);
-    await request(app)
+    await request(serveurTest(app))
       .post("/api/pointages")
       .set("Cookie", cookie)
       .send({ membreId, clientId, date: jour, heures: 3 })
       .expect(201);
 
-    const doublon = await request(app)
+    const doublon = await request(serveurTest(app))
       .post("/api/pointages")
       .set("Cookie", cookie)
       .send({ membreId, clientId, date: jour, heures: 2 });
@@ -379,7 +380,7 @@ describe("e — RATTACHEMENT CLIENT DIRECT (US-A4.1)", () => {
   });
 
   test("GET /pointages?clientId= filtre sur le rattachement client", async () => {
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get(`/api/pointages?clientId=${clientId}`)
       .set("Cookie", cookie)
       .expect(200);
@@ -413,7 +414,7 @@ describe("e — RATTACHEMENT CLIENT DIRECT (US-A4.1)", () => {
 
   test("le récapitulatif hebdomadaire distingue les lignes client des lignes affaire", async () => {
     const jour = jourDeLaSemaine(5); // pointé plus haut, directement sur le client
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get(`/api/pointages/recapitulatif-semaine?date=${jour}`)
       .set("Cookie", cookie)
       .expect(200);

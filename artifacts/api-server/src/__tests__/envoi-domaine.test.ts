@@ -17,7 +17,7 @@
 import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import app from "../app";
-import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner } from "./helpers";
+import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner, serveurTest } from "./helpers";
 
 let cookie: string;
 let tenantId: string;
@@ -27,13 +27,13 @@ const cleanupEmails: string[] = [];
 beforeAll(async () => {
   const email = `envoi-${Date.now()}@test.nodaq`;
   cleanupEmails.push(email);
-  const reg = await request(app)
+  const reg = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: "Martin", tenantNom: "Toiture Martin" })
     .expect(201);
   await completeMfaForRegisteredOwner(reg.body.userId);
   cookie = reg.headers["set-cookie"]?.[0] ?? "";
-  const { body: me } = await request(app).get("/api/auth/me").set("Cookie", cookie).expect(200);
+  const { body: me } = await request(serveurTest(app)).get("/api/auth/me").set("Cookie", cookie).expect(200);
   tenantId = me.tenantId;
   cleanupTenantIds.push(tenantId);
 }, 60_000);
@@ -50,7 +50,7 @@ afterAll(async () => {
 
 describe("a — LES DEUX MODES", () => {
   test("par défaut, un tenant neuf est en repli et AVERTI", async () => {
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get("/api/parametres-envoi")
       .set("Cookie", cookie)
       .expect(200);
@@ -61,7 +61,7 @@ describe("a — LES DEUX MODES", () => {
   });
 
   test("le mode domaine authentifié exige un domaine et une adresse", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .put("/api/parametres-envoi")
       .set("Cookie", cookie)
       .send({ mode: "domaine_authentifie" });
@@ -72,7 +72,7 @@ describe("a — LES DEUX MODES", () => {
   test("l'adresse d'expédition doit appartenir au domaine déclaré", async () => {
     // Expédier « martin@gmail.com » depuis un domaine authentifié échouerait à
     // l'alignement DMARC, sans message clair pour l'artisan.
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .put("/api/parametres-envoi")
       .set("Cookie", cookie)
       .send({
@@ -85,7 +85,7 @@ describe("a — LES DEUX MODES", () => {
   });
 
   test("un paramétrage valide est accepté mais NON vérifié tant que le DNS ne l'est pas", async () => {
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .put("/api/parametres-envoi")
       .set("Cookie", cookie)
       .send({
@@ -105,7 +105,7 @@ describe("a — LES DEUX MODES", () => {
 
 describe("b — LE REPLI AVERTIT", () => {
   test("un domaine déclaré mais non vérifié reste en avertissement", async () => {
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get("/api/parametres-envoi")
       .set("Cookie", cookie)
       .expect(200);
@@ -120,7 +120,7 @@ describe("b — LE REPLI AVERTIT", () => {
 
 describe("c — JOURNAL sans corps ni sujet", () => {
   test("l'envoi d'un devis journalise le destinataire, jamais le contenu", async () => {
-    const devis = await request(app)
+    const devis = await request(serveurTest(app))
       .post("/api/devis")
       .set("Cookie", cookie)
       .send({
@@ -129,13 +129,13 @@ describe("c — JOURNAL sans corps ni sujet", () => {
       })
       .expect(201);
 
-    await request(app)
+    await request(serveurTest(app))
       .post(`/api/devis/${devis.body.id}/envoyer`)
       .set("Cookie", cookie)
       .send({ emailTo: "cliente@exemple.test", message: "Bonjour Madame Dupont" })
       .expect(200);
 
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get("/api/parametres-envoi/journal")
       .set("Cookie", cookie)
       .expect(200);
@@ -173,7 +173,7 @@ describe("d — VÉRIFICATION DNS", () => {
     const sauvegarde = process.env["EMAIL_SPF_INCLUDE"];
     delete process.env["EMAIL_SPF_INCLUDE"];
     try {
-      const res = await request(app)
+      const res = await request(serveurTest(app))
         .post("/api/parametres-envoi/verifier")
         .set("Cookie", cookie);
       expect(res.status).toBe(503);
@@ -186,7 +186,7 @@ describe("d — VÉRIFICATION DNS", () => {
   test("avec la configuration mais sans DNS publié, chaque manque est NOMMÉ", async () => {
     process.env["EMAIL_SPF_INCLUDE"] = "include:_spf.exemple-fournisseur.test";
     try {
-      const { body } = await request(app)
+      const { body } = await request(serveurTest(app))
         .post("/api/parametres-envoi/verifier")
         .set("Cookie", cookie)
         .expect(200);

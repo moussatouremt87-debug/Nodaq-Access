@@ -32,6 +32,7 @@ import {
   cleanupTenants,
   cleanupUsers,
   completeMfaForRegisteredOwner,
+  serveurTest,
 } from "./helpers";
 
 const tenantIds: string[] = [];
@@ -77,7 +78,7 @@ async function creerAppel(tid: string, campagneId: string, numero: string): Prom
 beforeAll(async () => {
   const email = `appels-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@test.nodaq`;
   emails.push(email);
-  const reg = await request(app)
+  const reg = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: "Patron", tenantNom: "Appels SARL" })
     .expect(201);
@@ -88,7 +89,7 @@ beforeAll(async () => {
 
   const email2 = `appels2-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@test.nodaq`;
   emails.push(email2);
-  const reg2 = await request(app)
+  const reg2 = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email: email2, password: "test-pass-1234", nom: "Autre", tenantNom: "Autre SARL" })
     .expect(201);

@@ -14,7 +14,7 @@
 import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import app from "../app";
-import { adminPool, createTestTenant, createTestUser, createTestMembership, createTestSession, cookieHeader, cleanupTenants, cleanupUsers } from "./helpers";
+import { adminPool, createTestTenant, createTestUser, createTestMembership, createTestSession, cookieHeader, cleanupTenants, cleanupUsers, serveurTest } from "./helpers";
 import { buildAgentMessageFromDoc } from "../lib/visionExtraction";
 import { withTenant, prospectsTable } from "@workspace/db";
 import { like } from "drizzle-orm";
@@ -43,14 +43,14 @@ afterAll(async () => {
 
 describe("POST /api/chat/upload", () => {
   test("returns 401 without auth", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/chat/upload")
       .attach("image", Buffer.from("fake"), { filename: "test.jpg", contentType: "image/jpeg" });
     expect(res.status).toBe(401);
   });
 
   test("returns 400 when no image field is provided", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/chat/upload")
       .set("Cookie", sessionCookie)
       .field("text", "some caption");
@@ -62,7 +62,7 @@ describe("POST /api/chat/upload", () => {
     const saved = process.env.LLM_API_KEY;
     delete process.env.LLM_API_KEY;
     try {
-      const res = await request(app)
+      const res = await request(serveurTest(app))
         .post("/api/chat/upload")
         .set("Cookie", sessionCookie)
         .attach("image", Buffer.from("fake"), { filename: "test.jpg", contentType: "image/jpeg" });
@@ -154,7 +154,7 @@ describe("Prompt-injection trust boundary", () => {
       "Décris ce document archivé en une phrase et demande à l'utilisateur ce qu'il souhaite en faire.",
     ].join("\n");
 
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/chat/messages")
       .set("Cookie", sessionCookie)
       .send({ content: injectionMessage });
@@ -182,14 +182,14 @@ describe("Prompt-injection trust boundary", () => {
 
 describe("POST /api/chat/transcribe", () => {
   test("returns 401 without auth", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/chat/transcribe")
       .attach("audio", Buffer.from("fake"), { filename: "test.webm", contentType: "audio/webm" });
     expect(res.status).toBe(401);
   });
 
   test("returns 400 when no audio field is provided", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/chat/transcribe")
       .set("Cookie", sessionCookie);
     expect(res.status).toBe(400);
@@ -200,7 +200,7 @@ describe("POST /api/chat/transcribe", () => {
     const saved = process.env.LLM_API_KEY;
     delete process.env.LLM_API_KEY;
     try {
-      const res = await request(app)
+      const res = await request(serveurTest(app))
         .post("/api/chat/transcribe")
         .set("Cookie", sessionCookie)
         .attach("audio", Buffer.from("fake"), { filename: "test.webm", contentType: "audio/webm" });

@@ -19,6 +19,7 @@ import {
   createTestSession,
   cleanupTenants,
   cleanupUsers,
+  serveurTest,
 } from "./helpers";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -50,12 +51,12 @@ afterAll(async () => {
   await cleanupUsers(...emails);
 });
 
-const asOwner  = () => ({ get: (u: string) => request(app).get(u).set("Cookie", cookieOwner),
-                           post: (u: string, b: unknown) => request(app).post(u).set("Cookie", cookieOwner).send(b as Record<string, unknown>),
-                           patch: (u: string, b: unknown) => request(app).patch(u).set("Cookie", cookieOwner).send(b as Record<string, unknown>) });
-const asMember = () => ({ get: (u: string) => request(app).get(u).set("Cookie", cookieMember),
-                           post: (u: string, b: unknown) => request(app).post(u).set("Cookie", cookieMember).send(b as Record<string, unknown>),
-                           patch: (u: string, b: unknown) => request(app).patch(u).set("Cookie", cookieMember).send(b as Record<string, unknown>) });
+const asOwner  = () => ({ get: (u: string) => request(serveurTest(app)).get(u).set("Cookie", cookieOwner),
+                           post: (u: string, b: unknown) => request(serveurTest(app)).post(u).set("Cookie", cookieOwner).send(b as Record<string, unknown>),
+                           patch: (u: string, b: unknown) => request(serveurTest(app)).patch(u).set("Cookie", cookieOwner).send(b as Record<string, unknown>) });
+const asMember = () => ({ get: (u: string) => request(serveurTest(app)).get(u).set("Cookie", cookieMember),
+                           post: (u: string, b: unknown) => request(serveurTest(app)).post(u).set("Cookie", cookieMember).send(b as Record<string, unknown>),
+                           patch: (u: string, b: unknown) => request(serveurTest(app)).patch(u).set("Cookie", cookieMember).send(b as Record<string, unknown>) });
 
 // ── Lectures : accessibles à MEMBER ──────────────────────────────────────────
 
@@ -216,7 +217,7 @@ describe("Régression — importer 3 chantiers ne retourne pas donneesInsuffisan
     const s = await createTestSession(u.id, t.id);
     const cookie2 = cookieHeader(s.id);
 
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/reprise/blocs/chantiers")
       .set("Cookie", cookie2)
       .send({

@@ -28,6 +28,7 @@ import {
   cleanupTenants,
   cleanupUsers,
   completeMfaForRegisteredOwner,
+  serveurTest,
 } from "./helpers";
 
 const tenantIds: string[] = [];
@@ -51,7 +52,7 @@ async function poserPlan(labels: string[], expireLe?: Date): Promise<string> {
 beforeAll(async () => {
   email = `a64-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@test.nodaq`;
   emails.push(email);
-  const reg = await request(app)
+  const reg = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: "Patron A64", tenantNom: "Tenant A64" })
     .expect(201);
@@ -72,12 +73,12 @@ describe("a — AC1 : la décision est consignée avec sa date, son auteur et le
   test("une approbation journalise l'auteur et un instantané du contenu", async () => {
     const planId = await poserPlan(["Poser le carrelage salle de bain"]);
 
-    await request(app)
+    await request(serveurTest(app))
       .post(`/api/pending-actions/${planId}/approve`)
       .set("Cookie", cookie)
       .expect(200);
 
-    const journal = await request(app).get("/api/journal-decisions").set("Cookie", cookie).expect(200);
+    const journal = await request(serveurTest(app)).get("/api/journal-decisions").set("Cookie", cookie).expect(200);
     const ligne = journal.body.find((l: { actionId: string }) => l.actionId === planId);
 
     expect(ligne).toBeTruthy();
@@ -93,12 +94,12 @@ describe("a — AC1 : la décision est consignée avec sa date, son auteur et le
   test("un rejet est consigné aussi — un refus se prouve autant qu'un accord", async () => {
     const planId = await poserPlan(["Facturer Dupont"]);
 
-    await request(app)
+    await request(serveurTest(app))
       .post(`/api/pending-actions/${planId}/reject`)
       .set("Cookie", cookie)
       .expect(200);
 
-    const journal = await request(app).get("/api/journal-decisions").set("Cookie", cookie).expect(200);
+    const journal = await request(serveurTest(app)).get("/api/journal-decisions").set("Cookie", cookie).expect(200);
     const ligne = journal.body.find((l: { actionId: string }) => l.actionId === planId);
     expect(ligne.decision).toBe("REJETEE");
     expect(ligne.decideeParEmail).toBe(email);
@@ -106,12 +107,12 @@ describe("a — AC1 : la décision est consignée avec sa date, son auteur et le
 
   test("l'instantané survit à la disparition de l'action d'origine", async () => {
     const planId = await poserPlan(["Action éphémère"]);
-    await request(app).post(`/api/pending-actions/${planId}/reject`).set("Cookie", cookie).expect(200);
+    await request(serveurTest(app)).post(`/api/pending-actions/${planId}/reject`).set("Cookie", cookie).expect(200);
 
     // La ligne d'origine disparaît — le journal, lui, doit rester complet.
     await adminPool.query("DELETE FROM pending_actions WHERE id = $1", [planId]);
 
-    const journal = await request(app).get("/api/journal-decisions").set("Cookie", cookie).expect(200);
+    const journal = await request(serveurTest(app)).get("/api/journal-decisions").set("Cookie", cookie).expect(200);
     const ligne = journal.body.find((l: { actionId: string }) => l.actionId === planId);
     expect(ligne).toBeTruthy();
     expect(ligne.actionLabel).toBe("Action éphémère");
@@ -169,7 +170,7 @@ describe("c — AC3 : une expiration se distingue d'une approbation et d'un reje
   test("une action expirée sans décision ressort EXPIREE, sans auteur", async () => {
     const planId = await poserPlan(["Plan jamais décidé"], new Date(Date.now() - 3600_000));
 
-    const journal = await request(app).get("/api/journal-decisions").set("Cookie", cookie).expect(200);
+    const journal = await request(serveurTest(app)).get("/api/journal-decisions").set("Cookie", cookie).expect(200);
     const ligne = journal.body.find((l: { actionId: string }) => l.actionId === planId);
 
     expect(ligne).toBeTruthy();
@@ -186,9 +187,9 @@ describe("c — AC3 : une expiration se distingue d'une approbation et d'un reje
 describe("d — AC2 : l'export est lisible sans l'interface NODAQ", () => {
   test("le CSV porte un en-tête explicite et une ligne par décision", async () => {
     const planId = await poserPlan(["Ligne à exporter"]);
-    await request(app).post(`/api/pending-actions/${planId}/reject`).set("Cookie", cookie).expect(200);
+    await request(serveurTest(app)).post(`/api/pending-actions/${planId}/reject`).set("Cookie", cookie).expect(200);
 
-    const res = await request(app).get("/api/journal-decisions/export").set("Cookie", cookie).expect(200);
+    const res = await request(serveurTest(app)).get("/api/journal-decisions/export").set("Cookie", cookie).expect(200);
     expect(res.headers["content-type"]).toContain("text/csv");
 
     const csv = (res.text as string).replace(/^﻿/, "");
@@ -204,7 +205,7 @@ describe("d — AC2 : l'export est lisible sans l'interface NODAQ", () => {
   test("une expiration s'exporte avec une mention explicite d'absence d'auteur", async () => {
     await poserPlan(["Expirée à exporter"], new Date(Date.now() - 7200_000));
 
-    const res = await request(app).get("/api/journal-decisions/export").set("Cookie", cookie).expect(200);
+    const res = await request(serveurTest(app)).get("/api/journal-decisions/export").set("Cookie", cookie).expect(200);
     const csv = res.text as string;
     expect(csv).toContain("Expirée sans décision");
     // Une case vide se lirait comme une donnée perdue.

@@ -26,6 +26,7 @@ import {
   cleanupTenants,
   cleanupUsers,
   completeMfaForRegisteredOwner,
+  serveurTest,
 } from "./helpers";
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -44,7 +45,7 @@ const cleanupEmails: string[] = [];
  * ║  LE TEST DES 20 ÉMISSIONS EST LE PLUS GOURMAND EN PORTS DE LA SUITE.     ║
  * ╚═══════════════════════════════════════════════════════════════════════════╝
  *
- * `request(app)` monte un serveur éphémère PAR REQUÊTE. Vingt brouillons puis
+ * `request(serveurTest(app))` monte un serveur éphémère PAR REQUÊTE. Vingt brouillons puis
  * vingt émissions en parallèle, c'est quarante serveurs et quarante connexions
  * ouverts en rafale — sur une réserve de ports qui appartient à la MACHINE.
  * D'où des `read ECONNRESET` intermittents sur ce test précis, y compris quand
@@ -115,28 +116,28 @@ beforeAll(async () => {
   // Tenant A
   const emailA = `fact-owner-a-${Date.now()}@test.nodaq`;
   cleanupEmails.push(emailA);
-  const regA = await request(app)
+  const regA = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email: emailA, password: "test-pass-1234", nom: "Owner A", tenantNom: "Corp A" })
     .expect(201);
   await completeMfaForRegisteredOwner(regA.body.userId);
   cookieA = regA.headers["set-cookie"]?.[0] ?? "";
 
-  const { body: meA } = await request(app).get("/api/auth/me").set("Cookie", cookieA).expect(200);
+  const { body: meA } = await request(serveurTest(app)).get("/api/auth/me").set("Cookie", cookieA).expect(200);
   tenantAId = meA.tenantId;
   cleanupTenantIds.push(tenantAId);
 
   // Tenant B
   const emailB = `fact-owner-b-${Date.now()}@test.nodaq`;
   cleanupEmails.push(emailB);
-  const regB = await request(app)
+  const regB = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email: emailB, password: "test-pass-1234", nom: "Owner B", tenantNom: "Corp B" })
     .expect(201);
   await completeMfaForRegisteredOwner(regB.body.userId);
   cookieB = regB.headers["set-cookie"]?.[0] ?? "";
 
-  const { body: meB } = await request(app).get("/api/auth/me").set("Cookie", cookieB).expect(200);
+  const { body: meB } = await request(serveurTest(app)).get("/api/auth/me").set("Cookie", cookieB).expect(200);
   tenantBId = meB.tenantId;
   cleanupTenantIds.push(tenantBId);
 
@@ -148,7 +149,7 @@ beforeAll(async () => {
     { cookie: cookieB, siret: "55203253400000", nom: "Bati Nord SASU" },
   ];
   for (const { cookie, siret, nom } of tenantSeeds) {
-    await request(app)
+    await request(serveurTest(app))
       .patch("/api/parametres")
       .set("Cookie", cookie)
       .send({ "company.siret": siret, "company.raison_sociale": nom })
@@ -175,7 +176,7 @@ describe("a — IMMUTABILITÉ", () => {
     const { id } = await createBrouillon(cookieA);
     await emettre(cookieA, id).expect(200);
 
-    const patch = await request(app)
+    const patch = await request(serveurTest(app))
       .patch(`/api/factures/${id}`)
       .set("Cookie", cookieA)
       .send({ customerName: "Hacked Name" });
@@ -188,7 +189,7 @@ describe("a — IMMUTABILITÉ", () => {
     const { id } = await createBrouillon(cookieA);
     await emettre(cookieA, id).expect(200);
 
-    const del = await request(app)
+    const del = await request(serveurTest(app))
       .delete(`/api/factures/${id}`)
       .set("Cookie", cookieA);
     expect(del.status).toBe(409);
@@ -200,7 +201,7 @@ describe("a — IMMUTABILITÉ", () => {
     const { id } = await createBrouillon(cookieA);
     await emettre(cookieA, id).expect(200);
 
-    const forged = await request(app)
+    const forged = await request(serveurTest(app))
       .patch(`/api/factures/${id}`)
       .set("Cookie", cookieA)
       .send({ statut: "BROUILLON", pdfPath: null }); // tentative de déblocage
@@ -274,7 +275,7 @@ describe("c — PDF ARCHIVÉ", () => {
     expect(dbSha256).toBeTruthy();
 
     // Fetch PDF bytes
-    const pdfRes = await request(app)
+    const pdfRes = await request(serveurTest(app))
       .get(`/api/factures/${id}/pdf`)
       .set("Cookie", cookieA)
       .expect(200);
@@ -294,8 +295,8 @@ describe("c — PDF ARCHIVÉ", () => {
     await emettre(cookieA, id).expect(200);
 
     const [r1, r2] = await Promise.all([
-      request(app).get(`/api/factures/${id}/pdf`).set("Cookie", cookieA).expect(200),
-      request(app).get(`/api/factures/${id}/pdf`).set("Cookie", cookieA).expect(200),
+      request(serveurTest(app)).get(`/api/factures/${id}/pdf`).set("Cookie", cookieA).expect(200),
+      request(serveurTest(app)).get(`/api/factures/${id}/pdf`).set("Cookie", cookieA).expect(200),
     ]);
     const sha1 = crypto.createHash("sha256").update(r1.body as Buffer).digest("hex");
     const sha2 = crypto.createHash("sha256").update(r2.body as Buffer).digest("hex");
@@ -353,7 +354,7 @@ describe("e — FACTUR-X EN 16931", () => {
     const { id } = await createBrouillon(cookieA);
     await emettre(cookieA, id).expect(200);
 
-    const pdfRes = await request(app)
+    const pdfRes = await request(serveurTest(app))
       .get(`/api/factures/${id}/pdf`)
       .set("Cookie", cookieA)
       .expect(200);
@@ -369,7 +370,7 @@ describe("e — FACTUR-X EN 16931", () => {
     const { id } = await createBrouillon(cookieA);
     await emettre(cookieA, id).expect(200);
 
-    const pdfRes = await request(app)
+    const pdfRes = await request(serveurTest(app))
       .get(`/api/factures/${id}/pdf`)
       .set("Cookie", cookieA)
       .expect(200);
@@ -386,7 +387,7 @@ describe("f — TVA 3 TAUX", () => {
     const { id } = await createBrouillon(cookieA); // 20% + 10% + 5.5%
     await emettre(cookieA, id).expect(200);
 
-    const pdfRes = await request(app)
+    const pdfRes = await request(serveurTest(app))
       .get(`/api/factures/${id}/pdf`)
       .set("Cookie", cookieA)
       .expect(200);
@@ -448,23 +449,23 @@ describe("g2 — TVA RÉDUITE HORS BÂTIMENT NE BLOQUE PAS (US-A2.5)", () => {
   beforeAll(async () => {
     const email = `fact-restau-${Date.now()}@test.nodaq`;
     cleanupEmails.push(email);
-    const reg = await request(app)
+    const reg = await request(serveurTest(app))
       .post("/api/auth/register")
       .send({ email, password: "test-pass-1234", nom: "Owner Restau", tenantNom: "Chez Restau" })
       .expect(201);
     await completeMfaForRegisteredOwner(reg.body.userId);
     cookieRestau = reg.headers["set-cookie"]?.[0] ?? "";
 
-    const { body: me } = await request(app).get("/api/auth/me").set("Cookie", cookieRestau).expect(200);
+    const { body: me } = await request(serveurTest(app)).get("/api/auth/me").set("Cookie", cookieRestau).expect(200);
     cleanupTenantIds.push(me.tenantId);
 
-    await request(app)
+    await request(serveurTest(app))
       .patch("/api/parametres")
       .set("Cookie", cookieRestau)
       .send({ "company.siret": "73282932000074", "company.raison_sociale": "Chez Restau SARL" })
       .expect(200);
 
-    await request(app)
+    await request(serveurTest(app))
       .patch("/api/votre-metier")
       .set("Cookie", cookieRestau)
       .send({ metier: "restauration_chr" })
@@ -498,7 +499,7 @@ describe("h — AVOIR", () => {
     const { id, amountCents } = await createBrouillon(cookieA);
     await emettre(cookieA, id).expect(200);
 
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/avoirs")
       .set("Cookie", cookieA)
       .send({
@@ -517,7 +518,7 @@ describe("h — AVOIR", () => {
     await emettre(cookieA, id).expect(200);
 
     // Avoir TTC = factureTTC (montantHt = amountCents, tva = 0) → annulation complète
-    const avoir = await request(app)
+    const avoir = await request(serveurTest(app))
       .post("/api/avoirs")
       .set("Cookie", cookieA)
       .send({
@@ -530,7 +531,7 @@ describe("h — AVOIR", () => {
 
     expect(avoir.body.numero).toMatch(/^AVOIR-\d{4}-\d{4}$/);
 
-    const factureUpdated = await request(app)
+    const factureUpdated = await request(serveurTest(app))
       .get(`/api/factures/${id}`)
       .set("Cookie", cookieA)
       .expect(200);
@@ -544,7 +545,7 @@ describe("h — AVOIR", () => {
     await emettre(cookieA, id).expect(200);
 
     // Avoir couvrant 50 % du TTC → correction partielle, facture reste EMISE
-    const avoir = await request(app)
+    const avoir = await request(serveurTest(app))
       .post("/api/avoirs")
       .set("Cookie", cookieA)
       .send({
@@ -557,7 +558,7 @@ describe("h — AVOIR", () => {
 
     expect(avoir.body.numero).toMatch(/^AVOIR-\d{4}-\d{4}$/);
 
-    const factureUpdated = await request(app)
+    const factureUpdated = await request(serveurTest(app))
       .get(`/api/factures/${id}`)
       .set("Cookie", cookieA)
       .expect(200);
@@ -574,7 +575,7 @@ describe("h — AVOIR", () => {
   test("avoir sur facture non EMISE → 422", async () => {
     const { id } = await createBrouillon(cookieA);
     // Still BROUILLON
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/avoirs")
       .set("Cookie", cookieA)
       .send({ factureRefId: id, montantHtCents: 1000, montantTvaCents: 200, motif: "Test" });
@@ -593,7 +594,7 @@ describe("i — ISOLATION PAR TENANT", () => {
     await emettre(cookieA, id).expect(200);
 
     // Tenant B cannot read it
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .get(`/api/factures/${id}`)
       .set("Cookie", cookieB);
     expect(res.status).toBe(404);
@@ -634,7 +635,7 @@ describe("j — DATE D'ÉMISSION (round-trip fuseau horaire)", () => {
     const emitted = await emettre(cookieA, id, { issuedDate }).expect(200);
     expect(emitted.body.issuedDate).toBe(issuedDate);
 
-    const reread = await request(app)
+    const reread = await request(serveurTest(app))
       .get(`/api/factures/${id}`)
       .set("Cookie", cookieA)
       .expect(200);
@@ -655,13 +656,13 @@ describe("k — une échéance du jour même n'est pas encore en retard", () => 
     const { toDateString } = await import("@nodaq/shared");
     const aujourdhui = toDateString(new Date());
 
-    const avant = await request(app).get("/api/factures").set("Cookie", cookieA).expect(200);
+    const avant = await request(serveurTest(app)).get("/api/factures").set("Cookie", cookieA).expect(200);
 
     const { id } = await createBrouillon(cookieA, { dueDate: aujourdhui });
     const emitted = await emettre(cookieA, id, { dueDate: aujourdhui }).expect(200);
     expect(emitted.body.dueDate).toBe(aujourdhui);
 
-    const apres = await request(app).get("/api/factures").set("Cookie", cookieA).expect(200);
+    const apres = await request(serveurTest(app)).get("/api/factures").set("Cookie", cookieA).expect(200);
     expect(apres.body.totalOverdueCents).toBe(avant.body.totalOverdueCents);
   });
 });
@@ -678,24 +679,24 @@ describe("k — une échéance du jour même n'est pas encore en retard", () => 
 
 describe("l — totalImpayeCents (cockpit) exclut les factures pas encore échues", () => {
   test("échéance future → n'augmente pas totalImpayeCents", async () => {
-    const avant = await request(app).get("/api/cockpit/kpis").set("Cookie", cookieA).expect(200);
+    const avant = await request(serveurTest(app)).get("/api/cockpit/kpis").set("Cookie", cookieA).expect(200);
 
     const { id } = await createBrouillon(cookieA, { dueDate: "2026-12-31" });
     await emettre(cookieA, id, { dueDate: "2026-12-31" }).expect(200);
 
-    const apres = await request(app).get("/api/cockpit/kpis").set("Cookie", cookieA).expect(200);
+    const apres = await request(serveurTest(app)).get("/api/cockpit/kpis").set("Cookie", cookieA).expect(200);
     expect(apres.body.totalImpayeCents).toBe(avant.body.totalImpayeCents);
   });
 
   test("échéance passée → augmente totalImpayeCents du montant de la facture", async () => {
-    const avant = await request(app).get("/api/cockpit/kpis").set("Cookie", cookieA).expect(200);
+    const avant = await request(serveurTest(app)).get("/api/cockpit/kpis").set("Cookie", cookieA).expect(200);
 
     const { id, amountCents } = await createBrouillon(cookieA, {
       issuedDate: "2020-01-01", dueDate: "2020-01-31",
     });
     await emettre(cookieA, id, { issuedDate: "2020-01-01", dueDate: "2020-01-31" }).expect(200);
 
-    const apres = await request(app).get("/api/cockpit/kpis").set("Cookie", cookieA).expect(200);
+    const apres = await request(serveurTest(app)).get("/api/cockpit/kpis").set("Cookie", cookieA).expect(200);
     expect(apres.body.totalImpayeCents).toBe(avant.body.totalImpayeCents + amountCents);
   });
 });

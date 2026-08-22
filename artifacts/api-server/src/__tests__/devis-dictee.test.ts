@@ -16,7 +16,7 @@
 import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import app from "../app";
-import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner } from "./helpers";
+import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner, serveurTest } from "./helpers";
 
 let cookie: string;
 let tenantId: string;
@@ -26,19 +26,19 @@ const cleanupEmails: string[] = [];
 beforeAll(async () => {
   const email = `dictee-${Date.now()}@test.nodaq`;
   cleanupEmails.push(email);
-  const reg = await request(app)
+  const reg = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: "Artisan", tenantNom: "Placo Test" })
     .expect(201);
   await completeMfaForRegisteredOwner(reg.body.userId);
   cookie = reg.headers["set-cookie"]?.[0] ?? "";
 
-  const { body: me } = await request(app).get("/api/auth/me").set("Cookie", cookie).expect(200);
+  const { body: me } = await request(serveurTest(app)).get("/api/auth/me").set("Cookie", cookie).expect(200);
   tenantId = me.tenantId;
   cleanupTenantIds.push(tenantId);
 
   // Catalogue : la cloison est tarifée, la véranda ne l'est PAS.
-  await request(app)
+  await request(serveurTest(app))
     .post("/api/catalogue")
     .set("Cookie", cookie)
     .send({
@@ -61,7 +61,7 @@ afterAll(async () => {
 
 describe("a — AUCUN PRIX INVENTÉ hors catalogue", () => {
   test("un ouvrage absent du catalogue est rendu SANS prix, marqué à compléter", async () => {
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .post("/api/devis/dictee/proposer")
       .set("Cookie", cookie)
       .send({ texte: "Pose de cloison BA13 sur trente mètres carrés, et une véranda" })
@@ -81,7 +81,7 @@ describe("a — AUCUN PRIX INVENTÉ hors catalogue", () => {
 
   test("le total n'additionne QUE le chiffrable, et compte le reste", async () => {
     // Posé à la main : 30 m² × 4 500 c = 135 000 c. La véranda n'entre pas.
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .post("/api/devis/dictee/proposer")
       .set("Cookie", cookie)
       .send({ texte: "Cloison BA13 trente mètres carrés plus une véranda" })
@@ -96,16 +96,16 @@ describe("a — AUCUN PRIX INVENTÉ hors catalogue", () => {
     // Un second tenant, sans aucun catalogue.
     const email = `dictee-vide-${Date.now()}@test.nodaq`;
     cleanupEmails.push(email);
-    const reg = await request(app)
+    const reg = await request(serveurTest(app))
       .post("/api/auth/register")
       .send({ email, password: "test-pass-1234", nom: "Neuf", tenantNom: "Sans Catalogue" })
       .expect(201);
     await completeMfaForRegisteredOwner(reg.body.userId);
     const cookieVide = reg.headers["set-cookie"]?.[0] ?? "";
-    const { body: me } = await request(app).get("/api/auth/me").set("Cookie", cookieVide).expect(200);
+    const { body: me } = await request(serveurTest(app)).get("/api/auth/me").set("Cookie", cookieVide).expect(200);
     cleanupTenantIds.push(me.tenantId);
 
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .post("/api/devis/dictee/proposer")
       .set("Cookie", cookieVide)
       .send({ texte: "Cloison BA13 trente mètres carrés" })
@@ -122,7 +122,7 @@ describe("a — AUCUN PRIX INVENTÉ hors catalogue", () => {
 describe("b — TOTAL SERVEUR fait autorité", () => {
   test("un total falsifié envoyé par le client est IGNORÉ", async () => {
     // Le client tente d'imposer un total dérisoire en plus des lignes.
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .post("/api/devis")
       .set("Cookie", cookie)
       .send({
@@ -144,7 +144,7 @@ describe("b — TOTAL SERVEUR fait autorité", () => {
 
 describe("c — CHAÎNE dictée → devis émis", () => {
   test("la proposition alimente POST /devis sans dupliquer la logique d'émission", async () => {
-    const proposition = await request(app)
+    const proposition = await request(serveurTest(app))
       .post("/api/devis/dictee/proposer")
       .set("Cookie", cookie)
       .send({ texte: "Cloison BA13 trente mètres carrés" })
@@ -161,7 +161,7 @@ describe("c — CHAÎNE dictée → devis émis", () => {
         ...(l.unite ? { unit: l.unite } : {}),
       }));
 
-    const devis = await request(app)
+    const devis = await request(serveurTest(app))
       .post("/api/devis")
       .set("Cookie", cookie)
       .send({ clientName: "Madame Martin", lines })
@@ -178,7 +178,7 @@ describe("c — CHAÎNE dictée → devis émis", () => {
 
 describe("d — AMORÇAGE du catalogue depuis les devis existants", () => {
   test("les lignes des devis déjà saisis deviennent des entrées de catalogue", async () => {
-    await request(app)
+    await request(serveurTest(app))
       .post("/api/devis")
       .set("Cookie", cookie)
       .send({
@@ -187,13 +187,13 @@ describe("d — AMORÇAGE du catalogue depuis les devis existants", () => {
       })
       .expect(201);
 
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .post("/api/catalogue/amorcer")
       .set("Cookie", cookie)
       .expect(200);
     expect(body.crees).toBeGreaterThan(0);
 
-    const { body: cat } = await request(app).get("/api/catalogue").set("Cookie", cookie).expect(200);
+    const { body: cat } = await request(serveurTest(app)).get("/api/catalogue").set("Cookie", cookie).expect(200);
     const ragreage = cat.lignes.find((l: { libelle: string }) => l.libelle === "Ragréage sol");
     expect(ragreage).toBeDefined();
     expect(ragreage.prixUnitaireHtCents).toBe(1800);
@@ -201,7 +201,7 @@ describe("d — AMORÇAGE du catalogue depuis les devis existants", () => {
   });
 
   test("relancer l'amorçage n'ajoute rien — opération idempotente", async () => {
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .post("/api/catalogue/amorcer")
       .set("Cookie", cookie)
       .expect(200);
@@ -209,7 +209,7 @@ describe("d — AMORÇAGE du catalogue depuis les devis existants", () => {
   });
 
   test("une ligne saisie à la main n'est JAMAIS écrasée par une déduction", async () => {
-    const { body: cat } = await request(app).get("/api/catalogue").set("Cookie", cookie).expect(200);
+    const { body: cat } = await request(serveurTest(app)).get("/api/catalogue").set("Cookie", cookie).expect(200);
     const cloison = cat.lignes.find((l: { libelle: string }) => l.libelle === "Cloison BA13");
     expect(cloison.origine).toBe("saisi");
     expect(cloison.prixUnitaireHtCents).toBe(4500);

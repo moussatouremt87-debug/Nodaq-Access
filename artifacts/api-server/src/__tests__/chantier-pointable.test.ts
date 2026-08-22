@@ -23,6 +23,7 @@ import {
   cleanupTenants,
   cleanupUsers,
   completeMfaForRegisteredOwner,
+  serveurTest,
 } from "./helpers.js";
 
 const tenantIds: string[] = [];
@@ -33,7 +34,7 @@ let tenantId = "";
 beforeAll(async () => {
   const email = `chp-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@test.nodaq`;
   emails.push(email);
-  const { body, headers } = await request(app)
+  const { body, headers } = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: "Patron", tenantNom: "Chantier SARL" })
     .expect(201);
@@ -59,7 +60,7 @@ async function chantierSansAffectation(label: string): Promise<string> {
 }
 
 const recap = () =>
-  request(app).get("/api/pointages/recapitulatif-semaine").set("Cookie", cookie);
+  request(serveurTest(app)).get("/api/pointages/recapitulatif-semaine").set("Cookie", cookie);
 
 describe("a — le chantier non affecté devient atteignable", () => {
   test("il ne produit AUCUNE ligne pré-remplie, et c'est voulu", async () => {
@@ -136,7 +137,7 @@ describe("c — isolation", () => {
   test("les chantiers d'un autre tenant n'apparaissent pas", async () => {
     const autre = `chp2-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@test.nodaq`;
     emails.push(autre);
-    const { body: b2, headers: h2 } = await request(app)
+    const { body: b2, headers: h2 } = await request(serveurTest(app))
       .post("/api/auth/register")
       .send({ email: autre, password: "test-pass-1234", nom: "B", tenantNom: "Voisin" })
       .expect(201);
@@ -144,7 +145,7 @@ describe("c — isolation", () => {
     tenantIds.push(b2.tenantId);
 
     const id = await chantierSansAffectation("Chez nous seulement");
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get("/api/pointages/recapitulatif-semaine")
       .set("Cookie", h2["set-cookie"][0])
       .expect(200);

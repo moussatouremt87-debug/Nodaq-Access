@@ -29,7 +29,7 @@ import {
   montantsNonSources,
   MESSAGE_REFUS_CHIFFRAGE,
 } from "../lib/garde-montants";
-import { cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner } from "./helpers";
+import { cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner, serveurTest } from "./helpers";
 
 const tenantIds: string[] = [];
 const emails: string[] = [];
@@ -38,7 +38,7 @@ let cookie: string;
 beforeAll(async () => {
   const email = `a63-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@test.nodaq`;
   emails.push(email);
-  const reg = await request(app)
+  const reg = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: "Patron A63", tenantNom: "Tenant A63" })
     .expect(201);
@@ -137,7 +137,7 @@ describe("b — AC1 : un chiffre sans source n'atteint jamais l'écran", () => {
   test("« environ 3 000 € » est remplacé par une explication", async () => {
     const res = await avecReponseDuModele(
       "D'après mon expérience, ce genre de chantier tourne autour de 3 000 €.",
-      () => request(app).post("/api/chat/messages").set("Cookie", cookie).send({ content: "Combien pour une toiture ?" }),
+      () => request(serveurTest(app)).post("/api/chat/messages").set("Cookie", cookie).send({ content: "Combien pour une toiture ?" }),
     );
 
     expect(res.status).toBe(200);
@@ -157,7 +157,7 @@ describe("c — une réponse honnête traverse la garde intacte", () => {
   test("une réponse sans aucun montant est rendue telle quelle", async () => {
     const texte = "Vous avez 3 affaires en cours et 2 prospects à relancer.";
     const res = await avecReponseDuModele(texte, () =>
-      request(app).post("/api/chat/messages").set("Cookie", cookie).send({ content: "Où en suis-je ?" }),
+      request(serveurTest(app)).post("/api/chat/messages").set("Cookie", cookie).send({ content: "Où en suis-je ?" }),
     );
     expect(res.status).toBe(200);
     const contenu = res.body.content ?? res.body.message?.content ?? "";
@@ -167,7 +167,7 @@ describe("c — une réponse honnête traverse la garde intacte", () => {
   test("un montant repris de la question de l'utilisateur est rendu tel quel", async () => {
     const texte = "Bien noté, je retiens 2 000 € pour ce devis.";
     const res = await avecReponseDuModele(texte, () =>
-      request(app)
+      request(serveurTest(app))
         .post("/api/chat/messages")
         .set("Cookie", cookie)
         .send({ content: "Note que le devis Dupont est à 2 000 €" }),
@@ -196,7 +196,7 @@ describe("d — AC2/AC3 : le périmètre de refus est dans le prompt", () => {
     }) as typeof fetch;
 
     try {
-      await request(app).post("/api/chat/messages").set("Cookie", cookie).send({ content: "Bonjour" });
+      await request(serveurTest(app)).post("/api/chat/messages").set("Cookie", cookie).send({ content: "Bonjour" });
     } finally {
       globalThis.fetch = original;
     }

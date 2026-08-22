@@ -24,6 +24,7 @@ import {
   cleanupTenants,
   cleanupUsers,
   completeMfaForRegisteredOwner,
+  serveurTest,
 } from "./helpers";
 
 const tenantIds: string[] = [];
@@ -46,13 +47,13 @@ const APPELS = [
 ];
 
 const proposer = (corps: Record<string, unknown> = {}) =>
-  request(app)
+  request(serveurTest(app))
     .post("/api/relance/campagnes")
     .set("Cookie", ownerCookie)
     .send({ appels: APPELS, ...corps });
 
 async function poserRegle(regle: Record<string, unknown>): Promise<void> {
-  await request(app)
+  await request(serveurTest(app))
     .put("/api/relance/regles")
     .set("Cookie", ownerCookie)
     .send(regle)
@@ -62,7 +63,7 @@ async function poserRegle(regle: Record<string, unknown>): Promise<void> {
 beforeAll(async () => {
   const email = `camp-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@test.nodaq`;
   emails.push(email);
-  const reg = await request(app)
+  const reg = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: "Patron", tenantNom: "Campagne SARL" })
     .expect(201);
@@ -110,7 +111,7 @@ describe("a — proposer ne compose rien, ça remplit la file de validation", ()
   });
 
   test("une campagne sans appel est refusée", async () => {
-    const r = await request(app)
+    const r = await request(serveurTest(app))
       .post("/api/relance/campagnes")
       .set("Cookie", ownerCookie)
       .send({ appels: [] });
@@ -163,7 +164,7 @@ describe("c — le mandat est figé à l'approbation, avec sa version de règle"
   test("approuver gèle le mandat et estampille la version", async () => {
     const propose = await proposer().expect(201);
 
-    await request(app)
+    await request(serveurTest(app))
       .post(`/api/pending-actions/${propose.body.pendingActionId}/approve`)
       .set("Cookie", ownerCookie)
       .expect(200);
@@ -182,7 +183,7 @@ describe("c — le mandat est figé à l'approbation, avec sa version de règle"
 
   test("changer la règle APRÈS ne réécrit pas une campagne validée", async () => {
     const propose = await proposer().expect(201);
-    await request(app)
+    await request(serveurTest(app))
       .post(`/api/pending-actions/${propose.body.pendingActionId}/approve`)
       .set("Cookie", ownerCookie)
       .expect(200);
@@ -225,7 +226,7 @@ describe("c — le mandat est figé à l'approbation, avec sa version de règle"
     // …le dirigeant referme le lien de paiement AVANT d'approuver.
     await poserRegle({ ...REGLE_OUVERTE, lienPaiementAutorise: false });
 
-    await request(app)
+    await request(serveurTest(app))
       .post(`/api/pending-actions/${propose.body.pendingActionId}/approve`)
       .set("Cookie", ownerCookie)
       .expect(200);
@@ -248,7 +249,7 @@ describe("d — exclure un débiteur avant validation, plus après", () => {
   test("retirer un appel met à jour la campagne ET la file", async () => {
     const propose = await proposer().expect(201);
 
-    const r = await request(app)
+    const r = await request(serveurTest(app))
       .delete(`/api/relance/campagnes/${propose.body.campagne.id}/appels/F-001`)
       .set("Cookie", ownerCookie)
       .expect(200);
@@ -266,12 +267,12 @@ describe("d — exclure un débiteur avant validation, plus après", () => {
 
   test("après validation, la liste est verrouillée", async () => {
     const propose = await proposer().expect(201);
-    await request(app)
+    await request(serveurTest(app))
       .post(`/api/pending-actions/${propose.body.pendingActionId}/approve`)
       .set("Cookie", ownerCookie)
       .expect(200);
 
-    const r = await request(app)
+    const r = await request(serveurTest(app))
       .delete(`/api/relance/campagnes/${propose.body.campagne.id}/appels/F-001`)
       .set("Cookie", ownerCookie);
     expect(r.status).toBe(409);
@@ -285,7 +286,7 @@ describe("e — un rejet ferme la campagne", () => {
   test("rejeter l'action fait passer la campagne en REJETEE", async () => {
     const propose = await proposer().expect(201);
 
-    await request(app)
+    await request(serveurTest(app))
       .post(`/api/pending-actions/${propose.body.pendingActionId}/reject`)
       .set("Cookie", ownerCookie)
       .expect(200);
@@ -307,7 +308,7 @@ describe("f — le mandat se lit et se resserre depuis l'écran de validation", 
   test("la campagne se retrouve par son action, avec la règle du tenant", async () => {
     const propose = await proposer().expect(201);
 
-    const r = await request(app)
+    const r = await request(serveurTest(app))
       .get(`/api/relance/campagnes/par-action/${propose.body.pendingActionId}`)
       .set("Cookie", ownerCookie)
       .expect(200);
@@ -320,7 +321,7 @@ describe("f — le mandat se lit et se resserre depuis l'écran de validation", 
   });
 
   test("une action sans campagne rend 404, pas une campagne vide", async () => {
-    const r = await request(app)
+    const r = await request(serveurTest(app))
       .get("/api/relance/campagnes/par-action/action-qui-nexiste-pas")
       .set("Cookie", ownerCookie);
     expect(r.status).toBe(404);
@@ -329,7 +330,7 @@ describe("f — le mandat se lit et se resserre depuis l'écran de validation", 
   test("resserrer le mandat fonctionne, et met la file à jour", async () => {
     const propose = await proposer().expect(201);
 
-    const r = await request(app)
+    const r = await request(serveurTest(app))
       .patch(`/api/relance/campagnes/${propose.body.campagne.id}/mandat`)
       .set("Cookie", ownerCookie)
       .send({ echelonnementAutorise: false })
@@ -351,7 +352,7 @@ describe("f — le mandat se lit et se resserre depuis l'écran de validation", 
     // direct pourrait essayer. L'invariant tient au serveur, pas à l'écran.
     const propose = await proposer().expect(201);
 
-    const r = await request(app)
+    const r = await request(serveurTest(app))
       .patch(`/api/relance/campagnes/${propose.body.campagne.id}/mandat`)
       .set("Cookie", ownerCookie)
       .send({ remiseAutorisee: true, retardMaxJours: 999 })
@@ -370,12 +371,12 @@ describe("f — le mandat se lit et se resserre depuis l'écran de validation", 
 
   test("après validation, le mandat est figé et ne se resserre plus", async () => {
     const propose = await proposer().expect(201);
-    await request(app)
+    await request(serveurTest(app))
       .post(`/api/pending-actions/${propose.body.pendingActionId}/approve`)
       .set("Cookie", ownerCookie)
       .expect(200);
 
-    const r = await request(app)
+    const r = await request(serveurTest(app))
       .patch(`/api/relance/campagnes/${propose.body.campagne.id}/mandat`)
       .set("Cookie", ownerCookie)
       .send({ echelonnementAutorise: false });

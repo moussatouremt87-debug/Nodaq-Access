@@ -23,7 +23,7 @@ import request from "supertest";
 import crypto from "node:crypto";
 import app from "../app";
 import { toDateString } from "@nodaq/shared";
-import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner } from "./helpers";
+import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner, serveurTest } from "./helpers";
 
 interface Locataire { cookie: string; tenantId: string }
 
@@ -38,8 +38,8 @@ interface Locataire { cookie: string; tenantId: string }
 let compteurIp = 0;
 const ipUnique = (): string => `203.0.113.${(compteurIp++ % 250) + 1}`;
 
-const publicGet = (chemin: string) => request(app).get(chemin).set("X-Forwarded-For", ipUnique());
-const publicPost = (chemin: string) => request(app).post(chemin).set("X-Forwarded-For", ipUnique());
+const publicGet = (chemin: string) => request(serveurTest(app)).get(chemin).set("X-Forwarded-For", ipUnique());
+const publicPost = (chemin: string) => request(serveurTest(app)).post(chemin).set("X-Forwarded-For", ipUnique());
 
 const cleanupTenantIds: string[] = [];
 const cleanupEmails: string[] = [];
@@ -50,13 +50,13 @@ let b: Locataire;
 async function inscrire(nom: string): Promise<Locataire> {
   const email = `accept-${nom}-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@test.nodaq`;
   cleanupEmails.push(email);
-  const reg = await request(app)
+  const reg = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: `Patron ${nom}`, tenantNom: `Tenant ${nom}` })
     .expect(201);
   await completeMfaForRegisteredOwner(reg.body.userId);
   const cookie = reg.headers["set-cookie"]?.[0] ?? "";
-  const { body: me } = await request(app).get("/api/auth/me").set("Cookie", cookie).expect(200);
+  const { body: me } = await request(serveurTest(app)).get("/api/auth/me").set("Cookie", cookie).expect(200);
   cleanupTenantIds.push(me.tenantId);
   return { cookie, tenantId: me.tenantId };
 }
@@ -327,12 +327,12 @@ describe("h — le jeton d'un tenant n'ouvre rien chez un autre", () => {
 describe("i — « renvoyer » réutilise le lien, « nouveau lien » le remplace", () => {
   /** Crée un devis par l'API et l'envoie une première fois. */
   async function creerEtEnvoyer(l: Locataire): Promise<{ id: string; url: string }> {
-    const { body: cree } = await request(app)
+    const { body: cree } = await request(serveurTest(app))
       .post("/api/devis")
       .set("Cookie", l.cookie)
       .send({ clientName: "Madame Client", lines: [{ description: "Pose", quantity: 1, unitPriceCents: 100_000 }] })
       .expect(201);
-    const { body: envoye } = await request(app)
+    const { body: envoye } = await request(serveurTest(app))
       .post(`/api/devis/${cree.id}/envoyer`)
       .set("Cookie", l.cookie)
       .send({ emailTo: "client@example.test" })
@@ -346,7 +346,7 @@ describe("i — « renvoyer » réutilise le lien, « nouveau lien » le remplac
 
   test("un renvoi rend EXACTEMENT le même lien", async () => {
     const premier = await creerEtEnvoyer(a);
-    const { body: renvoi } = await request(app)
+    const { body: renvoi } = await request(serveurTest(app))
       .post(`/api/devis/${premier.id}/envoyer`)
       .set("Cookie", a.cookie)
       .send({ emailTo: "client@example.test" })
@@ -360,7 +360,7 @@ describe("i — « renvoyer » réutilise le lien, « nouveau lien » le remplac
 
   test("après un renvoi, le lien du PREMIER e-mail fonctionne toujours", async () => {
     const premier = await creerEtEnvoyer(a);
-    await request(app)
+    await request(serveurTest(app))
       .post(`/api/devis/${premier.id}/envoyer`)
       .set("Cookie", a.cookie)
       .send({ emailTo: "client@example.test" })
@@ -375,7 +375,7 @@ describe("i — « renvoyer » réutilise le lien, « nouveau lien » le remplac
 
   test("« nouveau lien » en rend un AUTRE et invalide le précédent", async () => {
     const premier = await creerEtEnvoyer(a);
-    const { body: nouveau } = await request(app)
+    const { body: nouveau } = await request(serveurTest(app))
       .post(`/api/devis/${premier.id}/nouveau-lien`)
       .set("Cookie", a.cookie)
       .expect(200);
@@ -395,7 +395,7 @@ describe("i — « renvoyer » réutilise le lien, « nouveau lien » le remplac
       .send({ signataire: "Jean Client" })
       .expect(200);
 
-    await request(app)
+    await request(serveurTest(app))
       .post(`/api/devis/${premier.id}/nouveau-lien`)
       .set("Cookie", a.cookie)
       .expect(409);
@@ -423,7 +423,7 @@ describe("i — « renvoyer » réutilise le lien, « nouveau lien » le remplac
 
   test("supprimer un devis emporte son jeton", async () => {
     const premier = await creerEtEnvoyer(a);
-    await request(app).delete(`/api/devis/${premier.id}`).set("Cookie", a.cookie).expect(204);
+    await request(serveurTest(app)).delete(`/api/devis/${premier.id}`).set("Cookie", a.cookie).expect(204);
     const { rows } = await adminPool.query(
       `SELECT count(*)::int AS n FROM tenant_secrets WHERE tenant_id = $1::uuid AND cle = $2`,
       [a.tenantId, `devis.${premier.id}.accept_token`],
@@ -442,7 +442,7 @@ describe("j — une route publique n'est pas une route sans limite", () => {
 
     let vus429 = 0;
     for (let i = 0; i < 30; i++) {
-      const r = await request(app).get(inconnu()).set("X-Forwarded-For", ip);
+      const r = await request(serveurTest(app)).get(inconnu()).set("X-Forwarded-For", ip);
       if (r.status === 429) vus429++;
     }
     expect(vus429).toBeGreaterThan(0);
@@ -451,7 +451,7 @@ describe("j — une route publique n'est pas une route sans limite", () => {
   test("une AUTRE adresse n'est pas pénalisée par la précédente", async () => {
     // Sans cette assertion, un compteur global passerait le test précédent tout
     // en bloquant tout le monde dès qu'un seul client insiste.
-    const r = await request(app)
+    const r = await request(serveurTest(app))
       .get(`/api/public/devis/${crypto.randomUUID()}/accept-page`)
       .set("X-Forwarded-For", "198.51.100.200");
     expect(r.status).toBe(404);
@@ -462,7 +462,7 @@ describe("j — une route publique n'est pas une route sans limite", () => {
 
 describe("k — la page nomme l'émetteur, ou n'invente rien", () => {
   test("profil renseigné : la page donne la raison sociale et le SIRET", async () => {
-    await request(app)
+    await request(serveurTest(app))
       .patch("/api/parametres")
       .set("Cookie", a.cookie)
       .send({
@@ -500,7 +500,7 @@ describe("k — la page nomme l'émetteur, ou n'invente rien", () => {
   test("une valeur faite d'espaces vaut une valeur absente", async () => {
     // Un profil à moitié rempli est le cas courant, et « nom = "   " » afficherait
     // un cartouche vide sur la page du client sans que rien ne le signale.
-    await request(app)
+    await request(serveurTest(app))
       .patch("/api/parametres")
       .set("Cookie", b.cookie)
       .send({ "company.raison_sociale": "   " })

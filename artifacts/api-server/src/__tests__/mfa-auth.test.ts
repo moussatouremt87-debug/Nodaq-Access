@@ -30,6 +30,7 @@ import {
   createTestSession,
   cleanupTenants,
   cleanupUsers,
+  serveurTest,
 } from "./helpers";
 
 let tenantId: string;
@@ -74,7 +75,7 @@ describe("a — bloqué avant MFA, mais /mfa/* reste atteignable", () => {
     const u = await creerUtilisateur("OWNER", "owner-bloque");
     const cookie = await sessionEnAttente(u.userId);
 
-    const res = await request(app).get("/api/cockpit/kpis").set("Cookie", cookie);
+    const res = await request(serveurTest(app)).get("/api/cockpit/kpis").set("Cookie", cookie);
     expect(res.status).toBe(403);
     expect(res.body.error).toBe("mfa_required");
     expect(res.body.mfaStatus).toBe("enroll_required");
@@ -84,7 +85,7 @@ describe("a — bloqué avant MFA, mais /mfa/* reste atteignable", () => {
     const u = await creerUtilisateur("ACCOUNTANT", "accountant-bloque");
     const cookie = await sessionEnAttente(u.userId);
 
-    const res = await request(app).get("/api/cockpit/kpis").set("Cookie", cookie);
+    const res = await request(serveurTest(app)).get("/api/cockpit/kpis").set("Cookie", cookie);
     expect(res.status).toBe(403);
     expect(res.body.error).toBe("mfa_required");
   });
@@ -93,11 +94,11 @@ describe("a — bloqué avant MFA, mais /mfa/* reste atteignable", () => {
     const u = await creerUtilisateur("OWNER", "owner-mfa-routes");
     const cookie = await sessionEnAttente(u.userId);
 
-    const statut = await request(app).get("/api/mfa/status").set("Cookie", cookie);
+    const statut = await request(serveurTest(app)).get("/api/mfa/status").set("Cookie", cookie);
     expect(statut.status).toBe(200);
     expect(statut.body.enabled).toBe(false);
 
-    const enrol = await request(app).post("/api/mfa/enroll").set("Cookie", cookie);
+    const enrol = await request(serveurTest(app)).post("/api/mfa/enroll").set("Cookie", cookie);
     expect(enrol.status).toBe(200);
     expect(enrol.body.secret).toBeTruthy();
     expect(enrol.body.qrDataUri).toMatch(/^data:image\/png;base64,/);
@@ -111,7 +112,7 @@ describe("b — MEMBER n'est jamais bloqué par requireMfaVerified", () => {
     const u = await creerUtilisateur("MEMBER", "membre");
     const cookie = await sessionEnAttente(u.userId);
 
-    const res = await request(app).get("/api/cockpit/kpis").set("Cookie", cookie);
+    const res = await request(serveurTest(app)).get("/api/cockpit/kpis").set("Cookie", cookie);
     expect(res.status).toBe(200);
   });
 });
@@ -124,14 +125,14 @@ describe("c, d — enrôlement et portée par session", () => {
     const u = await creerUtilisateur("OWNER", "owner-enrolement");
     const cookie1 = await sessionEnAttente(u.userId);
 
-    const { body: enrol } = await request(app)
+    const { body: enrol } = await request(serveurTest(app))
       .post("/api/mfa/enroll")
       .set("Cookie", cookie1)
       .expect(200);
     const { secret } = enrol as { secret: string };
 
     // Code faux — RIEN ne doit être persisté.
-    const mauvais = await request(app)
+    const mauvais = await request(serveurTest(app))
       .post("/api/mfa/verify")
       .set("Cookie", cookie1)
       .send({ secret, code: "000000" });
@@ -143,12 +144,12 @@ describe("c, d — enrôlement et portée par session", () => {
     );
     expect(avant[0].mfa_enabled_at).toBeNull();
 
-    const bloqueEncore = await request(app).get("/api/cockpit/kpis").set("Cookie", cookie1);
+    const bloqueEncore = await request(serveurTest(app)).get("/api/cockpit/kpis").set("Cookie", cookie1);
     expect(bloqueEncore.status).toBe(403);
 
     // Code correct — termine l'enrôlement pour CETTE session.
     const codeCorrect = await genererCodeCourant(secret);
-    const bon = await request(app)
+    const bon = await request(serveurTest(app))
       .post("/api/mfa/verify")
       .set("Cookie", cookie1)
       .send({ secret, code: codeCorrect });
@@ -161,26 +162,26 @@ describe("c, d — enrôlement et portée par session", () => {
     );
     expect(apres[0].mfa_enabled_at).not.toBeNull();
 
-    const debloque = await request(app).get("/api/cockpit/kpis").set("Cookie", cookie1);
+    const debloque = await request(serveurTest(app)).get("/api/cockpit/kpis").set("Cookie", cookie1);
     expect(debloque.status).toBe(200);
 
     // Une DEUXIÈME session du même utilisateur maintenant enrôlé : toujours
     // bloquée — le MFA se prouve par session, pas une fois pour toutes.
     const cookie2 = await sessionEnAttente(u.userId);
-    const session2Bloquee = await request(app).get("/api/cockpit/kpis").set("Cookie", cookie2);
+    const session2Bloquee = await request(serveurTest(app)).get("/api/cockpit/kpis").set("Cookie", cookie2);
     expect(session2Bloquee.status).toBe(403);
     expect(session2Bloquee.body.mfaStatus).toBe("verify_required");
 
     // Cette session vérifie à son tour (chemin normal, sans `secret`) — et SE
     // débloque, elle, sans affecter les autres.
     const codeCourant = await genererCodeCourant(secret);
-    const verif2 = await request(app)
+    const verif2 = await request(serveurTest(app))
       .post("/api/mfa/verify")
       .set("Cookie", cookie2)
       .send({ code: codeCourant });
     expect(verif2.status).toBe(200);
 
-    const session2Debloquee = await request(app).get("/api/cockpit/kpis").set("Cookie", cookie2);
+    const session2Debloquee = await request(serveurTest(app)).get("/api/cockpit/kpis").set("Cookie", cookie2);
     expect(session2Debloquee.status).toBe(200);
   });
 });
@@ -192,12 +193,12 @@ describe("e — codes de récupération", () => {
     const u = await creerUtilisateur("OWNER", "owner-recuperation");
     const cookie1 = await sessionEnAttente(u.userId);
 
-    const { body: enrol } = await request(app)
+    const { body: enrol } = await request(serveurTest(app))
       .post("/api/mfa/enroll")
       .set("Cookie", cookie1)
       .expect(200);
     const codeCorrect = await genererCodeCourant(enrol.secret);
-    const { body: fin } = await request(app)
+    const { body: fin } = await request(serveurTest(app))
       .post("/api/mfa/verify")
       .set("Cookie", cookie1)
       .send({ secret: enrol.secret, code: codeCorrect })
@@ -206,22 +207,22 @@ describe("e — codes de récupération", () => {
 
     // Une nouvelle session, bloquée, débloquée via le code de récupération.
     const cookie2 = await sessionEnAttente(u.userId);
-    const premiereUtilisation = await request(app)
+    const premiereUtilisation = await request(serveurTest(app))
       .post("/api/mfa/recovery")
       .set("Cookie", cookie2)
       .send({ code: codeRecuperation });
     expect(premiereUtilisation.status).toBe(200);
-    const debloquee = await request(app).get("/api/cockpit/kpis").set("Cookie", cookie2);
+    const debloquee = await request(serveurTest(app)).get("/api/cockpit/kpis").set("Cookie", cookie2);
     expect(debloquee.status).toBe(200);
 
     // Réutilisation du MÊME code, sur une AUTRE session bloquée → refusé.
     const cookie3 = await sessionEnAttente(u.userId);
-    const reutilisation = await request(app)
+    const reutilisation = await request(serveurTest(app))
       .post("/api/mfa/recovery")
       .set("Cookie", cookie3)
       .send({ code: codeRecuperation });
     expect(reutilisation.status).toBe(400);
-    const toujoursBloquee = await request(app).get("/api/cockpit/kpis").set("Cookie", cookie3);
+    const toujoursBloquee = await request(serveurTest(app)).get("/api/cockpit/kpis").set("Cookie", cookie3);
     expect(toujoursBloquee.status).toBe(403);
 
     // Jamais stockés en clair : chaque hash ressemble à un hash bcrypt, pas au code.
@@ -246,12 +247,12 @@ describe("f — secret TOTP illisible en base", () => {
     const u = await creerUtilisateur("OWNER", "owner-secret-illisible");
     const cookie = await sessionEnAttente(u.userId);
 
-    const { body: enrol } = await request(app)
+    const { body: enrol } = await request(serveurTest(app))
       .post("/api/mfa/enroll")
       .set("Cookie", cookie)
       .expect(200);
     const codeCorrect = await genererCodeCourant(enrol.secret);
-    await request(app)
+    await request(serveurTest(app))
       .post("/api/mfa/verify")
       .set("Cookie", cookie)
       .send({ secret: enrol.secret, code: codeCorrect })
@@ -273,7 +274,7 @@ describe("f — secret TOTP illisible en base", () => {
 describe("g — POST /api/auth/login reflète l'état MFA sans fuiter tenantId/role", () => {
   test("OWNER jamais enrôlé → enroll_required, sans tenantId ni role", async () => {
     const u = await creerUtilisateur("OWNER", "login-enroll");
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/auth/login")
       .send({ email: u.email, password: u.password })
       .expect(200);
@@ -285,18 +286,18 @@ describe("g — POST /api/auth/login reflète l'état MFA sans fuiter tenantId/r
   test("OWNER déjà enrôlé → verify_required, sans tenantId ni role", async () => {
     const u = await creerUtilisateur("OWNER", "login-verify");
     const cookie = await sessionEnAttente(u.userId);
-    const { body: enrol } = await request(app)
+    const { body: enrol } = await request(serveurTest(app))
       .post("/api/mfa/enroll")
       .set("Cookie", cookie)
       .expect(200);
     const codeCorrect = await genererCodeCourant(enrol.secret);
-    await request(app)
+    await request(serveurTest(app))
       .post("/api/mfa/verify")
       .set("Cookie", cookie)
       .send({ secret: enrol.secret, code: codeCorrect })
       .expect(200);
 
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/auth/login")
       .send({ email: u.email, password: u.password })
       .expect(200);
@@ -307,7 +308,7 @@ describe("g — POST /api/auth/login reflète l'état MFA sans fuiter tenantId/r
 
   test("MEMBER → réponse inchangée, aucun champ mfaStatus", async () => {
     const u = await creerUtilisateur("MEMBER", "login-membre");
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/auth/login")
       .send({ email: u.email, password: u.password })
       .expect(200);
@@ -328,7 +329,7 @@ describe("e — l'enrôlement doit être possible sur l'appareil qu'on tient", (
     const u = await creerUtilisateur("OWNER", "owner-otpauth");
     const cookie = await sessionEnAttente(u.userId);
 
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .post("/api/mfa/enroll")
       .set("Cookie", cookie)
       .expect(200);

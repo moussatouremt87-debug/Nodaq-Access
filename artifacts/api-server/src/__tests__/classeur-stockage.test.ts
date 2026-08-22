@@ -21,6 +21,7 @@ import {
   cookieHeader,
   cleanupTenants,
   cleanupUsers,
+  serveurTest,
 } from "./helpers";
 
 let cookieA: string;
@@ -60,7 +61,7 @@ describe("a — aller-retour upload → téléchargement", () => {
     const contenu = Buffer.from("%PDF-1.4 contenu de test classeur");
     const shaAttendu = crypto.createHash("sha256").update(contenu).digest("hex");
 
-    const upload = await request(app)
+    const upload = await request(serveurTest(app))
       .post("/api/classeur")
       .set("Cookie", cookieA)
       .field("category", "CONTRATS")
@@ -72,7 +73,7 @@ describe("a — aller-retour upload → téléchargement", () => {
     expect(upload.body.category).toBe("CONTRATS");
     const id = upload.body.id as string;
 
-    const dl = await request(app)
+    const dl = await request(serveurTest(app))
       .get(`/api/classeur/${id}/telechargement`)
       .set("Cookie", cookieA);
 
@@ -84,7 +85,7 @@ describe("a — aller-retour upload → téléchargement", () => {
   });
 
   test("le document est listé avec hasContent:true", async () => {
-    const upload = await request(app)
+    const upload = await request(serveurTest(app))
       .post("/api/classeur")
       .set("Cookie", cookieA)
       .field("name", "Facture listing")
@@ -92,14 +93,14 @@ describe("a — aller-retour upload → téléchargement", () => {
       .attach("file", Buffer.from("contenu"), { filename: "f.pdf", contentType: "application/pdf" });
     expect(upload.status).toBe(201);
 
-    const list = await request(app).get("/api/classeur").set("Cookie", cookieA);
+    const list = await request(serveurTest(app)).get("/api/classeur").set("Cookie", cookieA);
     expect(list.status).toBe(200);
     const doc = list.body.documents.find((d: { id: string }) => d.id === upload.body.id);
     expect(doc.hasContent).toBe(true);
   });
 
   test("sans fichier → 400, rien n'est créé", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/classeur")
       .set("Cookie", cookieA)
       .field("name", "Sans fichier")
@@ -108,7 +109,7 @@ describe("a — aller-retour upload → téléchargement", () => {
   });
 
   test("un type de fichier non autorisé est refusé", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/classeur")
       .set("Cookie", cookieA)
       .attach("file", Buffer.from("#!/bin/sh\necho hi"), { filename: "script.sh", contentType: "application/x-sh" });
@@ -119,16 +120,16 @@ describe("a — aller-retour upload → téléchargement", () => {
 
 describe("b — suppression emporte le contenu", () => {
   test("après DELETE, le téléchargement rend 404", async () => {
-    const upload = await request(app)
+    const upload = await request(serveurTest(app))
       .post("/api/classeur")
       .set("Cookie", cookieA)
       .attach("file", Buffer.from("à supprimer"), { filename: "a-supprimer.pdf", contentType: "application/pdf" });
     const id = upload.body.id as string;
 
-    const del = await request(app).delete(`/api/classeur/${id}`).set("Cookie", cookieA);
+    const del = await request(serveurTest(app)).delete(`/api/classeur/${id}`).set("Cookie", cookieA);
     expect(del.status).toBe(204);
 
-    const dl = await request(app).get(`/api/classeur/${id}/telechargement`).set("Cookie", cookieA);
+    const dl = await request(serveurTest(app)).get(`/api/classeur/${id}/telechargement`).set("Cookie", cookieA);
     expect(dl.status).toBe(404);
 
     const { rows } = await adminPool.query(
@@ -141,16 +142,16 @@ describe("b — suppression emporte le contenu", () => {
 
 describe("c — isolation par tenant", () => {
   test("le tenant B ne peut pas télécharger un document du tenant A", async () => {
-    const upload = await request(app)
+    const upload = await request(serveurTest(app))
       .post("/api/classeur")
       .set("Cookie", cookieA)
       .attach("file", Buffer.from("secret tenant A"), { filename: "secret.pdf", contentType: "application/pdf" });
     const id = upload.body.id as string;
 
-    const dl = await request(app).get(`/api/classeur/${id}/telechargement`).set("Cookie", cookieB);
+    const dl = await request(serveurTest(app)).get(`/api/classeur/${id}/telechargement`).set("Cookie", cookieB);
     expect(dl.status).toBe(404);
 
-    const list = await request(app).get("/api/classeur").set("Cookie", cookieB);
+    const list = await request(serveurTest(app)).get("/api/classeur").set("Cookie", cookieB);
     expect(list.body.documents.find((d: { id: string }) => d.id === id)).toBeUndefined();
   });
 });
@@ -163,11 +164,11 @@ describe("d — document sans contenu archivé (créé avant la migration)", () 
       [id, tenantAId],
     );
 
-    const list = await request(app).get("/api/classeur").set("Cookie", cookieA);
+    const list = await request(serveurTest(app)).get("/api/classeur").set("Cookie", cookieA);
     const doc = list.body.documents.find((d: { id: string }) => d.id === id);
     expect(doc.hasContent).toBe(false);
 
-    const dl = await request(app).get(`/api/classeur/${id}/telechargement`).set("Cookie", cookieA);
+    const dl = await request(serveurTest(app)).get(`/api/classeur/${id}/telechargement`).set("Cookie", cookieA);
     expect(dl.status).toBe(404);
     expect(dl.body.error).toMatch(/contenu archivé/);
   });

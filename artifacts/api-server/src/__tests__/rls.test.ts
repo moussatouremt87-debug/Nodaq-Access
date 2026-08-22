@@ -30,6 +30,7 @@ import {
   cleanupUsers,
   tableInsertSql,
   completeMfaForRegisteredOwner,
+  serveurTest,
 } from "./helpers";
 
 // Helper: count rows in a table under a given tenant context via withTenant.
@@ -89,7 +90,7 @@ beforeAll(async () => {
   const ownerPassword = "rls-owner-password-phase5";
   testEmails.push(ownerEmail);
 
-  const regRes = await request(app)
+  const regRes = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email: ownerEmail, password: ownerPassword, nom: "RLS Owner", tenantNom: "RLS Test Corp" })
     .expect(201);
@@ -99,7 +100,7 @@ beforeAll(async () => {
   if (!cookieOwner) throw new Error("register did not set a cookie");
 
   // Remember owner's tenant for cleanup
-  const { body: meOwner } = await request(app)
+  const { body: meOwner } = await request(serveurTest(app))
     .get("/api/auth/me")
     .set("Cookie", cookieOwner)
     .expect(200);
@@ -114,7 +115,7 @@ beforeAll(async () => {
   await createTestMembership(memberUser.id, ownerTenantId, "MEMBER");
   testEmails.push(memberEmail);
 
-  const memberLogin = await request(app)
+  const memberLogin = await request(serveurTest(app))
     .post("/api/auth/login")
     .send({ email: memberEmail, password: memberUser.password })
     .expect(200);
@@ -329,7 +330,7 @@ describe("d — TENANT FALSIFIÉ", () => {
   const fakeTenantId = "00000000-0000-0000-0000-000000000001";
 
   test("body tenantId is ignored; session tenantId is used", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/affaires")
       .set("Cookie", cookieOwner)
       .send({ label: "Forged Body Test", tenantId: fakeTenantId })
@@ -342,7 +343,7 @@ describe("d — TENANT FALSIFIÉ", () => {
   });
 
   test("X-Tenant-Id header is ignored; session tenantId is used", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/affaires")
       .set("Cookie", cookieOwner)
       .set("X-Tenant-Id", fakeTenantId)
@@ -356,7 +357,7 @@ describe("d — TENANT FALSIFIÉ", () => {
   });
 
   test("?tenantId= query param is ignored; session tenantId is used", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post(`/api/affaires?tenantId=${fakeTenantId}`)
       .set("Cookie", cookieOwner)
       .send({ label: "Forged Query Test" })
@@ -380,7 +381,7 @@ describe("e — APPARTENANCE", () => {
     testEmails.push(email);
 
     // Create a new OWNER user via the real register endpoint
-    const regRes = await request(app)
+    const regRes = await request(serveurTest(app))
       .post("/api/auth/register")
       .send({
         email,
@@ -392,14 +393,14 @@ describe("e — APPARTENANCE", () => {
 
     await completeMfaForRegisteredOwner(regRes.body.userId);
     const cookie = regRes.headers["set-cookie"]?.[0] ?? "";
-    const { body: me } = await request(app)
+    const { body: me } = await request(serveurTest(app))
       .get("/api/auth/me")
       .set("Cookie", cookie)
       .expect(200);
     tenantIds.push(me.tenantId);
 
     // Confirm access works before deleting membership
-    await request(app)
+    await request(serveurTest(app))
       .get("/api/cockpit/kpis")
       .set("Cookie", cookie)
       .expect(200);
@@ -411,7 +412,7 @@ describe("e — APPARTENANCE", () => {
     );
 
     // requireMembership middleware re-queries memberships on every request
-    const forbidden = await request(app)
+    const forbidden = await request(serveurTest(app))
       .get("/api/cockpit/kpis")
       .set("Cookie", cookie);
     expect(forbidden.status).toBe(403);
@@ -426,12 +427,12 @@ describe("e — APPARTENANCE", () => {
 
 describe("f — SESSION", () => {
   test("missing cookie → 401", async () => {
-    const res = await request(app).get("/api/cockpit/kpis");
+    const res = await request(serveurTest(app)).get("/api/cockpit/kpis");
     expect(res.status).toBe(401);
   });
 
   test("forged / unsigned cookie → 401", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .get("/api/cockpit/kpis")
       .set("Cookie", "nodaq_sid=totally-fake-not-a-uuid");
     expect(res.status).toBe(401);
@@ -440,7 +441,7 @@ describe("f — SESSION", () => {
   test("valid signature but non-existent session ID → 401", async () => {
     // Sign a UUID that was never stored in the sessions table
     const ghost = crypto.randomUUID();
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .get("/api/cockpit/kpis")
       .set("Cookie", cookieHeader(ghost));
     expect(res.status).toBe(401);
@@ -461,7 +462,7 @@ describe("f — SESSION", () => {
     const session = await createTestSession(user.id, tenant.id, expiredAt);
     const cookie = cookieHeader(session.id);
 
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .get("/api/cockpit/kpis")
       .set("Cookie", cookie);
     expect(res.status).toBe(401);
@@ -476,7 +477,7 @@ describe("f — SESSION", () => {
 
 describe("g — RÔLE", () => {
   test("OWNER can access OWNER-only routes", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .get("/api/equipe")
       .set("Cookie", cookieOwner);
     expect(res.status).toBe(200);
@@ -484,20 +485,20 @@ describe("g — RÔLE", () => {
 
   test("MEMBER is denied OWNER-only routes (equipe, connecteurs, parametres)", async () => {
     // GET /equipe is OWNER-only
-    const equipe = await request(app)
+    const equipe = await request(serveurTest(app))
       .get("/api/equipe")
       .set("Cookie", cookieMember);
     expect(equipe.status).toBe(403);
 
     // PATCH /connecteurs is OWNER-only
-    const connRes = await request(app)
+    const connRes = await request(serveurTest(app))
       .patch("/api/connecteurs/STRIPE")
       .set("Cookie", cookieMember)
       .send({ status: "CONNECTE", config: {} });
     expect(connRes.status).toBe(403);
 
     // GET /parametres is OWNER-only
-    const params = await request(app)
+    const params = await request(serveurTest(app))
       .get("/api/parametres")
       .set("Cookie", cookieMember);
     expect(params.status).toBe(403);
@@ -507,7 +508,7 @@ describe("g — RÔLE", () => {
 
   test("MEMBER can access non-OWNER-restricted routes", async () => {
     // cockpit is accessible to all authenticated members
-    const kpi = await request(app)
+    const kpi = await request(serveurTest(app))
       .get("/api/cockpit/kpis")
       .set("Cookie", cookieMember);
     expect(kpi.status).toBe(200);

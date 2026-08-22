@@ -19,7 +19,7 @@
 import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import app from "../app";
-import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner, texteBrut } from "./helpers";
+import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner, texteBrut, serveurTest } from "./helpers";
 
 const suffix = Date.now().toString(36);
 const email = `vendeur-cle-${suffix}@test.nodaq`;
@@ -32,7 +32,7 @@ const CODE_POSTAL = "69001";
 const COMMUNE = "Lyon";
 
 beforeAll(async () => {
-  const reg = await request(app)
+  const reg = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: "Test Onboarding", tenantNom: `Vendeur Clé ${suffix}` })
     .expect(201);
@@ -47,7 +47,7 @@ beforeAll(async () => {
   tenantId = rows[0]?.id ?? "";
 
   // Le VRAI chemin d'écriture — pas une insertion directe en base.
-  await request(app)
+  await request(serveurTest(app))
     .post("/api/onboarding/profil/confirmer")
     .set("Cookie", cookie)
     .send({
@@ -68,7 +68,7 @@ afterAll(async () => {
 
 describe("le vendeur d'une facture émise vient du vrai profil onboarding", () => {
   test("le nom réel apparaît, jamais le repli \"Entreprise\"", async () => {
-    const { body: f } = await request(app)
+    const { body: f } = await request(serveurTest(app))
       .post("/api/factures")
       .set("Cookie", cookie)
       .send({
@@ -79,7 +79,7 @@ describe("le vendeur d'une facture émise vient du vrai profil onboarding", () =
       })
       .expect(201);
 
-    const emise = await request(app)
+    const emise = await request(serveurTest(app))
       .post(`/api/factures/${f.id}/emettre`)
       .set("Cookie", cookie)
       .send({})
@@ -88,7 +88,7 @@ describe("le vendeur d'une facture émise vient du vrai profil onboarding", () =
 
     // Le PDF archivé est celui servi — même octets, donc l'assertion sur le
     // PDF récupéré vaut pour ce qui a réellement été remis au client.
-    const pdfRes = await request(app)
+    const pdfRes = await request(serveurTest(app))
       .get(`/api/factures/${f.id}/pdf`)
       .set("Cookie", cookie)
       .expect(200);

@@ -12,7 +12,7 @@ import { describe, test, expect, afterEach, vi } from "vitest";
 import crypto from "node:crypto";
 import { buildCiiXml, buildFacturXPdf, type FacturXInvoice } from "@nodaq/facturx";
 import { sendDocument } from "../lib/canal-emission";
-import { adminPool, createTestTenant, cleanupTenants } from "./helpers";
+import { adminPool, createTestTenant, cleanupTenants, serveurTest } from "./helpers";
 
 const cleanupTenantIds: string[] = [];
 

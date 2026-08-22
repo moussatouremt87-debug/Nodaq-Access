@@ -58,6 +58,7 @@ import {
   cookieHeader,
   cleanupTenants,
   cleanupUsers,
+  serveurTest,
 } from "./helpers";
 import { withTenant, prospectsTable, affairesTable, activityTable, chatMessagesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
@@ -132,7 +133,7 @@ describe("Upload path — adversarial injection via Pixtral output", () => {
       activity: await countInjectedActivity(cleanupTenantId),
     };
 
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/chat/upload")
       .set("Cookie", sessionCookie)
       // No caption field → no-agent path
@@ -250,7 +251,7 @@ describe("Upload path — adversarial injection via Pixtral output", () => {
       activity: await countInjectedActivity(cleanupTenantId),
     };
 
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/chat/upload")
       .set("Cookie", sessionCookie)
       .attach("image", Buffer.from("fake-image"), {
@@ -318,7 +319,7 @@ describe("Upload history isolation — document content never persisted to chat 
 
     let convId: string;
     try {
-      const res = await request(app)
+      const res = await request(serveurTest(app))
         .post("/api/chat/upload")
         .set("Cookie", sessionCookie)
         .attach("image", Buffer.from("fake-captioned"), {
@@ -371,7 +372,7 @@ describe("Upload history isolation — document content never persisted to chat 
    * model behaviour.
    */
   test("no-caption upload: chat history contains no document-derived content", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/chat/upload")
       .set("Cookie", sessionCookie)
       .attach("image", Buffer.from("fake-image"), {
@@ -420,7 +421,7 @@ describe("Upload history isolation — document content never persisted to chat 
    */
   test("follow-up chat after upload: injection content absent from model context", async () => {
     // Step 1: upload a malicious document (injection content in mocked Pixtral)
-    const uploadRes = await request(app)
+    const uploadRes = await request(serveurTest(app))
       .post("/api/chat/upload")
       .set("Cookie", sessionCookie)
       .attach("image", Buffer.from("fake-image-2"), {
@@ -504,7 +505,7 @@ describe("Upload history isolation — document content never persisted to chat 
 
     try {
       // Step 3: send an innocuous follow-up in the same conversation
-      const chatRes = await request(app)
+      const chatRes = await request(serveurTest(app))
         .post("/api/chat/messages")
         .set("Cookie", sessionCookie)
         .send({ content: "Bonjour", conversationId: convId });

@@ -19,6 +19,7 @@ import {
   cleanupTenants,
   cleanupUsers,
   completeMfaForRegisteredOwner,
+  serveurTest,
 } from "./helpers";
 
 const tenantIds: string[] = [];
@@ -29,7 +30,7 @@ interface Locataire { cookie: string; tenantId: string }
 async function inscrire(nom: string, metier: string): Promise<Locataire> {
   const email = `a72-${nom}-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@test.nodaq`;
   emails.push(email);
-  const reg = await request(app)
+  const reg = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: `Patron ${nom}`, tenantNom: `Tenant ${nom}` })
     .expect(201);
@@ -79,7 +80,7 @@ describe("le secteur du tenant remonte jusqu'au garde-fou", () => {
   test("chez un praticien, le message est retenu et n'atteint PAS le modèle", async () => {
     let reponse: request.Response | undefined;
     const appels = await compterAppelsModele(async () => {
-      reponse = await request(app)
+      reponse = await request(serveurTest(app))
         .post("/api/chat/messages")
         .set("Cookie", praticien.cookie)
         .send({ content: dossier });
@@ -99,7 +100,7 @@ describe("le secteur du tenant remonte jusqu'au garde-fou", () => {
     // Le contraste est la preuve que c'est bien le SECTEUR qui décide, et non
     // une propriété du texte : mot pour mot le même contenu.
     const appels = await compterAppelsModele(async () => {
-      await request(app)
+      await request(serveurTest(app))
         .post("/api/chat/messages")
         .set("Cookie", macon.cookie)
         .send({ content: dossier });
@@ -109,7 +110,7 @@ describe("le secteur du tenant remonte jusqu'au garde-fou", () => {
 
   test("un marqueur explicite retient le message même chez le maçon", async () => {
     const appels = await compterAppelsModele(async () => {
-      await request(app)
+      await request(serveurTest(app))
         .post("/api/chat/messages")
         .set("Cookie", macon.cookie)
         .send({ content: "Je te transmets le certificat médical de Paul pour son arrêt" });
