@@ -186,18 +186,26 @@ export const IntentionCreerClient = z
  * chantier peut le consigner sur place, au lieu de le retrouver trois
  * semaines plus tard dans une poche de veste.
  *
- * ── Aucun montant dans ce schéma, et c'est une garde qui l'a imposé ───────
- * La première version acceptait un `montantEuros` dicté. Le test « AUCUN
- * schéma d'intention ne déclare de champ monétaire » l'a refusée, et il avait
- * raison : ce champ aurait fait produire un montant PAR LE MODÈLE, ce que la
- * règle 3 interdit — un chiffre entendu de travers sur un règlement se
- * retrouve en comptabilité.
+ * ── Le montant : dicté s'il l'a été, calculé sinon ───────────────────────
+ * Deux sources, dans cet ordre.
  *
- * Le montant proposé est donc le SOLDE, calculé par le serveur depuis le
- * journal des paiements. Un règlement partiel reste possible, et par le bon
- * chemin : l'écran de validation affiche ce solde et laisse le CORRIGER
- * (`CHAMPS_CORRIGEABLES`). Le chiffre vient alors des doigts de
- * l'utilisateur, jamais de l'oreille de la machine.
+ * 1. « Delacroix m'a réglé 500 euros sur la 181 » — le chiffre sort de la
+ *    bouche de l'artisan. Il est retenu s'il se RETROUVE dans la
+ *    transcription (`centimesDepuisDictee`), jamais autrement.
+ * 2. Rien de prononcé, ou rien de retrouvé : le SOLDE, calculé par le serveur
+ *    depuis le journal des paiements. C'est le repli, et c'est l'état sûr.
+ *
+ * Dans les deux cas l'écran affiche le montant et le laisse corriger
+ * (`CHAMPS_CORRIGEABLES`) avant la moindre écriture.
+ *
+ * ── Ce que ce commentaire disait avant, et pourquoi il a changé ──────────
+ * Une première version de ce schéma acceptait un montant dicté ; la garde
+ * « AUCUN schéma d'intention ne déclare de champ monétaire » l'avait refusée,
+ * et le refus a tenu plusieurs lots. Il était trop large : il confondait
+ * FIXER un prix — ce que la règle 3 interdit au modèle — et RECOPIER un
+ * chiffre que l'utilisateur vient de prononcer, ce qu'elle n'a jamais
+ * interdit. La garde a été resserrée sur ce qu'elle protège vraiment (voir
+ * `INTENTIONS_MONTANT_DICTABLE`), pas supprimée.
  */
 export const MOYENS_REGLEMENT_DICTABLES = ["VIREMENT", "CHEQUE", "ESPECES", "CB"] as const;
 
@@ -206,6 +214,17 @@ export const IntentionEnregistrerReglement = z
     type: z.literal("enregistrer_reglement"),
     factureMentionnee: Mention,
     moyen: z.enum(MOYENS_REGLEMENT_DICTABLES).nullable().optional(),
+    /**
+     * Le montant PRONONCÉ, en euros. Facultatif.
+     *
+     * En euros et jamais en centimes : c'est l'unique nom de champ monétaire
+     * qu'un schéma a le droit de déclarer, et un test le vérifie. Un modèle
+     * qui rendrait des centimes écrirait 45 centimes pour « 45 euros ».
+     *
+     * Absent, ou introuvable dans la transcription, le champ retombe sur
+     * `CHAMPS_A_COMPLETER` : réclamé à l'écran, jamais deviné.
+     */
+    montantEuros: z.number().positive().max(10_000_000).nullable().optional(),
   })
   .strict();
 
@@ -287,6 +306,17 @@ export const IntentionCreerArticleCatalogue = z
     designation: z.string().min(1).max(300),
     /** « au mètre carré », « à l'heure », « au forfait ». Libre, court. */
     unite: z.string().max(20).nullable().optional(),
+    /**
+     * Le montant PRONONCÉ, en euros. Facultatif.
+     *
+     * En euros et jamais en centimes : c'est l'unique nom de champ monétaire
+     * qu'un schéma a le droit de déclarer, et un test le vérifie. Un modèle
+     * qui rendrait des centimes écrirait 45 centimes pour « 45 euros ».
+     *
+     * Absent, ou introuvable dans la transcription, le champ retombe sur
+     * `CHAMPS_A_COMPLETER` : réclamé à l'écran, jamais deviné.
+     */
+    montantEuros: z.number().positive().max(10_000_000).nullable().optional(),
   })
   .strict();
 
@@ -314,6 +344,17 @@ export const IntentionCreerChargeRecurrente = z
     libelle: z.string().min(1).max(300),
     cadence: z.enum(CADENCES_DICTABLES),
     categorie: z.enum(CATEGORIES_CHARGE_DICTABLES).nullable().optional(),
+    /**
+     * Le montant PRONONCÉ, en euros. Facultatif.
+     *
+     * En euros et jamais en centimes : c'est l'unique nom de champ monétaire
+     * qu'un schéma a le droit de déclarer, et un test le vérifie. Un modèle
+     * qui rendrait des centimes écrirait 45 centimes pour « 45 euros ».
+     *
+     * Absent, ou introuvable dans la transcription, le champ retombe sur
+     * `CHAMPS_A_COMPLETER` : réclamé à l'écran, jamais deviné.
+     */
+    montantEuros: z.number().positive().max(10_000_000).nullable().optional(),
   })
   .strict();
 
@@ -329,6 +370,17 @@ export const IntentionCreerContrat = z
     libelle: z.string().min(1).max(300),
     cadence: z.enum(CADENCES_DICTABLES),
     clientMentionne: Mention.nullable().optional(),
+    /**
+     * Le montant PRONONCÉ, en euros. Facultatif.
+     *
+     * En euros et jamais en centimes : c'est l'unique nom de champ monétaire
+     * qu'un schéma a le droit de déclarer, et un test le vérifie. Un modèle
+     * qui rendrait des centimes écrirait 45 centimes pour « 45 euros ».
+     *
+     * Absent, ou introuvable dans la transcription, le champ retombe sur
+     * `CHAMPS_A_COMPLETER` : réclamé à l'écran, jamais deviné.
+     */
+    montantEuros: z.number().positive().max(10_000_000).nullable().optional(),
   })
   .strict();
 
@@ -387,6 +439,32 @@ export const TYPES_INTENTION = [
   "creer_contrat",
 ] as const;
 export type TypeIntention = (typeof TYPES_INTENTION)[number];
+
+/**
+ * Les intentions qui ont le droit de porter un montant DICTÉ.
+ *
+ * La ligne de partage n'est pas « c'est pratique » mais « qui détient le
+ * chiffre » :
+ *
+ * - L'HUMAIN seul le détient — le prix d'un article neuf, un loyer, un
+ *   contrat, la somme qu'un client vient de remettre. Rien ne peut le
+ *   calculer, et le taper à l'écran alors qu'on vient de le prononcer était
+ *   une corvée que rien ne justifiait.
+ * - Un DOCUMENT ou un journal fait foi — le solde issu du journal des
+ *   paiements, le total d'un devis signé. Le serveur calcule, et la bouche de
+ *   l'utilisateur n'est pas une source recevable : facturer autre chose que ce
+ *   qui a été accepté ne se rattrape pas. `facturer_devis` reste donc hors de
+ *   cette liste, définitivement.
+ *
+ * Un montant dicté n'est retenu que s'il se retrouve dans la transcription
+ * (voir `centimesDepuisDictee`), et reste corrigeable à l'écran.
+ */
+export const INTENTIONS_MONTANT_DICTABLE = [
+  "creer_article_catalogue",
+  "creer_charge_recurrente",
+  "creer_contrat",
+  "enregistrer_reglement",
+] as const;
 
 // ── Rapprochement d'un nom mentionné ─────────────────────────────────────────
 

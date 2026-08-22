@@ -77,6 +77,32 @@ Il appelle un outil de la liste blanche (`get_indicateur`) ou s'appuie sur le ca
 du tenant, puis formule. Un chiffre affiché à l'utilisateur vient toujours d'un calcul
 déterministe, jamais du modèle.
 
+**Recopier un montant prononcé n'est pas le fixer.** « Ajoute au catalogue la pose de
+placo à 45 euros du mètre » ne demande au modèle ni calcul ni décision : le chiffre sort
+de la bouche de l'utilisateur. L'interdire obligeait à retaper à l'écran un nombre qu'on
+venait de dire — et cette confusion a fait refuser pendant plusieurs lots quelque chose
+que cette règle n'a jamais interdit.
+
+La transcription d'un montant dicté est donc permise, sous **trois** conditions
+cumulatives, tenues par `INTENTIONS_MONTANT_DICTABLE` et `centimesDepuisDictee` :
+
+1. **L'humain est la seule source du chiffre.** Un prix d'article neuf, un loyer, un
+   contrat, la somme qu'un client vient de remettre. Là où un document ou un journal
+   fait foi — le solde issu du journal des paiements, le total d'un devis signé — la
+   bouche de l'utilisateur n'est pas une source recevable, et le serveur calcule.
+   `facturer_devis` ne portera jamais de montant dicté : facturer autre chose que ce
+   qui a été accepté ne se rattrape pas.
+2. **Le montant se retrouve dans la transcription.** Un modèle qui hallucine un chiffre
+   absent de la phrase est arrêté là. Non retrouvé, le montant n'est pas « nettoyé » :
+   il est écarté, et le champ retombe vide, réclamé à l'écran (`CHAMPS_A_COMPLETER`).
+   Le repli est l'état sûr.
+3. **En euros, jamais en centimes.** `montantEuros` est le seul nom de champ monétaire
+   qu'un schéma d'intention ait le droit de déclarer, et un test le vérifie. Un modèle
+   qui rendrait des centimes écrirait 45 centimes pour « 45 euros ».
+
+La règle 4 s'applique par-dessus, inchangée : le montant est affiché et corrigeable
+avant la moindre écriture.
+
 ### 4. Écriture agentique = validation humaine
 
 Tout outil MCP d'écriture ou d'envoi (`send_*`, `create_*`, `submit_*`) crée une

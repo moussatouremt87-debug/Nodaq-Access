@@ -9,13 +9,20 @@
  *   POST /voix/executer     — relit le plan EN BASE et l'applique
  *
  * Le modèle ne touche jamais la base : il rend des intentions, dont le schéma
- * ne contient ni identifiant ni montant. Ce n'est pas une consigne de rédaction
- * — c'est `@nodaq/shared`.`SortieModele` qui refuse.
+ * ne contient AUCUN identifiant. Ce n'est pas une consigne de rédaction — c'est
+ * `@nodaq/shared`.`SortieModele` qui refuse.
+ *
+ * Il peut en revanche rapporter un montant PRONONCÉ (`montantEuros`), sur les
+ * seules intentions dont l'humain détient le chiffre. Recopier n'est pas
+ * fixer : la règle 3 interdit au modèle de CALCULER un prix, pas de rendre
+ * celui qu'on vient de dire. Deux verrous plutôt qu'un interdit : le montant
+ * doit se retrouver dans la transcription, et l'écran l'affiche avant écriture.
+ * Voir `INTENTIONS_MONTANT_DICTABLE` et `centimesDepuisDictee`.
  */
 import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { getConfig, chatCompletion, LlmConfigError } from "@nodaq/llm";
-import { SortieModele, TYPES_INTENTION, STATUTS_AFFAIRE_DICTABLES, TYPES_ABSENCE_DICTABLES, affaireWords, type Vertical } from "@nodaq/shared";
+import { SortieModele, TYPES_INTENTION, INTENTIONS_MONTANT_DICTABLE, STATUTS_AFFAIRE_DICTABLES, TYPES_ABSENCE_DICTABLES, affaireWords, type Vertical } from "@nodaq/shared";
 import { verticalDuTenant } from "../lib/vertical-tenant.js";
 import {
   chargerContexte,
@@ -71,6 +78,16 @@ function consigne(vertical: Vertical): string {
     "",
     "Tu ne calcules rien, tu ne fixes aucun prix, tu n'inventes aucun identifiant.",
     "Tu rends UNIQUEMENT les faits dictés, tels qu'ils ont été dits.",
+    "",
+    // La consigne ne PROTÈGE pas — le schéma Zod et la vérification du montant
+    // dans la transcription s'en chargent. Elle rend la relaxe UTILISABLE : un
+    // modèle à qui l'on répète « tu ne fixes aucun prix » et rien d'autre
+    // s'abstient aussi de recopier celui qu'on vient de prononcer.
+    `Un montant explicitement PRONONCÉ se rend dans \`montantEuros\`, en euros, `
+      + `pour : ${INTENTIONS_MONTANT_DICTABLE.join(", ")}.`,
+    "Recopier un montant dit n'est pas le fixer. Mais s'il n'a pas été dit, omets le champ :",
+    "ne le déduis pas, ne l'arrondis pas, ne le devine pas. Un montant absent se saisit à l'écran.",
+    "Jamais de centimes : « 45 euros » se rend 45, « 45,50 euros » se rend 45.5.",
     "",
     `Types d'intention disponibles : ${TYPES_INTENTION.join(", ")}.`,
     `Statuts d'affaire : ${STATUTS_AFFAIRE_DICTABLES.join(", ")}.`,
@@ -147,7 +164,9 @@ router.post("/voix/interpreter", async (req, res): Promise<void> => {
   }
 
   const contexte = await chargerContexte(tenantId);
-  const plan = construirePlan(sortie.intentions, sortie.nonCompris, contexte);
+  // La transcription est passée pour VÉRIFIER les montants dictés : un chiffre
+  // que la phrase ne porte pas est écarté, et le champ redevient à saisir.
+  const plan = construirePlan(sortie.intentions, sortie.nonCompris, contexte, parsed.data.texte);
 
   // Rien à appliquer ET rien à trancher : ne pas enregistrer. Un plan qui ne
   // propose aucune opération n'a pas sa place dans la file de validation du

@@ -197,6 +197,12 @@ globalThis.fetch = async function patchedFetch(
                           }],
                           nonCompris: [],
                         }
+                      : userText.includes("voix-test-cat-dicte")
+                        ? { intentions: [{ type: "creer_article_catalogue", designation: "Pose de placo", unite: "m2", montantEuros: 45 }], nonCompris: [] }
+                      : userText.includes("voix-test-cat-halluc")
+                        ? { intentions: [{ type: "creer_article_catalogue", designation: "Pose de placo", unite: "m2", montantEuros: 999 }], nonCompris: [] }
+                      : userText.includes("voix-test-reglement-dicte")
+                        ? { intentions: [{ type: "enregistrer_reglement", factureMentionnee: "181", montantEuros: 500 }], nonCompris: [] }
                       : userText.includes("voix-test-catalogue")
                         ? { intentions: [{ type: "creer_article_catalogue", designation: "Pose de placo", unite: "m2" }], nonCompris: [] }
                       : userText.includes("voix-test-charge")
