@@ -109,11 +109,26 @@ describe("l'écran secteur est le premier écran affiché", () => {
  * SIREN a seulement lieu d'être.
  */
 describe("la qualification s'intercale entre le secteur et la recherche", () => {
-  test("après le secteur vient le stade, pas la recherche SIRET", async () => {
+  test("après le secteur vient le stade — en passant l'écran", async () => {
     const utilisateur = userEvent.setup();
     monter();
     await screen.findByText(/quel est votre secteur d'activité/i);
     await utilisateur.click(screen.getByRole("button", { name: /plus tard/i }));
+
+    expect(await screen.findByTestId("ecran-stade")).toBeTruthy();
+  });
+
+  test("après le secteur vient le stade — en le renseignant", async () => {
+    // Les deux sorties de l'écran secteur sont distinctes (`onNext` et
+    // `onSkip`) et peuvent diverger sans que rien ne casse : une injection qui
+    // renvoyait `onNext` vers la recherche SIRET n'a pas fait broncher un test
+    // qui n'empruntait que « Plus tard ».
+    const utilisateur = userEvent.setup();
+    monter();
+    await screen.findByText(/quel est votre secteur d'activité/i);
+
+    await utilisateur.click(screen.getByTestId("option-secteur-batiment"));
+    await utilisateur.click(screen.getByRole("button", { name: /continuer/i }));
 
     expect(await screen.findByTestId("ecran-stade")).toBeTruthy();
   });
