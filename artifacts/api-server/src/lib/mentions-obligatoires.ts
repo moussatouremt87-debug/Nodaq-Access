@@ -25,7 +25,13 @@
  * Reprises MOT POUR MOT de l'implémentation d'origine. Une citation qu'on
  * reformule en migrant est une citation qu'on n'a pas vérifiée.
  */
-import { decennaleApplicable, VERTICALS, type Vertical } from "@nodaq/shared";
+import {
+  decennaleApplicable,
+  mentionsManquantes,
+  VERTICALS,
+  VERTICALS_DECHETS,
+  type Vertical,
+} from "@nodaq/shared";
 import type { FactureForPdf } from "./pdf-generation.js";
 
 export interface RegleMention {
@@ -59,6 +65,23 @@ const VERTICALS_TRAVAUX: readonly Vertical[] = VERTICALS.filter(decennaleApplica
 const VERTICALS_ORDRE: readonly Vertical[] = ["professions_liberales", "sante_liberale"];
 
 export const REGLES_MENTIONS: readonly RegleMention[] = [
+  {
+    // Décret n° 2020-1817 (loi AGEC). Une entrée de plus dans la table, comme
+    // l'en-tête de ce fichier le prescrit — le moteur ne change pas.
+    code: "mentions_dechets_manquantes",
+    message:
+      "Devis de travaux sans mentions de gestion des déchets (décret 2020-1817) : " +
+      "quantité estimée, nature, modalités d'enlèvement, point de collecte et coût.",
+    // NON BLOQUANT, et c'est une décision du ticket : « on signale, on
+    // n'empêche pas — le dirigeant reste maître ». Refuser l'émission
+    // transformerait une obligation de forme en blocage d'activité, sur un
+    // document que l'artisan doit parfois sortir dans l'heure.
+    bloquant: false,
+    verticals: VERTICALS_DECHETS,
+    enDefaut: (d) =>
+      d.type === "DEVIS" &&
+      (d.gestionDechets == null || mentionsManquantes(d.gestionDechets).length > 0),
+  },
   // ── Socle commun : aucune condition de secteur ──────────────────────────
   {
     code: "siret_vendeur_manquant",

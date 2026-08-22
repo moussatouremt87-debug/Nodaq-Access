@@ -20,7 +20,7 @@ import {
   computeVatBreakdown,
 } from "@nodaq/facturx";
 import type { FacturXInvoice, FacturXLine, FacturXParty } from "@nodaq/facturx";
-import type { Vertical } from "@nodaq/shared";
+import type { Vertical, GestionDechets } from "@nodaq/shared";
 import { REGLES_MENTIONS } from "./mentions-obligatoires.js";
 
 // ── Local type aliases (mirror lib/db/src/schema/factures.ts) ────────────────
@@ -86,6 +86,23 @@ export interface FactureForPdf {
   attestationTvaFournie?: boolean;
   retenueGarantiePct?: number;
   notes?: string;
+  /**
+   * Bloc réglementaire imprimé APRÈS le corps du document et AVANT les
+   * conditions de paiement — position exigée par le ticket 4.35.
+   *
+   * Un titre et des lignes déjà rédigées : ce module met en page, il ne
+   * rédige pas. Le texte vient de `texteBlocDechets`, qui est aussi celui
+   * affiché à l'écran avant validation — deux rédactions du même bloc
+   * finiraient par différer, et celle qu'on relit ne serait plus celle qu'on
+   * imprime.
+   */
+  blocReglementaire?: { titre: string; lignes: readonly string[] };
+  /**
+   * Le bloc AGEC en DONNÉES, pour que l'audit des mentions puisse dire ce qui
+   * manque. `blocReglementaire` ci-dessus n'est que sa mise en page : auditer
+   * du texte déjà rédigé obligerait à le relire pour savoir s'il est complet.
+   */
+  gestionDechets?: GestionDechets | null;
   /**
    * Mot déjà résolu pour l'en-tête d'un document `type: "DEVIS"` (US-A2.1) —
    * ex. "Devis" ou "Proposition commerciale" selon le vertical du tenant.
@@ -380,6 +397,16 @@ export async function generateHumanPdf(data: FactureForPdf): Promise<Buffer> {
       ); y += 14;
     }
 
+    if (data.blocReglementaire && data.blocReglementaire.lignes.length > 0) {
+      y += 10;
+      doc.font("Helvetica-Bold").text(data.blocReglementaire.titre, 50, y, { width: W });
+      doc.font("Helvetica");
+      for (const ligne of data.blocReglementaire.lignes) {
+        y = doc.y + 2;
+        doc.text(ligne, 50, y, { width: W });
+      }
+      y = doc.y;
+    }
     if (data.notes) { y += 6; doc.text(data.notes.slice(0, 300), 50, y, { width: W }); }
 
     doc.end();
