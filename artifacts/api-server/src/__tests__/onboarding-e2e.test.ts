@@ -21,6 +21,7 @@ import {
   cleanupTenants,
   cleanupUsers,
   completeMfaForRegisteredOwner,
+  serveurTest,
 } from "./helpers";
 import pg from "pg";
 
@@ -35,7 +36,7 @@ let tenantId: string = "";
 
 beforeAll(async () => {
   // Créer le compte via l'API (comme un vrai utilisateur)
-  const res = await request(app)
+  const res = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email, password, nom: "E2E Test", tenantNom })
     .expect(201);
@@ -62,11 +63,11 @@ afterAll(async () => {
 
 const api = () => ({
   get: (url: string) =>
-    request(app).get(url).set("Cookie", cookie),
+    request(serveurTest(app)).get(url).set("Cookie", cookie),
   post: (url: string, body: unknown) =>
-    request(app).post(url).set("Cookie", cookie).send(body as Record<string, unknown>),
+    request(serveurTest(app)).post(url).set("Cookie", cookie).send(body as Record<string, unknown>),
   patch: (url: string, body: unknown) =>
-    request(app).patch(url).set("Cookie", cookie).send(body as Record<string, unknown>),
+    request(serveurTest(app)).patch(url).set("Cookie", cookie).send(body as Record<string, unknown>),
 });
 
 // ── Parcours complet ──────────────────────────────────────────────────────────

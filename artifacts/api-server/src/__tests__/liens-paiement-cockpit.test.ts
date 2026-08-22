@@ -16,7 +16,7 @@ import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach, vi 
 import request from "supertest";
 import crypto from "node:crypto";
 import app from "../app";
-import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner } from "./helpers";
+import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner, serveurTest } from "./helpers";
 
 const NUMERO_TEST = "+33600000042";
 const MONTANT = 42_800;
@@ -78,7 +78,7 @@ beforeAll(async () => {
 
   const email = `lp-cockpit-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@test.nodaq`;
   emails.push(email);
-  const reg = await request(app)
+  const reg = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: "Patron", tenantNom: "Cockpit SARL" })
     .expect(201);
@@ -87,7 +87,7 @@ beforeAll(async () => {
   tenantIds.push(tenantId);
   cookie = reg.headers["set-cookie"][0];
 
-  await request(app)
+  await request(serveurTest(app))
     .patch("/api/parametres")
     .set("Cookie", cookie)
     .send({ "company.raison_sociale": "Charpente Cockpit" })
@@ -120,7 +120,7 @@ afterAll(async () => {
 describe("a — la liste montre ce qu'il faut, et rien de plus", () => {
   test("les liens du tenant, sans l'empreinte du numéro", async () => {
     const id = await lien("EMIS");
-    const r = await request(app)
+    const r = await request(serveurTest(app))
       .get("/api/relance/liens-paiement")
       .set("Cookie", cookie)
       .expect(200);
@@ -142,7 +142,7 @@ describe("b — renvoyer réexpédie le MÊME lien", () => {
     const trace = smsSimule();
     const id = await lien("EMIS");
 
-    const r = await request(app)
+    const r = await request(serveurTest(app))
       .post(`/api/relance/liens-paiement/${id}/renvoyer`)
       .set("Cookie", cookie)
       .expect(200);
@@ -160,7 +160,7 @@ describe("b — renvoyer réexpédie le MÊME lien", () => {
     const trace = smsSimule();
     const id = await lien("EMIS");
 
-    await request(app)
+    await request(serveurTest(app))
       .post(`/api/relance/liens-paiement/${id}/renvoyer`)
       .set("Cookie", cookie)
       .send({ numero: "+33699999999" })
@@ -173,7 +173,7 @@ describe("b — renvoyer réexpédie le MÊME lien", () => {
     const trace = smsSimule({ echoue: true });
     const id = await lien("EMIS");
 
-    await request(app)
+    await request(serveurTest(app))
       .post(`/api/relance/liens-paiement/${id}/renvoyer`)
       .set("Cookie", cookie)
       .expect(502);
@@ -189,7 +189,7 @@ describe("c — un lien qui n'est plus actif ne se renvoie pas", () => {
     const trace = smsSimule();
     const id = await lien(statut);
 
-    const r = await request(app)
+    const r = await request(serveurTest(app))
       .post(`/api/relance/liens-paiement/${id}/renvoyer`)
       .set("Cookie", cookie)
       .expect(409);
@@ -202,7 +202,7 @@ describe("c — un lien qui n'est plus actif ne se renvoie pas", () => {
     const trace = smsSimule();
     const id = await lien("EMIS", null);
 
-    await request(app)
+    await request(serveurTest(app))
       .post(`/api/relance/liens-paiement/${id}/renvoyer`)
       .set("Cookie", cookie)
       .expect(409);
@@ -212,7 +212,7 @@ describe("c — un lien qui n'est plus actif ne se renvoie pas", () => {
 
   test("lien inconnu → 404", async () => {
     smsSimule();
-    await request(app)
+    await request(serveurTest(app))
       .post(`/api/relance/liens-paiement/${crypto.randomUUID()}/renvoyer`)
       .set("Cookie", cookie)
       .expect(404);

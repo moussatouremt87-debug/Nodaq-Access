@@ -17,7 +17,7 @@
 import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import { toDateString } from "@nodaq/shared";
-import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner } from "./helpers";
+import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner, serveurTest } from "./helpers";
 import app from "../app";
 
 interface Locataire { cookie: string; tenantId: string }
@@ -29,7 +29,7 @@ async function inscrire(nom: string): Promise<Locataire> {
   const suffix = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const email = `brief-${nom}-${suffix}@test.nodaq`;
   cleanupEmails.push(email);
-  const reg = await request(app).post("/api/auth/register")
+  const reg = await request(serveurTest(app)).post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: `Patron ${nom}`, tenantNom: `Tenant ${nom} ${suffix}` })
     .expect(201);
   await completeMfaForRegisteredOwner(reg.body.userId);
@@ -42,7 +42,7 @@ async function inscrire(nom: string): Promise<Locataire> {
   const tenantId = rows[0]?.id ?? "";
   cleanupTenantIds.push(tenantId);
 
-  await request(app).post("/api/onboarding/profil/confirmer").set("Cookie", cookie)
+  await request(serveurTest(app)).post("/api/onboarding/profil/confirmer").set("Cookie", cookie)
     .send({
       siret: "81234567600009", siren: "812345676", raison_sociale: `${nom} SARL`,
       adresse: "9 rue des Artisans", code_postal: "69001", commune: "Lyon",
@@ -59,7 +59,7 @@ function ilYA(jours: number): string {
 }
 
 async function creerFacture(l: Locataire, dueDate: string): Promise<{ id: string }> {
-  const { body } = await request(app).post("/api/factures").set("Cookie", l.cookie)
+  const { body } = await request(serveurTest(app)).post("/api/factures").set("Cookie", l.cookie)
     .send({
       customerName: "Client Brief", issuedDate: dueDate, dueDate,
       lines: [{ description: "Prestation", quantity: 1, unitPriceCents: 50_000, vatRate: 20, vatCategory: "S" }],
@@ -83,20 +83,20 @@ describe("c — habilitations à surveiller (US-A4.4)", () => {
   test("une habilitation expirée est urgente, une bientôt expirée non, une valide n'apparaît pas", async () => {
     const l = await inscrire("habilitations-brief");
 
-    const { body: membre } = await request(app).post("/api/equipe").set("Cookie", l.cookie)
+    const { body: membre } = await request(serveurTest(app)).post("/api/equipe").set("Cookie", l.cookie)
       .send({ name: "Salarié Brief" }).expect(201);
 
-    await request(app).post(`/api/equipe/${membre.id}/habilitations`).set("Cookie", l.cookie)
+    await request(serveurTest(app)).post(`/api/equipe/${membre.id}/habilitations`).set("Cookie", l.cookie)
       .send({ type: "habilitation_electrique", libelle: "Habilitation électrique — expirée", dateExpiration: dansNJours(-5) })
       .expect(201);
-    await request(app).post(`/api/equipe/${membre.id}/habilitations`).set("Cookie", l.cookie)
+    await request(serveurTest(app)).post(`/api/equipe/${membre.id}/habilitations`).set("Cookie", l.cookie)
       .send({ type: "caces", libelle: "CACES — bientôt expiré", dateExpiration: dansNJours(10) })
       .expect(201);
-    await request(app).post(`/api/equipe/${membre.id}/habilitations`).set("Cookie", l.cookie)
+    await request(serveurTest(app)).post(`/api/equipe/${membre.id}/habilitations`).set("Cookie", l.cookie)
       .send({ type: "diplome_etat", libelle: "Diplôme d'État — valide", dateExpiration: dansNJours(300) })
       .expect(201);
 
-    const { body } = await request(app).get("/api/brief").set("Cookie", l.cookie).expect(200);
+    const { body } = await request(serveurTest(app)).get("/api/brief").set("Cookie", l.cookie).expect(200);
     const habilitations = body.sections.find((s: { type: string }) => s.type === "habilitations");
     expect(habilitations.items).toHaveLength(2);
     const labels = habilitations.items.map((i: { label: string; urgent: boolean }) => i.label);
@@ -112,7 +112,7 @@ describe("c — habilitations à surveiller (US-A4.4)", () => {
 
   test("aucune habilitation à surveiller → pas de section habilitations", async () => {
     const l = await inscrire("habilitations-brief-vide");
-    const { body } = await request(app).get("/api/brief").set("Cookie", l.cookie).expect(200);
+    const { body } = await request(serveurTest(app)).get("/api/brief").set("Cookie", l.cookie).expect(200);
     expect(body.sections.find((s: { type: string }) => s.type === "habilitations")).toBeUndefined();
   });
 });
@@ -120,17 +120,17 @@ describe("c — habilitations à surveiller (US-A4.4)", () => {
 describe("a, b — sévérité calibrée par secteur, en retard significatif en tête", () => {
   test("bâtiment (délai usuel 30j) : 15 jours de retard → pas urgent ; 45 jours → urgent, en tête", async () => {
     const l = await inscrire("batiment-brief");
-    await request(app).patch("/api/votre-metier").set("Cookie", l.cookie).send({ metier: "batiment" }).expect(200);
+    await request(serveurTest(app)).patch("/api/votre-metier").set("Cookie", l.cookie).send({ metier: "batiment" }).expect(200);
 
     const legere = await creerFacture(l, ilYA(15));
-    await request(app).post(`/api/factures/${legere.id}/emettre`).set("Cookie", l.cookie)
+    await request(serveurTest(app)).post(`/api/factures/${legere.id}/emettre`).set("Cookie", l.cookie)
       .send({ issuedDate: ilYA(15), dueDate: ilYA(15) }).expect(200);
 
     const grave = await creerFacture(l, ilYA(45));
-    await request(app).post(`/api/factures/${grave.id}/emettre`).set("Cookie", l.cookie)
+    await request(serveurTest(app)).post(`/api/factures/${grave.id}/emettre`).set("Cookie", l.cookie)
       .send({ issuedDate: ilYA(45), dueDate: ilYA(45) }).expect(200);
 
-    const { body } = await request(app).get("/api/brief").set("Cookie", l.cookie).expect(200);
+    const { body } = await request(serveurTest(app)).get("/api/brief").set("Cookie", l.cookie).expect(200);
     const overdue = body.sections.find((s: { type: string }) => s.type === "overdue");
     expect(overdue.items).toHaveLength(2);
     // La facture à 45 jours (significative) est en tête, urgent=true.

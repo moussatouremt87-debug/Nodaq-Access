@@ -14,7 +14,7 @@ import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import crypto from "node:crypto";
 import app from "../app";
-import { adminPool, cleanupTenants, cleanupUsers, createTestUser, createTestMembership, completeMfaForRegisteredOwner } from "./helpers";
+import { adminPool, cleanupTenants, cleanupUsers, createTestUser, createTestMembership, completeMfaForRegisteredOwner, serveurTest } from "./helpers";
 
 let cookieOwnerA: string;
 let cookieMemberA: string;
@@ -45,13 +45,13 @@ beforeAll(async () => {
   for (const [nom, cible] of [["a", "A"], ["b", "B"]] as const) {
     const email = `tresorerie-${nom}-${Date.now()}@test.nodaq`;
     cleanupEmails.push(email);
-    const reg = await request(app)
+    const reg = await request(serveurTest(app))
       .post("/api/auth/register")
       .send({ email, password: "test-pass-1234", nom: `Patron ${cible}`, tenantNom: `Tenant ${cible}` })
       .expect(201);
     await completeMfaForRegisteredOwner(reg.body.userId);
     const cookie = reg.headers["set-cookie"]?.[0] ?? "";
-    const { body: me } = await request(app).get("/api/auth/me").set("Cookie", cookie).expect(200);
+    const { body: me } = await request(serveurTest(app)).get("/api/auth/me").set("Cookie", cookie).expect(200);
     if (cible === "A") { cookieOwnerA = cookie; tenantA = me.tenantId; }
     else { cookieOwnerB = cookie; tenantB = me.tenantId; }
     cleanupTenantIds.push(me.tenantId);
@@ -61,7 +61,7 @@ beforeAll(async () => {
   cleanupEmails.push(emailMember);
   const utilisateurMembre = await createTestUser(emailMember);
   await createTestMembership(utilisateurMembre.id, tenantA, "MEMBER");
-  const connexion = await request(app)
+  const connexion = await request(serveurTest(app))
     .post("/api/auth/login")
     .send({ email: emailMember, password: utilisateurMembre.password })
     .expect(200);
@@ -76,7 +76,7 @@ afterAll(async () => {
 
 describe("a — pas encore connecté", () => {
   test("aucune ligne bank_accounts → treasuryBalanceCents est null, pas 0", async () => {
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get("/api/cockpit/kpis")
       .set("Cookie", cookieOwnerB)
       .expect(200);
@@ -88,7 +88,7 @@ describe("b — connecté", () => {
   test("la somme des soldes réels est renvoyée", async () => {
     await connecterBanque(tenantA, [123_456, 78_900]);
 
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get("/api/cockpit/kpis")
       .set("Cookie", cookieOwnerA)
       .expect(200);
@@ -98,7 +98,7 @@ describe("b — connecté", () => {
 
 describe("c — isolation", () => {
   test("le solde du tenant A n'apparaît pas chez le tenant B", async () => {
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get("/api/cockpit/kpis")
       .set("Cookie", cookieOwnerB)
       .expect(200);
@@ -108,7 +108,7 @@ describe("c — isolation", () => {
 
 describe("d — masquage financier", () => {
   test("un MEMBER ne voit jamais le solde, même connecté", async () => {
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get("/api/cockpit/kpis")
       .set("Cookie", cookieMemberA)
       .expect(200);

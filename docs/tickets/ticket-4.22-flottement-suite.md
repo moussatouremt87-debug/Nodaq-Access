@@ -214,3 +214,92 @@ options :
 Les deux autres gestes (Vitest épinglé, config typée) ne se discutent pas : ils
 sont ce qui empêche la prochaine dérive silencieuse, indépendamment du choix
 ci-dessus.
+
+
+---
+
+# La cause, trouvée (2026-08-22)
+
+Trois hypothèses tombent, dont celle que ce dépôt documentait depuis des mois.
+
+## Ce qui a été RÉFUTÉ, par la mesure
+
+**Les ports éphémères ne sont pas épuisés.** Échantillonné pendant une
+exécution complète : le pic atteint **677 sockets en `TIME_WAIT`** sur 16 384
+disponibles. Le chiffrage de ce ticket, qui annonçait ~25 800, était une
+extrapolation jamais vérifiée. C'est aussi l'explication de `CLAUDE.md`.
+
+**Les descripteurs de fichiers** : limite à 1 048 576. Sans objet.
+
+**Les connexions PostgreSQL** : pic à 11, pour un `max_connections` de 100.
+
+**Le partage de serveur entre tests** : j'ai cru tenir la cause en lisant
+`if (!addr) this._server = app.listen(0)` dans supertest — deux requêtes
+concurrentes auraient partagé un serveur, et la première à finir l'aurait fermé
+sous la seconde. Mais le constructeur appelle `http.createServer(app)` **par
+test** : chaque requête a bien son propre serveur.
+
+**La charge seule** : 150 inscriptions séquentielles en isolation, zéro
+`ECONNRESET`.
+
+## La cause : le RECYCLAGE des ports, pas leur épuisement
+
+`request(app)` fabrique un serveur HTTP **neuf à chaque appel**. La suite en
+compte plus de 28 000. Un port tout juste libéré est réattribué à un serveur
+suivant alors qu'un paquet de l'ancienne connexion est encore en vol : la
+nouvelle connexion reçoit un RST, et le client voit `read ECONNRESET`.
+
+Mesuré sur 8 000 requêtes identiques, dans le même processus :
+
+| | ECONNRESET | durée |
+|---|---|---|
+| un serveur par requête | **1** | 4 141 ms |
+| un serveur partagé | **0** | 2 080 ms |
+
+Le partage supprime le défaut **et divise le temps par deux** : le coût, c'était
+la création et la fermeture d'un serveur à chaque requête.
+
+## Le correctif
+
+`serveurTest(app)` dans `helpers.ts` : un serveur par application, mémoïsé.
+845 appels remplacés dans 78 fichiers.
+
+**L'application est un PARAMÈTRE, et ce détail a coûté trois tests.** Une
+première version importait l'app statiquement dans `helpers.ts`. Or plusieurs
+fichiers simulent un module (`vi.mock`) puis chargent l'app par import différé,
+pour éprouver un chemin d'échec : l'import statique chargeait la vraie app
+avant eux, leur serveur ne voyait jamais la simulation, et `avoirs-incident`
+comme `numero-brule` attendaient 500 en recevant 201. Ils passaient au vert en
+n'éprouvant plus rien. La mémoïsation est donc indexée sur l'app elle-même.
+
+**Un second effet, révélateur** : la suite devenue plus rapide a commencé à
+déclencher un limiteur de débit que la lenteur masquait — 20 requêtes par
+minute depuis la même adresse. Il s'est stabilisé une fois le serveur indexé
+par app.
+
+## Le parallélisme est rétabli
+
+La sérialisation posée plus haut reposait sur le diagnostic réfuté. Elle
+coûtait un facteur trois sur la CI (16 minutes) sans rien régler — 3 exécutions
+rouges sur 12 après, contre 2 sur 12 avant. `fileParallelism` repasse à `true` :
+la suite api-server retombe de ~136 s à **~60 s**.
+
+## Mesure après correctif
+
+**13 exécutions consécutives vertes** — 6 en séquentiel, 7 en parallèle —
+contre environ une rouge sur quatre auparavant.
+
+**Ce que ça ne prouve pas.** Avec un taux antérieur de ~25 %, treize
+exécutions propres ont environ 2,4 % de chance d'arriver par hasard. C'est une
+preuve forte, pas une certitude. Et la famille « la ligne n'est pas là »
+(404 sur une route qui existe, 201 devenu 200) n'a **pas** été reproduite depuis
+le correctif : elle est peut-être la même cause vue autrement, peut-être une
+seconde. À rouvrir si elle réapparaît.
+
+## Pourquoi la garde est structurelle
+
+Le taux mesuré est d'environ 1 sur 8 000 requêtes. Un test qui exigerait de
+VOIR un `ECONNRESET` serait lui-même flottant — on remplacerait un défaut
+intermittent par un autre. `serveur-partage.test.ts` vérifie donc la propriété
+stable : aucun fichier ne recrée un serveur par requête, et `helpers.ts`
+n'importe pas l'application.

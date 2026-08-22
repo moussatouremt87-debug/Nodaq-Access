@@ -19,7 +19,7 @@ import request from "supertest";
 import crypto from "node:crypto";
 import app from "../app";
 import { toDateString } from "@nodaq/shared";
-import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner } from "./helpers";
+import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner, serveurTest } from "./helpers";
 
 interface Locataire { cookie: string; tenantId: string }
 
@@ -34,12 +34,12 @@ const ipUnique = (): string => `198.51.100.${(compteurIp++ % 250) + 1}`;
 async function inscrire(nom: string): Promise<Locataire> {
   const email = `prosp-${nom}-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@test.nodaq`;
   cleanupEmails.push(email);
-  const reg = await request(app).post("/api/auth/register")
+  const reg = await request(serveurTest(app)).post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: `Patron ${nom}`, tenantNom: `Tenant ${nom}` })
     .expect(201);
   await completeMfaForRegisteredOwner(reg.body.userId);
   const cookie = reg.headers["set-cookie"]?.[0] ?? "";
-  const { body: me } = await request(app).get("/api/auth/me").set("Cookie", cookie).expect(200);
+  const { body: me } = await request(serveurTest(app)).get("/api/auth/me").set("Cookie", cookie).expect(200);
   cleanupTenantIds.push(me.tenantId);
   return { cookie, tenantId: me.tenantId };
 }
@@ -55,7 +55,7 @@ async function contactAvecBase(
     telephone?: string;
   },
 ): Promise<string> {
-  const { body: c } = await request(app).post("/api/prospection/contacts").set("Cookie", l.cookie)
+  const { body: c } = await request(serveurTest(app)).post("/api/prospection/contacts").set("Cookie", l.cookie)
     .send({
       nom: `Contact ${crypto.randomBytes(3).toString("hex")}`,
       type: opts.type,
@@ -67,7 +67,7 @@ async function contactAvecBase(
     })
     .expect(201);
 
-  await request(app).post(`/api/prospection/contacts/${c.id}/base`).set("Cookie", l.cookie)
+  await request(serveurTest(app)).post(`/api/prospection/contacts/${c.id}/base`).set("Cookie", l.cookie)
     .send({ base: opts.base, source: "registre des permis de construire de la commune X" })
     .expect(201);
 
@@ -82,7 +82,7 @@ async function contactAvecBase(
 }
 
 const envoyer = (l: Locataire, contactId: string, canal: string) =>
-  request(app).post("/api/prospection/envoyer").set("Cookie", l.cookie)
+  request(serveurTest(app)).post("/api/prospection/envoyer").set("Cookie", l.cookie)
     .send({ contactId, canal, objet: "Entretien de gouttières", message: "Bonjour, …" });
 
 beforeAll(async () => {
@@ -99,7 +99,7 @@ afterAll(async () => {
 
 describe("a — le SERVEUR refuse, pas l'interface", () => {
   test("un contact SANS base légale n'est prospectable par aucun canal", async () => {
-    const { body: c } = await request(app).post("/api/prospection/contacts").set("Cookie", a.cookie)
+    const { body: c } = await request(serveurTest(app)).post("/api/prospection/contacts").set("Cookie", a.cookie)
       .send({ nom: "Sans base", type: "PRO", email: "sansbase@example.test" }).expect(201);
 
     for (const canal of ["email", "telephone", "courrier"]) {
@@ -171,7 +171,7 @@ describe("b — embargo : le CORPS ne contient pas les coordonnées", () => {
     const adresse = `rue Unique ${crypto.randomBytes(4).toString("hex")}`;
     await adminPool.query(`UPDATE contacts_prospection SET adresse = $1 WHERE id = $2`, [adresse, id]);
 
-    const { body } = await request(app).get("/api/prospection/contacts")
+    const { body } = await request(serveurTest(app)).get("/api/prospection/contacts")
       .set("Cookie", a.cookie).expect(200);
 
     // On vérifie le CORPS, pas le code HTTP : un champ masqué à l'écran voyage
@@ -196,10 +196,10 @@ describe("b — embargo : le CORPS ne contient pas les coordonnées", () => {
     const id = await contactAvecBase(a, {
       type: "PARTICULIER", base: "INTERET_LEGITIME_PARTICULIER", email,
     });
-    await request(app).post(`/api/prospection/contacts/${id}/informer`)
+    await request(serveurTest(app)).post(`/api/prospection/contacts/${id}/informer`)
       .set("Cookie", a.cookie).expect(200);
 
-    const { body } = await request(app).get("/api/prospection/contacts")
+    const { body } = await request(serveurTest(app)).get("/api/prospection/contacts")
       .set("Cookie", a.cookie).expect(200);
     const c = body.contacts.find((x: { id: string }) => x.id === id);
     expect(c.sousEmbargo).toBe(false);
@@ -212,7 +212,7 @@ describe("b — embargo : le CORPS ne contient pas les coordonnées", () => {
     const id = await contactAvecBase(a, {
       type: "PARTICULIER", base: "INTERET_LEGITIME_PARTICULIER",
     });
-    await request(app).post(`/api/prospection/contacts/${id}/informer`)
+    await request(serveurTest(app)).post(`/api/prospection/contacts/${id}/informer`)
       .set("Cookie", a.cookie).expect(200);
 
     const { rows } = await adminPool.query(
@@ -242,13 +242,13 @@ describe("c — une opposition survit au RÉIMPORT du fichier", () => {
     // On rejoue le jeton depuis l'envoi précédent.
     const envoi = await envoyer(a, premier, "email").expect(200);
     const jeton = String(envoi.body.lienOpposition).split("/").pop()!;
-    await request(app).post(`/api/public/opposition/${jeton}`)
+    await request(serveurTest(app)).post(`/api/public/opposition/${jeton}`)
       .set("X-Forwarded-For", ipUnique()).expect(200);
 
     await envoyer(a, premier, "email").expect(403);
 
     // RÉIMPORT : nouvelle ligne, nouvel identifiant, MÊMES coordonnées.
-    await request(app).post("/api/prospection/importer").set("Cookie", a.cookie)
+    await request(serveurTest(app)).post("/api/prospection/importer").set("Cookie", a.cookie)
       .send({
         source: "fichier prescripteurs 2026-09",
         base: "INTERET_LEGITIME_PRO",
@@ -256,7 +256,7 @@ describe("c — une opposition survit au RÉIMPORT du fichier", () => {
       })
       .expect(201);
 
-    const { body: liste } = await request(app).get("/api/prospection/contacts")
+    const { body: liste } = await request(serveurTest(app)).get("/api/prospection/contacts")
       .set("Cookie", a.cookie).expect(200);
     const reimporte = liste.contacts.find((c: { nom: string }) => c.nom === "Réimporté");
     expect(reimporte, "le contact réimporté doit exister").toBeDefined();
@@ -277,7 +277,7 @@ describe("c — une opposition survit au RÉIMPORT du fichier", () => {
     const chezA = await contactAvecBase(a, { type: "PRO", base: "INTERET_LEGITIME_PRO", email });
     const envoi = await envoyer(a, chezA, "email").expect(200);
     const jeton = String(envoi.body.lienOpposition).split("/").pop()!;
-    await request(app).post(`/api/public/opposition/${jeton}`)
+    await request(serveurTest(app)).post(`/api/public/opposition/${jeton}`)
       .set("X-Forwarded-For", ipUnique()).expect(200);
     await envoyer(a, chezA, "email").expect(403);
 
@@ -286,7 +286,7 @@ describe("c — une opposition survit au RÉIMPORT du fichier", () => {
   });
 
   test("un jeton d'opposition inconnu → 404", async () => {
-    await request(app).post(`/api/public/opposition/${crypto.randomUUID()}`)
+    await request(serveurTest(app)).post(`/api/public/opposition/${crypto.randomUUID()}`)
       .set("X-Forwarded-For", ipUnique()).expect(404);
   });
 });
@@ -298,14 +298,14 @@ describe("d — seuil d'anonymat sur les signaux de zone", () => {
     const t = await inscrire("signaux");
     const poser = async (ville: string, n: number) => {
       for (let i = 0; i < n; i++) {
-        await request(app).post("/api/prospection/contacts").set("Cookie", t.cookie)
+        await request(serveurTest(app)).post("/api/prospection/contacts").set("Cookie", t.cookie)
           .send({ nom: `C${i}`, type: "PRO", ville }).expect(201);
       }
     };
     await poser("Petite-Commune", 4);
     await poser("Grande-Commune", 5);
 
-    const { body } = await request(app).get("/api/prospection/signaux")
+    const { body } = await request(serveurTest(app)).get("/api/prospection/signaux")
       .set("Cookie", t.cookie).expect(200);
 
     const villes = body.signaux.map((s: { ville: string }) => s.ville);
@@ -367,7 +367,7 @@ describe("f — isolation, une table à la fois", () => {
 
   test("le tenant B ne voit aucun contact de A", async () => {
     const idA = await contactAvecBase(a, { type: "PRO", base: "INTERET_LEGITIME_PRO" });
-    const { body } = await request(app).get("/api/prospection/contacts")
+    const { body } = await request(serveurTest(app)).get("/api/prospection/contacts")
       .set("Cookie", b.cookie).expect(200);
     // Sur les IDENTIFIANTS : la ville des fixtures est partagée, et B a le
     // droit d'avoir ses propres contacts à Marly-Gomont.
@@ -472,7 +472,7 @@ describe("h — purge à trois ans, par le PROPRIÉTAIRE", () => {
     // Ce n'est plus de la prospection, c'est la relation client — et sa
     // conservation suit la durée comptable.
     const t = await inscrire("purge-client");
-    const { body: client } = await request(app).post("/api/clients").set("Cookie", t.cookie)
+    const { body: client } = await request(serveurTest(app)).post("/api/clients").set("Cookie", t.cookie)
       .send({ nom: "Dupont SARL", type: "PRO" }).expect(201);
 
     const id = crypto.randomUUID();
@@ -491,7 +491,7 @@ describe("h — purge à trois ans, par le PROPRIÉTAIRE", () => {
 
   test("l'aperçu annonce le nombre, et qui doit lancer la purge", async () => {
     const t = await inscrire("purge-apercu");
-    const { body } = await request(app).get("/api/prospection/purge/apercu")
+    const { body } = await request(serveurTest(app)).get("/api/prospection/purge/apercu")
       .set("Cookie", t.cookie).expect(200);
     expect(body.retentionJours).toBe(3 * 365);
     expect(body.commande).toContain("purger-prospection.mjs");

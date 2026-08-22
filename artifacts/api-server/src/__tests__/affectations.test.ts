@@ -13,7 +13,7 @@
 import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import app from "../app";
-import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner } from "./helpers";
+import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner, serveurTest } from "./helpers";
 
 let cookie: string;
 let tenantId: string;
@@ -26,14 +26,14 @@ const cleanupEmails: string[] = [];
 beforeAll(async () => {
   const email = `affectations-${Date.now()}@test.nodaq`;
   cleanupEmails.push(email);
-  const reg = await request(app)
+  const reg = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: "Chef", tenantNom: "Services Test" })
     .expect(201);
   await completeMfaForRegisteredOwner(reg.body.userId);
   cookie = reg.headers["set-cookie"]?.[0] ?? "";
 
-  const { body: me } = await request(app).get("/api/auth/me").set("Cookie", cookie).expect(200);
+  const { body: me } = await request(serveurTest(app)).get("/api/auth/me").set("Cookie", cookie).expect(200);
   tenantId = me.tenantId;
   cleanupTenantIds.push(tenantId);
 
@@ -68,7 +68,7 @@ const corpsBase = () => ({ membreId, dateDebut: "2020-01-06", dateFin: "2020-01-
 
 describe("a — rattachement AFFAIRE (comportement existant)", () => {
   test("une affectation avec affaireId seul est créée normalement", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/affectations")
       .set("Cookie", cookie)
       .send({ ...corpsBase(), affaireId });
@@ -80,7 +80,7 @@ describe("a — rattachement AFFAIRE (comportement existant)", () => {
 
 describe("b — rattachement CLIENT direct (US-A4.1)", () => {
   test("une affectation avec clientId seul est créée sans affaire", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/affectations")
       .set("Cookie", cookie)
       .send({ ...corpsBase(), clientId });
@@ -90,7 +90,7 @@ describe("b — rattachement CLIENT direct (US-A4.1)", () => {
   });
 
   test("GET /affectations?clientId= filtre sur le rattachement client", async () => {
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get(`/api/affectations?clientId=${clientId}`)
       .set("Cookie", cookie)
       .expect(200);
@@ -101,7 +101,7 @@ describe("b — rattachement CLIENT direct (US-A4.1)", () => {
 
 describe("c — rattachement invalide REFUSÉ", () => {
   test("affaire ET client à la fois → REFUSÉ à la création", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/affectations")
       .set("Cookie", cookie)
       .send({ ...corpsBase(), affaireId, clientId });
@@ -109,12 +109,12 @@ describe("c — rattachement invalide REFUSÉ", () => {
   });
 
   test("ni affaire ni client → REFUSÉ à la création", async () => {
-    const res = await request(app).post("/api/affectations").set("Cookie", cookie).send(corpsBase());
+    const res = await request(serveurTest(app)).post("/api/affectations").set("Cookie", cookie).send(corpsBase());
     expect(res.status).toBe(400);
   });
 
   test("PATCH qui ferait porter les deux rattachements à la fois → REFUSÉ", async () => {
-    const cree = await request(app)
+    const cree = await request(serveurTest(app))
       .post("/api/affectations")
       .set("Cookie", cookie)
       .send({ ...corpsBase(), affaireId })
@@ -123,7 +123,7 @@ describe("c — rattachement invalide REFUSÉ", () => {
     // N'envoie QUE clientId : affaireId n'est pas touché par le corps du
     // patch, donc reste celui déjà enregistré — l'état FUSIONNÉ porterait
     // alors les deux. C'est exactement ce que la route doit refuser.
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .patch(`/api/affectations/${cree.body.id}`)
       .set("Cookie", cookie)
       .send({ clientId });
@@ -133,13 +133,13 @@ describe("c — rattachement invalide REFUSÉ", () => {
 
 describe("d — PATCH bascule le rattachement", () => {
   test("affaire → client : envoyer clientId ET affaireId:null bascule proprement", async () => {
-    const cree = await request(app)
+    const cree = await request(serveurTest(app))
       .post("/api/affectations")
       .set("Cookie", cookie)
       .send({ ...corpsBase(), affaireId })
       .expect(201);
 
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .patch(`/api/affectations/${cree.body.id}`)
       .set("Cookie", cookie)
       .send({ affaireId: null, clientId });
@@ -149,13 +149,13 @@ describe("d — PATCH bascule le rattachement", () => {
   });
 
   test("client → affaire : envoyer affaireId ET clientId:null bascule proprement", async () => {
-    const cree = await request(app)
+    const cree = await request(serveurTest(app))
       .post("/api/affectations")
       .set("Cookie", cookie)
       .send({ ...corpsBase(), clientId })
       .expect(201);
 
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .patch(`/api/affectations/${cree.body.id}`)
       .set("Cookie", cookie)
       .send({ clientId: null, affaireId });

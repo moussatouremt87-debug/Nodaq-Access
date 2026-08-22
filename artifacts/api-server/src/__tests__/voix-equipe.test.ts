@@ -17,7 +17,7 @@ import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import crypto from "node:crypto";
 import app from "../app";
-import { adminPool, cleanupTenants, cleanupUsers, createTestTeamMember, completeMfaForRegisteredOwner } from "./helpers";
+import { adminPool, cleanupTenants, cleanupUsers, createTestTeamMember, completeMfaForRegisteredOwner, serveurTest } from "./helpers";
 
 interface Locataire { cookie: string; tenantId: string }
 
@@ -30,26 +30,26 @@ let b: Locataire;
 async function inscrire(nom: string): Promise<Locataire> {
   const email = `voix-equipe-${nom}-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@test.nodaq`;
   cleanupEmails.push(email);
-  const reg = await request(app)
+  const reg = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: `Patron ${nom}`, tenantNom: `Tenant ${nom}` })
     .expect(201);
   await completeMfaForRegisteredOwner(reg.body.userId);
   const cookie = reg.headers["set-cookie"]?.[0] ?? "";
-  const { body: me } = await request(app).get("/api/auth/me").set("Cookie", cookie).expect(200);
+  const { body: me } = await request(serveurTest(app)).get("/api/auth/me").set("Cookie", cookie).expect(200);
   cleanupTenantIds.push(me.tenantId);
   return { cookie, tenantId: me.tenantId };
 }
 
 const interpreter = (l: Locataire, texte: string) =>
-  request(app).post("/api/voix/interpreter").set("Cookie", l.cookie).send({ texte });
+  request(serveurTest(app)).post("/api/voix/interpreter").set("Cookie", l.cookie).send({ texte });
 
 const executer = (
   l: Locataire,
   planId: string,
   corrections?: Record<number, Record<string, string>>,
 ) =>
-  request(app)
+  request(serveurTest(app))
     .post("/api/voix/executer")
     .set("Cookie", l.cookie)
     .send({ planId, ...(corrections ? { corrections } : {}) });
@@ -249,7 +249,7 @@ describe("f — declare_absence via l'agent de chat", () => {
       `SELECT count(*)::int AS n FROM absences WHERE tenant_id = $1::uuid`, [a.tenantId],
     );
 
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .post("/api/chat/messages")
       .set("Cookie", a.cookie)
       .send({ content: "agent-declare-absence Sophie chat agent est malade" })
@@ -415,7 +415,7 @@ describe("g — l'humain corrige le texte avant que ça s'écrive", () => {
     const { body } = await interpreter(t, "voix-test-client").expect(200);
     expect(body.operations[0].champs.nom).toBe("Menuiserie Delacroix");
 
-    await request(app)
+    await request(serveurTest(app))
       .post("/api/voix/executer")
       .set("Cookie", t.cookie)
       .send({
@@ -443,7 +443,7 @@ describe("g — l'humain corrige le texte avant que ça s'écrive", () => {
 
     const { body } = await interpreter(t, "voix-test-pointage").expect(200);
 
-    const r = await request(app)
+    const r = await request(serveurTest(app))
       .post("/api/voix/executer")
       .set("Cookie", t.cookie)
       .send({ planId: body.planId, corrections: { "0": { affaireId: "affaire-d-un-autre" } } })
@@ -473,7 +473,7 @@ describe("g — l'humain corrige le texte avant que ça s'écrive", () => {
     await affaire(t, "Dupont");
 
     const { body } = await interpreter(t, "voix-test-pointage").expect(200);
-    await request(app)
+    await request(serveurTest(app))
       .post("/api/voix/executer")
       .set("Cookie", t.cookie)
       .send({ planId: body.planId, corrections: { "0": { heures: "8" } } })
@@ -538,7 +538,7 @@ describe("h — enregistrer_reglement, aller-retour complet", () => {
     const { body } = await interpreter(t, "voix-test-reglement-cheque").expect(200);
     expect(body.operations[0].champs.montantCents).toBe("40000");
 
-    await request(app)
+    await request(serveurTest(app))
       .post("/api/voix/executer")
       .set("Cookie", t.cookie)
       .send({ planId: body.planId, corrections: { "0": { montantCents: "15000" } } })
@@ -641,7 +641,7 @@ describe("i — lancer_relance : la voix PRÉPARE, elle ne déclenche pas", () =
 describe("j — facturer_devis emprunte LE module, pas une seconde conversion", () => {
   /** Un devis accepté, créé par la vraie route pour que ses totaux soient justes. */
   async function devisAccepte(l: Locataire, montantCents: number): Promise<{ id: string; ttc: number }> {
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .post("/api/devis")
       .set("Cookie", l.cookie)
       .send({
@@ -680,7 +680,7 @@ describe("j — facturer_devis emprunte LE module, pas une seconde conversion", 
   test("un devis DÉJÀ facturé n'est plus proposé — et on dit pourquoi", async () => {
     const t = await inscrire("facturer-deja");
     const d = await devisAccepte(t, 100000);
-    await request(app).post(`/api/devis/${d.id}/facturer`).set("Cookie", t.cookie).expect(201);
+    await request(serveurTest(app)).post(`/api/devis/${d.id}/facturer`).set("Cookie", t.cookie).expect(201);
 
     const { body } = await interpreter(t, "voix-test-facturer").expect(200);
     expect(body.operations).toHaveLength(0);
@@ -783,7 +783,7 @@ describe("k — un montant que la voix ne porte pas est RÉCLAMÉ, jamais devin�
 
   test("contrat : le client dicté est rapproché d’une fiche existante", async () => {
     const t = await inscrire("contrat-voix");
-    await request(app).post("/api/clients").set("Cookie", t.cookie)
+    await request(serveurTest(app)).post("/api/clients").set("Cookie", t.cookie)
       .send({ nom: "Menuiserie Delacroix" }).expect(201);
 
     const { body } = await interpreter(t, "voix-test-contrat").expect(200);
@@ -886,7 +886,7 @@ describe("l — recopier un montant dit n'est pas le fixer", () => {
 describe("m — le devis dicté : le catalogue chiffre, jamais le modèle", () => {
   /** Une ligne de catalogue, par la vraie route. */
   async function catalogue(l: Locataire, libelle: string, prixCents: number): Promise<void> {
-    await request(app).post("/api/catalogue").set("Cookie", l.cookie)
+    await request(serveurTest(app)).post("/api/catalogue").set("Cookie", l.cookie)
       .send({ libelle, unite: "m2", prixUnitaireHtCents: prixCents, tauxTva: 10 })
       .expect(201);
   }

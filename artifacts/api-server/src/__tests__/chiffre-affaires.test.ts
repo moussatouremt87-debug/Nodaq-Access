@@ -21,7 +21,7 @@ import request from "supertest";
 import crypto from "node:crypto";
 import app from "../app";
 import { toDateString } from "@nodaq/shared";
-import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner } from "./helpers";
+import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner, serveurTest } from "./helpers";
 
 let cookie: string;
 let tenantId: string;
@@ -83,7 +83,7 @@ async function avoir(opts: {
 
 /** Le CA de l'exercice, tel que le cockpit le sert au patron. */
 async function caExercice(): Promise<number> {
-  const { body } = await request(app)
+  const { body } = await request(serveurTest(app))
     .get("/api/cockpit/kpis")
     .set("Cookie", cookie)
     .expect(200);
@@ -93,13 +93,13 @@ async function caExercice(): Promise<number> {
 beforeAll(async () => {
   const email = `ca-${Date.now()}@test.nodaq`;
   cleanupEmails.push(email);
-  const reg = await request(app)
+  const reg = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: "Patron CA", tenantNom: "Tenant CA" })
     .expect(201);
   await completeMfaForRegisteredOwner(reg.body.userId);
   cookie = reg.headers["set-cookie"]?.[0] ?? "";
-  const { body: me } = await request(app).get("/api/auth/me").set("Cookie", cookie).expect(200);
+  const { body: me } = await request(serveurTest(app)).get("/api/auth/me").set("Cookie", cookie).expect(200);
   tenantId = me.tenantId;
   cleanupTenantIds.push(tenantId);
 }, 90_000);
@@ -281,7 +281,7 @@ describe("les objectifs du cockpit lisent le MÊME chiffre d'affaires", () => {
     const f = await facture({ issuedDate: aujourdhui, amountCents: 1_000_000 });
 
     const lire = async (): Promise<{ ecartCents: number; caExerciceCents: number }> => {
-      const { body } = await request(app)
+      const { body } = await request(serveurTest(app))
         .get("/api/cockpit/objectifs")
         .set("Cookie", cookie)
         .expect(200);
@@ -310,7 +310,7 @@ describe("les objectifs du cockpit lisent le MÊME chiffre d'affaires", () => {
     await facture({ issuedDate: `${anneeCourante - 1}-01-15`, amountCents: 2_000_000 });
     await facture({ issuedDate: aujourdhui, amountCents: 900_000, statut: "BROUILLON" });
 
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get("/api/cockpit/objectifs")
       .set("Cookie", cookie)
       .expect(200);

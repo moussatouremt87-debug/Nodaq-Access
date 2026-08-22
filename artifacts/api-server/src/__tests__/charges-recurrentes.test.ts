@@ -19,6 +19,7 @@ import {
   cookieHeader,
   cleanupTenants,
   cleanupUsers,
+  serveurTest,
 } from "./helpers";
 
 let cookieOwner: string;
@@ -58,7 +59,7 @@ afterAll(async () => {
 
 describe("a — CRUD complet", () => {
   test("POST crée, GET liste, PATCH met à jour, DELETE supprime", async () => {
-    const res1 = await request(app)
+    const res1 = await request(serveurTest(app))
       .post("/api/charges-recurrentes")
       .set("Cookie", cookieOwner)
       .send({ label: "Loyer atelier", category: "LOYER", cadence: "mensuel", startDate: "2026-08-05", amountCents: 80_000 });
@@ -66,11 +67,11 @@ describe("a — CRUD complet", () => {
     expect(res1.body.active).toBe(true);
     const id = res1.body.id;
 
-    const res2 = await request(app).get("/api/charges-recurrentes").set("Cookie", cookieOwner);
+    const res2 = await request(serveurTest(app)).get("/api/charges-recurrentes").set("Cookie", cookieOwner);
     expect(res2.status).toBe(200);
     expect(res2.body.find((c: { id: string }) => c.id === id)).toBeDefined();
 
-    const res3 = await request(app)
+    const res3 = await request(serveurTest(app))
       .patch(`/api/charges-recurrentes/${id}`)
       .set("Cookie", cookieOwner)
       .send({ amountCents: 85_000, active: false });
@@ -78,24 +79,24 @@ describe("a — CRUD complet", () => {
     expect(res3.body.amountCents).toBe(85_000);
     expect(res3.body.active).toBe(false);
 
-    const res4 = await request(app).get("/api/charges-recurrentes?active=false").set("Cookie", cookieOwner);
+    const res4 = await request(serveurTest(app)).get("/api/charges-recurrentes?active=false").set("Cookie", cookieOwner);
     expect(res4.body.find((c: { id: string }) => c.id === id)).toBeDefined();
 
-    const res5 = await request(app).delete(`/api/charges-recurrentes/${id}`).set("Cookie", cookieOwner);
+    const res5 = await request(serveurTest(app)).delete(`/api/charges-recurrentes/${id}`).set("Cookie", cookieOwner);
     expect(res5.status).toBe(204);
 
-    const res6 = await request(app).get("/api/charges-recurrentes").set("Cookie", cookieOwner);
+    const res6 = await request(serveurTest(app)).get("/api/charges-recurrentes").set("Cookie", cookieOwner);
     expect(res6.body.find((c: { id: string }) => c.id === id)).toBeUndefined();
   });
 
   test("PATCH/DELETE sur un id inexistant → 404", async () => {
-    const resPatch = await request(app)
+    const resPatch = await request(serveurTest(app))
       .patch("/api/charges-recurrentes/00000000-0000-0000-0000-000000000000")
       .set("Cookie", cookieOwner)
       .send({ amountCents: 1 });
     expect(resPatch.status).toBe(404);
 
-    const resDelete = await request(app)
+    const resDelete = await request(serveurTest(app))
       .delete("/api/charges-recurrentes/00000000-0000-0000-0000-000000000000")
       .set("Cookie", cookieOwner);
     expect(resDelete.status).toBe(404);
@@ -104,7 +105,7 @@ describe("a — CRUD complet", () => {
 
 describe("b — validation Zod", () => {
   test("cadence absente → 400, rien n'est créé", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/charges-recurrentes")
       .set("Cookie", cookieOwner)
       .send({ label: "Sans cadence", category: "AUTRE", startDate: "2026-08-05", amountCents: 1_000 });
@@ -112,7 +113,7 @@ describe("b — validation Zod", () => {
   });
 
   test("label vide → 400", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/charges-recurrentes")
       .set("Cookie", cookieOwner)
       .send({ label: "", category: "AUTRE", cadence: "mensuel", startDate: "2026-08-05", amountCents: 1_000 });
@@ -122,10 +123,10 @@ describe("b — validation Zod", () => {
 
 describe("c — financierOnly", () => {
   test("MEMBER → 403 sur toutes les routes", async () => {
-    const resGet = await request(app).get("/api/charges-recurrentes").set("Cookie", cookieMember);
+    const resGet = await request(serveurTest(app)).get("/api/charges-recurrentes").set("Cookie", cookieMember);
     expect(resGet.status).toBe(403);
 
-    const resPost = await request(app)
+    const resPost = await request(serveurTest(app))
       .post("/api/charges-recurrentes")
       .set("Cookie", cookieMember)
       .send({ label: "x", category: "AUTRE", cadence: "mensuel", startDate: "2026-08-05", amountCents: 1_000 });
@@ -135,12 +136,12 @@ describe("c — financierOnly", () => {
 
 describe("d — isolation par tenant", () => {
   test("le tenant B ne voit pas les charges du tenant A", async () => {
-    await request(app)
+    await request(serveurTest(app))
       .post("/api/charges-recurrentes")
       .set("Cookie", cookieOwner)
       .send({ label: "Charge tenant A", category: "AUTRE", cadence: "mensuel", startDate: "2026-08-05", amountCents: 5_000 });
 
-    const res = await request(app).get("/api/charges-recurrentes").set("Cookie", cookieOwnerB);
+    const res = await request(serveurTest(app)).get("/api/charges-recurrentes").set("Cookie", cookieOwnerB);
     expect(res.status).toBe(200);
     expect(res.body.find((c: { label: string }) => c.label === "Charge tenant A")).toBeUndefined();
   });

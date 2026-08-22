@@ -16,7 +16,7 @@ import request from "supertest";
 import crypto from "node:crypto";
 import app from "../app";
 import { toDateString } from "@nodaq/shared";
-import { adminPool, cleanupTenants, cleanupUsers, createTestTeamMember, completeMfaForRegisteredOwner } from "./helpers";
+import { adminPool, cleanupTenants, cleanupUsers, createTestTeamMember, completeMfaForRegisteredOwner, serveurTest } from "./helpers";
 
 interface Locataire { cookie: string; tenantId: string }
 
@@ -29,13 +29,13 @@ let b: Locataire;
 async function inscrire(nom: string): Promise<Locataire> {
   const email = `socle-${nom}-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@test.nodaq`;
   cleanupEmails.push(email);
-  const reg = await request(app)
+  const reg = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: `Patron ${nom}`, tenantNom: `Tenant ${nom}` })
     .expect(201);
   await completeMfaForRegisteredOwner(reg.body.userId);
   const cookie = reg.headers["set-cookie"]?.[0] ?? "";
-  const { body: me } = await request(app).get("/api/auth/me").set("Cookie", cookie).expect(200);
+  const { body: me } = await request(serveurTest(app)).get("/api/auth/me").set("Cookie", cookie).expect(200);
   cleanupTenantIds.push(me.tenantId);
   return { cookie, tenantId: me.tenantId };
 }
@@ -171,7 +171,7 @@ describe("b — paiement partiel", () => {
   test("10 000 € facturés, 3 000 € encaissés → EMISE, reste dû 7 000 €", async () => {
     const f = await factureEmise(a, 1_000_000);
 
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .post("/api/paiements")
       .set("Cookie", a.cookie)
       .send({ factureId: f, montantCents: 300_000, moyen: "VIREMENT", nature: "ACOMPTE" })
@@ -189,9 +189,9 @@ describe("b — paiement partiel", () => {
 
   test("le solde de 7 000 € fait passer la facture en PAYEE", async () => {
     const f = await factureEmise(a, 1_000_000);
-    await request(app).post("/api/paiements").set("Cookie", a.cookie)
+    await request(serveurTest(app)).post("/api/paiements").set("Cookie", a.cookie)
       .send({ factureId: f, montantCents: 300_000 }).expect(201);
-    const { body } = await request(app).post("/api/paiements").set("Cookie", a.cookie)
+    const { body } = await request(serveurTest(app)).post("/api/paiements").set("Cookie", a.cookie)
       .send({ factureId: f, montantCents: 700_000, nature: "SOLDE" }).expect(201);
 
     expect(body.facture.resteDuCents).toBe(0);
@@ -208,7 +208,7 @@ describe("b — paiement partiel", () => {
     // Deux façons d'écrire le même fait, ce sont deux façons de le rendre
     // faux : cette route ne doit plus poser l'état à la main.
     const f = await factureEmise(a, 500_000);
-    await request(app).post(`/api/factures/${f}/payer`).set("Cookie", a.cookie).expect(200);
+    await request(serveurTest(app)).post(`/api/factures/${f}/payer`).set("Cookie", a.cookie).expect(200);
 
     const { rows } = await adminPool.query(
       `SELECT montant_cents, nature FROM paiements WHERE facture_id = $1`, [f],
@@ -224,9 +224,9 @@ describe("b — paiement partiel", () => {
 
   test("après un acompte, « payer » n'encaisse que le RESTE dû", async () => {
     const f = await factureEmise(a, 1_000_000);
-    await request(app).post("/api/paiements").set("Cookie", a.cookie)
+    await request(serveurTest(app)).post("/api/paiements").set("Cookie", a.cookie)
       .send({ factureId: f, montantCents: 400_000, nature: "ACOMPTE" }).expect(201);
-    await request(app).post(`/api/factures/${f}/payer`).set("Cookie", a.cookie).expect(200);
+    await request(serveurTest(app)).post(`/api/factures/${f}/payer`).set("Cookie", a.cookie).expect(200);
 
     const { rows } = await adminPool.query(
       `SELECT coalesce(sum(montant_cents),0)::int AS total FROM paiements WHERE facture_id = $1`, [f],
@@ -241,13 +241,13 @@ describe("b — paiement partiel", () => {
 describe("c — acompte encaissé avant toute facture", () => {
   test("`factureId` nul, `affaireId` renseigné : accepté et visible", async () => {
     const aff = await affaire(a, "Carrelage Dupont");
-    await request(app)
+    await request(serveurTest(app))
       .post("/api/paiements")
       .set("Cookie", a.cookie)
       .send({ affaireId: aff, montantCents: 250_000, nature: "ACOMPTE", moyen: "CHEQUE" })
       .expect(201);
 
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get(`/api/affaires/${aff}/encaisse`)
       .set("Cookie", a.cookie)
       .expect(200);
@@ -256,12 +256,12 @@ describe("c — acompte encaissé avant toute facture", () => {
 
   test("un remboursement se retranche du total encaissé", async () => {
     const aff = await affaire(a, "Chantier remboursé");
-    await request(app).post("/api/paiements").set("Cookie", a.cookie)
+    await request(serveurTest(app)).post("/api/paiements").set("Cookie", a.cookie)
       .send({ affaireId: aff, montantCents: 100_000 }).expect(201);
-    await request(app).post("/api/paiements").set("Cookie", a.cookie)
+    await request(serveurTest(app)).post("/api/paiements").set("Cookie", a.cookie)
       .send({ affaireId: aff, montantCents: 30_000, sens: "REMBOURSEMENT" }).expect(201);
 
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get(`/api/affaires/${aff}/encaisse`).set("Cookie", a.cookie).expect(200);
     expect(body.encaisseCents).toBe(70_000);
   });
@@ -271,13 +271,13 @@ describe("c — acompte encaissé avant toute facture", () => {
 
 describe("d — le texte est un instantané, `client_id` est le lien", () => {
   test("renommer la fiche ne réécrit pas une facture émise", async () => {
-    const { body: client } = await request(app)
+    const { body: client } = await request(serveurTest(app))
       .post("/api/clients").set("Cookie", a.cookie)
       .send({ nom: "Dupont SARL", type: "PRO" }).expect(201);
 
     const f = await factureEmise(a, 100_000, "Dupont SARL", client.id);
 
-    await request(app)
+    await request(serveurTest(app))
       .patch(`/api/clients/${client.id}`).set("Cookie", a.cookie)
       .send({ nom: "Dupont & Fils" }).expect(200);
 
@@ -290,23 +290,23 @@ describe("d — le texte est un instantané, `client_id` est le lien", () => {
     // Et le lien, lui, pointe bien sur la fiche renommée.
     expect(rows[0].client_id).toBe(client.id);
 
-    const { body: fiche } = await request(app)
+    const { body: fiche } = await request(serveurTest(app))
       .get(`/api/clients/${client.id}`).set("Cookie", a.cookie).expect(200);
     expect(fiche.nom).toBe("Dupont & Fils");
   });
 
   test("la recherche ignore accents et casse", async () => {
-    await request(app).post("/api/clients").set("Cookie", a.cookie)
+    await request(serveurTest(app)).post("/api/clients").set("Cookie", a.cookie)
       .send({ nom: "Génin Père et Fils" }).expect(201);
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get("/api/clients/rechercher?q=GENIN").set("Cookie", a.cookie).expect(200);
     expect(body.clients.some((c: { nom: string }) => c.nom === "Génin Père et Fils")).toBe(true);
   });
 
   test("deux clients peuvent porter le même nom", async () => {
-    await request(app).post("/api/clients").set("Cookie", a.cookie).send({ nom: "Dupont" }).expect(201);
-    await request(app).post("/api/clients").set("Cookie", a.cookie).send({ nom: "Dupont" }).expect(201);
-    const { body } = await request(app)
+    await request(serveurTest(app)).post("/api/clients").set("Cookie", a.cookie).send({ nom: "Dupont" }).expect(201);
+    await request(serveurTest(app)).post("/api/clients").set("Cookie", a.cookie).send({ nom: "Dupont" }).expect(201);
+    const { body } = await request(serveurTest(app))
       .get("/api/clients/rechercher?q=dupont").set("Cookie", a.cookie).expect(200);
     expect(body.clients.filter((c: { nom: string }) => c.nom === "Dupont").length).toBeGreaterThanOrEqual(2);
   });
@@ -320,7 +320,7 @@ describe("e — une heure PRÉVUE n'entre dans aucune marge", () => {
     const membre = await createTestTeamMember(a.tenantId, "Thomas");
     const lundi = toDateString(new Date());
 
-    await request(app)
+    await request(serveurTest(app))
       .post("/api/affectations").set("Cookie", a.cookie)
       .send({
         affaireId: aff, membreId: membre.id,
@@ -335,7 +335,7 @@ describe("e — une heure PRÉVUE n'entre dans aucune marge", () => {
     );
     expect(rows[0].n).toBe(0);
 
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get(`/api/marge/${aff}`).set("Cookie", a.cookie);
     if (body && typeof body === "object" && "labourCents" in body) {
       expect(body.labourCents).toBe(0);
@@ -351,11 +351,11 @@ describe("e — une heure PRÉVUE n'entre dans aucune marge", () => {
     // par défaut, ce qui exclurait cette affectation un samedi/dimanche.
     const jour = prochainMardi();
 
-    await request(app).post("/api/affectations").set("Cookie", a.cookie)
+    await request(serveurTest(app)).post("/api/affectations").set("Cookie", a.cookie)
       .send({ affaireId: aff, membreId: membre.id, dateDebut: jour, dateFin: jour, heuresParJour: 6 })
       .expect(201);
 
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get(`/api/pointages/recapitulatif-semaine?date=${jour}`)
       .set("Cookie", a.cookie)
       .expect(200);
@@ -385,7 +385,7 @@ describe("e — une heure PRÉVUE n'entre dans aucune marge", () => {
     const aff = await affaire(a, "Chantier week-end");
     const membre = await createTestTeamMember(a.tenantId, "Samia");
 
-    await request(app).post("/api/affectations").set("Cookie", a.cookie)
+    await request(serveurTest(app)).post("/api/affectations").set("Cookie", a.cookie)
       .send({
         affaireId: aff, membreId: membre.id,
         dateDebut: jourSamedi, dateFin: jourSamedi, heuresParJour: 5,
@@ -393,7 +393,7 @@ describe("e — une heure PRÉVUE n'entre dans aucune marge", () => {
       })
       .expect(201);
 
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get(`/api/pointages/recapitulatif-semaine?date=${jourSamedi}`)
       .set("Cookie", a.cookie)
       .expect(200);
@@ -415,11 +415,11 @@ describe("e — une heure PRÉVUE n'entre dans aucune marge", () => {
     const aff = await affaire(a, "Chantier semaine seulement");
     const membre = await createTestTeamMember(a.tenantId, "Karim");
 
-    await request(app).post("/api/affectations").set("Cookie", a.cookie)
+    await request(serveurTest(app)).post("/api/affectations").set("Cookie", a.cookie)
       .send({ affaireId: aff, membreId: membre.id, dateDebut: jourSamedi, dateFin: jourSamedi, heuresParJour: 5 })
       .expect(201);
 
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get(`/api/pointages/recapitulatif-semaine?date=${jourSamedi}`)
       .set("Cookie", a.cookie)
       .expect(200);
@@ -438,7 +438,7 @@ describe("f — bornes de période, en dates métier", () => {
   test("`date_fin` avant `date_debut` → 400", async () => {
     const aff = await affaire(a);
     const membre = await createTestTeamMember(a.tenantId, "Borne");
-    await request(app)
+    await request(serveurTest(app))
       .post("/api/affectations").set("Cookie", a.cookie)
       .send({
         affaireId: aff, membreId: membre.id,
@@ -450,7 +450,7 @@ describe("f — bornes de période, en dates métier", () => {
   test("un PATCH qui rendrait la période incohérente est refusé", async () => {
     const aff = await affaire(a);
     const membre = await createTestTeamMember(a.tenantId, "Patch");
-    const { body: cree } = await request(app)
+    const { body: cree } = await request(serveurTest(app))
       .post("/api/affectations").set("Cookie", a.cookie)
       .send({
         affaireId: aff, membreId: membre.id,
@@ -459,7 +459,7 @@ describe("f — bornes de période, en dates métier", () => {
       .expect(201);
 
     // Seule `dateFin` change : le contrôle doit porter sur la valeur FINALE.
-    await request(app)
+    await request(serveurTest(app))
       .patch(`/api/affectations/${cree.id}`).set("Cookie", a.cookie)
       .send({ dateFin: "2026-08-01" })
       .expect(400);
@@ -470,7 +470,7 @@ describe("f — bornes de période, en dates métier", () => {
     // métier passée par `toISOString` reviendrait décalée d'un jour.
     const aff = await affaire(a);
     const membre = await createTestTeamMember(a.tenantId, "Fuseau");
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .post("/api/affectations").set("Cookie", a.cookie)
       .send({
         affaireId: aff, membreId: membre.id,
@@ -480,7 +480,7 @@ describe("f — bornes de période, en dates métier", () => {
     expect(body.dateDebut).toBe("2026-08-27");
     expect(body.dateFin).toBe("2026-09-27");
 
-    const { body: relu } = await request(app)
+    const { body: relu } = await request(serveurTest(app))
       .get(`/api/affectations/${body.id}`).set("Cookie", a.cookie).expect(200);
     expect(relu.dateDebut).toBe("2026-08-27");
     expect(relu.dateFin).toBe("2026-09-27");
@@ -489,14 +489,14 @@ describe("f — bornes de période, en dates métier", () => {
   test("une période est retenue si elle RECOUVRE la fenêtre, pas seulement si elle y commence", async () => {
     const aff = await affaire(a);
     const membre = await createTestTeamMember(a.tenantId, "Recouvrement");
-    await request(app).post("/api/affectations").set("Cookie", a.cookie)
+    await request(serveurTest(app)).post("/api/affectations").set("Cookie", a.cookie)
       .send({
         affaireId: aff, membreId: membre.id,
         dateDebut: "2026-08-27", dateFin: "2026-09-27", heuresParJour: 7,
       }).expect(201);
 
     // Fenêtre entièrement à l'intérieur de l'affectation.
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get("/api/affectations?debut=2026-09-01&fin=2026-09-07")
       .set("Cookie", a.cookie).expect(200);
     expect(body.affectations.some((x: { affaireId: string }) => x.affaireId === aff)).toBe(true);
@@ -504,7 +504,7 @@ describe("f — bornes de période, en dates métier", () => {
 
   test("une date de paiement non fournie prend le jour LOCAL", async () => {
     const aff = await affaire(a);
-    const { body } = await request(app).post("/api/paiements").set("Cookie", a.cookie)
+    const { body } = await request(serveurTest(app)).post("/api/paiements").set("Cookie", a.cookie)
       .send({ affaireId: aff, montantCents: 1000 }).expect(201);
     expect(body.paiement.date).toBe(toDateString(new Date()));
   });
@@ -514,29 +514,29 @@ describe("f — bornes de période, en dates métier", () => {
 
 describe("g — isolation, une table à la fois", () => {
   test("le tenant B ne voit pas les clients de A", async () => {
-    await request(app).post("/api/clients").set("Cookie", a.cookie)
+    await request(serveurTest(app)).post("/api/clients").set("Cookie", a.cookie)
       .send({ nom: "Client secret de A" }).expect(201);
-    const { body } = await request(app).get("/api/clients").set("Cookie", b.cookie).expect(200);
+    const { body } = await request(serveurTest(app)).get("/api/clients").set("Cookie", b.cookie).expect(200);
     expect(body.clients.some((c: { nom: string }) => c.nom === "Client secret de A")).toBe(false);
   });
 
   test("le tenant B ne voit pas les paiements de A", async () => {
     const f = await factureEmise(a, 100_000);
-    await request(app).post("/api/paiements").set("Cookie", a.cookie)
+    await request(serveurTest(app)).post("/api/paiements").set("Cookie", a.cookie)
       .send({ factureId: f, montantCents: 50_000, reference: "REF-SECRETE-A" }).expect(201);
-    const { body } = await request(app).get("/api/paiements").set("Cookie", b.cookie).expect(200);
+    const { body } = await request(serveurTest(app)).get("/api/paiements").set("Cookie", b.cookie).expect(200);
     expect(JSON.stringify(body)).not.toContain("REF-SECRETE-A");
   });
 
   test("le tenant B ne voit pas les affectations de A", async () => {
     const aff = await affaire(a, "Chantier confidentiel");
     const membre = await createTestTeamMember(a.tenantId, "Isolé");
-    await request(app).post("/api/affectations").set("Cookie", a.cookie)
+    await request(serveurTest(app)).post("/api/affectations").set("Cookie", a.cookie)
       .send({
         affaireId: aff, membreId: membre.id,
         dateDebut: "2026-08-27", dateFin: "2026-08-28", heuresParJour: 7,
       }).expect(201);
-    const { body } = await request(app).get("/api/affectations").set("Cookie", b.cookie).expect(200);
+    const { body } = await request(serveurTest(app)).get("/api/affectations").set("Cookie", b.cookie).expect(200);
     expect(body.affectations.some((x: { affaireId: string }) => x.affaireId === aff)).toBe(false);
   });
 

@@ -17,7 +17,7 @@ import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import crypto from "node:crypto";
 import app from "../app";
-import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner } from "./helpers";
+import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner, serveurTest } from "./helpers";
 
 const tenantIds: string[] = [];
 const emails: string[] = [];
@@ -30,7 +30,7 @@ async function devis(options: {
   remise?: number;
   statut?: string;
 }): Promise<{ id: string; totalTTCCents: number }> {
-  const { body } = await request(app)
+  const { body } = await request(serveurTest(app))
     .post("/api/devis")
     .set("Cookie", cookie)
     .send({
@@ -48,12 +48,12 @@ async function devis(options: {
 }
 
 const facturer = (id: string) =>
-  request(app).post(`/api/devis/${id}/facturer`).set("Cookie", cookie);
+  request(serveurTest(app)).post(`/api/devis/${id}/facturer`).set("Cookie", cookie);
 
 beforeAll(async () => {
   const email = `facturer-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@test.nodaq`;
   emails.push(email);
-  const reg = await request(app)
+  const reg = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: "Patron", tenantNom: "Facturer SARL" })
     .expect(201);

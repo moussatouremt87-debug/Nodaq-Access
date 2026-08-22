@@ -41,6 +41,7 @@ import {
   cleanupUsers,
   completeMfaForRegisteredOwner,
   texteBrut,
+  serveurTest,
 } from "./helpers";
 
 const tenantIds: string[] = [];
@@ -67,12 +68,12 @@ async function avecLlmBaseUrl<T>(url: string | undefined, action: () => Promise<
 }
 
 const demanderAttestation = (cookie: string) =>
-  request(app).get("/api/souverainete/attestation").set("Cookie", cookie);
+  request(serveurTest(app)).get("/api/souverainete/attestation").set("Cookie", cookie);
 
 beforeAll(async () => {
   const email = `a74-owner-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@test.nodaq`;
   emails.push(email);
-  const reg = await request(app)
+  const reg = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({
       email,

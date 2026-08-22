@@ -29,6 +29,7 @@ import {
   createTestSession,
   cleanupTenants,
   cleanupUsers,
+  serveurTest,
 } from "./helpers";
 
 const tenantIds: string[] = [];
@@ -80,14 +81,14 @@ describe("a — AC2 : l'accès se ferme à l'échéance, sans geste le jour venu
     const saisonnier = await creerMembre("MEMBER", "saisonnier");
 
     // Programmée pour dans un mois : rien ne change aujourd'hui.
-    const prog = await request(app)
+    const prog = await request(serveurTest(app))
       .patch(`/api/membres/${saisonnier.membershipId}/echeance`)
       .set("Cookie", ownerCookie)
       .send({ expiresAt: new Date(Date.now() + 30 * 86_400_000).toISOString() })
       .expect(200);
     expect(prog.body.expiresAt).toBeTruthy();
 
-    const avant = await request(app).get("/api/cockpit/kpis").set("Cookie", saisonnier.cookie);
+    const avant = await request(serveurTest(app)).get("/api/cockpit/kpis").set("Cookie", saisonnier.cookie);
     expect(avant.status).toBe(200);
 
     // Le jour venu — simulé en base, exactement comme le temps le ferait.
@@ -97,14 +98,14 @@ describe("a — AC2 : l'accès se ferme à l'échéance, sans geste le jour venu
       [saisonnier.membershipId],
     );
 
-    const apres = await request(app).get("/api/cockpit/kpis").set("Cookie", saisonnier.cookie);
+    const apres = await request(serveurTest(app)).get("/api/cockpit/kpis").set("Cookie", saisonnier.cookie);
     expect(apres.status).toBe(403);
     expect(apres.body.error).toMatch(/expir/i);
   });
 
   test("une date déjà passée est refusée — on programme, on ne rétrodate pas", async () => {
     const m = await creerMembre("MEMBER", "retro");
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .patch(`/api/membres/${m.membershipId}/echeance`)
       .set("Cookie", ownerCookie)
       .send({ expiresAt: new Date(Date.now() - 86_400_000).toISOString() });
@@ -114,7 +115,7 @@ describe("a — AC2 : l'accès se ferme à l'échéance, sans geste le jour venu
   test("l'échéance se repousse — un contrat prolongé ne demande pas de réinviter", async () => {
     const m = await creerMembre("MEMBER", "prolonge", new Date(Date.now() + 86_400_000));
     const nouvelle = new Date(Date.now() + 60 * 86_400_000);
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .patch(`/api/membres/${m.membershipId}/echeance`)
       .set("Cookie", ownerCookie)
       .send({ expiresAt: nouvelle.toISOString() })
@@ -124,7 +125,7 @@ describe("a — AC2 : l'accès se ferme à l'échéance, sans geste le jour venu
 
   test("l'échéance se retire pour un salarié qui devient permanent", async () => {
     const m = await creerMembre("MEMBER", "permanent", new Date(Date.now() + 86_400_000));
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .patch(`/api/membres/${m.membershipId}/echeance`)
       .set("Cookie", ownerCookie)
       .send({ expiresAt: null })
@@ -139,7 +140,7 @@ describe("b — AC1 : la saisonnalité n'impose aucune étape de plus", () => {
   test("inviter un MEMBER sans date reste possible", async () => {
     const email = `a73-invite-sans-date-${Date.now()}@test.nodaq`;
     emails.push(email);
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/membres/inviter")
       .set("Cookie", ownerCookie)
       .send({ email, role: "MEMBER" });
@@ -152,7 +153,7 @@ describe("b — AC1 : la saisonnalité n'impose aucune étape de plus", () => {
     const email = `a73-invite-avec-date-${Date.now()}@test.nodaq`;
     emails.push(email);
     const echeance = new Date(Date.now() + 90 * 86_400_000);
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/membres/inviter")
       .set("Cookie", ownerCookie)
       .send({ email, role: "MEMBER", accesExpireAt: echeance.toISOString() })
@@ -181,7 +182,7 @@ describe("c — un propriétaire unique ne peut pas programmer sa propre sortie"
     const cookie = cookieHeader(session.id);
     const seulOwnerId = rows[0]!.id;
 
-    const refus = await request(app)
+    const refus = await request(serveurTest(app))
       .patch(`/api/membres/${seulOwnerId}/echeance`)
       .set("Cookie", cookie)
       .send({ expiresAt: new Date(Date.now() + 86_400_000).toISOString() });
@@ -194,7 +195,7 @@ describe("c — un propriétaire unique ne peut pas programmer sa propre sortie"
     const user2 = await createTestUser(email2);
     await createTestMembership(user2.id, t.id, "OWNER");
 
-    const ok = await request(app)
+    const ok = await request(serveurTest(app))
       .patch(`/api/membres/${seulOwnerId}/echeance`)
       .set("Cookie", cookie)
       .send({ expiresAt: new Date(Date.now() + 86_400_000).toISOString() });
@@ -207,7 +208,7 @@ describe("c — un propriétaire unique ne peut pas programmer sa propre sortie"
 describe("d — les garanties du tiers de confiance survivent", () => {
   test("retirer l'échéance d'un VIEWER → 403", async () => {
     const v = await creerMembre("VIEWER", "tiers", new Date(Date.now() + 86_400_000));
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .patch(`/api/membres/${v.membershipId}/echeance`)
       .set("Cookie", ownerCookie)
       .send({ expiresAt: null });
@@ -218,7 +219,7 @@ describe("d — les garanties du tiers de confiance survivent", () => {
   test("inviter un VIEWER sans date reste refusé", async () => {
     const email = `a73-viewer-sans-date-${Date.now()}@test.nodaq`;
     emails.push(email);
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/membres/inviter")
       .set("Cookie", ownerCookie)
       .send({ email, role: "VIEWER" });
@@ -246,7 +247,7 @@ describe("e — AC3 : le volume ne fait sauter aucune étape de sécurité", () 
     }
 
     for (const [i, m] of membres.entries()) {
-      const res = await request(app).get("/api/cockpit/kpis").set("Cookie", m.cookie);
+      const res = await request(serveurTest(app)).get("/api/cockpit/kpis").set("Cookie", m.cookie);
       if (i % 2 === 0) {
         expect(res.status, `le membre ${i} est expiré, il ne doit pas passer`).toBe(403);
       } else {

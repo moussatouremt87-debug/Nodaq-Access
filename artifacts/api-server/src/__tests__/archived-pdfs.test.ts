@@ -20,6 +20,7 @@ import {
   cleanupTenants,
   cleanupUsers,
   completeMfaForRegisteredOwner,
+  serveurTest,
 } from "./helpers";
 
 // ── Shared fixtures ───────────────────────────────────────────────────────────
@@ -30,7 +31,7 @@ const cleanupTenantIds: string[] = [];
 const cleanupEmails: string[] = [];
 
 async function createBrouillon(cookie: string) {
-  const res = await request(app)
+  const res = await request(serveurTest(app))
     .post("/api/factures")
     .set("Cookie", cookie)
     .send({
@@ -46,7 +47,7 @@ async function createBrouillon(cookie: string) {
 }
 
 function emettre(cookie: string, id: string) {
-  return request(app)
+  return request(serveurTest(app))
     .post(`/api/factures/${id}/emettre`)
     .set("Cookie", cookie)
     .send({ issuedDate: "2026-08-01", dueDate: "2026-09-01" });
@@ -56,19 +57,19 @@ beforeAll(async () => {
   const emailA = `archived-pdf-${Date.now()}@test.nodaq`;
   cleanupEmails.push(emailA);
 
-  const regA = await request(app)
+  const regA = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email: emailA, password: "test-pass-1234", nom: "Owner PDF", tenantNom: "Corp PDF" })
     .expect(201);
   await completeMfaForRegisteredOwner(regA.body.userId);
   cookieA = regA.headers["set-cookie"]?.[0] ?? "";
 
-  const { body: me } = await request(app).get("/api/auth/me").set("Cookie", cookieA).expect(200);
+  const { body: me } = await request(serveurTest(app)).get("/api/auth/me").set("Cookie", cookieA).expect(200);
   tenantAId = me.tenantId;
   cleanupTenantIds.push(tenantAId);
 
   // Seed SIRET + nom so mandatory-mention audit passes and PDF can be generated
-  await request(app)
+  await request(serveurTest(app))
     .patch("/api/parametres")
     .set("Cookie", cookieA)
     .send({ "company.siret": "81234567600009", "company.raison_sociale": "PDF Corp SARL" })
@@ -100,7 +101,7 @@ describe("① PDF servi depuis la base après suppression du répertoire de stoc
     fs.rmSync(storageDir, { recursive: true, force: true });
 
     // PDF must still be served — bytes come from the DB, not the disk
-    const pdfRes = await request(app)
+    const pdfRes = await request(serveurTest(app))
       .get(`/api/factures/${id}/pdf`)
       .set("Cookie", cookieA)
       .expect(200);
@@ -128,7 +129,7 @@ describe("② GET /factures ne renvoie pas les octets PDF", () => {
       ),
     );
 
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .get("/api/factures")
       .set("Cookie", cookieA)
       .expect(200);
@@ -246,7 +247,7 @@ describe("⑤ Atomicité : échec de l'archivage laisse la facture en BROUILLON"
       expect(res.status).toBe(500);
 
       // Facture must still be BROUILLON — the whole TX was rolled back
-      const check = await request(app)
+      const check = await request(serveurTest(app))
         .get(`/api/factures/${factureId}`)
         .set("Cookie", cookieA)
         .expect(200);

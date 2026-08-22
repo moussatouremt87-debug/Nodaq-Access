@@ -17,7 +17,7 @@ import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import crypto from "node:crypto";
 import app from "../app";
-import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner } from "./helpers";
+import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner, serveurTest } from "./helpers";
 
 interface Locataire {
   cookie: string;
@@ -42,7 +42,7 @@ const REGLE_OUVERTE = {
 async function inscrire(nom: string): Promise<Locataire> {
   const email = `jeton-${nom}-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@test.nodaq`;
   emails.push(email);
-  const reg = await request(app)
+  const reg = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: `Patron ${nom}`, tenantNom: `Tenant ${nom}` })
     .expect(201);
@@ -51,14 +51,14 @@ async function inscrire(nom: string): Promise<Locataire> {
   const tenantId = reg.body.tenantId;
   tenantIds.push(tenantId);
 
-  await request(app).put("/api/relance/regles").set("Cookie", cookie).send(REGLE_OUVERTE).expect(200);
-  await request(app)
+  await request(serveurTest(app)).put("/api/relance/regles").set("Cookie", cookie).send(REGLE_OUVERTE).expect(200);
+  await request(serveurTest(app))
     .patch("/api/parametres")
     .set("Cookie", cookie)
     .send({ "company.raison_sociale": `Charpente ${nom}` })
     .expect(200);
 
-  const { body } = await request(app)
+  const { body } = await request(serveurTest(app))
     .post("/api/relance/campagnes")
     .set("Cookie", cookie)
     .send({
@@ -77,7 +77,7 @@ async function inscrire(nom: string): Promise<Locataire> {
   // VALIDÉE, comme en production : c'est l'approbation qui FIGE le mandat et la
   // version de règle (US-9). Sur une campagne seulement proposée, la passerelle
   // retombe — à juste titre — sur le défaut prudent, et n'accorderait rien.
-  await request(app)
+  await request(serveurTest(app))
     .post(`/api/pending-actions/${body.pendingActionId}/approve`)
     .set("Cookie", cookie)
     .expect(200);
@@ -105,7 +105,7 @@ async function appelPlanifie(l: Locataire): Promise<{ appelId: string; jeton: st
 }
 
 const avecJeton = (jeton: string) => (chemin: string) =>
-  request(app).get(chemin).set("Authorization", `Bearer ${jeton}`);
+  request(serveurTest(app)).get(chemin).set("Authorization", `Bearer ${jeton}`);
 
 beforeAll(async () => {
   a = await inscrire("a");
@@ -131,7 +131,7 @@ describe("a — le tenant vient du jeton, jamais du client", () => {
     // La garde est structurelle : rien ne lit un tenant dans le corps, donc il
     // n'y a rien à contourner. Ce test le prouve plutôt que de le supposer.
     const { jeton } = await appelPlanifie(a);
-    const r = await request(app)
+    const r = await request(serveurTest(app))
       .post("/api/relance/appel/echelonnement")
       .set("Authorization", `Bearer ${jeton}`)
       .send({
@@ -146,11 +146,11 @@ describe("a — le tenant vient du jeton, jamais du client", () => {
   });
 
   test("sans jeton : 401", async () => {
-    await request(app).get("/api/relance/appel/ouverture").expect(401);
+    await request(serveurTest(app)).get("/api/relance/appel/ouverture").expect(401);
   });
 
   test("un jeton inconnu : 401, avec la MÊME réponse qu'un jeton expiré", async () => {
-    const inconnu = await request(app)
+    const inconnu = await request(serveurTest(app))
       .get("/api/relance/appel/ouverture")
       .set("Authorization", `Bearer ${crypto.randomBytes(32).toString("base64url")}`)
       .expect(401);
@@ -166,7 +166,7 @@ describe("a — le tenant vient du jeton, jamais du client", () => {
   test("un en-tête mal formé ne passe pas", async () => {
     const { jeton } = await appelPlanifie(a);
     for (const entete of [jeton, `Basic ${jeton}`, "Bearer", "Bearer "]) {
-      await request(app)
+      await request(serveurTest(app))
         .get("/api/relance/appel/ouverture")
         .set("Authorization", entete)
         .expect(401);
@@ -197,7 +197,7 @@ describe("b — un jeton n'ouvre qu'une conversation", () => {
 
   test("une session humaine n'ouvre PAS les routes du worker", async () => {
     // La réciproque : ces routes ne sont exposées à aucune interface.
-    await request(app)
+    await request(serveurTest(app))
       .get("/api/relance/appel/ouverture")
       .set("Cookie", a.cookie)
       .expect(401);
@@ -259,7 +259,7 @@ describe("e — le noyau décide, la route transmet", () => {
     // votre campagne » expose un réglage et invite à une discussion que
     // l'agent n'a pas le droit d'avoir.
     const { jeton } = await appelPlanifie(a);
-    const r = await request(app)
+    const r = await request(serveurTest(app))
       .post("/api/relance/appel/echelonnement")
       .set("Authorization", `Bearer ${jeton}`)
       .send({ versements: 40, premierVersementDansJours: 300, dernierVersementRetardJours: 900 })

@@ -33,6 +33,7 @@ import {
   cleanupTenants,
   cleanupUsers,
   completeMfaForRegisteredOwner,
+  serveurTest,
 } from "./helpers";
 
 const tenantIds: string[] = [];
@@ -62,7 +63,7 @@ async function poserVertical(vertical: string): Promise<void> {
 beforeAll(async () => {
   const email = `mod-owner-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@test.nodaq`;
   emails.push(email);
-  const reg = await request(app)
+  const reg = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: "Patron", tenantNom: "Modules SARL" })
     .expect(201);
@@ -89,7 +90,7 @@ afterAll(async () => {
 
 describe("a — l'état des modules se lit, quel que soit le rôle", () => {
   test("le propriétaire lit la liste complète", async () => {
-    const r = await request(app).get("/api/modules").set("Cookie", ownerCookie).expect(200);
+    const r = await request(serveurTest(app)).get("/api/modules").set("Cookie", ownerCookie).expect(200);
     expect(r.body.modules).toHaveLength(MODULES.length);
     for (const m of r.body.modules) {
       expect(typeof m.active).toBe("boolean");
@@ -98,12 +99,12 @@ describe("a — l'état des modules se lit, quel que soit le rôle", () => {
   });
 
   test("un MEMBER la lit aussi — sinon son menu diffèrerait sans explication", async () => {
-    const r = await request(app).get("/api/modules").set("Cookie", membreCookie).expect(200);
+    const r = await request(serveurTest(app)).get("/api/modules").set("Cookie", membreCookie).expect(200);
     expect(r.body.modules).toHaveLength(MODULES.length);
   });
 
   test("sans session, rien", async () => {
-    await request(app).get("/api/modules").expect(401);
+    await request(serveurTest(app)).get("/api/modules").expect(401);
   });
 });
 
@@ -111,7 +112,7 @@ describe("a — l'état des modules se lit, quel que soit le rôle", () => {
 
 describe("b — seul le propriétaire décide", () => {
   test("un MEMBER ne peut pas allumer un module", async () => {
-    const r = await request(app)
+    const r = await request(serveurTest(app))
       .patch("/api/modules")
       .set("Cookie", membreCookie)
       .send({ choix: { [AUTRE_MODULE.id]: true } });
@@ -119,7 +120,7 @@ describe("b — seul le propriétaire décide", () => {
   });
 
   test("un identifiant inconnu est refusé, pas écrit dans le vide", async () => {
-    const r = await request(app)
+    const r = await request(serveurTest(app))
       .patch("/api/modules")
       .set("Cookie", ownerCookie)
       .send({ choix: { module_qui_nexiste_pas: true } });
@@ -128,7 +129,7 @@ describe("b — seul le propriétaire décide", () => {
   });
 
   test("un corps mal formé est refusé", async () => {
-    const r = await request(app)
+    const r = await request(serveurTest(app))
       .patch("/api/modules")
       .set("Cookie", ownerCookie)
       .send({ choix: { [MODULE_SOCLE.id]: "oui" } });
@@ -140,7 +141,7 @@ describe("b — seul le propriétaire décide", () => {
 
 describe("c — un choix explicite survit et prime sur le défaut", () => {
   test("éteindre un module de socle, puis le rallumer", async () => {
-    const eteint = await request(app)
+    const eteint = await request(serveurTest(app))
       .patch("/api/modules")
       .set("Cookie", ownerCookie)
       .send({ choix: { [MODULE_SOCLE.id]: false } })
@@ -150,12 +151,12 @@ describe("c — un choix explicite survit et prime sur le défaut", () => {
     expect(apres.source).toBe("choix");
 
     // Relu à froid : le choix est bien PERSISTÉ, pas seulement renvoyé.
-    const relu = await request(app).get("/api/modules").set("Cookie", ownerCookie).expect(200);
+    const relu = await request(serveurTest(app)).get("/api/modules").set("Cookie", ownerCookie).expect(200);
     expect(relu.body.modules.find((m: { id: string }) => m.id === MODULE_SOCLE.id).active).toBe(
       false,
     );
 
-    await request(app)
+    await request(serveurTest(app))
       .patch("/api/modules")
       .set("Cookie", ownerCookie)
       .send({ choix: { [MODULE_SOCLE.id]: true } })
@@ -166,7 +167,7 @@ describe("c — un choix explicite survit et prime sur le défaut", () => {
     // C'est ce qui permet à l'écran d'annoncer d'où vient l'état. Un module
     // allumé par défaut ET allumé par choix doit se distinguer, sinon
     // l'utilisateur ne sait jamais si son clic a été retenu.
-    const r = await request(app)
+    const r = await request(serveurTest(app))
       .patch("/api/modules")
       .set("Cookie", ownerCookie)
       .send({ choix: { [AUTRE_MODULE.id]: true } })
@@ -190,7 +191,7 @@ describe("d — le défaut se lit dans le secteur du tenant", () => {
     }
     const secteurs = gate.defaultOn as readonly string[];
     await poserVertical(secteurs[0]!);
-    const dedans = await request(app).get("/api/modules").set("Cookie", ownerCookie).expect(200);
+    const dedans = await request(serveurTest(app)).get("/api/modules").set("Cookie", ownerCookie).expect(200);
     expect(dedans.body.modules.find((m: { id: string }) => m.id === gate.id).active).toBe(true);
   });
 });
@@ -202,17 +203,17 @@ describe("e — éteindre un module ne ferme aucune route", () => {
     // Propriété DÉLIBÉRÉE, écrite dans le catalogue : le module est de la
     // surface produit, pas de l'autorisation. Si elle changeait un jour, il
     // faudrait que ce soit une décision, pas un effet de bord — d'où ce test.
-    await request(app)
+    await request(serveurTest(app))
       .patch("/api/modules")
       .set("Cookie", ownerCookie)
       .send({ choix: { classeur: false } })
       .expect(200);
 
-    const r = await request(app).get("/api/classeur").set("Cookie", ownerCookie);
+    const r = await request(serveurTest(app)).get("/api/classeur").set("Cookie", ownerCookie);
     expect(r.status, "la route ne doit pas se fermer avec le module").not.toBe(403);
     expect(r.status).toBeLessThan(500);
 
-    await request(app)
+    await request(serveurTest(app))
       .patch("/api/modules")
       .set("Cookie", ownerCookie)
       .send({ choix: { classeur: true } })

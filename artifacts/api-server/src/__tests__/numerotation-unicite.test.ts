@@ -22,7 +22,7 @@
  * transaction annulée : rien ne subsiste.
  */
 import { describe, test, expect } from "vitest";
-import { adminPool } from "./helpers";
+import { adminPool, serveurTest } from "./helpers";
 
 const COLONNES = "(id, tenant_id, customer_name, number, issued_date, due_date, amount_cents)";
 

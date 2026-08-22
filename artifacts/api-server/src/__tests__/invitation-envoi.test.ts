@@ -24,6 +24,7 @@ import {
   cleanupTenants,
   cleanupUsers,
   completeMfaForRegisteredOwner,
+  serveurTest,
 } from "./helpers.js";
 
 const tenantIds: string[] = [];
@@ -34,7 +35,7 @@ let tenantId = "";
 beforeAll(async () => {
   const email = `inv-owner-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@test.nodaq`;
   emails.push(email);
-  const { body, headers } = await request(app)
+  const { body, headers } = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: "Patron", tenantNom: "Invit SARL" })
     .expect(201);
@@ -53,7 +54,7 @@ afterAll(async () => {
 async function inviter(): Promise<Record<string, unknown>> {
   const invite = `compta-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@cabinet.test`;
   emails.push(invite);
-  const { body } = await request(app)
+  const { body } = await request(serveurTest(app))
     .post("/api/membres/inviter")
     .set("Cookie", cookie)
     .send({ email: invite, role: "ACCOUNTANT" })
@@ -103,12 +104,12 @@ describe("b — le lien de secours permet d'inviter quand même", () => {
     const jeton = String(body["lienInvitation"]).split("/membres/accepter/")[1]!;
     // Un lien qu'on donne à copier doit mener quelque part — sinon on a
     // remplacé un e-mail qui n'arrive pas par une adresse qui ne marche pas.
-    const apercu = await request(app).get(`/api/membres/inviter/${jeton}`).expect(200);
+    const apercu = await request(serveurTest(app)).get(`/api/membres/inviter/${jeton}`).expect(200);
     expect(apercu.body.email).toBe(body["email"]);
   });
 
   test("un jeton inventé ne donne rien", async () => {
-    await request(app)
+    await request(serveurTest(app))
       .get(`/api/membres/inviter/${crypto.randomBytes(32).toString("hex")}`)
       .expect(404);
   });

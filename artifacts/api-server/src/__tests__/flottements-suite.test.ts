@@ -21,7 +21,7 @@
  * Cause : la contention sur les ports éphémères de la boucle locale. Supertest
  * monte un serveur `app.listen(0)` PAR REQUÊTE et ouvre une connexion neuve
  * (superagent impose `agent: false`, donc aucune mise en réserve). La suite
- * compte plus de 300 appels `request(app)` ; les huit paquets lancés ensemble
+ * compte plus de 300 appels `request(serveurTest(app))` ; les huit paquets lancés ensemble
  * puisent tous dans la MÊME réserve de ports, qui est une ressource de la
  * machine et non du processus.
  *

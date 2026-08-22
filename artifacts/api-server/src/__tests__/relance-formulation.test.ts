@@ -16,14 +16,14 @@ import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import crypto from "node:crypto";
 import app from "../app";
-import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner } from "./helpers";
+import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner, serveurTest } from "./helpers";
 
 const tenantIds: string[] = [];
 const emails: string[] = [];
 let jeton: string;
 
 const formuler = (corps: Record<string, unknown>) =>
-  request(app)
+  request(serveurTest(app))
     .post("/api/relance/formulation")
     .set("Authorization", `Bearer ${jeton}`)
     .send(corps);
@@ -38,7 +38,7 @@ const cas = (marqueur: string) => [{ locuteur: "debiteur", propos: marqueur }];
 beforeAll(async () => {
   const email = `formul-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@test.nodaq`;
   emails.push(email);
-  const reg = await request(app)
+  const reg = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: "Patron", tenantNom: "Formulation SARL" })
     .expect(201);
@@ -51,14 +51,14 @@ beforeAll(async () => {
   // appel en cours, jamais avec une session. On monte donc le décor minimal —
   // une campagne validée, un appel planifié — plutôt que de contourner
   // l'authentification qu'on est en train d'éprouver.
-  const { body } = await request(app)
+  const { body } = await request(serveurTest(app))
     .post("/api/relance/campagnes")
     .set("Cookie", cookie)
     .send({
       appels: [{ clientId: null, factureId: "F-1", montantCents: 1000, numero: "+33600000009", clientNom: "Menuiserie Delacroix" }],
     })
     .expect(201);
-  await request(app)
+  await request(serveurTest(app))
     .post(`/api/pending-actions/${body.pendingActionId}/approve`)
     .set("Cookie", cookie)
     .expect(200);
@@ -201,7 +201,7 @@ describe("d — la formulation ne décide rien", () => {
   });
 
   test("un jeton d'appel est exigé — une session ne suffit pas", async () => {
-    await request(app)
+    await request(serveurTest(app))
       .post("/api/relance/formulation")
       .send({ intention: "demander_date" })
       .expect(401);

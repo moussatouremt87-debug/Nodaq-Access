@@ -20,6 +20,7 @@ import {
   cookieHeader,
   cleanupTenants,
   cleanupUsers,
+  serveurTest,
 } from "./helpers";
 
 let cookieOwnerA: string;
@@ -97,7 +98,7 @@ afterAll(async () => {
 
 describe("a — paramétrage de la clé API PA", () => {
   test("aucune clé enregistrée au départ", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .get("/api/facturation-electronique")
       .set("Cookie", cookieOwnerA)
       .expect(200);
@@ -105,13 +106,13 @@ describe("a — paramétrage de la clé API PA", () => {
   });
 
   test("PUT enregistre la clé — la lecture ne rend qu'un booléen, jamais la valeur", async () => {
-    await request(app)
+    await request(serveurTest(app))
       .put("/api/facturation-electronique")
       .set("Cookie", cookieOwnerA)
       .send({ cleApi: "secret-de-test-pa" })
       .expect(200);
 
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .get("/api/facturation-electronique")
       .set("Cookie", cookieOwnerA)
       .expect(200);
@@ -120,13 +121,13 @@ describe("a — paramétrage de la clé API PA", () => {
   });
 
   test("PUT avec cleApi: null révoque la clé", async () => {
-    await request(app)
+    await request(serveurTest(app))
       .put("/api/facturation-electronique")
       .set("Cookie", cookieOwnerA)
       .send({ cleApi: null })
       .expect(200);
 
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .get("/api/facturation-electronique")
       .set("Cookie", cookieOwnerA)
       .expect(200);
@@ -134,7 +135,7 @@ describe("a — paramétrage de la clé API PA", () => {
   });
 
   test("un MEMBER n'a pas accès (route réservée aux OWNER)", async () => {
-    await request(app)
+    await request(serveurTest(app))
       .get("/api/facturation-electronique")
       .set("Cookie", cookieMemberA)
       .expect(403);
@@ -146,7 +147,7 @@ describe("a — paramétrage de la clé API PA", () => {
 describe("b — capture manuelle d'un Factur-X reçu", () => {
   test("un vrai Factur-X est capturé, le SIREN/montant/date sont extraits sans ressaisie", async () => {
     const pdf = await facturXPdf();
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/facturation-electronique/documents")
       .set("Cookie", cookieOwnerA)
       .attach("file", pdf, { filename: "facture-fournisseur.pdf", contentType: "application/pdf" });
@@ -159,18 +160,18 @@ describe("b — capture manuelle d'un Factur-X reçu", () => {
 
   test("un PDF sans pièce jointe Factur-X est refusé (422), rien n'est écrit", async () => {
     const plain = Buffer.from("%PDF-1.4 pas un factur-x");
-    const before = await request(app)
+    const before = await request(serveurTest(app))
       .get("/api/facturation-electronique/documents")
       .set("Cookie", cookieOwnerA)
       .expect(200);
 
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/facturation-electronique/documents")
       .set("Cookie", cookieOwnerA)
       .attach("file", plain, { filename: "pas-facturx.pdf", contentType: "application/pdf" });
     expect(res.status).toBe(422);
 
-    const after = await request(app)
+    const after = await request(serveurTest(app))
       .get("/api/facturation-electronique/documents")
       .set("Cookie", cookieOwnerA)
       .expect(200);
@@ -178,7 +179,7 @@ describe("b — capture manuelle d'un Factur-X reçu", () => {
   });
 
   test("un fichier non-PDF est refusé (400)", async () => {
-    await request(app)
+    await request(serveurTest(app))
       .post("/api/facturation-electronique/documents")
       .set("Cookie", cookieOwnerA)
       .attach("file", Buffer.from("pas un pdf"), { filename: "x.txt", contentType: "text/plain" })
@@ -187,13 +188,13 @@ describe("b — capture manuelle d'un Factur-X reçu", () => {
 
   test("le document capturé est téléchargeable, octets identiques", async () => {
     const pdf = await facturXPdf();
-    const upload = await request(app)
+    const upload = await request(serveurTest(app))
       .post("/api/facturation-electronique/documents")
       .set("Cookie", cookieOwnerA)
       .attach("file", pdf, { filename: "facture.pdf", contentType: "application/pdf" });
     const id = upload.body.id as string;
 
-    const dl = await request(app)
+    const dl = await request(serveurTest(app))
       .get(`/api/facturation-electronique/documents/${id}/pdf`)
       .set("Cookie", cookieOwnerA)
       .expect(200);
@@ -206,13 +207,13 @@ describe("b — capture manuelle d'un Factur-X reçu", () => {
 describe("c — isolation", () => {
   test("le tenant B ne voit aucun document du tenant A", async () => {
     const pdf = await facturXPdf();
-    await request(app)
+    await request(serveurTest(app))
       .post("/api/facturation-electronique/documents")
       .set("Cookie", cookieOwnerA)
       .attach("file", pdf, { filename: "facture-a.pdf", contentType: "application/pdf" })
       .expect(201);
 
-    const listeB = await request(app)
+    const listeB = await request(serveurTest(app))
       .get("/api/facturation-electronique/documents")
       .set("Cookie", cookieOwnerB)
       .expect(200);
@@ -224,14 +225,14 @@ describe("c — isolation", () => {
 
 describe("d — webhook plateforme agréée : authentification par signature", () => {
   test("génère un secret de webhook, jamais relu ensuite", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/facturation-electronique/webhook-secret")
       .set("Cookie", cookieOwnerA)
       .expect(200);
     expect(typeof res.body.secret).toBe("string");
     expect(res.body.secret.length).toBeGreaterThan(32);
 
-    const statut = await request(app)
+    const statut = await request(serveurTest(app))
       .get("/api/facturation-electronique")
       .set("Cookie", cookieOwnerA)
       .expect(200);
@@ -240,7 +241,7 @@ describe("d — webhook plateforme agréée : authentification par signature", (
   });
 
   test("une signature correcte est acceptée et écrit le document", async () => {
-    const secretRes = await request(app)
+    const secretRes = await request(serveurTest(app))
       .post("/api/facturation-electronique/webhook-secret")
       .set("Cookie", cookieOwnerA)
       .expect(200);
@@ -251,7 +252,7 @@ describe("d — webhook plateforme agréée : authentification par signature", (
     const raw = JSON.stringify(body);
     const signature = crypto.createHmac("sha256", secret).update(raw).digest("hex");
 
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post(`/api/webhooks/plateforme-agreee/${tenantAId}`)
       .set("Content-Type", "application/json")
       .set("X-Pa-Signature", `sha256=${signature}`)
@@ -260,7 +261,7 @@ describe("d — webhook plateforme agréée : authentification par signature", (
   });
 
   test("une signature incorrecte est refusée (401), rien n'est écrit", async () => {
-    const before = await request(app)
+    const before = await request(serveurTest(app))
       .get("/api/facturation-electronique/documents")
       .set("Cookie", cookieOwnerA)
       .expect(200);
@@ -269,14 +270,14 @@ describe("d — webhook plateforme agréée : authentification par signature", (
     const body = { pdfBase64: pdf.toString("base64") };
     const raw = JSON.stringify(body);
 
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post(`/api/webhooks/plateforme-agreee/${tenantAId}`)
       .set("Content-Type", "application/json")
       .set("X-Pa-Signature", "sha256=0000000000000000000000000000000000000000000000000000000000000000")
       .send(raw);
     expect(res.status).toBe(401);
 
-    const after = await request(app)
+    const after = await request(serveurTest(app))
       .get("/api/facturation-electronique/documents")
       .set("Cookie", cookieOwnerA)
       .expect(200);
@@ -285,7 +286,7 @@ describe("d — webhook plateforme agréée : authentification par signature", (
 
   test("sans en-tête de signature, la requête est refusée (401)", async () => {
     const pdf = await facturXPdf();
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post(`/api/webhooks/plateforme-agreee/${tenantAId}`)
       .send({ pdfBase64: pdf.toString("base64") });
     expect(res.status).toBe(401);
@@ -293,13 +294,13 @@ describe("d — webhook plateforme agréée : authentification par signature", (
 
   test("un tenant sans secret de webhook configuré refuse tout (401) — même réponse qu'un tenant inconnu", async () => {
     const inconnu = crypto.randomUUID();
-    const resInconnu = await request(app)
+    const resInconnu = await request(serveurTest(app))
       .post(`/api/webhooks/plateforme-agreee/${inconnu}`)
       .set("X-Pa-Signature", "sha256=abc")
       .send({ pdfBase64: "AA==" });
     expect(resInconnu.status).toBe(401);
 
-    const resTenantBSansSecret = await request(app)
+    const resTenantBSansSecret = await request(serveurTest(app))
       .post(`/api/webhooks/plateforme-agreee/${tenantBId}`)
       .set("X-Pa-Signature", "sha256=abc")
       .send({ pdfBase64: "AA==" });
@@ -308,7 +309,7 @@ describe("d — webhook plateforme agréée : authentification par signature", (
   });
 
   test("un id de tenant mal formé est rejeté (404), pas une erreur serveur", async () => {
-    await request(app)
+    await request(serveurTest(app))
       .post("/api/webhooks/plateforme-agreee/pas-un-uuid")
       .set("X-Pa-Signature", "sha256=abc")
       .send({ pdfBase64: "AA==" })

@@ -14,7 +14,7 @@ import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import crypto from "node:crypto";
 import app from "../app";
-import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner } from "./helpers";
+import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner, serveurTest } from "./helpers";
 
 interface Locataire { cookie: string; tenantId: string }
 
@@ -27,13 +27,13 @@ let b: Locataire;
 async function inscrire(nom: string): Promise<Locataire> {
   const email = `approve-${nom}-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@test.nodaq`;
   cleanupEmails.push(email);
-  const reg = await request(app)
+  const reg = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: `Patron ${nom}`, tenantNom: `Tenant ${nom}` })
     .expect(201);
   await completeMfaForRegisteredOwner(reg.body.userId);
   const cookie = reg.headers["set-cookie"]?.[0] ?? "";
-  const { body: me } = await request(app).get("/api/auth/me").set("Cookie", cookie).expect(200);
+  const { body: me } = await request(serveurTest(app)).get("/api/auth/me").set("Cookie", cookie).expect(200);
   cleanupTenantIds.push(me.tenantId);
   return { cookie, tenantId: me.tenantId };
 }
@@ -54,7 +54,7 @@ describe("POST /pending-actions/:id/approve exécute réellement un plan vocal",
       `SELECT count(*)::int AS n FROM prospects WHERE tenant_id = $1::uuid`, [a.tenantId],
     );
 
-    const { body: propose } = await request(app)
+    const { body: propose } = await request(serveurTest(app))
       .post("/api/chat/messages")
       .set("Cookie", a.cookie)
       .send({ content: "Crée un prospect Jean Dupont au 0612345678" })
@@ -68,7 +68,7 @@ describe("POST /pending-actions/:id/approve exécute réellement un plan vocal",
     expect(pendant.rows[0].n).toBe(avant.rows[0].n);
 
     // Le chemin du BOUTON DU COCKPIT — pas /voix/executer.
-    const approuve = await request(app)
+    const approuve = await request(serveurTest(app))
       .post(`/api/pending-actions/${propose.planId}/approve`)
       .set("Cookie", a.cookie)
       .expect(200);
@@ -82,14 +82,14 @@ describe("POST /pending-actions/:id/approve exécute réellement un plan vocal",
   });
 
   test("un second appel n'écrit pas en double", async () => {
-    const { body: propose } = await request(app)
+    const { body: propose } = await request(serveurTest(app))
       .post("/api/chat/messages")
       .set("Cookie", a.cookie)
       .send({ content: "Crée un prospect Jean Dupont au 0612345678" })
       .expect(200);
 
-    await request(app).post(`/api/pending-actions/${propose.planId}/approve`).set("Cookie", a.cookie).expect(200);
-    await request(app).post(`/api/pending-actions/${propose.planId}/approve`).set("Cookie", a.cookie).expect(200);
+    await request(serveurTest(app)).post(`/api/pending-actions/${propose.planId}/approve`).set("Cookie", a.cookie).expect(200);
+    await request(serveurTest(app)).post(`/api/pending-actions/${propose.planId}/approve`).set("Cookie", a.cookie).expect(200);
 
     const { rows } = await adminPool.query(
       `SELECT count(*)::int AS n FROM prospects WHERE tenant_id = $1::uuid AND name = 'Jean Dupont'`,
@@ -102,13 +102,13 @@ describe("POST /pending-actions/:id/approve exécute réellement un plan vocal",
   });
 
   test("isolation : le tenant B ne peut pas approuver le plan de A", async () => {
-    const { body: propose } = await request(app)
+    const { body: propose } = await request(serveurTest(app))
       .post("/api/chat/messages")
       .set("Cookie", a.cookie)
       .send({ content: "Crée un prospect Jean Dupont au 0612345678" })
       .expect(200);
 
-    const reponse = await request(app)
+    const reponse = await request(serveurTest(app))
       .post(`/api/pending-actions/${propose.planId}/approve`)
       .set("Cookie", b.cookie);
     expect(reponse.status).toBe(404);

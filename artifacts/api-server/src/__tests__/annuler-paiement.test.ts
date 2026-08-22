@@ -16,6 +16,7 @@ import {
   cleanupTenants,
   cleanupUsers,
   completeMfaForRegisteredOwner,
+  serveurTest,
 } from "./helpers.js";
 
 interface Locataire { tenantId: string; cookie: string }
@@ -26,7 +27,7 @@ const emails: string[] = [];
 async function inscrire(nom: string): Promise<Locataire> {
   const email = `annul-${nom}-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@test.nodaq`;
   emails.push(email);
-  const { body, headers } = await request(app)
+  const { body, headers } = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: "Patron", tenantNom: `Annul ${nom}` })
     .expect(201);
@@ -36,7 +37,7 @@ async function inscrire(nom: string): Promise<Locataire> {
   // Sans SIRET ni raison sociale, l'émission refuse — l'audit des mentions
   // obligatoires fait son travail. On passe par la vraie route de paramètres,
   // comme le fait `facturation.test.ts`.
-  await request(app)
+  await request(serveurTest(app))
     .patch("/api/parametres")
     .set("Cookie", cookie)
     .send({ "company.siret": "81234567600009", "company.raison_sociale": "Annul SARL" })
@@ -55,7 +56,7 @@ async function factureEmise(
   l: Locataire,
   htCents: number,
 ): Promise<{ id: string; ttc: number }> {
-  const { body } = await request(app)
+  const { body } = await request(serveurTest(app))
     .post("/api/factures")
     .set("Cookie", l.cookie)
     .send({
@@ -67,7 +68,7 @@ async function factureEmise(
     .expect(201);
   // `.send({})` et non rien : sans corps, `EmettreBody.safeParse(undefined)`
   // échoue et la route rend 400 avant même de regarder la facture.
-  await request(app).post(`/api/factures/${body.id}/emettre`).set("Cookie", l.cookie).send({}).expect(200);
+  await request(serveurTest(app)).post(`/api/factures/${body.id}/emettre`).set("Cookie", l.cookie).send({}).expect(200);
   return { id: body.id, ttc: body.amountCents as number };
 }
 
@@ -104,11 +105,11 @@ describe("a — le geste de trop se défait", () => {
 
   test("payé par erreur → annulé → la facture redevient ÉMISE, sans règlement", async () => {
     const { id, ttc } = await factureEmise(t, 100000);
-    await request(app).post(`/api/factures/${id}/payer`).set("Cookie", t.cookie).expect(200);
+    await request(serveurTest(app)).post(`/api/factures/${id}/payer`).set("Cookie", t.cookie).expect(200);
     expect(await statut(id)).toBe("PAYEE");
     expect(await solde(id)).toBe(ttc);
 
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .post(`/api/factures/${id}/annuler-paiement`).set("Cookie", t.cookie).expect(200);
 
     expect(body.montantAnnuleCents).toBe(ttc);
@@ -130,19 +131,19 @@ describe("a — le geste de trop se défait", () => {
 
   test("deux clics d’annulation n’annulent pas deux fois", async () => {
     const { id, ttc } = await factureEmise(t, 40000);
-    await request(app).post(`/api/factures/${id}/payer`).set("Cookie", t.cookie).expect(200);
-    await request(app).post(`/api/factures/${id}/annuler-paiement`).set("Cookie", t.cookie).expect(200);
+    await request(serveurTest(app)).post(`/api/factures/${id}/payer`).set("Cookie", t.cookie).expect(200);
+    await request(serveurTest(app)).post(`/api/factures/${id}/annuler-paiement`).set("Cookie", t.cookie).expect(200);
     // Sans le lien par `reference`, le second clic contre-passerait le même
     // règlement une seconde fois et creuserait un solde NÉGATIF.
-    await request(app).post(`/api/factures/${id}/annuler-paiement`).set("Cookie", t.cookie).expect(409);
+    await request(serveurTest(app)).post(`/api/factures/${id}/annuler-paiement`).set("Cookie", t.cookie).expect(409);
     expect(await solde(id)).toBe(0);
     expect(ttc).toBeGreaterThan(0);
   });
 
   test("la trace dit qui, quoi, et l’état avant → après", async () => {
     const { id } = await factureEmise(t, 50000);
-    await request(app).post(`/api/factures/${id}/payer`).set("Cookie", t.cookie).expect(200);
-    await request(app).post(`/api/factures/${id}/annuler-paiement`).set("Cookie", t.cookie).expect(200);
+    await request(serveurTest(app)).post(`/api/factures/${id}/payer`).set("Cookie", t.cookie).expect(200);
+    await request(serveurTest(app)).post(`/api/factures/${id}/annuler-paiement`).set("Cookie", t.cookie).expect(200);
 
     const { rows } = await adminPool.query(
       `SELECT label, meta FROM activity
@@ -169,10 +170,10 @@ describe("b — on ne défait QUE le geste de trop", () => {
       [crypto.randomUUID(), t.tenantId, id],
     );
     // Puis on clique « payée » par erreur : le reste dû s'inscrit.
-    await request(app).post(`/api/factures/${id}/payer`).set("Cookie", t.cookie).expect(200);
+    await request(serveurTest(app)).post(`/api/factures/${id}/payer`).set("Cookie", t.cookie).expect(200);
     expect(await solde(id)).toBe(ttc);
 
-    await request(app).post(`/api/factures/${id}/annuler-paiement`).set("Cookie", t.cookie).expect(200);
+    await request(serveurTest(app)).post(`/api/factures/${id}/annuler-paiement`).set("Cookie", t.cookie).expect(200);
 
     // Effacer TOUS les règlements serait une seconde erreur pour en corriger
     // une première : l'acompte est un fait, il reste.
@@ -187,25 +188,25 @@ describe("c — les refus", () => {
 
   test("rien à annuler → 409, et aucune écriture", async () => {
     const { id } = await factureEmise(t, 10000);
-    await request(app)
+    await request(serveurTest(app))
       .post(`/api/factures/${id}/annuler-paiement`).set("Cookie", t.cookie).expect(409);
     expect(await statut(id)).toBe("EMISE");
   });
 
   test("facture inconnue → 404", async () => {
-    await request(app)
+    await request(serveurTest(app))
       .post(`/api/factures/${crypto.randomUUID()}/annuler-paiement`)
       .set("Cookie", t.cookie).expect(404);
   });
 
   test("une facture annulée par avoir ne se dépaye pas", async () => {
     const { id, ttc } = await factureEmise(t, 20000);
-    await request(app).post(`/api/factures/${id}/payer`).set("Cookie", t.cookie).expect(200);
+    await request(serveurTest(app)).post(`/api/factures/${id}/payer`).set("Cookie", t.cookie).expect(200);
     // L'avoir est le document qui fait foi ; toucher au règlement ici
     // casserait la chaîne comptable.
     await adminPool.query(`UPDATE factures SET statut = 'ANNULEE_PAR_AVOIR' WHERE id = $1`, [id]);
 
-    await request(app)
+    await request(serveurTest(app))
       .post(`/api/factures/${id}/annuler-paiement`).set("Cookie", t.cookie).expect(409);
     expect(await solde(id)).toBe(ttc);
   });
@@ -216,10 +217,10 @@ describe("d — isolation : on n'annule pas le règlement du voisin", () => {
     const a = await inscrire("iso-a");
     const b = await inscrire("iso-b");
     const { id, ttc } = await factureEmise(a, 70000);
-    await request(app).post(`/api/factures/${id}/payer`).set("Cookie", a.cookie).expect(200);
+    await request(serveurTest(app)).post(`/api/factures/${id}/payer`).set("Cookie", a.cookie).expect(200);
 
     // La RLS ne rend pas la ligne : pour B, cette facture n'existe pas.
-    await request(app)
+    await request(serveurTest(app))
       .post(`/api/factures/${id}/annuler-paiement`).set("Cookie", b.cookie).expect(404);
     expect(await solde(id)).toBe(ttc);
   });

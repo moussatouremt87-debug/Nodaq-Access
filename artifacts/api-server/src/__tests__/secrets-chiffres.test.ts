@@ -24,7 +24,7 @@ import { randomBytes } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import app from "../app";
-import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner } from "./helpers";
+import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner, serveurTest } from "./helpers";
 
 const RACINE = resolve(__dirname, "../../../..");
 
@@ -41,20 +41,20 @@ const cleanupEmails: string[] = [];
 async function inscrire(nom: string): Promise<Locataire> {
   const email = `secrets-${nom}-${Date.now()}-${randomBytes(3).toString("hex")}@test.nodaq`;
   cleanupEmails.push(email);
-  const reg = await request(app)
+  const reg = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: `Patron ${nom}`, tenantNom: `Tenant ${nom}` })
     .expect(201);
   await completeMfaForRegisteredOwner(reg.body.userId);
   const cookie = reg.headers["set-cookie"]?.[0] ?? "";
-  const { body: me } = await request(app).get("/api/auth/me").set("Cookie", cookie).expect(200);
+  const { body: me } = await request(serveurTest(app)).get("/api/auth/me").set("Cookie", cookie).expect(200);
   cleanupTenantIds.push(me.tenantId);
   return { cookie, tenantId: me.tenantId };
 }
 
 /** Enregistre un SMTP complet, mot de passe compris. */
 function poserSmtp(l: Locataire, motDePasse: string): request.Test {
-  return request(app)
+  return request(serveurTest(app))
     .put("/api/parametres-envoi")
     .set("Cookie", l.cookie)
     .send({
@@ -137,7 +137,7 @@ describe("b — rien en clair dans la réponse HTTP", () => {
   });
 
   test("la lecture non plus", async () => {
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get("/api/parametres-envoi")
       .set("Cookie", a.cookie)
       .expect(200);
@@ -147,7 +147,7 @@ describe("b — rien en clair dans la réponse HTTP", () => {
   });
 
   test("`null` révoque le secret", async () => {
-    await request(app)
+    await request(serveurTest(app))
       .put("/api/parametres-envoi")
       .set("Cookie", b.cookie)
       .send({
@@ -159,7 +159,7 @@ describe("b — rien en clair dans la réponse HTTP", () => {
       })
       .expect(200);
 
-    const revoque = await request(app)
+    const revoque = await request(serveurTest(app))
       .put("/api/parametres-envoi")
       .set("Cookie", b.cookie)
       .send({
@@ -185,7 +185,7 @@ describe("b — rien en clair dans la réponse HTTP", () => {
 describe("c — isolation entre tenants", () => {
   test("le tenant B ne voit pas le secret du tenant A", async () => {
     await poserSmtp(a, sentinelle()).expect(200);
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get("/api/parametres-envoi")
       .set("Cookie", b.cookie)
       .expect(200);

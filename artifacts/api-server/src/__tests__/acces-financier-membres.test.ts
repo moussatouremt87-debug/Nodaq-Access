@@ -34,6 +34,7 @@ import {
   cleanupTenants,
   cleanupUsers,
   completeMfaForRegisteredOwner,
+  serveurTest,
 } from "./helpers";
 
 let tenantId: string;
@@ -80,10 +81,10 @@ afterAll(async () => {
 });
 
 const as = (cookie: string) => ({
-  get: (u: string) => request(app).get(u).set("Cookie", cookie),
-  post: (u: string, b?: unknown) => request(app).post(u).set("Cookie", cookie).send((b ?? {}) as Record<string, unknown>),
-  patch: (u: string, b?: unknown) => request(app).patch(u).set("Cookie", cookie).send((b ?? {}) as Record<string, unknown>),
-  delete: (u: string) => request(app).delete(u).set("Cookie", cookie),
+  get: (u: string) => request(serveurTest(app)).get(u).set("Cookie", cookie),
+  post: (u: string, b?: unknown) => request(serveurTest(app)).post(u).set("Cookie", cookie).send((b ?? {}) as Record<string, unknown>),
+  patch: (u: string, b?: unknown) => request(serveurTest(app)).patch(u).set("Cookie", cookie).send((b ?? {}) as Record<string, unknown>),
+  delete: (u: string) => request(serveurTest(app)).delete(u).set("Cookie", cookie),
 });
 
 // ── Verrouillage des routeurs exclusivement financiers ──────────────────────
@@ -329,7 +330,7 @@ describe("Gestion des membres — réservée au OWNER", () => {
       [crypto.randomUUID(), tenantId, email.toLowerCase(), tokenSha256, ownerUserId],
     );
 
-    const accept = await request(app)
+    const accept = await request(serveurTest(app))
       .post(`/api/membres/inviter/${token}/accepter`)
       .send({ password: "Test1234!", nom: "Coowner Test" });
     expect(accept.status).toBe(200);
@@ -355,7 +356,7 @@ describe("Gestion des membres — réservée au OWNER", () => {
     // Le co-OWNER franchit ownerOnly avec SA PROPRE session, indépendamment
     // du premier OWNER — pas de logique "premier arrivé" cachée
     // (requireRole/requireMembership ne lisent que la session de l'appelant).
-    const listeVueParCoOwner = await request(app).get("/api/membres").set("Cookie", coOwnerCookie);
+    const listeVueParCoOwner = await request(serveurTest(app)).get("/api/membres").set("Cookie", coOwnerCookie);
     expect(listeVueParCoOwner.status).toBe(200);
     expect(listeVueParCoOwner.body.membres.some((m: { id: string }) => m.id === coOwnerMembershipId)).toBe(true);
 
@@ -393,7 +394,7 @@ describe("Gestion des membres — réservée au OWNER", () => {
 
 describe("Acceptation d'invitation — public", () => {
   test("GET /api/membres/inviter/:token — jeton inconnu → 404 indifférencié", async () => {
-    const res = await request(app).get("/api/membres/inviter/jeton-inexistant");
+    const res = await request(serveurTest(app)).get("/api/membres/inviter/jeton-inexistant");
     expect(res.status).toBe(404);
     expect(res.body.error).toBe("Lien invalide ou expiré.");
   });
@@ -408,14 +409,14 @@ describe("Acceptation d'invitation — public", () => {
       [crypto.randomUUID(), tenantId, email, tokenSha256, ownerUserId],
     );
 
-    const apercu = await request(app).get(`/api/membres/inviter/${token}`);
+    const apercu = await request(serveurTest(app)).get(`/api/membres/inviter/${token}`);
     expect(apercu.status).toBe(200);
     expect(apercu.body.compteExistant).toBe(false);
     expect(apercu.body.email).toBe(email);
     expect(apercu.body.expire).toBe(false);
     expect(apercu.body.dejaAcceptee).toBe(false);
 
-    const accept = await request(app)
+    const accept = await request(serveurTest(app))
       .post(`/api/membres/inviter/${token}/accepter`)
       .send({ nom: "Nouveau Collaborateur", password: "motdepasse123" });
     expect(accept.status).toBe(200);
@@ -431,7 +432,7 @@ describe("Acceptation d'invitation — public", () => {
     expect(rows[0]?.role).toBe("MEMBER");
 
     // Jeton déjà utilisé → 409, ne peut pas être ré-accepté.
-    const second = await request(app)
+    const second = await request(serveurTest(app))
       .post(`/api/membres/inviter/${token}/accepter`)
       .send({ nom: "Rejoue", password: "motdepasse123" });
     expect(second.status).toBe(409);
@@ -447,11 +448,11 @@ describe("Acceptation d'invitation — public", () => {
       [crypto.randomUUID(), tenantId, email, tokenSha256, ownerUserId],
     );
 
-    const apercu = await request(app).get(`/api/membres/inviter/${token}`);
+    const apercu = await request(serveurTest(app)).get(`/api/membres/inviter/${token}`);
     expect(apercu.status).toBe(200);
     expect(apercu.body.expire).toBe(true);
 
-    const accept = await request(app)
+    const accept = await request(serveurTest(app))
       .post(`/api/membres/inviter/${token}/accepter`)
       .send({ nom: "Trop tard", password: "motdepasse123" });
     expect(accept.status).toBe(410);
@@ -470,16 +471,16 @@ describe("Acceptation d'invitation — public", () => {
       [crypto.randomUUID(), tenantId, user.email, tokenSha256, ownerUserId],
     );
 
-    const apercu = await request(app).get(`/api/membres/inviter/${token}`);
+    const apercu = await request(serveurTest(app)).get(`/api/membres/inviter/${token}`);
     expect(apercu.status).toBe(200);
     expect(apercu.body.compteExistant).toBe(true);
 
-    const wrongPassword = await request(app)
+    const wrongPassword = await request(serveurTest(app))
       .post(`/api/membres/inviter/${token}/accepter`)
       .send({ password: "mauvais-mot-de-passe" });
     expect(wrongPassword.status).toBe(401);
 
-    const rightPassword = await request(app)
+    const rightPassword = await request(serveurTest(app))
       .post(`/api/membres/inviter/${token}/accepter`)
       .send({ password });
     expect(rightPassword.status).toBe(200);
@@ -517,7 +518,7 @@ describe("Isolation entre tenants — memberships/users sans RLS (US-A5.1, AC3)"
       [crypto.randomUUID(), tenantB.id, userB.id],
     );
 
-    const vueA = await request(app).get("/api/membres").set("Cookie", cookieA);
+    const vueA = await request(serveurTest(app)).get("/api/membres").set("Cookie", cookieA);
     expect(vueA.status).toBe(200);
     expect(vueA.body.membres.every((m: { email: string }) => m.email !== emailB)).toBe(true);
     expect(vueA.body.invitationsEnAttente).toHaveLength(0);

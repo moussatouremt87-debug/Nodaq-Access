@@ -21,6 +21,7 @@ import {
   createTestSession,
   cleanupTenants,
   cleanupUsers,
+  serveurTest,
 } from "./helpers";
 
 // ─── Test fixtures ────────────────────────────────────────────────────────────
@@ -46,7 +47,7 @@ afterAll(async () => {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 async function sendChat(cookie: string, content: string, conversationId?: string) {
-  return request(app)
+  return request(serveurTest(app))
     .post("/api/chat/messages")
     .set("Cookie", cookie)
     .send({ content, conversationId: conversationId ?? null });
@@ -88,7 +89,7 @@ describe("Tool: create_prospect", () => {
     expect(res.body.planId).toBeTruthy();
 
     // Après validation, la ligne apparaît — et une seule.
-    await request(app)
+    await request(serveurTest(app))
       .post("/api/voix/executer")
       .set("Cookie", sessionCookieA)
       .send({ planId: res.body.planId })
@@ -191,7 +192,7 @@ describe("Tenant isolation", () => {
     );
 
     // Tenant B's GET /api/chat/messages should not expose tenant A data
-    const historyRes = await request(app)
+    const historyRes = await request(serveurTest(app))
       .get("/api/chat/messages")
       .set("Cookie", sessionCookieB);
     expect(historyRes.status).toBe(200);
@@ -204,7 +205,7 @@ describe("Tenant isolation", () => {
 
 describe("GET /api/chat/messages", () => {
   test("returns empty history for new conversationId", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .get("/api/chat/messages?conversationId=00000000-0000-0000-0000-000000000001")
       .set("Cookie", sessionCookieA);
     // ── LE STATUT SEUL NE DIT PAS POURQUOI ──────────────────────────────────
@@ -223,7 +224,7 @@ describe("GET /api/chat/messages", () => {
   });
 
   test("returns 401 without auth", async () => {
-    const res = await request(app).get("/api/chat/messages");
+    const res = await request(serveurTest(app)).get("/api/chat/messages");
     expect(res.status).toBe(401);
   });
 });
@@ -232,7 +233,7 @@ describe("GET /api/chat/messages", () => {
 
 describe("GET /api/chat/suggestions", () => {
   test("returns an array of suggestion strings", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .get("/api/chat/suggestions")
       .set("Cookie", sessionCookieA);
     expect(res.status).toBe(200);
@@ -242,7 +243,7 @@ describe("GET /api/chat/suggestions", () => {
   });
 
   test("returns 401 without auth", async () => {
-    const res = await request(app).get("/api/chat/suggestions");
+    const res = await request(serveurTest(app)).get("/api/chat/suggestions");
     expect(res.status).toBe(401);
   });
 });
@@ -262,7 +263,7 @@ describe("Agent failure behavior", () => {
   });
 
   test("POST /api/chat/messages returns 400 for empty content", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/chat/messages")
       .set("Cookie", sessionCookieA)
       .send({ content: "", conversationId: null });
@@ -270,14 +271,14 @@ describe("Agent failure behavior", () => {
   });
 
   test("POST /api/chat/messages returns 401 without auth", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/chat/messages")
       .send({ content: "hello", conversationId: null });
     expect(res.status).toBe(401);
   });
 
   test("POST /api/chat/messages returns 400 for missing content", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/chat/messages")
       .set("Cookie", sessionCookieA)
       .send({ conversationId: null });

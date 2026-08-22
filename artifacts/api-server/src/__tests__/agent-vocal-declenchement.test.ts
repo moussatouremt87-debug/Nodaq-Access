@@ -20,6 +20,7 @@ import {
   cleanupTenants,
   cleanupUsers,
   completeMfaForRegisteredOwner,
+  serveurTest,
 } from "./helpers";
 import { FAKE_ELEVENLABS_BASE } from "./vitest.setup";
 
@@ -34,7 +35,7 @@ async function tenantAvecCampagne(options: { raisonSociale?: string } = {}): Pro
 }> {
   const email = `decl-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@test.nodaq`;
   emails.push(email);
-  const reg = await request(app)
+  const reg = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: "P", tenantNom: "Déclenchement SARL" })
     .expect(201);
@@ -43,14 +44,14 @@ async function tenantAvecCampagne(options: { raisonSociale?: string } = {}): Pro
   tenantIds.push(reg.body.tenantId);
 
   if (options.raisonSociale) {
-    await request(app)
+    await request(serveurTest(app))
       .patch("/api/parametres")
       .set("Cookie", cookie)
       .send({ "company.raison_sociale": options.raisonSociale })
       .expect(200);
   }
 
-  const { body } = await request(app)
+  const { body } = await request(serveurTest(app))
     .post("/api/relance/campagnes")
     .set("Cookie", cookie)
     .send({
@@ -65,7 +66,7 @@ async function tenantAvecCampagne(options: { raisonSociale?: string } = {}): Pro
       ],
     })
     .expect(201);
-  await request(app)
+  await request(serveurTest(app))
     .post(`/api/pending-actions/${body.pendingActionId}/approve`)
     .set("Cookie", cookie)
     .expect(200);
@@ -74,7 +75,7 @@ async function tenantAvecCampagne(options: { raisonSociale?: string } = {}): Pro
 }
 
 const planifier = (t: { cookie: string; campagneId: string }) =>
-  request(app)
+  request(serveurTest(app))
     .post(`/api/relance/campagnes/${t.campagneId}/appels`)
     .set("Cookie", t.cookie)
     .send({ factureId: "F-DECL", numero: NUMERO_TEST });

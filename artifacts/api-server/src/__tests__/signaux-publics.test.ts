@@ -18,7 +18,7 @@ import request from "supertest";
 import express from "express";
 import crypto from "node:crypto";
 import app from "../app";
-import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner } from "./helpers";
+import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner, serveurTest } from "./helpers";
 import { creerRouteEnrichissement } from "../routes/prospection";
 import {
   chercherEntreprises,
@@ -38,12 +38,12 @@ let b: Locataire;
 async function inscrire(nom: string): Promise<Locataire> {
   const email = `signaux-${nom}-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@test.nodaq`;
   cleanupEmails.push(email);
-  const reg = await request(app).post("/api/auth/register")
+  const reg = await request(serveurTest(app)).post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: `Patron ${nom}`, tenantNom: `Tenant ${nom}` })
     .expect(201);
   await completeMfaForRegisteredOwner(reg.body.userId);
   const cookie = reg.headers["set-cookie"]?.[0] ?? "";
-  const { body: me } = await request(app).get("/api/auth/me").set("Cookie", cookie).expect(200);
+  const { body: me } = await request(serveurTest(app)).get("/api/auth/me").set("Cookie", cookie).expect(200);
   cleanupTenantIds.push(me.tenantId);
   return { cookie, tenantId: me.tenantId };
 }
@@ -96,10 +96,10 @@ const entrepreneurIndividuel = () => ({
 });
 
 async function contactPro(l: Locataire, avecBase = true): Promise<string> {
-  const { body: c } = await request(app).post("/api/prospection/contacts").set("Cookie", l.cookie)
+  const { body: c } = await request(serveurTest(app)).post("/api/prospection/contacts").set("Cookie", l.cookie)
     .send({ nom: "SYNDIC MARLY SAS", type: "PRO", ville: "Marly-Gomont" }).expect(201);
   if (avecBase) {
-    await request(app).post(`/api/prospection/contacts/${c.id}/base`).set("Cookie", l.cookie)
+    await request(serveurTest(app)).post(`/api/prospection/contacts/${c.id}/base`).set("Cookie", l.cookie)
       .send({ base: "INTERET_LEGITIME_PRO", source: "annuaire public des entreprises" })
       .expect(201);
   }
@@ -124,7 +124,7 @@ afterAll(async () => {
 describe("aucune suggestion sans source", () => {
   test("sans source configurée : zéro axe, et la raison est DITE", async () => {
     retirerSource();
-    const { body } = await request(app).get("/api/prospection/axes")
+    const { body } = await request(serveurTest(app)).get("/api/prospection/axes")
       .set("Cookie", a.cookie).expect(200);
 
     expect(body.axes).toHaveLength(0);
@@ -135,7 +135,7 @@ describe("aucune suggestion sans source", () => {
 
   test("avec une source, chaque axe la CITE", async () => {
     configurerSource();
-    const { body } = await request(app).get("/api/prospection/axes")
+    const { body } = await request(serveurTest(app)).get("/api/prospection/axes")
       .set("Cookie", a.cookie).expect(200);
 
     expect(body.axes.length).toBeGreaterThan(0);
@@ -148,7 +148,7 @@ describe("aucune suggestion sans source", () => {
 
   test("un tenant sans secteur renseigné n'obtient rien, et sait pourquoi", async () => {
     configurerSource();
-    const { body } = await request(app).get("/api/prospection/axes")
+    const { body } = await request(serveurTest(app)).get("/api/prospection/axes")
       .set("Cookie", b.cookie).expect(200);
     expect(body.axes).toHaveLength(0);
     expect(body.raisonSilence).toBe("secteur_absent");
@@ -165,7 +165,7 @@ describe("régression #43 — /axes lit votre-metier.metier, pas metier.secteur"
     // Seule la clé que plus aucun écran ne pose jamais — voir l'issue.
     await reglage(t.tenantId, "metier.secteur", "batiment");
 
-    const { body } = await request(app).get("/api/prospection/axes")
+    const { body } = await request(serveurTest(app)).get("/api/prospection/axes")
       .set("Cookie", t.cookie).expect(200);
     expect(body.axes).toHaveLength(0);
     expect(body.raisonSilence).toBe("secteur_absent");
@@ -177,7 +177,7 @@ describe("régression #43 — /axes lit votre-metier.metier, pas metier.secteur"
     await reglage(t.tenantId, "company.commune", "Marly-Gomont");
     await reglage(t.tenantId, "votre-metier.metier", "batiment");
 
-    const { body } = await request(app).get("/api/prospection/axes")
+    const { body } = await request(serveurTest(app)).get("/api/prospection/axes")
       .set("Cookie", t.cookie).expect(200);
     expect(body.raisonSilence).toBeNull();
     expect(body.axes.length).toBeGreaterThan(0);
@@ -187,18 +187,18 @@ describe("régression #43 — /axes lit votre-metier.metier, pas metier.secteur"
 describe("aucune cible particulier", () => {
   test("l'avertissement est affiché en PERMANENCE, même sans axe", async () => {
     retirerSource();
-    const sansAxe = await request(app).get("/api/prospection/axes").set("Cookie", a.cookie).expect(200);
+    const sansAxe = await request(serveurTest(app)).get("/api/prospection/axes").set("Cookie", a.cookie).expect(200);
     expect(sansAxe.body.avertissement).toMatch(/PROFESSIONNELS/);
     expect(sansAxe.body.avertissement).toMatch(/consentement/i);
 
     configurerSource();
-    const avecAxes = await request(app).get("/api/prospection/axes").set("Cookie", a.cookie).expect(200);
+    const avecAxes = await request(serveurTest(app)).get("/api/prospection/axes").set("Cookie", a.cookie).expect(200);
     expect(avecAxes.body.avertissement).toMatch(/PROFESSIONNELS/);
   });
 
   test("aucun axe rendu ne mentionne un particulier", async () => {
     configurerSource();
-    const { body } = await request(app).get("/api/prospection/axes")
+    const { body } = await request(serveurTest(app)).get("/api/prospection/axes")
       .set("Cookie", a.cookie).expect(200);
     expect(JSON.stringify(body.axes)).not.toMatch(/particulier/i);
   });
@@ -261,9 +261,9 @@ describe("pas de base légale, pas d'enrichissement", () => {
   });
 
   test("un contact PARTICULIER est refusé en 422", async () => {
-    const { body: c } = await request(app).post("/api/prospection/contacts").set("Cookie", a.cookie)
+    const { body: c } = await request(serveurTest(app)).post("/api/prospection/contacts").set("Cookie", a.cookie)
       .send({ nom: "Madame Bernard", type: "PARTICULIER", ville: "Marly-Gomont" }).expect(201);
-    await request(app).post(`/api/prospection/contacts/${c.id}/base`).set("Cookie", a.cookie)
+    await request(serveurTest(app)).post(`/api/prospection/contacts/${c.id}/base`).set("Cookie", a.cookie)
       .send({ base: "CONSENTEMENT", source: "formulaire du site" }).expect(201);
 
     const t = vi.fn(async () => ({ status: 200, texte: "{}" }));
@@ -348,8 +348,8 @@ describe("isolation", () => {
     await reglage(b.tenantId, "votre-metier.metier", "paysage");
     await reglage(b.tenantId, "company.commune", "Laon");
 
-    const rA = await request(app).get("/api/prospection/axes").set("Cookie", a.cookie).expect(200);
-    const rB = await request(app).get("/api/prospection/axes").set("Cookie", b.cookie).expect(200);
+    const rA = await request(serveurTest(app)).get("/api/prospection/axes").set("Cookie", a.cookie).expect(200);
+    const rB = await request(serveurTest(app)).get("/api/prospection/axes").set("Cookie", b.cookie).expect(200);
 
     expect(rA.body.axes.every((x: { zone: string }) => x.zone === "Marly-Gomont")).toBe(true);
     expect(rB.body.axes.every((x: { zone: string }) => x.zone === "Laon")).toBe(true);

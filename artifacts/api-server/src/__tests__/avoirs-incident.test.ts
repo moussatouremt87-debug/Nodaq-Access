@@ -71,6 +71,7 @@ const {
   createTestSession,
   cookieHeader,
   completeMfaForRegisteredOwner,
+  serveurTest,
 } = await import("./helpers");
 
 const emails: string[] = [];
@@ -81,19 +82,19 @@ let tenantId = "";
 beforeAll(async () => {
   const email = `incident-${Date.now()}@test.nodaq`;
   emails.push(email);
-  const reg = await request(app)
+  const reg = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: "Owner", tenantNom: "Corp Sinistrée" })
     .expect(201);
   await completeMfaForRegisteredOwner(reg.body.userId);
   cookieOwner = reg.headers["set-cookie"]?.[0] ?? "";
-  const me = await request(app).get("/api/auth/me").set("Cookie", cookieOwner).expect(200);
+  const me = await request(serveurTest(app)).get("/api/auth/me").set("Cookie", cookieOwner).expect(200);
   tenantId = me.body.tenantId;
   tenants.push(tenantId);
 
   // Mentions légales : sans elles l'émission serait refusée AVANT l'attribution
   // du numéro d'avoir, et aucun de ces tests ne traverserait le chemin visé.
-  await request(app)
+  await request(serveurTest(app))
     .patch("/api/parametres")
     .set("Cookie", cookieOwner)
     .send({ "company.siret": "81234567600009", "company.raison_sociale": "Corp Sinistrée" })
@@ -111,7 +112,7 @@ afterEach(() => {
 
 /** Crée une facture EMISE d'un montant connu et rend id/numéro/montant TTC. */
 async function creerFactureEmise(): Promise<{ id: string; number: string; amountCents: number }> {
-  const brouillon = await request(app)
+  const brouillon = await request(serveurTest(app))
     .post("/api/factures")
     .set("Cookie", cookieOwner)
     .send({
@@ -125,7 +126,7 @@ async function creerFactureEmise(): Promise<{ id: string; number: string; amount
     })
     .expect(201);
 
-  const emise = await request(app)
+  const emise = await request(serveurTest(app))
     .post(`/api/factures/${brouillon.body.id}/emettre`)
     .set("Cookie", cookieOwner)
     .send({ issuedDate: "2026-08-01", dueDate: "2026-09-01" })
@@ -140,7 +141,7 @@ describe("le sinistre : TX2 échoue, la compensation échoue à son tour", () =>
 
     armer([3, 4]); // 3 = TX2 (insertion de l'avoir), 4 = compensation
     const motif = "Sinistre — annulation totale, TX2 puis compensation échouent";
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/avoirs")
       .set("Cookie", cookieOwner)
       .send({
@@ -172,7 +173,7 @@ describe("le sinistre : TX2 échoue, la compensation échoue à son tour", () =>
 
     // Et la facture, elle, reste dans l'état incohérent que rien n'a réparé —
     // exactement le sinistre que la trace documente.
-    const apres = await request(app)
+    const apres = await request(serveurTest(app))
       .get(`/api/factures/${facture.id}`)
       .set("Cookie", cookieOwner)
       .expect(200);
@@ -185,7 +186,7 @@ describe("la compensation réussit : aucun incident n'est créé", () => {
     const facture = await creerFactureEmise();
 
     armer([3]); // seul TX2 échoue — la compensation (4) n'est pas armée
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/avoirs")
       .set("Cookie", cookieOwner)
       .send({
@@ -203,7 +204,7 @@ describe("la compensation réussit : aucun incident n'est créé", () => {
     expect(rows).toHaveLength(0);
 
     // Et la facture est revenue exactement comme avant : EMISE, résiduel intact.
-    const apres = await request(app)
+    const apres = await request(serveurTest(app))
       .get(`/api/factures/${facture.id}`)
       .set("Cookie", cookieOwner)
       .expect(200);
@@ -266,14 +267,14 @@ describe("visibilité — la ligne du cockpit n'appartient qu'au OWNER", () => {
       [tenantId, facture.id],
     );
 
-    const owner = await request(app)
+    const owner = await request(serveurTest(app))
       .get("/api/cockpit/kpis")
       .set("Cookie", cookieOwner)
       .expect(200);
     expect(typeof owner.body.incidentsFacturationCount).toBe("number");
     expect(owner.body.incidentsFacturationCount).toBeGreaterThanOrEqual(1);
 
-    const membreRes = await request(app)
+    const membreRes = await request(serveurTest(app))
       .get("/api/cockpit/kpis")
       .set("Cookie", cookieMembre)
       .expect(200);
@@ -306,7 +307,7 @@ describe("rien de sensible dans les journaux", () => {
 
     try {
       armer([3, 4]);
-      await request(app)
+      await request(serveurTest(app))
         .post("/api/avoirs")
         .set("Cookie", cookieOwner)
         .send({

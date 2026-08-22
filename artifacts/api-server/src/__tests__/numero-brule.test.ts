@@ -38,6 +38,9 @@ vi.mock("../lib/pdf-generation.js", async (importOriginal) => {
 
 const { default: app } = await import("../app");
 const { logger } = await import("../lib/logger.js");
+// Le serveur partagé vient du même import différé : ce fichier simule un
+// module AVANT de charger l'app, l'import statique le court-circuiterait.
+const { serveurTest } = await import("./helpers");
 
 const emails: string[] = [];
 const tenants: string[] = [];
@@ -46,20 +49,20 @@ let cookie = "";
 beforeAll(async () => {
   const email = `brule-${Date.now()}@test.nodaq`;
   emails.push(email);
-  const reg = await request(app)
+  const reg = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: "Owner", tenantNom: "Corp Brûlée" })
     .expect(201);
   const { completeMfaForRegisteredOwner } = await import("./helpers");
   await completeMfaForRegisteredOwner(reg.body.userId);
   cookie = reg.headers["set-cookie"]?.[0] ?? "";
-  const me = await request(app).get("/api/auth/me").set("Cookie", cookie).expect(200);
+  const me = await request(serveurTest(app)).get("/api/auth/me").set("Cookie", cookie).expect(200);
   tenants.push(me.body.tenantId);
 
   // Mentions légales : sans elles l'émission serait refusée AVANT l'attribution
   // du numéro, et le test ne traverserait jamais le chemin visé. Même voie que
   // `facturation.test.ts` — l'API réelle, RLS comprise. Le SIRET satisfait Luhn.
-  await request(app)
+  await request(serveurTest(app))
     .patch("/api/parametres")
     .set("Cookie", cookie)
     .send({ "company.siret": "81234567600009", "company.raison_sociale": "Corp Brûlée" })
@@ -74,7 +77,7 @@ afterAll(async () => {
 
 describe("numéro brûlé", () => {
   test("un PDF qui échoue laisse une trace nommant le numéro et la raison", async () => {
-    const brouillon = await request(app)
+    const brouillon = await request(serveurTest(app))
       .post("/api/factures")
       .set("Cookie", cookie)
       .send({
@@ -90,7 +93,7 @@ describe("numéro brûlé", () => {
 
     const avertissements = vi.spyOn(logger, "warn");
     try {
-      const res = await request(app)
+      const res = await request(serveurTest(app))
         .post(`/api/factures/${brouillon.body.id}/emettre`)
         .set("Cookie", cookie)
         .send({ issuedDate: "2026-08-01", dueDate: "2026-09-01" });
@@ -114,7 +117,7 @@ describe("numéro brûlé", () => {
     }
 
     // Et la facture est restée BROUILLON, donc réémettable.
-    const apres = await request(app)
+    const apres = await request(serveurTest(app))
       .get(`/api/factures/${brouillon.body.id}`)
       .set("Cookie", cookie);
     expect(apres.body.statut).toBe("BROUILLON");

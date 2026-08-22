@@ -19,6 +19,7 @@ import {
   cookieHeader,
   cleanupTenants,
   cleanupUsers,
+  serveurTest,
 } from "./helpers";
 
 let cookieA: string;
@@ -29,7 +30,7 @@ const tenantIds: string[] = [];
 const emails: string[] = [];
 
 async function createBrouillon(cookie: string, overrides: Record<string, unknown> = {}) {
-  const res = await request(app)
+  const res = await request(serveurTest(app))
     .post("/api/factures")
     .set("Cookie", cookie)
     .send({
@@ -45,7 +46,7 @@ async function createBrouillon(cookie: string, overrides: Record<string, unknown
 }
 
 function emettre(cookie: string, id: string, issuedDate: string) {
-  return request(app)
+  return request(serveurTest(app))
     .post(`/api/factures/${id}/emettre`)
     .set("Cookie", cookie)
     .send({ issuedDate, dueDate: "2026-09-30" });
@@ -70,7 +71,7 @@ beforeAll(async () => {
   await createTestMembership(ownerB.id, tenantB.id, "OWNER");
   cookieB = cookieHeader((await createTestSession(ownerB.id, tenantB.id)).id);
 
-  await request(app)
+  await request(serveurTest(app))
     .patch("/api/parametres")
     .set("Cookie", cookieA)
     .send({ "company.siret": "81234567600009", "company.raison_sociale": "E-Reporting Corp" })
@@ -100,7 +101,7 @@ afterAll(async () => {
 
 describe("a — aperçu de l'agrégat", () => {
   test("compte exactement les 2 factures émises DANS la période, exclut le brouillon et la facture hors période", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .get("/api/e-reporting/apercu")
       .query({ periodeDebut: "2026-08-01", periodeFin: "2026-08-31" })
       .set("Cookie", cookieA)
@@ -114,7 +115,7 @@ describe("a — aperçu de l'agrégat", () => {
   });
 
   test("une période inversée est rejetée (400), pas silencieusement acceptée", async () => {
-    await request(app)
+    await request(serveurTest(app))
       .get("/api/e-reporting/apercu")
       .query({ periodeDebut: "2026-08-31", periodeFin: "2026-08-01" })
       .set("Cookie", cookieA)
@@ -122,7 +123,7 @@ describe("a — aperçu de l'agrégat", () => {
   });
 
   test("isolation : le tenant B ne voit aucune des factures du tenant A", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .get("/api/e-reporting/apercu")
       .query({ periodeDebut: "2026-08-01", periodeFin: "2026-08-31" })
       .set("Cookie", cookieB)
@@ -134,7 +135,7 @@ describe("a — aperçu de l'agrégat", () => {
 
 describe("b — déclaration : refus explicite sans plateforme agréée configurée", () => {
   test("503, pas une transmission silencieusement ignorée", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/e-reporting/declarer")
       .set("Cookie", cookieA)
       .send({ periodeDebut: "2026-08-01", periodeFin: "2026-08-31", tvaDeclareeCents: 40_000 })
@@ -151,7 +152,7 @@ describe("b — déclaration : refus explicite sans plateforme agréée configur
   });
 
   test("un corps invalide (TVA négative) est rejeté (400) avant tout appel PA", async () => {
-    await request(app)
+    await request(serveurTest(app))
       .post("/api/e-reporting/declarer")
       .set("Cookie", cookieA)
       .send({ periodeDebut: "2026-08-01", periodeFin: "2026-08-31", tvaDeclareeCents: -1 })

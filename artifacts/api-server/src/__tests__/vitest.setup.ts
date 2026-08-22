@@ -1,3 +1,11 @@
+import { afterAll as __afterAllServeur } from "vitest";
+import { arreterServeurTest } from "./helpers.js";
+
+// Les serveurs partagés se créent à la première requête (voir `serveurTest`)
+// et se referment ici. Rien à démarrer : `listen(0)` rend le port lisible
+// immédiatement.
+__afterAllServeur(async () => { await arreterServeurTest(); });
+
 /**
  * Vitest global setup — runs before every test file.
  *

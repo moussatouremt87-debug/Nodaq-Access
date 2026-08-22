@@ -15,7 +15,7 @@ import { describe, test, expect, beforeAll, afterAll, vi } from "vitest";
 import request from "supertest";
 import crypto from "node:crypto";
 import app from "../app";
-import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner, texteBrut } from "./helpers";
+import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner, texteBrut, serveurTest } from "./helpers";
 
 interface Locataire { cookie: string; tenantId: string }
 
@@ -26,24 +26,24 @@ let b: Locataire;
 
 let compteurIp = 0;
 const ipUnique = (): string => `203.0.113.${(compteurIp++ % 250) + 1}`;
-const publicGet = (chemin: string) => request(app).get(chemin).set("X-Forwarded-For", ipUnique());
+const publicGet = (chemin: string) => request(serveurTest(app)).get(chemin).set("X-Forwarded-For", ipUnique());
 
 async function inscrire(nom: string): Promise<Locataire> {
   const email = `pdfdevis-${nom}-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@test.nodaq`;
   cleanupEmails.push(email);
-  const reg = await request(app).post("/api/auth/register")
+  const reg = await request(serveurTest(app)).post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: `Patron ${nom}`, tenantNom: `Tenant ${nom}` })
     .expect(201);
   await completeMfaForRegisteredOwner(reg.body.userId);
   const cookie = reg.headers["set-cookie"]?.[0] ?? "";
-  const { body: me } = await request(app).get("/api/auth/me").set("Cookie", cookie).expect(200);
+  const { body: me } = await request(serveurTest(app)).get("/api/auth/me").set("Cookie", cookie).expect(200);
   cleanupTenantIds.push(me.tenantId);
   return { cookie, tenantId: me.tenantId };
 }
 
 /** Devis créé par l'API, avec des lignes réelles. */
 async function creerDevis(l: Locataire): Promise<{ id: string; reference: string }> {
-  const { body } = await request(app).post("/api/devis").set("Cookie", l.cookie)
+  const { body } = await request(serveurTest(app)).post("/api/devis").set("Cookie", l.cookie)
     .send({
       clientName: "Madame Bernard",
       validUntil: "2027-12-31",
@@ -78,7 +78,7 @@ afterAll(async () => {
 describe("le PDF d'un devis se rend", () => {
   test("la route authentifiée rend un PDF non vide", async () => {
     const d = await creerDevis(a);
-    const r = await request(app).get(`/api/devis/${d.id}/pdf`).set("Cookie", a.cookie).expect(200);
+    const r = await request(serveurTest(app)).get(`/api/devis/${d.id}/pdf`).set("Cookie", a.cookie).expect(200);
     expect(r.headers["content-type"]).toContain("application/pdf");
     expect(r.headers["content-disposition"]).toContain(".pdf");
     // Un PDF commence par %PDF-. Sans ce contrôle, un corps vide passerait.
@@ -88,7 +88,7 @@ describe("le PDF d'un devis se rend", () => {
 
   test("il porte le titre DEVIS, pas FACTURE", async () => {
     const d = await creerDevis(a);
-    const r = await request(app).get(`/api/devis/${d.id}/pdf`).set("Cookie", a.cookie).expect(200);
+    const r = await request(serveurTest(app)).get(`/api/devis/${d.id}/pdf`).set("Cookie", a.cookie).expect(200);
     const texte = texteBrut(r.body as Buffer);
     expect(texte).toContain("Devis n");
     expect(texte).not.toContain("Facture n");
@@ -101,14 +101,14 @@ describe("le PDF d'un devis se rend", () => {
     // "Proposition commerciale" — le mot que verticalPacks.ts porte pour ce
     // secteur.
     const liberal = await inscrire("liberal");
-    await request(app)
+    await request(serveurTest(app))
       .patch("/api/votre-metier")
       .set("Cookie", liberal.cookie)
       .send({ metier: "professions_liberales" })
       .expect(200);
 
     const d = await creerDevis(liberal);
-    const r = await request(app).get(`/api/devis/${d.id}/pdf`).set("Cookie", liberal.cookie).expect(200);
+    const r = await request(serveurTest(app)).get(`/api/devis/${d.id}/pdf`).set("Cookie", liberal.cookie).expect(200);
     const texte = texteBrut(r.body as Buffer);
     expect(texte).toContain("Proposition commerciale n");
     expect(texte).not.toContain("Devis n");
@@ -118,7 +118,7 @@ describe("le PDF d'un devis se rend", () => {
     // Elles ne concernent que les factures. Les faire figurer sur un devis
     // annoncerait une créance là où il n'y a qu'une proposition.
     const d = await creerDevis(a);
-    const r = await request(app).get(`/api/devis/${d.id}/pdf`).set("Cookie", a.cookie).expect(200);
+    const r = await request(serveurTest(app)).get(`/api/devis/${d.id}/pdf`).set("Cookie", a.cookie).expect(200);
     const texte = texteBrut(r.body as Buffer);
     expect(texte).not.toContain("nalit");        // « pénalités de retard »
     expect(texte).not.toContain("recouvrement");
@@ -129,26 +129,26 @@ describe("le PDF d'un devis se rend", () => {
     // creerDevis() pose vatRate:10 sur ses deux lignes — reproduit le
     // scénario UAT (ligne à 10 %, aucune mention nulle part sur le document).
     const d = await creerDevis(a);
-    const r = await request(app).get(`/api/devis/${d.id}/pdf`).set("Cookie", a.cookie).expect(200);
+    const r = await request(serveurTest(app)).get(`/api/devis/${d.id}/pdf`).set("Cookie", a.cookie).expect(200);
     const texte = texteBrut(r.body as Buffer);
     expect(texte).toContain("279-0 bis");
   });
 
   test("aucune ligne à taux réduit → pas de mention TVA réduite", async () => {
-    const { body } = await request(app).post("/api/devis").set("Cookie", a.cookie)
+    const { body } = await request(serveurTest(app)).post("/api/devis").set("Cookie", a.cookie)
       .send({
         clientName: "Madame Bernard",
         lines: [{ description: "Prestation standard", quantity: 1, unitPriceCents: 10_000, vatRate: 20 }],
       })
       .expect(201);
-    const r = await request(app).get(`/api/devis/${body.id}/pdf`).set("Cookie", a.cookie).expect(200);
+    const r = await request(serveurTest(app)).get(`/api/devis/${body.id}/pdf`).set("Cookie", a.cookie).expect(200);
     const texte = texteBrut(r.body as Buffer);
     expect(texte).not.toContain("279-0 bis");
   });
 
   test("un devis d'un autre tenant n'est pas atteignable", async () => {
     const d = await creerDevis(a);
-    await request(app).get(`/api/devis/${d.id}/pdf`).set("Cookie", b.cookie).expect(404);
+    await request(serveurTest(app)).get(`/api/devis/${d.id}/pdf`).set("Cookie", b.cookie).expect(404);
   });
 });
 
@@ -162,7 +162,7 @@ describe("l'e-mail d'envoi porte le devis", () => {
     const espion = vi.spyOn(canal, "sendDocument");
 
     const d = await creerDevis(a);
-    await request(app).post(`/api/devis/${d.id}/envoyer`).set("Cookie", a.cookie)
+    await request(serveurTest(app)).post(`/api/devis/${d.id}/envoyer`).set("Cookie", a.cookie)
       .send({ emailTo: "client@example.test" }).expect(200);
 
     expect(espion).toHaveBeenCalled();
@@ -182,7 +182,7 @@ describe("le PDF servi par le JETON, sans session", () => {
 
   async function devisEnvoye(l: Locataire): Promise<{ id: string; token: string; reference: string }> {
     const d = await creerDevis(l);
-    const { body } = await request(app).post(`/api/devis/${d.id}/envoyer`).set("Cookie", l.cookie)
+    const { body } = await request(serveurTest(app)).post(`/api/devis/${d.id}/envoyer`).set("Cookie", l.cookie)
       .send({ emailTo: "client@example.test" }).expect(200);
     return { ...d, token: jetonDe(body.acceptUrl) };
   }
@@ -218,7 +218,7 @@ describe("le PDF servi par le JETON, sans session", () => {
   test("LE PDF RESTE SERVI APRÈS ACCEPTATION", async () => {
     // C'est précisément à ce moment-là que le client veut garder son document.
     const d = await devisEnvoye(a);
-    await request(app).post(`/api/public/devis/${d.token}/accept`)
+    await request(serveurTest(app)).post(`/api/public/devis/${d.token}/accept`)
       .set("X-Forwarded-For", ipUnique())
       .send({ signataire: "Jean Client" }).expect(200);
 
@@ -238,7 +238,7 @@ describe("les dates sont affichées à la française", () => {
   test("le PDF montre JJ/MM/AAAA, jamais AAAA-MM-JJ", async () => {
     // « 2026-08-10 » est le format d'ÉCHANGE, pas celui qu'on montre à un
     // client. Le XML Factur-X, lui, reste en ISO — il n'est pas touché.
-    const { body: cree } = await request(app).post("/api/devis").set("Cookie", a.cookie)
+    const { body: cree } = await request(serveurTest(app)).post("/api/devis").set("Cookie", a.cookie)
       .send({
         clientName: "Madame Bernard",
         validUntil: "2027-12-31",
@@ -246,7 +246,7 @@ describe("les dates sont affichées à la française", () => {
       })
       .expect(201);
 
-    const r = await request(app).get(`/api/devis/${cree.id}/pdf`).set("Cookie", a.cookie).expect(200);
+    const r = await request(serveurTest(app)).get(`/api/devis/${cree.id}/pdf`).set("Cookie", a.cookie).expect(200);
     const texte = texteBrut(r.body as Buffer);
 
     expect(texte).toContain("31/12/2027");

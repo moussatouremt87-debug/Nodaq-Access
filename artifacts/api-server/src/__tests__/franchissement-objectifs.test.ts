@@ -15,7 +15,7 @@ import request from "supertest";
 import crypto from "node:crypto";
 import app from "../app";
 import { toDateString, CLE_TAUX_MARGE, CLE_CHARGES_FIXES } from "@nodaq/shared";
-import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner } from "./helpers";
+import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner, serveurTest } from "./helpers";
 import { evaluerFranchissements } from "../lib/franchissement-objectifs";
 
 interface Locataire { cookie: string; tenantId: string }
@@ -27,12 +27,12 @@ const anneeCourante = new Date().getFullYear();
 async function inscrire(nom: string): Promise<Locataire> {
   const email = `franchi-${nom}-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@test.nodaq`;
   cleanupEmails.push(email);
-  const reg = await request(app).post("/api/auth/register")
+  const reg = await request(serveurTest(app)).post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: `Patron ${nom}`, tenantNom: `Tenant ${nom}` })
     .expect(201);
   await completeMfaForRegisteredOwner(reg.body.userId);
   const cookie = reg.headers["set-cookie"]?.[0] ?? "";
-  const { body: me } = await request(app).get("/api/auth/me").set("Cookie", cookie).expect(200);
+  const { body: me } = await request(serveurTest(app)).get("/api/auth/me").set("Cookie", cookie).expect(200);
   cleanupTenantIds.push(me.tenantId);
   return { cookie, tenantId: me.tenantId };
 }
@@ -152,7 +152,7 @@ describe("b — annoncé UNE SEULE FOIS", () => {
       ["company.commune", "Marly"],
     ]) await reglage(t.tenantId, cle[0]!, cle[1]!);
 
-    const { body: f } = await request(app).post("/api/factures").set("Cookie", t.cookie)
+    const { body: f } = await request(serveurTest(app)).post("/api/factures").set("Cookie", t.cookie)
       .send({
         customerName: "Madame Bernard",
         issuedDate: toDateString(new Date()),
@@ -162,7 +162,7 @@ describe("b — annoncé UNE SEULE FOIS", () => {
       })
       .expect(201);
 
-    const emise = await request(app).post(`/api/factures/${f.id}/emettre`)
+    const emise = await request(serveurTest(app)).post(`/api/factures/${f.id}/emettre`)
       .set("Cookie", t.cookie).send({}).expect(200);
 
     expect(emise.body.objectifsFranchis).toHaveLength(1);
@@ -300,7 +300,7 @@ describe("g — isolation", () => {
 
     expect(await franchissements(deux.tenantId)).toHaveLength(0);
 
-    const { body } = await request(app).get("/api/cockpit/objectifs")
+    const { body } = await request(serveurTest(app)).get("/api/cockpit/objectifs")
       .set("Cookie", deux.cookie).expect(200);
     const seuil = body.objectifs.find((o: { id: string }) => o.id === "seuil_rentabilite");
     expect(seuil.dejaFranchi ?? false).toBe(false);
@@ -313,7 +313,7 @@ describe("g — isolation", () => {
     await factureEmise(t, 40_000_000, toDateString(new Date()));
     await evaluerFranchissements(t.tenantId);
 
-    const { body } = await request(app).get("/api/cockpit/objectifs")
+    const { body } = await request(serveurTest(app)).get("/api/cockpit/objectifs")
       .set("Cookie", t.cookie).expect(200);
     const seuil = body.objectifs.find((o: { id: string }) => o.id === "seuil_rentabilite");
     expect(seuil.dejaFranchi).toBe(true);

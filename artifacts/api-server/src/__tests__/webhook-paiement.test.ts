@@ -17,7 +17,7 @@ import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } fr
 import request from "supertest";
 import crypto from "node:crypto";
 import app from "../app";
-import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner } from "./helpers";
+import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner, serveurTest } from "./helpers";
 
 const SECRET = "secret-webhook-paiement-test";
 const MONTANT = 42_800;
@@ -68,7 +68,7 @@ const evenementPaye = (reference: string, transactionId = `tx-${reference}`) =>
   });
 
 const poster = (corps: string, secret: string | null) => {
-  const requete = request(app).post("/api/webhooks/paiement").set("Content-Type", "application/json");
+  const requete = request(serveurTest(app)).post("/api/webhooks/paiement").set("Content-Type", "application/json");
   if (secret) requete.set("BridgeApi-Signature", signer(corps, secret));
   return requete.send(corps);
 };
@@ -85,7 +85,7 @@ async function paiementsDuLien(lienId: string) {
 beforeAll(async () => {
   const email = `wh-paiement-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@test.nodaq`;
   emails.push(email);
-  const reg = await request(app)
+  const reg = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: "Patron", tenantNom: "Webhook SARL" })
     .expect(201);
@@ -135,7 +135,7 @@ describe("a — la signature commande, et elle est vérifiée AVANT toute lectur
     const lienId = await lienEmis();
     const corps = evenementPaye(lienId);
     const entete = signer(corps, SECRET);
-    await request(app)
+    await request(serveurTest(app))
       .post("/api/webhooks/paiement")
       .set("Content-Type", "application/json")
       .set("BridgeApi-Signature", entete)

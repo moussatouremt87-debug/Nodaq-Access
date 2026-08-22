@@ -17,7 +17,7 @@ import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import crypto from "node:crypto";
 import app from "../app";
-import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner } from "./helpers";
+import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner, serveurTest } from "./helpers";
 
 interface Locataire { cookie: string; tenantId: string }
 
@@ -29,12 +29,12 @@ let b: Locataire;
 async function inscrire(nom: string): Promise<Locataire> {
   const email = `alias-${nom}-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@test.nodaq`;
   cleanupEmails.push(email);
-  const reg = await request(app).post("/api/auth/register")
+  const reg = await request(serveurTest(app)).post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: `Patron ${nom}`, tenantNom: `Tenant ${nom}` })
     .expect(201);
   await completeMfaForRegisteredOwner(reg.body.userId);
   const cookie = reg.headers["set-cookie"]?.[0] ?? "";
-  const { body: me } = await request(app).get("/api/auth/me").set("Cookie", cookie).expect(200);
+  const { body: me } = await request(serveurTest(app)).get("/api/auth/me").set("Cookie", cookie).expect(200);
   cleanupTenantIds.push(me.tenantId);
   return { cookie, tenantId: me.tenantId };
 }
@@ -45,19 +45,19 @@ async function ligneCatalogue(
   prixCents = 4_500,
   motsCles: string[] = [],
 ): Promise<string> {
-  const { body } = await request(app).post("/api/catalogue").set("Cookie", l.cookie)
+  const { body } = await request(serveurTest(app)).post("/api/catalogue").set("Cookie", l.cookie)
     .send({ libelle, unite: "m2", prixUnitaireHtCents: prixCents, tauxTva: 10, motsCles })
     .expect(201);
   return body.id;
 }
 
 const apprendre = (l: Locataire, libelleDicte: string, ligneId: string, remplacer = false) =>
-  request(app).post("/api/catalogue/alias").set("Cookie", l.cookie)
+  request(serveurTest(app)).post("/api/catalogue/alias").set("Cookie", l.cookie)
     .send({ libelleDicte, catalogueLigneId: ligneId, remplacer });
 
 /** Passe une dictée et rend la ligne proposée. */
 async function dicter(l: Locataire, texte: string) {
-  const { body } = await request(app).post("/api/devis/dictee/proposer")
+  const { body } = await request(serveurTest(app)).post("/api/devis/dictee/proposer")
     .set("Cookie", l.cookie).send({ texte }).expect(200);
   return body.lignes[0];
 }
@@ -105,7 +105,7 @@ describe("a — ce que l'artisan corrige une fois, il ne le corrige plus", () =>
     expect(direct.provenance).toBe("catalogue");
 
     await apprendre(t, "du placo", ligne).expect(201);
-    const { body } = await request(app).get("/api/catalogue/alias")
+    const { body } = await request(serveurTest(app)).get("/api/catalogue/alias")
       .set("Cookie", t.cookie).expect(200);
     expect(body.alias[0].libelleDicte).toBe("du placo");
     expect(body.alias[0].libelleCatalogue).toBe("Cloison BA13");
@@ -129,7 +129,7 @@ describe("c — un alias ne RECOUVRE jamais le libellé d'une autre ligne", () =
     expect(r.body.error).toMatch(/détournerait/i);
 
     // Et rien n'a été appris.
-    const { body } = await request(app).get("/api/catalogue/alias")
+    const { body } = await request(serveurTest(app)).get("/api/catalogue/alias")
       .set("Cookie", t.cookie).expect(200);
     expect(body.total).toBe(0);
   });
@@ -164,7 +164,7 @@ describe("d — un remplacement n'est jamais implicite", () => {
     expect(r.body.error).toContain("Cloison BA13");
 
     // L'apprentissage d'origine est intact.
-    const { body } = await request(app).get("/api/catalogue/alias")
+    const { body } = await request(serveurTest(app)).get("/api/catalogue/alias")
       .set("Cookie", t.cookie).expect(200);
     expect(body.alias[0].catalogueLigneId).toBe(cloison);
   });
@@ -178,7 +178,7 @@ describe("d — un remplacement n'est jamais implicite", () => {
     const r = await apprendre(t, "du placo", peinture, true).expect(201);
     expect(r.body.remplace).toBe(true);
 
-    const { body } = await request(app).get("/api/catalogue/alias")
+    const { body } = await request(serveurTest(app)).get("/api/catalogue/alias")
       .set("Cookie", t.cookie).expect(200);
     // UNE phrase, UNE ligne : pas deux entrées concurrentes.
     expect(body.total).toBe(1);
@@ -193,7 +193,7 @@ describe("d — un remplacement n'est jamais implicite", () => {
     const r = await apprendre(t, "du placo", ligne).expect(201);
     expect(r.body.remplace).toBe(false);
 
-    const { body } = await request(app).get("/api/catalogue/alias")
+    const { body } = await request(serveurTest(app)).get("/api/catalogue/alias")
       .set("Cookie", t.cookie).expect(200);
     expect(body.total).toBe(1);
   });
@@ -206,7 +206,7 @@ describe("d — un remplacement n'est jamais implicite", () => {
     const r = await apprendre(t, "PLATRERIE GENERALE", ligne).expect(201);
     expect(r.body.remplace).toBe(false);
 
-    const { body } = await request(app).get("/api/catalogue/alias")
+    const { body } = await request(serveurTest(app)).get("/api/catalogue/alias")
       .set("Cookie", t.cookie).expect(200);
     expect(body.total).toBe(1);
   });
@@ -223,16 +223,16 @@ describe("e — un alias s'oublie", () => {
     await apprendre(t, "Cloison BA13", ligne).expect(201);
     expect((await dicter(t, "cloison trente mètres")).provenance).toBe("alias");
 
-    const { body } = await request(app).get("/api/catalogue/alias")
+    const { body } = await request(serveurTest(app)).get("/api/catalogue/alias")
       .set("Cookie", t.cookie).expect(200);
-    await request(app).delete(`/api/catalogue/alias/${body.alias[0].id}`)
+    await request(serveurTest(app)).delete(`/api/catalogue/alias/${body.alias[0].id}`)
       .set("Cookie", t.cookie).expect(204);
 
     expect((await dicter(t, "cloison trente mètres")).provenance).toBe("a_completer");
   });
 
   test("oublier un alias inconnu → 404", async () => {
-    await request(app).delete(`/api/catalogue/alias/${crypto.randomUUID()}`)
+    await request(serveurTest(app)).delete(`/api/catalogue/alias/${crypto.randomUUID()}`)
       .set("Cookie", a.cookie).expect(404);
   });
 });
@@ -245,7 +245,7 @@ describe("g — supprimer une ligne de catalogue emporte ses alias", () => {
     const ligne = await ligneCatalogue(t, "Cloison BA13");
     await apprendre(t, "du placo", ligne).expect(201);
 
-    await request(app).delete(`/api/catalogue/${ligne}`).set("Cookie", t.cookie);
+    await request(serveurTest(app)).delete(`/api/catalogue/${ligne}`).set("Cookie", t.cookie);
 
     const { rows } = await adminPool.query(
       `SELECT count(*)::int AS n FROM catalogue_alias WHERE catalogue_ligne_id = $1`, [ligne]);
@@ -260,7 +260,7 @@ describe("f — l'alias d'un tenant n'apprend rien à un autre", () => {
     const ligneA = await ligneCatalogue(a, `Cloison A ${crypto.randomBytes(3).toString("hex")}`);
     await apprendre(a, "du placo maison", ligneA).expect(201);
 
-    const { body } = await request(app).get("/api/catalogue/alias")
+    const { body } = await request(serveurTest(app)).get("/api/catalogue/alias")
       .set("Cookie", b.cookie).expect(200);
     expect(JSON.stringify(body)).not.toContain("du placo maison");
   });

@@ -29,6 +29,7 @@ import {
   createTestSession,
   cleanupTenants,
   cleanupUsers,
+  serveurTest,
 } from "./helpers";
 
 const tenantIds: string[] = [];
@@ -96,7 +97,7 @@ describe("a — GET /auth/mes-espaces liste le portefeuille, rôle et secteur pa
     const session = await createTestSession(user.id, tenantOwner.id);
     const cookie = cookieHeader(session.id);
 
-    const res = await request(app).get("/api/auth/mes-espaces").set("Cookie", cookie).expect(200);
+    const res = await request(serveurTest(app)).get("/api/auth/mes-espaces").set("Cookie", cookie).expect(200);
     const espaces = res.body.espaces as Array<{
       tenantId: string; role: string; secteurLabel: string; affairesEnCours: number | null;
     }>;
@@ -134,11 +135,11 @@ describe("b, c — POST /auth/basculer-espace bascule en place, isole les donné
     const session = await createTestSession(user.id, tenantA.id);
     const cookie = cookieHeader(session.id);
 
-    const avant = await request(app).get("/api/auth/me").set("Cookie", cookie).expect(200);
+    const avant = await request(serveurTest(app)).get("/api/auth/me").set("Cookie", cookie).expect(200);
     expect(avant.body.tenantId).toBe(tenantA.id);
     expect(avant.body.mfaStatus).toBe("verified");
 
-    const bascule = await request(app)
+    const bascule = await request(serveurTest(app))
       .post("/api/auth/basculer-espace")
       .set("Cookie", cookie)
       .send({ tenantId: tenantB.id })
@@ -151,20 +152,20 @@ describe("b, c — POST /auth/basculer-espace bascule en place, isole les donné
 
     // MÊME cookie, aucune nouvelle session — /auth/me reflète tenantB dès la
     // requête suivante.
-    const apres = await request(app).get("/api/auth/me").set("Cookie", cookie).expect(200);
+    const apres = await request(serveurTest(app)).get("/api/auth/me").set("Cookie", cookie).expect(200);
     expect(apres.body.tenantId).toBe(tenantB.id);
     expect(apres.body.role).toBe("ACCOUNTANT");
 
     // Bascule vers un tenant où l'utilisateur n'est PAS membre → 403, et la
     // session reste sur tenantB (non modifiée par la tentative refusée).
-    const refus = await request(app)
+    const refus = await request(serveurTest(app))
       .post("/api/auth/basculer-espace")
       .set("Cookie", cookie)
       .send({ tenantId: tenantEtranger.id })
       .expect(403);
     expect(refus.body.error).toBeTruthy();
 
-    const inchange = await request(app).get("/api/auth/me").set("Cookie", cookie).expect(200);
+    const inchange = await request(serveurTest(app)).get("/api/auth/me").set("Cookie", cookie).expect(200);
     expect(inchange.body.tenantId).toBe(tenantB.id);
   });
 
@@ -186,17 +187,17 @@ describe("b, c — POST /auth/basculer-espace bascule en place, isole les donné
     const session = await createTestSession(user.id, tenantA.id);
     const cookie = cookieHeader(session.id);
 
-    const surA = await request(app).get(`/api/compte-resultat?${periode}`).set("Cookie", cookie).expect(200);
+    const surA = await request(serveurTest(app)).get(`/api/compte-resultat?${periode}`).set("Cookie", cookie).expect(200);
     const ligneA = surA.body.lines.find((l: { lineCode: string }) => l.lineCode === "AUTRES_PRODUITS");
     expect(ligneA.manualAmountCents).toBe(111100);
 
-    await request(app)
+    await request(serveurTest(app))
       .post("/api/auth/basculer-espace")
       .set("Cookie", cookie)
       .send({ tenantId: tenantB.id })
       .expect(200);
 
-    const surB = await request(app).get(`/api/compte-resultat?${periode}`).set("Cookie", cookie).expect(200);
+    const surB = await request(serveurTest(app)).get(`/api/compte-resultat?${periode}`).set("Cookie", cookie).expect(200);
     const ligneB = surB.body.lines.find((l: { lineCode: string }) => l.lineCode === "AUTRES_PRODUITS");
     expect(ligneB.manualAmountCents).toBe(222200);
     expect(ligneB.manualAmountCents).not.toBe(111100);
@@ -228,7 +229,7 @@ describe("d — GET /cabinet/export consolide les clients en un seul CSV homogè
     const session = await createTestSession(user.id, tenantBtp.id);
     const cookie = cookieHeader(session.id);
 
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .get("/api/cabinet/export?from=2026-01-01&to=2026-12-31")
       .set("Cookie", cookie)
       .expect(200);

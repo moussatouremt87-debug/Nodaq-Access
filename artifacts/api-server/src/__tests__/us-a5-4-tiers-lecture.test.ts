@@ -29,6 +29,7 @@ import {
   createTestSession,
   cleanupTenants,
   cleanupUsers,
+  serveurTest,
 } from "./helpers";
 
 let tenantId: string;
@@ -78,7 +79,7 @@ describe("a, b — le tiers lit le dossier financier et n'écrit rien", () => {
   test("GET sur un écran autorisé → 200, montants en clair", async () => {
     const v = await creerUtilisateur("VIEWER", "lecture");
 
-    const cr = await request(app)
+    const cr = await request(serveurTest(app))
       .get("/api/compte-resultat?from=2026-01-01&to=2026-12-31")
       .set("Cookie", v.cookie);
     expect(cr.status).toBe(200);
@@ -86,7 +87,7 @@ describe("a, b — le tiers lit le dossier financier et n'écrit rien", () => {
     // pas des `null` (voir maskFinancialFields, qui masque avec null).
     expect(typeof cr.body.totals.resultatExercice).toBe("number");
 
-    const kpis = await request(app).get("/api/cockpit/kpis").set("Cookie", v.cookie);
+    const kpis = await request(serveurTest(app)).get("/api/cockpit/kpis").set("Cookie", v.cookie);
     expect(kpis.status).toBe(200);
     expect(kpis.body.chiffreAffairesMois).not.toBeNull();
   });
@@ -94,26 +95,26 @@ describe("a, b — le tiers lit le dossier financier et n'écrit rien", () => {
   test("toute méthode autre que GET est refusée, même sur un écran autorisé", async () => {
     const v = await creerUtilisateur("VIEWER", "ecriture");
 
-    const patch = await request(app)
+    const patch = await request(serveurTest(app))
       .patch("/api/compte-resultat/lignes")
       .set("Cookie", v.cookie)
       .send({ periodKey: "2026-01-01:2026-12-31", lines: [{ lineCode: "SALAIRES", amountCents: 1 }] });
     expect(patch.status).toBe(403);
     expect(patch.body.error).toMatch(/lecture seule/i);
 
-    const post = await request(app)
+    const post = await request(serveurTest(app))
       .post("/api/factures")
       .set("Cookie", v.cookie)
       .send({ clientName: "X", amountCents: 100 });
     expect(post.status).toBe(403);
 
-    const del = await request(app).delete("/api/factures/nimporte-quoi").set("Cookie", v.cookie);
+    const del = await request(serveurTest(app)).delete("/api/factures/nimporte-quoi").set("Cookie", v.cookie);
     expect(del.status).toBe(403);
   });
 
   test("un OWNER, lui, écrit toujours sur les mêmes routes — la garde ne vise que VIEWER", async () => {
     const o = await creerUtilisateur("OWNER", "owner-ecrit");
-    const patch = await request(app)
+    const patch = await request(serveurTest(app))
       .patch("/api/compte-resultat/lignes")
       .set("Cookie", o.cookie)
       .send({ periodKey: "2026-01-01:2026-12-31", lines: [{ lineCode: "SALAIRES", amountCents: 4200 }] });
@@ -128,7 +129,7 @@ describe("c — périmètre : liste blanche, refus par défaut", () => {
     const v = await creerUtilisateur("VIEWER", "perimetre");
 
     for (const chemin of ["/api/prospects", "/api/chat/messages", "/api/classeur", "/api/affaires"]) {
-      const res = await request(app).get(chemin).set("Cookie", v.cookie);
+      const res = await request(serveurTest(app)).get(chemin).set("Cookie", v.cookie);
       expect(res.status, `${chemin} devrait être refusé`).toBe(403);
     }
   });
@@ -150,10 +151,10 @@ describe("c — périmètre : liste blanche, refus par défaut", () => {
     const v = await creerUtilisateur("VIEWER", "fail-closed");
     const o = await creerUtilisateur("OWNER", "fail-closed-owner");
 
-    const pourOwner = await request(app).get("/api/routeur-qui-nexiste-pas-encore").set("Cookie", o.cookie);
+    const pourOwner = await request(serveurTest(app)).get("/api/routeur-qui-nexiste-pas-encore").set("Cookie", o.cookie);
     expect(pourOwner.status).toBe(404);
 
-    const pourViewer = await request(app).get("/api/routeur-qui-nexiste-pas-encore").set("Cookie", v.cookie);
+    const pourViewer = await request(serveurTest(app)).get("/api/routeur-qui-nexiste-pas-encore").set("Cookie", v.cookie);
     expect(pourViewer.status).toBe(403);
     expect(pourViewer.body.error).toMatch(/pas inclus dans l'accès/i);
   });
@@ -179,7 +180,7 @@ describe("c — périmètre : liste blanche, refus par défaut", () => {
 
     const v = await creerUtilisateur("VIEWER", "prefixes");
     for (const prefixe of ECRANS_TIERS_LECTURE) {
-      const res = await request(app).get(`/api${sondes[prefixe]}`).set("Cookie", v.cookie);
+      const res = await request(serveurTest(app)).get(`/api${sondes[prefixe]}`).set("Cookie", v.cookie);
       expect(res.body?.error ?? "", `${prefixe} ne doit pas être bloqué par le périmètre`)
         .not.toMatch(/pas inclus dans l'accès/i);
     }
@@ -192,7 +193,7 @@ describe("d, e — échéance de l'accès", () => {
   test("une échéance dépassée ferme l'accès dès la requête suivante, sans reconnexion", async () => {
     // Échéance dans le futur : l'accès fonctionne.
     const v = await creerUtilisateur("VIEWER", "echeance", new Date(Date.now() + 60_000));
-    const avant = await request(app).get("/api/cockpit/kpis").set("Cookie", v.cookie);
+    const avant = await request(serveurTest(app)).get("/api/cockpit/kpis").set("Cookie", v.cookie);
     expect(avant.status).toBe(200);
 
     // On recule l'échéance dans le passé — RIEN d'autre. Même session, même
@@ -202,7 +203,7 @@ describe("d, e — échéance de l'accès", () => {
       [v.userId],
     );
 
-    const apres = await request(app).get("/api/cockpit/kpis").set("Cookie", v.cookie);
+    const apres = await request(serveurTest(app)).get("/api/cockpit/kpis").set("Cookie", v.cookie);
     expect(apres.status).toBe(403);
     expect(apres.body.error).toMatch(/expir/i);
   });
@@ -210,7 +211,7 @@ describe("d, e — échéance de l'accès", () => {
   test("non-régression : une adhésion sans échéance n'est jamais fermée", async () => {
     for (const role of ["OWNER", "MEMBER", "ACCOUNTANT"] as const) {
       const u = await creerUtilisateur(role, `sans-echeance-${role}`);
-      const res = await request(app).get("/api/cockpit/kpis").set("Cookie", u.cookie);
+      const res = await request(serveurTest(app)).get("/api/cockpit/kpis").set("Cookie", u.cookie);
       expect(res.status, `${role} sans échéance doit passer`).toBe(200);
     }
   });
@@ -222,14 +223,14 @@ describe("f, g — accorder l'accès passe par l'invitation, avec une date", () 
   test("inviter un VIEWER sans date de fin → 400 ; avec une date passée → 400 ; avec une date future → 201", async () => {
     const o = await creerUtilisateur("OWNER", "inviteur");
 
-    const sansDate = await request(app)
+    const sansDate = await request(serveurTest(app))
       .post("/api/membres/inviter")
       .set("Cookie", o.cookie)
       .send({ email: `tiers-sans-date-${Date.now()}@test.nodaq`, role: "VIEWER" });
     expect(sansDate.status).toBe(400);
     expect(sansDate.body.error).toMatch(/date de fin/i);
 
-    const datePassee = await request(app)
+    const datePassee = await request(serveurTest(app))
       .post("/api/membres/inviter")
       .set("Cookie", o.cookie)
       .send({
@@ -242,7 +243,7 @@ describe("f, g — accorder l'accès passe par l'invitation, avec une date", () 
     const emailOk = `tiers-ok-${Date.now()}@test.nodaq`;
     emails.push(emailOk);
     const echeance = new Date(Date.now() + 30 * 86_400_000);
-    const ok = await request(app)
+    const ok = await request(serveurTest(app))
       .post("/api/membres/inviter")
       .set("Cookie", o.cookie)
       .send({ email: emailOk, role: "VIEWER", accesExpireAt: echeance.toISOString() });
@@ -268,7 +269,7 @@ describe("f, g — accorder l'accès passe par l'invitation, avec une date", () 
   test("une échéance sur un rôle autre que VIEWER est désormais acceptée (US-A7.3)", async () => {
     const o = await creerUtilisateur("OWNER", "inviteur-accountant");
     const echeance = new Date(Date.now() + 86_400_000);
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/membres/inviter")
       .set("Cookie", o.cookie)
       .send({
@@ -292,14 +293,14 @@ describe("f, g — accorder l'accès passe par l'invitation, avec une date", () 
       "SELECT id FROM memberships WHERE user_id = $1", [tiers.userId],
     )).rows;
 
-    const versViewer = await request(app)
+    const versViewer = await request(serveurTest(app))
       .patch(`/api/membres/${membreMembershipId}/role`)
       .set("Cookie", o.cookie)
       .send({ role: "VIEWER" });
     expect(versViewer.status).toBe(403);
     expect(versViewer.body.error).toMatch(/invitation/i);
 
-    const depuisViewer = await request(app)
+    const depuisViewer = await request(serveurTest(app))
       .patch(`/api/membres/${tiersMembershipId}/role`)
       .set("Cookie", o.cookie)
       .send({ role: "MEMBER" });

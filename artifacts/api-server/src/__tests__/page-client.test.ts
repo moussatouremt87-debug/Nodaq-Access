@@ -12,7 +12,7 @@ import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import crypto from "node:crypto";
 import app from "../app";
-import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner } from "./helpers";
+import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner, serveurTest } from "./helpers";
 
 interface Locataire { cookie: string; tenantId: string }
 
@@ -24,18 +24,18 @@ let b: Locataire;
 
 let compteurIp = 0;
 const ipUnique = (): string => `203.0.113.${(compteurIp++ % 250) + 1}`;
-const publicGet = (chemin: string) => request(app).get(chemin).set("X-Forwarded-For", ipUnique());
+const publicGet = (chemin: string) => request(serveurTest(app)).get(chemin).set("X-Forwarded-For", ipUnique());
 
 async function inscrire(nom: string): Promise<Locataire> {
   const email = `pageclient-${nom}-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@test.nodaq`;
   cleanupEmails.push(email);
-  const reg = await request(app)
+  const reg = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: `Patron ${nom}`, tenantNom: `Tenant ${nom}` })
     .expect(201);
   await completeMfaForRegisteredOwner(reg.body.userId);
   const cookie = reg.headers["set-cookie"]?.[0] ?? "";
-  const { body: me } = await request(app).get("/api/auth/me").set("Cookie", cookie).expect(200);
+  const { body: me } = await request(serveurTest(app)).get("/api/auth/me").set("Cookie", cookie).expect(200);
   cleanupTenantIds.push(me.tenantId);
   return { cookie, tenantId: me.tenantId };
 }
@@ -142,7 +142,7 @@ describe("l'entreprise qui envoie est NOMMÉE", () => {
 
   test("l'écran « déjà accepté » nomme aussi l'entreprise", async () => {
     const d = await devisAvecLignes(a);
-    await request(app)
+    await request(serveurTest(app))
       .post(`/api/public/devis/${d.token}/accept`)
       .set("X-Forwarded-For", ipUnique())
       .send({ signataire: "Jean Client" })
@@ -201,7 +201,7 @@ describe("les bornes sont tenues PAR LA ROUTE, pas par l'écran", () => {
   test("LE CAS OBSERVÉ : 35 au lieu de 3500 est refusé en 400", async () => {
     // L'application avait affiché, sans broncher, un seuil de rentabilité de
     // 13 714 286 €. Le calcul était juste ; l'entrée était absurde.
-    const r = await request(app)
+    const r = await request(serveurTest(app))
       .patch("/api/parametres")
       .set("Cookie", a.cookie)
       .send({ "objectifs.taux_marge_bp": "35" })
@@ -218,11 +218,11 @@ describe("les bornes sont tenues PAR LA ROUTE, pas par l'écran", () => {
     ["charges négatives", { "objectifs.charges_fixes_annuelles_cents": "-1" }],
     ["charges hors fourchette TPE", { "objectifs.charges_fixes_annuelles_cents": "999999999999" }],
   ])("%s → 400", async (_label, corps) => {
-    await request(app).patch("/api/parametres").set("Cookie", a.cookie).send(corps).expect(400);
+    await request(serveurTest(app)).patch("/api/parametres").set("Cookie", a.cookie).send(corps).expect(400);
   });
 
   test("une valeur refusée n'est PAS enregistrée", async () => {
-    await request(app).patch("/api/parametres").set("Cookie", a.cookie)
+    await request(serveurTest(app)).patch("/api/parametres").set("Cookie", a.cookie)
       .send({ "objectifs.taux_marge_bp": "35" }).expect(400);
     const { rows } = await adminPool.query(
       `SELECT value FROM settings WHERE tenant_id = $1::uuid AND key = 'objectifs.taux_marge_bp'`,
@@ -234,7 +234,7 @@ describe("les bornes sont tenues PAR LA ROUTE, pas par l'écran", () => {
   test("un lot mixte est refusé EN ENTIER — rien n'est écrit", async () => {
     // Écrire la moitié valide d'un lot refusé laisserait un paramétrage
     // incohérent, à moitié appliqué et à moitié non.
-    await request(app).patch("/api/parametres").set("Cookie", a.cookie)
+    await request(serveurTest(app)).patch("/api/parametres").set("Cookie", a.cookie)
       .send({ "objectifs.taux_marge_bp": "3500", "objectifs.charges_fixes_annuelles_cents": "1" })
       .expect(400);
     const { rows } = await adminPool.query(
@@ -245,14 +245,14 @@ describe("les bornes sont tenues PAR LA ROUTE, pas par l'écran", () => {
   });
 
   test("des valeurs correctes passent, et le cockpit les lit", async () => {
-    await request(app).patch("/api/parametres").set("Cookie", a.cookie)
+    await request(serveurTest(app)).patch("/api/parametres").set("Cookie", a.cookie)
       .send({
         "objectifs.taux_marge_bp": "3500",
         "objectifs.charges_fixes_annuelles_cents": "12000000",
       })
       .expect(200);
 
-    const { body } = await request(app)
+    const { body } = await request(serveurTest(app))
       .get("/api/cockpit/objectifs").set("Cookie", a.cookie).expect(200);
     const seuil = body.objectifs.find((o: { id: string }) => o.id === "seuil_rentabilite");
     expect(seuil.configurable).toBeUndefined();

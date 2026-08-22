@@ -26,7 +26,7 @@ import app from "../app";
 import { registresInterdits } from "@nodaq/shared";
 import { emettreLienPaiement, VALIDITE_LIEN_JOURS } from "../lib/lien-paiement.js";
 import { texteSmsLienPaiement } from "../lib/sms.js";
-import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner } from "./helpers";
+import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner, serveurTest } from "./helpers";
 
 const NUMERO_TEST = "+33600000042";
 const AUTRE_NUMERO = "+33600000099";
@@ -101,7 +101,7 @@ async function appelEnCours(options: {
   numero?: string;
   promesseMontantCents?: number;
 }): Promise<string> {
-  await request(app)
+  await request(serveurTest(app))
     .put("/api/relance/regles")
     .set("Cookie", proprio.cookie)
     .send({
@@ -114,7 +114,7 @@ async function appelEnCours(options: {
     })
     .expect(200);
 
-  const { body } = await request(app)
+  const { body } = await request(serveurTest(app))
     .post("/api/relance/campagnes")
     .set("Cookie", proprio.cookie)
     .send({
@@ -131,7 +131,7 @@ async function appelEnCours(options: {
     })
     .expect(201);
 
-  await request(app)
+  await request(serveurTest(app))
     .post(`/api/pending-actions/${body.pendingActionId}/approve`)
     .set("Cookie", proprio.cookie)
     .expect(200);
@@ -156,7 +156,7 @@ beforeAll(async () => {
 
   const email = `lien-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@test.nodaq`;
   emails.push(email);
-  const reg = await request(app)
+  const reg = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: "Patron", tenantNom: "Lien SARL" })
     .expect(201);
@@ -164,7 +164,7 @@ beforeAll(async () => {
   tenantIds.push(reg.body.tenantId);
   proprio = { cookie: reg.headers["set-cookie"][0], tenantId: reg.body.tenantId };
 
-  await request(app)
+  await request(serveurTest(app))
     .patch("/api/parametres")
     .set("Cookie", proprio.cookie)
     .send({ "company.raison_sociale": "Charpente Essai", "company.iban": IBAN })
@@ -285,7 +285,7 @@ describe("c — le SMS part au numéro de la campagne, à aucun autre", () => {
 
 describe("d — pas d'IBAN, pas de lien", () => {
   test("IBAN absent → refus, sans toucher la banque", async () => {
-    await request(app)
+    await request(serveurTest(app))
       .patch("/api/parametres")
       .set("Cookie", proprio.cookie)
       .send({ "company.iban": "" })
@@ -297,7 +297,7 @@ describe("d — pas d'IBAN, pas de lien", () => {
       expect(r.kind).toBe("sans_iban");
       expect(trace.bridge).toHaveLength(0);
     } finally {
-      await request(app)
+      await request(serveurTest(app))
         .patch("/api/parametres")
         .set("Cookie", proprio.cookie)
         .send({ "company.iban": IBAN })

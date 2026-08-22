@@ -16,6 +16,7 @@ import {
   cookieHeader,
   cleanupTenants,
   cleanupUsers,
+  serveurTest,
 } from "./helpers";
 
 let cookie: string;
@@ -40,33 +41,33 @@ afterAll(async () => {
 
 describe("a — estimatedValueCents n'accepte jamais une valeur négative", () => {
   test("POST /api/prospects avec une valeur négative → 400, rien n'est créé", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .post("/api/prospects")
       .set("Cookie", cookie)
       .send({ name: "Prospect négatif", estimatedValueCents: -50000 });
 
     expect(res.status).toBe(400);
 
-    const list = await request(app).get("/api/prospects").set("Cookie", cookie);
+    const list = await request(serveurTest(app)).get("/api/prospects").set("Cookie", cookie);
     expect(list.body.find((p: { name: string }) => p.name === "Prospect négatif")).toBeUndefined();
   });
 
   test("POST /api/prospects avec une valeur positive ou absente reste accepté", async () => {
-    const positif = await request(app)
+    const positif = await request(serveurTest(app))
       .post("/api/prospects")
       .set("Cookie", cookie)
       .send({ name: "Prospect positif", estimatedValueCents: 320000 });
     expect(positif.status).toBe(201);
     expect(positif.body.estimatedValueCents).toBe(320000);
 
-    const absent = await request(app)
+    const absent = await request(serveurTest(app))
       .post("/api/prospects")
       .set("Cookie", cookie)
       .send({ name: "Prospect sans valeur" });
     expect(absent.status).toBe(201);
     expect(absent.body.estimatedValueCents).toBeNull();
 
-    const zero = await request(app)
+    const zero = await request(serveurTest(app))
       .post("/api/prospects")
       .set("Cookie", cookie)
       .send({ name: "Prospect à zéro", estimatedValueCents: 0 });
@@ -75,20 +76,20 @@ describe("a — estimatedValueCents n'accepte jamais une valeur négative", () =
   });
 
   test("PATCH /api/prospects/:id avec une valeur négative → 400, la valeur existante n'est pas modifiée", async () => {
-    const created = await request(app)
+    const created = await request(serveurTest(app))
       .post("/api/prospects")
       .set("Cookie", cookie)
       .send({ name: "Prospect à corriger", estimatedValueCents: 100000 });
     expect(created.status).toBe(201);
     const id = created.body.id as string;
 
-    const patch = await request(app)
+    const patch = await request(serveurTest(app))
       .patch(`/api/prospects/${id}`)
       .set("Cookie", cookie)
       .send({ estimatedValueCents: -1 });
     expect(patch.status).toBe(400);
 
-    const reread = await request(app).get("/api/prospects").set("Cookie", cookie);
+    const reread = await request(serveurTest(app)).get("/api/prospects").set("Cookie", cookie);
     const prospect = reread.body.find((p: { id: string }) => p.id === id);
     expect(prospect.estimatedValueCents).toBe(100000);
   });

@@ -21,6 +21,7 @@ import {
   cleanupTenants,
   cleanupUsers,
   completeMfaForRegisteredOwner,
+  serveurTest,
 } from "./helpers";
 
 const IBAN_VALIDE = "FR1420041010050500013M02606";
@@ -32,7 +33,7 @@ let ownerCookie: string;
 beforeAll(async () => {
   const email = `iban-owner-${Date.now()}-${crypto.randomBytes(3).toString("hex")}@test.nodaq`;
   emails.push(email);
-  const reg = await request(app)
+  const reg = await request(serveurTest(app))
     .post("/api/auth/register")
     .send({ email, password: "test-pass-1234", nom: "Patron", tenantNom: "Encaissement SARL" })
     .expect(201);
@@ -50,7 +51,7 @@ describe("a — la route refuse ce qui n'est pas un IBAN", () => {
   test("une clé de contrôle fausse est refusée, avec un message lisible", async () => {
     // Deux chiffres permutés : le défaut de saisie le plus courant, et le seul
     // que ni la longueur ni le format ne voient.
-    const r = await request(app)
+    const r = await request(serveurTest(app))
       .patch("/api/parametres")
       .set("Cookie", ownerCookie)
       .send({ "company.iban": "FR1420041010050500013M02660" })
@@ -62,7 +63,7 @@ describe("a — la route refuse ce qui n'est pas un IBAN", () => {
   });
 
   test("une longueur fausse pour le pays est refusée", async () => {
-    await request(app)
+    await request(serveurTest(app))
       .patch("/api/parametres")
       .set("Cookie", ownerCookie)
       .send({ "company.iban": "FR142004101005050001" })
@@ -73,13 +74,13 @@ describe("a — la route refuse ce qui n'est pas un IBAN", () => {
     // Le point : la validation passe AVANT la transaction. Un refus qui aurait
     // déjà écrit les autres clés du même PATCH laisserait un enregistrement
     // partiel, sans que l'écran le sache.
-    await request(app)
+    await request(serveurTest(app))
       .patch("/api/parametres")
       .set("Cookie", ownerCookie)
       .send({ "company.iban": "FR0000000000000000000000000", "notif.prospectQualifie": "true" })
       .expect(400);
 
-    const lu = await request(app)
+    const lu = await request(serveurTest(app))
       .get("/api/parametres")
       .set("Cookie", ownerCookie)
       .expect(200);
@@ -93,13 +94,13 @@ describe("b — ce qu'elle accepte, et sous quelle forme", () => {
   test("un IBAN valide est accepté et rangé NORMALISÉ", async () => {
     // Saisi avec espaces et en minuscules — deux saisies du même compte ne
     // doivent pas produire deux valeurs différentes en base.
-    await request(app)
+    await request(serveurTest(app))
       .patch("/api/parametres")
       .set("Cookie", ownerCookie)
       .send({ "company.iban": "fr14 2004 1010 0505 0001 3m02 606" })
       .expect(200);
 
-    const lu = await request(app)
+    const lu = await request(serveurTest(app))
       .get("/api/parametres")
       .set("Cookie", ownerCookie)
       .expect(200);
@@ -110,7 +111,7 @@ describe("b — ce qu'elle accepte, et sous quelle forme", () => {
   test("une chaîne vide efface le réglage sans être validée", async () => {
     // Retirer son IBAN est légitime : on ne peut pas exiger qu'il soit valide
     // pour accepter de l'enlever.
-    await request(app)
+    await request(serveurTest(app))
       .patch("/api/parametres")
       .set("Cookie", ownerCookie)
       .send({ "company.iban": "" })

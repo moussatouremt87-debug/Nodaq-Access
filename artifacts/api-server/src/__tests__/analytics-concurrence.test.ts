@@ -24,6 +24,7 @@ import {
   createTestTeamMember,
   cleanupTenants,
   cleanupUsers,
+  serveurTest,
 } from "./helpers";
 import { INDICATEUR_IDS } from "../routes/analytics";
 
@@ -129,7 +130,7 @@ function assertePasDeFuiteSql(body: unknown[]): void {
 
 describe("régression #41 — GET /analytics/indicateurs sur tenant peuplé", () => {
   test("ids=all avec comparaison meme_periode_n1 : tous les indicateurs répondent, sans fuite SQL", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .get("/api/analytics/indicateurs")
       .query({ ids: "all", periode: "12_mois", comparaison: "meme_periode_n1" })
       .set("Cookie", cookie);
@@ -150,7 +151,7 @@ describe("régression #41 — GET /analytics/indicateurs sur tenant peuplé", ()
   });
 
   test("ids=all avec comparaison moyenne_12_mois : pas de fuite SQL (second site de concurrence)", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .get("/api/analytics/indicateurs")
       .query({ ids: "all", periode: "12_mois", comparaison: "moyenne_12_mois" })
       .set("Cookie", cookie);
@@ -161,7 +162,7 @@ describe("régression #41 — GET /analytics/indicateurs sur tenant peuplé", ()
   });
 
   test("GET /analytics/indicateurs/:id/serie : pas de fuite SQL (troisième site de concurrence)", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .get("/api/analytics/indicateurs/ca_facture/serie")
       .query({ n: 12 })
       .set("Cookie", cookie);
@@ -175,7 +176,7 @@ describe("régression #41 — GET /analytics/indicateurs sur tenant peuplé", ()
   });
 
   test("demander un seul indicateur réussit (déjà vrai avant #41, sert de témoin)", async () => {
-    const res = await request(app)
+    const res = await request(serveurTest(app))
       .get("/api/analytics/indicateurs")
       .query({ ids: "ca_facture", periode: "12_mois" })
       .set("Cookie", cookie);
