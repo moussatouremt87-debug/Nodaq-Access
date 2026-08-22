@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { RetourAgent } from '@/components/retour-agent';
 import { useChat, type AgentAction } from '@/hooks/use-chat';
 import { fmtDateTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -302,6 +303,12 @@ export default function Chat() {
 
                       {m.role === 'assistant' && actions.length > 0 && (
                         <ActionCard actions={actions} />
+                      )}
+
+                      {/* Ticket 4.36 lot C — sous CHAQUE réponse de l'agent,
+                          au moment où l'utilisateur la juge. */}
+                      {m.role === 'assistant' && (
+                        <RetourAgent typeProduction="reponse_chat" referenceId={m.id} />
                       )}
                     </div>
                   </div>

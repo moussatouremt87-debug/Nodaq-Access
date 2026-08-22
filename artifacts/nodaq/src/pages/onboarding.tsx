@@ -34,7 +34,10 @@ import { apiFetch } from '@/lib/auth';
 import { useLocation } from 'wouter';
 import { useUpdateVerticalMutation, secteursOnboarding, useVertical } from '@/hooks/use-vertical';
 import { useCompanyProfile, COMPANY_PROFILE_QUERY_KEY } from '@/hooks/use-company-profile';
-import { COMPANY_TYPE_PROFIL, type CompanyTypeProfil, type Vertical } from '@nodaq/shared';
+import { COMPANY_TYPE_PROFIL, type CompanyTypeProfil, type Vertical, type StadeEntreprise } from '@nodaq/shared';
+import {
+  EcranStade, EcranEffectif, EcranGestion, EcranIrritant, EcranPremiereAction,
+} from '@/components/onboarding-qualification';
 
 const TYPE_PROFIL_LABELS: Record<CompanyTypeProfil, string> = {
   micro_entreprise: 'Micro-entreprise / auto-entrepreneur',
@@ -892,12 +895,22 @@ function EcranMetier({ onDone, onSkip }: { onDone: () => void; onSkip: () => voi
 
 // ── Page principale ────────────────────────────────────────────────────────
 
-type Screen = 'secteur' | 'recherche' | 'classeur' | 'metier' | 'done';
+type Screen =
+  | 'stade' | 'effectif' | 'gestion' | 'irritant'
+  | 'secteur' | 'recherche' | 'classeur' | 'metier' | 'done';
 
 export default function OnboardingPage() {
-  const [screen, setScreen] = useState<Screen>('secteur');
+  const [screen, setScreen] = useState<Screen>('stade');
   const [_, navigate] = useLocation();
   const { toast } = useToast();
+  /**
+   * Le stade n'est pas gardé pour l'affichage : il fait SAUTER la recherche
+   * SIREN quand il n'y a pas encore d'entreprise. Demander son SIRET à
+   * quelqu'un qui n'en a pas est exactement la friction que ce lot supprime.
+   */
+  const [stade, setStade] = useState<StadeEntreprise | null>(null);
+  const sansSiren = stade === 'EN_PROJET';
+  const apresSecteur = (): Screen => (sansSiren ? 'classeur' : 'recherche');
 
   const confirmMut = useMutation({
     mutationFn: async (entreprise: EntrepriseResult) => {
@@ -930,26 +943,25 @@ export default function OnboardingPage() {
   });
 
   const STEPS: { id: Screen; label: string }[] = [
+    { id: 'stade', label: 'Vous' },
+    { id: 'effectif', label: 'Vous' },
+    { id: 'gestion', label: 'Vous' },
+    { id: 'irritant', label: 'Vous' },
     { id: 'secteur', label: 'Secteur' },
-    { id: 'recherche', label: 'Entreprise' },
+    ...(sansSiren ? [] : [{ id: 'recherche' as Screen, label: 'Entreprise' }]),
     { id: 'classeur', label: 'Documents' },
     { id: 'metier', label: 'Métier' },
   ];
-  const currentIdx = STEPS.findIndex(s => s.id === screen);
+  // Les quatre questions de qualification comptent pour UNE étape au fil
+  // d'Ariane : afficher « 1/8 » ferait paraître le parcours deux fois plus
+  // long qu'il ne l'est, et c'est un abandon de plus.
+  const FIL = STEPS.filter((s, i) => s.label !== 'Vous' || i === 0);
+  const currentIdx = FIL.findIndex(s => s.label === STEPS.find(t => t.id === screen)?.label);
 
+  // Le parcours ne se termine plus sur un cockpit vide : il se termine sur
+  // l'action que l'irritant déclaré au deuxième écran a choisie.
   if (screen === 'done') {
-    return (
-      <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4 text-center px-4">
-        <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-          <Check className="h-6 w-6 text-primary" />
-        </div>
-        <h2 className="text-xl font-semibold">Votre profil est enregistré</h2>
-        <p className="text-sm text-muted-foreground max-w-sm">
-          Vous pouvez compléter ces informations à tout moment depuis "Profil entreprise" dans le menu.
-        </p>
-        <Button onClick={() => navigate('/')}>Accéder au cockpit</Button>
-      </div>
-    );
+    return <EcranPremiereAction onAller={navigate} />;
   }
 
   return (
@@ -958,7 +970,7 @@ export default function OnboardingPage() {
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-            {STEPS.map((step, i) => (
+            {FIL.map((step, i) => (
               <span key={step.id} className="flex items-center gap-2">
                 {i > 0 && <ChevronRight className="h-3.5 w-3.5" />}
                 <span className={i === currentIdx ? 'text-foreground font-medium' : ''}>
@@ -973,10 +985,34 @@ export default function OnboardingPage() {
           <motion.div key={screen}
             initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -16 }} transition={{ duration: 0.2 }}>
+            {screen === 'stade' && (
+              <EcranStade
+                onNext={(s) => { setStade(s); setScreen('effectif'); }}
+                onSkip={() => setScreen('effectif')}
+              />
+            )}
+            {screen === 'effectif' && (
+              <EcranEffectif
+                onNext={() => setScreen('gestion')}
+                onSkip={() => setScreen('gestion')}
+              />
+            )}
+            {screen === 'gestion' && (
+              <EcranGestion
+                onNext={() => setScreen('irritant')}
+                onSkip={() => setScreen('irritant')}
+              />
+            )}
+            {screen === 'irritant' && (
+              <EcranIrritant
+                onNext={() => setScreen('secteur')}
+                onSkip={() => setScreen('secteur')}
+              />
+            )}
             {screen === 'secteur' && (
               <EcranSecteur
-                onNext={() => setScreen('recherche')}
-                onSkip={() => setScreen('recherche')}
+                onNext={() => setScreen(apresSecteur())}
+                onSkip={() => setScreen(apresSecteur())}
               />
             )}
             {screen === 'recherche' && (
