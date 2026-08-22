@@ -234,14 +234,41 @@ function InviteForm() {
   // US-A5.4 — obligatoire pour un tiers de confiance, refusée pour les
   // autres rôles (le serveur rejette les deux écarts).
   const [accesExpireAt, setAccesExpireAt] = useState('');
+  /**
+   * Le lien de la dernière invitation créée, quand l'e-mail n'est PAS parti.
+   *
+   * Il n'est disponible qu'une fois : la base ne conserve que le condensat
+   * SHA-256 du jeton. On le garde donc à l'écran tant que la personne ne l'a
+   * pas copié, au lieu de le laisser filer dans un toast qui s'efface.
+   */
+  const [lienDeSecours, setLienDeSecours] = useState<string | null>(null);
+
   const inviter = useInviterMembre({
     mutation: {
-      onSuccess: () => {
+      onSuccess: (reponse) => {
         qc.invalidateQueries({ queryKey: getListMembresQueryKey() });
+        const destinataire = email.trim();
         setEmail('');
         setLibelle('');
         setAccesExpireAt('');
-        toast({ title: 'Invitation envoyée', description: `Un e-mail a été envoyé à ${email.trim()}.` });
+
+        // Le défaut d'origine : ce message s'affichait TOUJOURS, sans regarder
+        // si le courrier était parti. Aucun SMTP n'étant configuré sur ce
+        // déploiement, l'invitation était annoncée « envoyée » et le comptable
+        // attendait un e-mail qui ne partirait jamais.
+        if (reponse?.envoye) {
+          setLienDeSecours(null);
+          toast({ title: 'Invitation envoyée', description: `Un e-mail a été envoyé à ${destinataire}.` });
+          return;
+        }
+        setLienDeSecours(reponse?.lienInvitation ?? null);
+        toast({
+          title: "L'invitation est créée, mais l'e-mail n'est pas parti",
+          description: reponse?.motifEchec
+            ? `${reponse.motifEchec} — copiez le lien ci-dessous et transmettez-le vous-même.`
+            : "Copiez le lien ci-dessous et transmettez-le vous-même.",
+          variant: 'destructive',
+        });
       },
       onError: (err: Error) => toast({ title: 'Erreur', description: err.message, variant: 'destructive' }),
     },
@@ -307,6 +334,39 @@ function InviteForm() {
           </Button>
         </div>
       </div>
+      {/* Le lien de secours. Visible tant qu'il n'a pas servi : il n'existe
+          qu'une fois, la base ne gardant que son condensat. */}
+      {lienDeSecours && (
+        <div
+          className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3"
+          data-testid="lien-invitation-secours"
+        >
+          <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+            L'e-mail n'est pas parti — transmettez ce lien vous-même
+          </p>
+          <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+            Il n'est affiché qu'une fois, et il expire dans 7 jours.
+          </p>
+          <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+            <Input readOnly value={lienDeSecours} className="flex-1 font-mono text-xs" onFocus={(e) => e.currentTarget.select()} />
+            <Button
+              type="button"
+              variant="secondary"
+              className="gap-1.5"
+              onClick={() => {
+                void navigator.clipboard?.writeText(lienDeSecours);
+                toast({ title: 'Lien copié' });
+              }}
+            >
+              Copier
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => setLienDeSecours(null)}>
+              Terminé
+            </Button>
+          </div>
+        </div>
+      )}
+
       <div className="mt-3 flex flex-col sm:flex-row gap-3">
         <div className="space-y-1.5 sm:max-w-xs flex-1">
           <Label htmlFor="invite-libelle">Fonction (facultatif)</Label>

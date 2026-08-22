@@ -201,6 +201,15 @@ router.post("/membres/inviter", async (req, res): Promise<void> => {
     expiresAt: invite!.expiresAt,
     createdAt: invite!.createdAt,
     envoye: envoi.success,
+    // Pourquoi ça n'est pas parti, quand ça n'est pas parti. Sans ce motif,
+    // l'utilisateur n'a aucun moyen de distinguer « le courrier arrive » de
+    // « rien ne partira jamais faute de SMTP configuré ».
+    motifEchec: envoi.success ? null : (envoi.error ?? "envoi impossible"),
+    // Le lien EN CLAIR, la seule fois où il est disponible : seul son condensat
+    // SHA-256 est conservé en base. Le rendre ici n'ajoute aucun secret — c'est
+    // exactement ce que l'e-mail transporte — et c'est ce qui permet d'inviter
+    // son comptable quand aucun serveur d'envoi n'est branché.
+    lienInvitation: lien,
   });
 });
 
