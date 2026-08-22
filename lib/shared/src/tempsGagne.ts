@@ -89,6 +89,11 @@ export const BAREME_TEMPS_MANUEL: Record<Intention["type"], { readonly champs: n
   // devisMentionne — mais l'alternative manuelle, c'est RESSAISIR toutes les
   // lignes du devis. Le barème sous-estime ici massivement, et c'est assumé.
   facturer_devis: { champs: 1 },
+  // Le prix se tape même après dictée : la voix fait gagner la désignation et
+  // l'unité, pas le chiffre. Compter 3 champs plutôt que 4 serait se flatter.
+  creer_article_catalogue: { champs: 3 },
+  creer_charge_recurrente: { champs: 3 },
+  creer_contrat: { champs: 3 },
 };
 
 /**

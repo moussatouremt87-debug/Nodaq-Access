@@ -36,6 +36,13 @@ interface Operation {
   certitude: string;
   /** Les champs résolus. Seuls ceux de `CHAMPS_CORRIGEABLES` sont modifiables. */
   champs?: Record<string, string | null>;
+  /**
+   * Champs que la voix laisse volontairement vides et que le serveur réclame
+   * avant d'écrire — un prix de catalogue, un montant de charge ou de
+   * contrat. Optionnel : un plan produit avant le lot 4 n'a pas ce champ, et
+   * les plans vivent une heure en base.
+   */
+  aCompleter?: string[];
 }
 
 interface Question {
@@ -100,6 +107,20 @@ export function MicroFlottant() {
 
   const corriger = (i: number, champ: string, valeur: string) =>
     setCorrections((c) => ({ ...c, [i]: { ...(c[i] ?? {}), [champ]: valeur } }));
+
+  /**
+   * Les champs encore vides que le serveur réclame — un prix de catalogue, un
+   * montant de charge ou de contrat. La voix ne les porte pas : ni le modèle
+   * (il n'a pas le droit de fixer un prix), ni le serveur (il n'a rien à
+   * calculer, c'est une décision commerciale).
+   *
+   * Ce blocage est un CONFORT : le serveur refuse de toute façon un plan dont
+   * un champ réclamé est vide. On ne laisse pas l'utilisateur appuyer sur un
+   * bouton qui va échouer, voilà tout.
+   */
+  const incomplets = (plan?.operations ?? []).flatMap((o, i) =>
+    (o.aCompleter ?? []).filter((c) => (corrections[i]?.[c] ?? '').trim() === ''),
+  );
 
   const valider = useCallback(async () => {
     if (!plan) return;
@@ -171,7 +192,14 @@ export function MicroFlottant() {
               <ul className="space-y-2" data-testid="liste-operations">
                 {plan.operations.map((o, i) => {
                   const modifiables = CHAMPS_CORRIGEABLES[o.type as keyof typeof CHAMPS_CORRIGEABLES] ?? [];
-                  const aCorriger = modifiables.filter((c) => o.champs?.[c] != null);
+                  const reclames = o.aCompleter ?? [];
+                  // Un champ RÉCLAMÉ est vide par construction : le filtre
+                  // « a déjà une valeur » l'écarterait, et il ne s'afficherait
+                  // jamais. On l'ajoute explicitement.
+                  const aCorriger = [
+                    ...modifiables.filter((c) => o.champs?.[c] != null),
+                    ...reclames.filter((c) => o.champs?.[c] == null),
+                  ];
                   return (
                     <li key={i} className="rounded-lg border border-card-border p-3 text-sm">
                       {o.libelle}
@@ -184,19 +212,26 @@ export function MicroFlottant() {
                           autre chose que ce que le libellé annonce. */}
                       {aCorriger.length > 0 && (
                         <div className="mt-2 space-y-1.5">
-                          {aCorriger.map((champ) => (
-                            <div key={champ} className="flex items-center gap-2">
-                              <span className="w-20 shrink-0 text-[11px] uppercase tracking-wide text-muted-foreground">
-                                {champ}
-                              </span>
-                              <Input
-                                value={corrections[i]?.[champ] ?? o.champs?.[champ] ?? ''}
-                                onChange={(e) => corriger(i, champ, e.target.value)}
-                                className="h-9 text-sm"
-                                data-testid={`correction-${i}-${champ}`}
-                              />
-                            </div>
-                          ))}
+                          {aCorriger.map((champ) => {
+                            const manquant =
+                              reclames.includes(champ) &&
+                              (corrections[i]?.[champ] ?? '').trim() === '';
+                            return (
+                              <div key={champ} className="flex items-center gap-2">
+                                <span className="w-20 shrink-0 text-[11px] uppercase tracking-wide text-muted-foreground">
+                                  {champ}
+                                </span>
+                                <Input
+                                  value={corrections[i]?.[champ] ?? o.champs?.[champ] ?? ''}
+                                  onChange={(e) => corriger(i, champ, e.target.value)}
+                                  placeholder={reclames.includes(champ) ? 'à saisir' : undefined}
+                                  aria-invalid={manquant || undefined}
+                                  className={`h-9 text-sm${manquant ? ' border-amber-500' : ''}`}
+                                  data-testid={`correction-${i}-${champ}`}
+                                />
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                     </li>
@@ -221,6 +256,15 @@ export function MicroFlottant() {
               </div>
             ))}
 
+            {/* Un bouton grisé sans motif est une impasse : on dit pourquoi,
+                et ce que la voix ne peut légitimement pas fournir. */}
+            {incomplets.length > 0 && (
+              <p className="text-xs text-amber-600 dark:text-amber-500" data-testid="montant-a-saisir">
+                Un montant reste à saisir : je ne le devine pas, et je ne
+                l’invente pas.
+              </p>
+            )}
+
             {plan?.nonCompris.length ? (
               <div className="rounded-lg border border-card-border bg-muted/40 p-3" data-testid="non-compris">
                 <div className="flex items-center gap-2 text-sm font-medium">
@@ -240,7 +284,7 @@ export function MicroFlottant() {
             <Button
               className="flex-1"
               onClick={() => void valider()}
-              disabled={applique || !plan?.operations.length}
+              disabled={applique || !plan?.operations.length || incomplets.length > 0}
               data-testid="bouton-valider-plan"
             >
               {applique ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
