@@ -17,6 +17,7 @@ import {
 import type { AffaireWords, Vertical } from '@nodaq/shared';
 import type { NavItem } from '@/lib/nav';
 import { MicroFlottant } from '@/components/micro-flottant';
+import { BanniereSiren } from '@/components/banniere-siren';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -198,6 +199,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             dernière ligne de chaque écran serait recouverte, et sur une liste
             c'est exactement l'élément qu'on cherchait à atteindre. */}
         <main className="flex-1 min-w-0 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-0">
+          {/* Ticket 4.36 — monté ici, donc présent sur toutes les pages : le
+              refus d'émettre tombe sur l'écran des devis et sur celui des
+              factures, pas sur le cockpit. Il se tait de lui-même quand le
+              SIRET est là, et le cockpit l'exclut lui-même. */}
+          <BanniereSiren />
           {children}
           {/* Monté ICI, en fin de page — donc présent sur TOUTES les pages,
               après leur contenu. Le poser page par page garantirait qu'on en

@@ -84,6 +84,61 @@ describe("b — un double-clic ne compte pas deux fois", () => {
     );
     expect(rows[0].n).toBe(1);
   });
+
+  test("le verbatim envoyé APRÈS le pouce n'est pas perdu", async () => {
+    // L'écran envoie le pouce dès le clic — pour ne rien perdre si l'onglet se
+    // ferme — puis le verbatim quand il arrive. Avec un `onConflictDoNothing`,
+    // ce second envoi rendait 204 et le commentaire disparaissait : la seule
+    // chose qu'on ait à lire dans un pouce en bas, jetée en silence.
+    const t = await inscrire("verbatim-apres");
+    const envoyer = (corps: Record<string, unknown>) =>
+      request(serveurTest(app)).post("/api/agent/feedback").set("Cookie", t.cookie)
+        .send({ typeProduction: "resume", referenceId: "r1", note: "POUCE_BAS", ...corps });
+
+    await envoyer({}).expect(204);
+    await envoyer({ verbatim: "il a inventé un montant" }).expect(204);
+
+    const { rows } = await adminPool.query(
+      `SELECT count(*)::int AS n, min(verbatim) AS v FROM agent_feedback WHERE tenant_id = $1`,
+      [t.tenantId],
+    );
+    expect(rows[0].n).toBe(1);
+    expect(rows[0].v).toBe("il a inventé un montant");
+  });
+
+  test("un pouce sans verbatim n'efface pas un verbatim déjà donné", async () => {
+    // Un re-clic distrait sur le même pouce ne doit pas effacer ce qu'on a
+    // écrit : c'est le `coalesce`, et il est invisible sans ce test.
+    const t = await inscrire("verbatim-garde");
+    const envoyer = (corps: Record<string, unknown>) =>
+      request(serveurTest(app)).post("/api/agent/feedback").set("Cookie", t.cookie)
+        .send({ typeProduction: "resume", referenceId: "r1", note: "POUCE_BAS", ...corps });
+
+    await envoyer({ verbatim: "les lignes sont dans le désordre" }).expect(204);
+    await envoyer({}).expect(204);
+
+    const { rows } = await adminPool.query(
+      `SELECT verbatim FROM agent_feedback WHERE tenant_id = $1`, [t.tenantId],
+    );
+    expect(rows[0].verbatim).toBe("les lignes sont dans le désordre");
+  });
+
+  test("changer d'avis remplace la note, sans créer de seconde ligne", async () => {
+    const t = await inscrire("avis");
+    const envoyer = (note: string) =>
+      request(serveurTest(app)).post("/api/agent/feedback").set("Cookie", t.cookie)
+        .send({ typeProduction: "resume", referenceId: "r1", note });
+
+    await envoyer("POUCE_HAUT").expect(204);
+    await envoyer("POUCE_BAS").expect(204);
+
+    const { rows } = await adminPool.query(
+      `SELECT count(*)::int AS n, min(note) AS note FROM agent_feedback WHERE tenant_id = $1`,
+      [t.tenantId],
+    );
+    expect(rows[0].n).toBe(1);
+    expect(rows[0].note).toBe("POUCE_BAS");
+  });
 });
 
 describe("c — la restitution ne compte jamais un silence", () => {
