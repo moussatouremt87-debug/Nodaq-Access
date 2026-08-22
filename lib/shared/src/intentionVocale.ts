@@ -63,11 +63,33 @@ export const IntentionCreerProspect = z
   })
   .strict();
 
+export const ETAPES_PROSPECT_DICTABLES = [
+  "NOUVEAU", "CONTACTE", "DEVIS_ENVOYE", "NEGOCIATION", "GAGNE", "PERDU",
+] as const;
+
 export const IntentionMajStatutAffaire = z
   .object({
     type: z.literal("maj_statut_affaire"),
     affaireMentionnee: Mention,
     statut: z.enum(STATUTS_AFFAIRE_DICTABLES),
+  })
+  .strict();
+
+/**
+ * Changer l'ÉTAPE d'un prospect (ticket 4.23).
+ *
+ * L'outil `update_prospect` de l'agent de chat existait et était déclaré au
+ * modèle, mais aucune intention ne lui correspondait : il retombait sur le
+ * repli générique et CONSIGNAIT UNE ACTIVITÉ. Demander « passe Dupont en
+ * négociation » enregistrait donc une ligne d'activité, et le prospect ne
+ * bougeait pas — sans que rien ne le signale. Une garde structurelle l'a
+ * attrapé (voir `agent-operateur.test.ts`).
+ */
+export const IntentionMajEtapeProspect = z
+  .object({
+    type: z.literal("maj_etape_prospect"),
+    prospectMentionne: Mention,
+    etape: z.enum(ETAPES_PROSPECT_DICTABLES),
   })
   .strict();
 
@@ -401,6 +423,7 @@ export const Intention = z.discriminatedUnion("type", [
   IntentionCreerArticleCatalogue,
   IntentionCreerChargeRecurrente,
   IntentionCreerContrat,
+  IntentionMajEtapeProspect,
 ]);
 export type Intention = z.infer<typeof Intention>;
 
@@ -437,6 +460,7 @@ export const TYPES_INTENTION = [
   "creer_article_catalogue",
   "creer_charge_recurrente",
   "creer_contrat",
+  "maj_etape_prospect",
 ] as const;
 export type TypeIntention = (typeof TYPES_INTENTION)[number];
 
@@ -655,6 +679,9 @@ export const CHAMPS_CORRIGEABLES: Record<TypeIntention, readonly string[]> = {
   // reste donc de la dictée, et se corrige. Contraste avec `affaireId` ou
   // `devisId`, qui sont des rapprochements et n'ont rien à faire ici.
   creer_contrat: ["libelle", "clientName", "montantCents"],
+  // Rien de dicté à corriger : l'étape est une valeur d'une liste fermée, et
+  // le prospect est un rapprochement.
+  maj_etape_prospect: [],
 };
 
 /**
@@ -694,6 +721,7 @@ export const CHAMPS_A_COMPLETER: Record<TypeIntention, readonly string[]> = {
   creer_article_catalogue: ["prixUnitaireHtCents"],
   creer_charge_recurrente: ["montantCents"],
   creer_contrat: ["montantCents"],
+  maj_etape_prospect: [],
 };
 
 /** Les champs encore vides d'une opération, parmi ceux qu'elle réclame. */

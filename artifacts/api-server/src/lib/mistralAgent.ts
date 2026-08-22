@@ -24,6 +24,10 @@ import {
   teamMembersTable,
   activityTable,
   classeurTable,
+  devisTable,
+  facturesTable,
+  clientsTable,
+  catalogueLignesTable,
 } from "@workspace/db";
 import { eq, desc, asc, sql, and, lte } from "drizzle-orm";
 import {
@@ -34,6 +38,7 @@ import {
 } from "../routes/analytics.js";
 import { parsePeriode, toDateString } from "./analytics-periods.js";
 import type { OperationPlanifiee } from "./plan-vocal.js";
+import { centimesDepuisDictee } from "@nodaq/shared";
 import { affaireWords, estSecretProfessionnel, inactiveModuleTools, champsManquants } from "@nodaq/shared";
 import { modulesDuTenant } from "./modules-tenant.js";
 import { verticalDepuisTx, verticalDuTenant, vocabulaireAssistant } from "./vertical-tenant.js";
@@ -62,7 +67,12 @@ export interface AgentResult {
 
 // ─── Tool definitions ─────────────────────────────────────────────────────────
 
-const TOOLS: LlmTool[] = [
+/**
+ * Les outils exposés au modèle. Exporté pour que les gardes puissent vérifier
+ * qu'un outil EXÉCUTABLE est bien DÉCLARÉ : un outil que le modèle ne voit pas
+ * est un outil qui n'existe pas, et l'agent répond « je ne peux pas ».
+ */
+export const TOOLS: LlmTool[] = [
   {
     type: "function",
     function: {
@@ -133,10 +143,6 @@ const TOOLS: LlmTool[] = [
             enum: ["PROSPECT", "EN_COURS", "TERMINEE"],
             description: "Statut initial (défaut: PROSPECT).",
           },
-          quotedAmountCents: {
-            type: "number",
-            description: "Montant devisé en centimes (ex: 150000 = 1 500 €).",
-          },
           notes: { type: "string" },
         },
         required: ["label"],
@@ -178,10 +184,6 @@ const TOOLS: LlmTool[] = [
             enum: ["NOUVEAU", "CONTACTE", "DEVIS_ENVOYE", "NEGOCIATION"],
             description: "Étape dans le pipeline (défaut: NOUVEAU).",
           },
-          estimatedValueCents: {
-            type: "number",
-            description: "Valeur estimée du projet en centimes.",
-          },
           notes: { type: "string" },
         },
         required: ["name"],
@@ -204,7 +206,6 @@ const TOOLS: LlmTool[] = [
           notes: { type: "string" },
           phone: { type: "string" },
           email: { type: "string" },
-          estimatedValueCents: { type: "number" },
         },
         required: ["id"],
       },
@@ -227,7 +228,6 @@ const TOOLS: LlmTool[] = [
             type: "string",
             description: "Date d'échéance au format YYYY-MM-DD.",
           },
-          estimatedCents: { type: "number", description: "Montant estimé en centimes." },
           notes: { type: "string" },
         },
         required: ["type", "label", "dueDate"],
@@ -323,6 +323,156 @@ const TOOLS: LlmTool[] = [
   {
     type: "function",
     function: {
+      name: "list_devis",
+      description: "Liste les devis du tenant (identifiant, référence, client, statut, total TTC). À appeler AVANT de facturer un devis, pour obtenir son identifiant.",
+      parameters: { type: "object", properties: { limit: { type: "number" } } },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_factures",
+      description: "Liste les factures du tenant (identifiant, numéro, client, statut, total, échéance). À appeler AVANT d'enregistrer un règlement.",
+      parameters: { type: "object", properties: { limit: { type: "number" } } },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_clients",
+      description: "Liste les fiches clients du tenant.",
+      parameters: { type: "object", properties: { limit: { type: "number" } } },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_catalogue",
+      description: "Liste le catalogue tarifaire du tenant. C'est LA source des prix : ne chiffre jamais sans l'avoir consulté.",
+      parameters: { type: "object", properties: { limit: { type: "number" } } },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "facturer_devis",
+      description: "Établit la facture d'un devis ACCEPTÉ. Crée un BROUILLON — l'émission reste un geste d'écran. Les montants viennent du devis signé, jamais de toi.",
+      parameters: {
+        type: "object",
+        properties: { devisId: { type: "string", description: "Identifiant obtenu via list_devis." } },
+        required: ["devisId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "pointer_heures",
+      description: "Enregistre des heures travaillées pour un membre de l'équipe.",
+      parameters: {
+        type: "object",
+        properties: {
+          membreId: { type: "string", description: "Identifiant obtenu via list_team_members." },
+          affaireId: { type: "string" },
+          heures: { type: "string", description: "Nombre d'heures, ex : \"3\" ou \"7.5\"." },
+          date: { type: "string", description: "Date au format AAAA-MM-JJ." },
+        },
+        required: ["membreId", "heures"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "create_client",
+      description: "Crée une fiche client.",
+      parameters: {
+        type: "object",
+        properties: {
+          nom: { type: "string" }, telephone: { type: "string" },
+          email: { type: "string" }, ville: { type: "string" },
+        },
+        required: ["nom"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "enregistrer_reglement",
+      description: "Enregistre un règlement reçu sur une facture. Sans montant, c'est le solde calculé par le serveur qui est proposé.",
+      parameters: {
+        type: "object",
+        properties: {
+          factureId: { type: "string", description: "Identifiant obtenu via list_factures." },
+          montantEuros: { type: "number", description: "EN EUROS, et seulement si l'utilisateur l'a écrit noir sur blanc. Jamais déduit, jamais arrondi." },
+          moyen: { type: "string", enum: ["VIREMENT", "CHEQUE", "ESPECES", "CB", "AUTRE"] },
+        },
+        required: ["factureId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "lancer_relance",
+      description: "Prépare une campagne de relance des factures en retard. Le serveur choisit les factures ; tu ne fixes ni seuil ni liste.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "create_article_catalogue",
+      description: "Ajoute un article au catalogue tarifaire.",
+      parameters: {
+        type: "object",
+        properties: {
+          libelle: { type: "string" },
+          unite: { type: "string", description: "ex : m², ml, heure, forfait." },
+          prixUnitaireHtEuros: { type: "number", description: "EN EUROS, et seulement si l'utilisateur l'a écrit. Sinon omets — l'écran le réclamera." },
+        },
+        required: ["libelle"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "create_charge_recurrente",
+      description: "Déclare une charge récurrente (loyer, assurance, abonnement).",
+      parameters: {
+        type: "object",
+        properties: {
+          libelle: { type: "string" },
+          cadence: { type: "string", enum: ["mensuel", "trimestriel", "semestriel", "annuel"] },
+          categorie: { type: "string", enum: ["LOYER", "MASSE_SALARIALE", "ABONNEMENT", "ASSURANCE", "AUTRE"] },
+          montantEuros: { type: "number", description: "EN EUROS, et seulement si l'utilisateur l'a écrit." },
+        },
+        required: ["libelle", "cadence"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "create_contrat",
+      description: "Crée un contrat récurrent.",
+      parameters: {
+        type: "object",
+        properties: {
+          libelle: { type: "string" },
+          cadence: { type: "string", enum: ["mensuel", "trimestriel", "semestriel", "annuel"] },
+          clientName: { type: "string" },
+          montantEuros: { type: "number", description: "EN EUROS, et seulement si l'utilisateur l'a écrit." },
+        },
+        required: ["libelle", "cadence"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "get_indicateur",
       description: [
         "Calcule un indicateur économique de l'entreprise sur une période donnée.",
@@ -367,7 +517,12 @@ const TOOLS: LlmTool[] = [
 async function buildSystemPrompt(tenantId: string): Promise<string> {
   const today = new Date();
   const todayStr = toDateString(today);
-  const in30Days = toDateString(new Date(today.getTime() + 30 * 24 * 60_000));
+  // 30 jours. `30 * 24 * 60_000` — la version d'avant — ne fait que 12 HEURES :
+  // il manquait un facteur 60 (minutes → millisecondes). L'agent ne voyait donc
+  // presque aucune échéance à venir, et répondait « je n'ai pas d'activité à te
+  // résumer » sur un tenant qui en avait.
+  const JOUR_MS = 24 * 60 * 60_000;
+  const in30Days = toDateString(new Date(today.getTime() + 30 * JOUR_MS));
 
   const context = await withTenant(tenantId, async (tx) => {
     const affairesEnCours = await tx
@@ -491,6 +646,32 @@ d) Ne JAMAIS comparer à d'autres entreprises, à un secteur ou à une moyenne n
    même si l'utilisateur le demande explicitement.
    Réponse type : « Je ne compare qu'à votre propre historique. »
 
+═══ TU ES L'OPÉRATEUR DE NODAQ ═══
+Tu n'es pas un assistant généraliste qui se trouve à côté d'un logiciel : tu es
+la façon de s'en servir. Ce que nodaq sait faire, TU sais le faire, en appelant
+tes outils. Toute écriture passe par une proposition que l'utilisateur valide
+d'un clic — tu ne demandes donc jamais la permission avant d'appeler un outil,
+la validation vient après, à l'écran.
+
+TROIS PHRASES QUE TU NE PRONONCES JAMAIS :
+
+  ✗ « Je ne peux pas créer de factures / devis / avoirs. »
+    Si l'outil existe, appelle-le. S'il te manque un outil pour une fonction du
+    produit, c'est un défaut d'outillage à signaler, pas une réponse.
+
+  ✗ « Utilise un logiciel de comptabilité / de facturation / un tableur. »
+    Tu ne renvoies JAMAIS vers un produit tiers pour une fonction de nodaq.
+    C'est nodaq que l'utilisateur a acheté pour ça.
+
+  ✗ « Fais appel à un expert-comptable pour établir ta facture. »
+    Un expert-comptable ne s'invoque que pour un avis fiscal qui SORT du
+    produit — jamais pour produire un document que nodaq produit.
+
+QUAND UNE CAPACITÉ N'EXISTE VRAIMENT PAS ENCORE, une seule formule :
+  « Ce n'est pas encore disponible dans nodaq, je le note pour l'équipe. »
+Puis propose ce qui existe et s'en rapproche le plus. Jamais « utilise autre
+chose ».
+
 ═══ CE QUE TU REFUSES, ET COMMENT ═══
 Trois refus, sans exception. Dans les trois cas : dis NON clairement,
 explique POURQUOI en français simple, et indique quoi faire à la place.
@@ -508,6 +689,16 @@ Jamais un message d'erreur technique, jamais un refus sec sans raison.
 2. UN AVIS PROFESSIONNEL RÉGLEMENTÉ. Médical, juridique, ou fiscal au-delà de la
    simple gestion courante. Tu n'es ni médecin, ni avocat, ni expert-comptable.
    Oriente vers un professionnel qualifié.
+
+   ATTENTION — CE REFUS NE S'APPLIQUE JAMAIS À UNE FONCTION DE NODAQ.
+   Établir une facture conforme, un devis, un avoir, gérer la TVA d'un document,
+   respecter le format de facturation électronique : c'est le MÉTIER de ce
+   produit, pas un avis réglementé. Un utilisateur qui demande « fais-moi une
+   facture au format officiel » demande une FONCTIONNALITÉ, et tu la fais.
+   Refuser là revient à dire que l'outil ne sait pas faire ce pour quoi il a été
+   acheté.
+   Le refus ne vaut que pour une question qui SORT du produit : un litige avec
+   un client, un contrôle fiscal, un arrêt de travail.
    ATTENTION — le refus n'est pas une formule de politesse à placer AVANT de
    répondre quand même. Si tu commences par « je ne peux pas donner de conseil
    juridique » et que tu enchaînes sur ce que dit la loi, les conditions de
@@ -581,33 +772,64 @@ export const OUTILS_ECRITURE = [
   "log_activity",
   "declare_absence",
   "affect_member",
+  // Ajoutés au ticket 4.23 : sans eux, l'agent répondait « je ne peux pas
+  // créer de factures » sur des fonctions que le produit assure depuis des
+  // mois. Chacun se rattache à une intention DÉJÀ définie et déjà exécutée par
+  // `executerPlan` — l'agent de chat et la voix empruntent le même chemin
+  // d'écriture, pas deux implémentations qui divergeront.
+  "facturer_devis",
+  "pointer_heures",
+  "create_client",
+  "enregistrer_reglement",
+  "lancer_relance",
+  "create_article_catalogue",
+  "create_charge_recurrente",
+  "create_contrat",
 ] as const;
 
 /**
  * Traduit un appel d'outil d'écriture en OPÉRATION PLANIFIÉE.
  *
  * Aucune écriture, aucun identifiant engendré, aucun montant retenu : les
- * champs monétaires que le modèle aurait pu proposer (`quotedAmountCents`,
- * `estimatedValueCents`, `estimatedCents`) sont délibérément ignorés — un
+ * champs monétaires que le modèle aurait pu proposer ne sont plus DÉCLARÉS du
+ * tout (ticket 4.23) : ils étaient annoncés au modèle puis silencieusement
+ * jetés, ce qui lui faisait croire — et dire à l'utilisateur — qu'un montant
+ * avait été enregistré. Ne pas offrir le champ est plus honnête que l'offrir
+ * et le perdre. Là où un montant est légitime, il est demandé en EUROS et
+ * vérifié dans le message (`centimesDepuisDictee`). Un
  * chiffre affiché à l'utilisateur vient d'un calcul déterministe, jamais du
  * modèle (règle 3 du dépôt).
  */
 export function proposerEcriture(
   name: string,
   args: Record<string, unknown>,
+  /**
+   * Le message de l'utilisateur, pour VÉRIFIER un montant proposé par le
+   * modèle — même règle que la voix : recopier un montant qu'on vient de lire
+   * est permis, en inventer un ne l'est pas. Vide par défaut : aucun montant
+   * n'est alors retenu et le champ retombe sur `CHAMPS_A_COMPLETER`.
+   */
+  messageUtilisateur: string = "",
 ): OperationPlanifiee {
   // Même dérivation que dans `construirePlan` : `aCompleter` se calcule, il
   // ne s'écrit pas. Ce fichier est le SECOND endroit qui fabrique des
   // opérations — c'est le compilateur qui l'a signalé quand le champ est
   // devenu obligatoire, pas une relecture.
-  const op = proposerEcritureBrute(name, args);
+  const op = proposerEcritureBrute(name, args, messageUtilisateur);
   return { ...op, aCompleter: champsManquants(op.type, op.champs) };
 }
 
 function proposerEcritureBrute(
   name: string,
   args: Record<string, unknown>,
+  messageUtilisateur: string,
 ): Omit<OperationPlanifiee, "aCompleter"> {
+  /** Le montant en centimes s'il figure dans le message, `null` sinon. */
+  const centimes = (cle: string): string | null => {
+    const v = args[cle];
+    const c = centimesDepuisDictee(messageUtilisateur, typeof v === "number" ? v : null);
+    return c === null ? null : String(c);
+  };
   const texte = (cle: string): string | null => {
     const v = args[cle];
     return typeof v === "string" && v.trim().length > 0 ? v.trim() : null;
@@ -633,13 +855,6 @@ function proposerEcritureBrute(
         type: "creer_prospect",
         libelle: `Créer le prospect « ${texte("name") ?? "sans nom"} »`,
         champs: { nom: texte("name") ?? "Sans nom", telephone: texte("phone"), ville: null },
-        certitude: "aucune_resolution",
-      };
-    case "update_prospect":
-      return {
-        type: "consigner_activite",
-        libelle: `Modifier un prospect (${texte("stage") ?? "mise à jour"})`,
-        champs: { libelle: `Prospect mis à jour : ${texte("stage") ?? "—"}` },
         certitude: "aucune_resolution",
       };
     case "create_echeance":
@@ -687,6 +902,102 @@ function proposerEcritureBrute(
         },
         certitude: "aucune_resolution",
       };
+    case "update_prospect":
+      return {
+        type: "maj_etape_prospect",
+        libelle: `Passer un prospect en ${texte("stage") ?? "?"}`,
+        champs: { prospectId: texte("id") ?? "", etape: texte("stage") ?? "NOUVEAU" },
+        certitude: "aucune_resolution",
+      };
+    case "facturer_devis":
+      return {
+        type: "facturer_devis",
+        libelle: `Facturer le devis ${texte("devisId") ?? "?"} (brouillon)`,
+        // L'identifiant vient de `list_devis`, jamais du modèle : c'est une
+        // lecture qu'il a faite, pas une invention.
+        champs: { devisId: texte("devisId") ?? "" },
+        certitude: "aucune_resolution",
+      };
+    case "pointer_heures":
+      return {
+        type: "pointer_heures",
+        libelle: `Pointer ${texte("heures") ?? "?"} h`,
+        champs: {
+          membreId: texte("membreId") ?? "",
+          affaireId: texte("affaireId"),
+          heures: texte("heures") ?? "",
+          date: texte("date"),
+        },
+        certitude: "aucune_resolution",
+      };
+    case "create_client":
+      return {
+        type: "creer_client",
+        libelle: `Créer la fiche client « ${texte("nom") ?? "sans nom"} »`,
+        champs: {
+          nom: texte("nom") ?? "Sans nom",
+          telephone: texte("telephone"),
+          email: texte("email"),
+          ville: texte("ville"),
+        },
+        certitude: "aucune_resolution",
+      };
+    case "enregistrer_reglement":
+      return {
+        type: "enregistrer_reglement",
+        libelle: `Enregistrer un règlement sur la facture ${texte("factureId") ?? "?"}`,
+        champs: {
+          factureId: texte("factureId") ?? "",
+          // Le montant n'est retenu que s'il figure dans le message. Sinon
+          // `null` : l'écran de validation le réclame, et le serveur refuse
+          // d'écrire tant qu'il manque.
+          montantCents: centimes("montantEuros"),
+          moyen: texte("moyen") ?? "AUTRE",
+        },
+        certitude: "aucune_resolution",
+      };
+    case "lancer_relance":
+      return {
+        type: "lancer_relance",
+        libelle: "Préparer une campagne de relance téléphonique",
+        champs: {},
+        certitude: "aucune_resolution",
+      };
+    case "create_article_catalogue":
+      return {
+        type: "creer_article_catalogue",
+        libelle: `Ajouter au catalogue « ${texte("libelle") ?? "sans nom"} »`,
+        champs: {
+          libelle: texte("libelle") ?? "Sans nom",
+          unite: texte("unite"),
+          prixUnitaireHtCents: centimes("prixUnitaireHtEuros"),
+        },
+        certitude: "aucune_resolution",
+      };
+    case "create_charge_recurrente":
+      return {
+        type: "creer_charge_recurrente",
+        libelle: `Déclarer la charge « ${texte("libelle") ?? "sans nom"} »`,
+        champs: {
+          libelle: texte("libelle") ?? "Sans nom",
+          cadence: texte("cadence") ?? "mensuel",
+          categorie: texte("categorie") ?? "AUTRE",
+          montantCents: centimes("montantEuros"),
+        },
+        certitude: "aucune_resolution",
+      };
+    case "create_contrat":
+      return {
+        type: "creer_contrat",
+        libelle: `Créer le contrat « ${texte("libelle") ?? "sans nom"} »`,
+        champs: {
+          libelle: texte("libelle") ?? "Sans nom",
+          cadence: texte("cadence") ?? "mensuel",
+          clientName: texte("clientName"),
+          montantCents: centimes("montantEuros"),
+        },
+        certitude: "aucune_resolution",
+      };
     default:
       return {
         type: "consigner_activite",
@@ -701,6 +1012,8 @@ async function executeTool(
   tenantId: string,
   name: string,
   args: Record<string, unknown>,
+  /** Le dernier message de l'utilisateur — sert à vérifier les montants. */
+  dernierMessageUtilisateur: string = "",
 ): Promise<{ result: string; action?: AgentAction; operation?: OperationPlanifiee }> {
   const limit = (args.limit as number | undefined) ?? 10;
 
@@ -710,7 +1023,7 @@ async function executeTool(
   // supprimés : un code mort qui écrit en base est exactement ce qui se
   // rebranche par accident. Il ne reste rien à rebrancher.
   if ((OUTILS_ECRITURE as readonly string[]).includes(name)) {
-    const operation = proposerEcriture(name, args);
+    const operation = proposerEcriture(name, args, dernierMessageUtilisateur);
     return {
       result:
         `Opération PROPOSÉE, pas encore appliquée : ${operation.libelle}. ` +
@@ -755,6 +1068,67 @@ async function executeTool(
       return { result: JSON.stringify(rows) };
     }
 
+    // Les trois lectures ci-dessous existent pour que les ÉCRITURES aient des
+    // identifiants à viser. Même patron que `list_team_members` avant
+    // `declare_absence` : l'agent regarde, puis propose.
+    case "list_devis": {
+      const rows = await withTenant(tenantId, (tx) =>
+        tx
+          .select({
+            id: devisTable.id,
+            reference: devisTable.reference,
+            client: devisTable.clientName,
+            statut: devisTable.status,
+            totalTTCCents: devisTable.totalTTCCents,
+          })
+          .from(devisTable)
+          .orderBy(desc(devisTable.createdAt))
+          .limit(limit),
+      );
+      return { result: JSON.stringify(rows) };
+    }
+    case "list_factures": {
+      const rows = await withTenant(tenantId, (tx) =>
+        tx
+          .select({
+            id: facturesTable.id,
+            numero: facturesTable.number,
+            client: facturesTable.customerName,
+            statut: facturesTable.statut,
+            totalTTCCents: facturesTable.amountCents,
+            echeance: facturesTable.dueDate,
+          })
+          .from(facturesTable)
+          .orderBy(desc(facturesTable.createdAt))
+          .limit(limit),
+      );
+      return { result: JSON.stringify(rows) };
+    }
+    case "list_catalogue": {
+      const rows = await withTenant(tenantId, (tx) =>
+        tx
+          .select({
+            libelle: catalogueLignesTable.libelle,
+            unite: catalogueLignesTable.unite,
+            prixUnitaireHtCents: catalogueLignesTable.prixUnitaireHtCents,
+          })
+          .from(catalogueLignesTable)
+          .where(eq(catalogueLignesTable.actif, true))
+          .orderBy(asc(catalogueLignesTable.libelle))
+          .limit(limit),
+      );
+      return { result: JSON.stringify(rows) };
+    }
+    case "list_clients": {
+      const rows = await withTenant(tenantId, (tx) =>
+        tx
+          .select({ id: clientsTable.id, nom: clientsTable.nom, ville: clientsTable.ville })
+          .from(clientsTable)
+          .orderBy(asc(clientsTable.nom))
+          .limit(limit),
+      );
+      return { result: JSON.stringify(rows) };
+    }
     case "list_team_members": {
       const rows = await withTenant(tenantId, (tx) =>
         tx.select().from(teamMembersTable).orderBy(asc(teamMembersTable.name)),
@@ -912,6 +1286,10 @@ export async function runAgent(
   }
 
   const systemPrompt = await buildSystemPrompt(tenantId);
+  // Le texte que l'utilisateur vient d'écrire — la seule source recevable pour
+  // un montant proposé par le modèle (voir `centimesDepuisDictee`).
+  const dernierMessageUtilisateur =
+    [...history].reverse().find((m) => m.role === "user")?.content ?? "";
   const actions: AgentAction[] = [];
   const operations: OperationPlanifiee[] = [];
 
@@ -990,7 +1368,12 @@ export async function runAgent(
         // keep empty
       }
 
-      const { result, action, operation } = await executeTool(tenantId, call.function.name, argsObj);
+      const { result, action, operation } = await executeTool(
+        tenantId,
+        call.function.name,
+        argsObj,
+        dernierMessageUtilisateur,
+      );
       if (action) actions.push(action);
       if (operation) operations.push(operation);
 

@@ -229,6 +229,8 @@ export interface ContexteResolution {
    *  rapprochement ne sert donc qu'à écrire le nom tel qu'il existe déjà,
    *  et une mention introuvable reste écrite telle qu'elle a été dictée. */
   readonly clients: readonly Candidat[];
+  /** Prospects encore ouverts — ni gagnés ni perdus. */
+  readonly prospects: readonly Candidat[];
   /** US-A6.1 — le mot du secteur, pour que les libellés soumis à validation
    *  parlent la langue de l'utilisateur (« Créer la mission … » plutôt que
    *  « Créer l'affaire … » chez un consultant). Porté par le contexte, déjà
@@ -303,8 +305,14 @@ export async function chargerContexte(tenantId: string): Promise<ContexteResolut
       .from(clientsTable);
     const clients = clientsLignes.map((c) => ({ id: c.id, libelle: c.nom }));
 
+    const prospectsLignes = await tx
+      .select({ id: prospectsTable.id, nom: prospectsTable.name })
+      .from(prospectsTable)
+      .where(sql`stage NOT IN ('GAGNE', 'PERDU')`);
+    const prospects = prospectsLignes.map((p) => ({ id: p.id, libelle: p.nom }));
+
     const words = affaireWords(await verticalDepuisTx(tx));
-    return { affaires, membres, factures, devisAFacturer, clients, impayes, words };
+    return { affaires, membres, factures, devisAFacturer, clients, prospects, impayes, words };
   });
 }
 
@@ -345,6 +353,8 @@ function libelleOperation(intention: Intention, words: AffaireWords): string {
       return `Déclarer la charge ${intention.cadence}le « ${intention.libelle} »`;
     case "creer_contrat":
       return `Créer le contrat ${intention.cadence} « ${intention.libelle} »`;
+    case "maj_etape_prospect":
+      return `Passer « ${intention.prospectMentionne} » en ${intention.etape}`;
   }
 }
 
@@ -459,6 +469,29 @@ export function construirePlan(
           dateDebut,
         },
         certitude: "aucune_resolution",
+      });
+      continue;
+    }
+
+    if (intention.type === "maj_etape_prospect") {
+      const r = resoudreMention(intention.prospectMentionne, contexte.prospects);
+      if (r.etat === "ambigu") {
+        questions.push({
+          question: `Quel prospect « ${intention.prospectMentionne} » ?`,
+          candidats: r.candidats,
+          mention: intention.prospectMentionne,
+        });
+        continue;
+      }
+      if (r.etat === "introuvable") {
+        incompris.push(`prospect « ${intention.prospectMentionne} » introuvable`);
+        continue;
+      }
+      operations.push({
+        type: intention.type,
+        libelle: `Passer « ${r.candidat.libelle} » en ${intention.etape}`,
+        champs: { prospectId: r.candidat.id, etape: intention.etape },
+        certitude: r.certitude,
       });
       continue;
     }
@@ -996,6 +1029,17 @@ async function executerOperation(
         ...(op.champs["clientNom"] ? { clientName: op.champs["clientNom"] } : {}),
         ...(op.champs["dateDebut"] ? { startDate: op.champs["dateDebut"] } : {}),
       });
+      return;
+    }
+    case "maj_etape_prospect": {
+      const [maj] = await tx
+        .update(prospectsTable)
+        .set({ stage: op.champs["etape"]! })
+        .where(eq(prospectsTable.id, op.champs["prospectId"]!))
+        .returning({ id: prospectsTable.id });
+      // Même exigence que `maj_statut_affaire` : une cible disparue fait
+      // échouer TOUT le plan, elle ne s'ignore pas.
+      if (!maj) throw new Error(`Prospect ${op.champs["prospectId"]} introuvable`);
       return;
     }
     case "creer_article_catalogue": {

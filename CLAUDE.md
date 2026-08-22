@@ -103,6 +103,30 @@ cumulatives, tenues par `INTENTIONS_MONTANT_DICTABLE` et `centimesDepuisDictee` 
 La règle 4 s'applique par-dessus, inchangée : le montant est affiché et corrigeable
 avant la moindre écriture.
 
+### 3 bis. L'agent est l'OPÉRATEUR du produit, pas un assistant à côté
+
+Trois règles issues de la session de test du 22/08/2026, où l'agent a répondu
+« je ne peux pas créer de factures, utilise un logiciel de comptabilité ou fais
+appel à un expert-comptable » — le produit recommandait la concurrence dans sa
+première minute d'usage.
+
+**a. Jamais « je ne peux pas » pour une fonction que nodaq assure.** S'il manque
+un outil, c'est un défaut d'outillage à corriger, pas une réponse. Et **jamais**
+de renvoi vers un logiciel tiers ou un expert-comptable pour une fonction du
+produit. Quand une capacité n'existe pas encore : « Ce n'est pas encore
+disponible dans nodaq, je le note pour l'équipe. »
+
+Corollaire pour les garde-fous : un refus rédigé trop largement attrape le cœur
+du métier. Établir une facture conforme n'est pas un « avis fiscal réglementé »,
+c'est la raison d'être du produit. Tout refus doit exclure explicitement les
+fonctions de nodaq.
+
+**b. Aucun jargon anglo-saxon ou financier dans l'interface.** L'utilisateur est
+un artisan, pas un analyste. MRR, YTD, churn, pipeline : bannis.
+
+**c. Toute action qui change un état financier est annulable**, et le dit au
+moment où elle est faite.
+
 ### 4. Écriture agentique = validation humaine
 
 Tout outil MCP d'écriture ou d'envoi (`send_*`, `create_*`, `submit_*`) crée une
