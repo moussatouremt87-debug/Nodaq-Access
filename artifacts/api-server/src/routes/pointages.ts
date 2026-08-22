@@ -384,7 +384,46 @@ router.get("/pointages/recapitulatif-semaine", async (req, res): Promise<void> =
       }, new Map<string, { clientId: string; clientLabel: string; heures: number }>())
       .values()];
 
-  res.json({ semaine: { debut, fin }, lignes, parAffaire, parClient, totalHeures });
+  /**
+   * Les chantiers et clients sur lesquels on PEUT pointer cette semaine.
+   *
+   * ── Le défaut que ça corrige ──────────────────────────────────────────
+   * « Quand je crée un chantier en cours, pourquoi il n'apparaît pas dans les
+   * heures de la semaine ? » La proposition ci-dessus est bâtie sur les
+   * AFFECTATIONS et la semaine type. Un chantier créé sans affecter personne
+   * n'y produisait donc aucune ligne — et l'écran ne proposait aucun moyen
+   * d'en ajouter une. Le chantier existait, il était en cours, et il était
+   * impossible d'y pointer la moindre heure.
+   *
+   * ── Pourquoi une LISTE, et pas des lignes à zéro ──────────────────────
+   * Émettre une ligne par membre, par chantier non affecté et par jour
+   * remplirait l'écran de zéros — cinq membres et trois chantiers font cent
+   * cinq lignes vides pour une semaine. Et surtout : proposer des heures sur
+   * un chantier où personne n'a été envoyé, c'est fabriquer du temps. La
+   * liste rend le chantier ATTEIGNABLE ; c'est l'utilisateur qui décide d'y
+   * ajouter une ligne, et combien.
+   *
+   * Les entrées déjà présentes dans la proposition sont retirées : les
+   * reproposer ferait créer un doublon là où il fallait corriger une ligne.
+   */
+  const dejaProposes = new Set(lignes.map((l) => cleRattachement(l.affaireId, l.clientId)));
+  const chantiersDisponibles = [
+    ...[...affairesActives.values()]
+      .filter((a) => !dejaProposes.has(`a:${a.id}`))
+      .map((a) => ({ affaireId: a.id, clientId: null, libelle: a.label })),
+    ...[...clientsActifs.values()]
+      .filter((c) => !dejaProposes.has(`c:${c.id}`))
+      .map((c) => ({ affaireId: null, clientId: c.id, libelle: c.nom })),
+  ].sort((x, y) => x.libelle.localeCompare(y.libelle));
+
+  res.json({
+    semaine: { debut, fin },
+    lignes,
+    parAffaire,
+    parClient,
+    totalHeures,
+    chantiersDisponibles,
+  });
 });
 
 // ── Écriture ──────────────────────────────────────────────────────────────────

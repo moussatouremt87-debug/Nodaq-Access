@@ -39,9 +39,19 @@ type Ligne = {
   origine: 'pointe' | 'propose';
 };
 
+/** Un chantier ou un client sur lequel on peut pointer, mais qui n'est pas
+ *  déjà dans la proposition — voir `chantiersDisponibles` côté serveur. */
+type ChantierDisponible = {
+  affaireId: string | null;
+  clientId: string | null;
+  libelle: string;
+};
+
 type Recap = {
   semaine: { debut: string; fin: string };
   lignes: Ligne[];
+  /** Optionnel : un récapitulatif servi avant ce lot n'en porte pas. */
+  chantiersDisponibles?: ChantierDisponible[];
   parAffaire: Array<{ affaireId: string; affaireLabel: string; heures: number }>;
   parClient: Array<{ clientId: string; clientLabel: string; heures: number }>;
   totalHeures: number;
@@ -93,13 +103,76 @@ export default function Pointages() {
     setAjustements({});
   }, [data?.semaine.debut]);
 
+  /**
+   * Les lignes ajoutées à la main pour un chantier absent de la proposition.
+   *
+   * « Quand je crée un chantier en cours, pourquoi il n'apparaît pas dans les
+   * heures de la semaine ? » — parce que la proposition vient des
+   * AFFECTATIONS. Un chantier où personne n'a encore été envoyé n'y figure
+   * pas, et il n'existait aucun moyen d'y pointer quoi que ce soit.
+   *
+   * Elles arrivent à ZÉRO heure : proposer du temps sur un chantier où
+   * personne n'a été envoyé, ce serait en fabriquer.
+   */
+  const [lignesAjoutees, setLignesAjoutees] = useState<Ligne[]>([]);
+  const [chantierChoisi, setChantierChoisi] = useState('');
+  const [membreChoisi, setMembreChoisi] = useState('');
+
+  /**
+   * Les personnes déjà présentes dans la semaine.
+   *
+   * Tirées des lignes plutôt que d'un appel de plus : qui apparaît dans la
+   * proposition est exactement qui peut recevoir des heures cette semaine —
+   * un absent n'y figure pas, et n'a donc pas à être proposé.
+   */
+  const membresConnus = useMemo(() => {
+    const vus = new Map<string, { id: string; nom: string }>();
+    for (const l of data?.lignes ?? []) vus.set(l.membreId, { id: l.membreId, nom: l.membreNom });
+    return [...vus.values()].sort((a, b) => a.nom.localeCompare(b.nom));
+  }, [data]);
+
+  // Repartir à zéro en changeant de semaine, comme les ajustements : une
+  // ligne ajoutée pour une semaine n'a rien à faire dans une autre.
+  useEffect(() => setLignesAjoutees([]), [semaineRef]);
+  // Pré-sélectionner la première personne évite un clic de plus au pouce.
+  useEffect(() => {
+    if (!membreChoisi && membresConnus.length > 0) setMembreChoisi(membresConnus[0]!.id);
+  }, [membresConnus, membreChoisi]);
+
+  const toutesLignes = useMemo(
+    () => [...(data?.lignes ?? []), ...lignesAjoutees],
+    [data, lignesAjoutees],
+  );
+
   const heuresDe = (l: Ligne): number => ajustements[cleLigne(l)] ?? l.heures;
+
+  const ajouterChantier = (c: ChantierDisponible, membre: { id: string; nom: string }) => {
+    setLignesAjoutees((actuelles) => {
+      const ligne: Ligne = {
+        membreId: membre.id,
+        membreNom: membre.nom,
+        affaireId: c.affaireId,
+        affaireLabel: c.affaireId ? c.libelle : null,
+        clientId: c.clientId,
+        clientLabel: c.clientId ? c.libelle : null,
+        date: data?.semaine.debut ?? toDateString(new Date()),
+        heures: 0,
+        origine: 'propose',
+      };
+      // Deux clics sur la même paire ne créent pas deux lignes : la clé est
+      // celle de la base, et un doublon y serait refusé de toute façon.
+      const cle = cleLigne(ligne);
+      if (actuelles.some((l) => cleLigne(l) === cle)) return actuelles;
+      if ((data?.lignes ?? []).some((l) => cleLigne(l) === cle)) return actuelles;
+      return [...actuelles, ligne];
+    });
+  };
 
   // Un groupe par rattachement — affaire OU client, jamais les deux — sur le
   // même principe que le regroupement `parAffaire`/`parClient` du serveur.
   const groupes = useMemo(() => {
     const acc = new Map<string, { label: string; heures: number; lignes: Ligne[] }>();
-    for (const l of data?.lignes ?? []) {
+    for (const l of toutesLignes) {
       const cle = cleRattachement(l);
       const cur = acc.get(cle) ?? { label: (l.affaireLabel ?? l.clientLabel)!, heures: 0, lignes: [] };
       cur.heures += heuresDe(l);
@@ -107,13 +180,13 @@ export default function Pointages() {
       acc.set(cle, cur);
     }
     return [...acc.entries()].map(([cle, v]) => ({ cle, ...v }));
-  }, [data, ajustements]);
+  }, [toutesLignes, ajustements]);
 
   const total = groupes.reduce((acc, g) => acc + g.heures, 0);
 
   const confirmer = useMutation({
     mutationFn: async () => {
-      const lignes = (data?.lignes ?? []).map((l) => ({
+      const lignes = toutesLignes.map((l) => ({
         membreId: l.membreId,
         ...(l.affaireId ? { affaireId: l.affaireId } : { clientId: l.clientId }),
         date: l.date,
@@ -265,6 +338,59 @@ export default function Pointages() {
             </motion.div>
           ))}
         </motion.div>
+      )}
+
+      {/* Ajouter un chantier absent de la proposition. Sans ça, un chantier
+          créé sans affectation était impossible à pointer : il existait, il
+          était en cours, et aucune heure ne pouvait s'y rattacher. */}
+      {(data?.chantiersDisponibles?.length ?? 0) > 0 && membresConnus.length > 0 && (
+        <div className="mt-4 rounded-xl border border-dashed border-card-border p-3" data-testid="ajouter-chantier">
+          <p className="text-xs text-muted-foreground">
+            Un chantier manque ? Ajoutez-le — il arrive à 0 h, à vous de saisir le temps réel.
+          </p>
+          <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+            <select
+              aria-label="Chantier à ajouter"
+              className="h-11 flex-1 rounded-md border border-input bg-background px-3 text-sm sm:h-9"
+              value={chantierChoisi}
+              onChange={(e) => setChantierChoisi(e.target.value)}
+            >
+              <option value="">Choisir…</option>
+              {data?.chantiersDisponibles?.map((c) => (
+                <option key={c.affaireId ?? c.clientId ?? ''} value={c.affaireId ?? `c:${c.clientId}`}>
+                  {c.libelle}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label="Personne concernée"
+              className="h-11 flex-1 rounded-md border border-input bg-background px-3 text-sm sm:h-9"
+              value={membreChoisi}
+              onChange={(e) => setMembreChoisi(e.target.value)}
+            >
+              {membresConnus.map((m) => (
+                <option key={m.id} value={m.id}>{m.nom}</option>
+              ))}
+            </select>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={!chantierChoisi || !membreChoisi}
+              onClick={() => {
+                const c = data?.chantiersDisponibles?.find(
+                  (x) => (x.affaireId ?? `c:${x.clientId}`) === chantierChoisi,
+                );
+                const m = membresConnus.find((x) => x.id === membreChoisi);
+                if (c && m) {
+                  ajouterChantier(c, m);
+                  setChantierChoisi('');
+                }
+              }}
+            >
+              Ajouter
+            </Button>
+          </div>
+        </div>
       )}
 
       <div className="sticky bottom-0 mt-5 -mx-4 border-t border-border bg-background/95 px-4 py-4 backdrop-blur">
