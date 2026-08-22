@@ -950,6 +950,15 @@ export interface InvitationEnAttente {
      * @nullable
      */
   accesExpireAt?: string | null;
+  /** L'e-mail d'invitation est-il RÉELLEMENT parti. `false` quand aucun SMTP n'est configuré sur le déploiement, ou que l'envoi a échoué. L'écran doit le dire : afficher « invitation envoyée » alors que rien n'est parti fait attendre indéfiniment un courrier qui n'arrivera pas. */
+  envoye: boolean;
+  /**
+     * Pourquoi l'envoi a échoué, quand `envoye` vaut false.
+     * @nullable
+     */
+  motifEchec?: string | null;
+  /** Le lien d'invitation en clair, à copier quand le courrier n'est pas parti. Rendu à l'OWNER qui vient de créer l'invitation, et à lui seul — c'est le même secret que celui expédié par e-mail, pas une information supplémentaire. Il n'est PAS re-consultable ensuite : seul son condensat SHA-256 est conservé. */
+  lienInvitation: string;
   createdAt: string;
 }
 

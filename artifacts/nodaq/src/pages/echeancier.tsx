@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { CurrencyInput } from '@/components/currency-input';
 import {
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from '@/components/ui/select';
@@ -302,7 +303,8 @@ function EcheanceDialog({ open, onOpenChange, echeance, onSaved }: {
   const [type, setType] = useState('TVA');
   const [label, setLabel] = useState('');
   const [dueDate, setDueDate] = useState('');
-  const [estimatedCents, setEstimatedCents] = useState('');
+  // En CENTIMES — voir `CurrencyInput`, qui porte la conversion.
+  const [estimatedCents, setEstimatedCents] = useState(0);
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -312,10 +314,10 @@ function EcheanceDialog({ open, onOpenChange, echeance, onSaved }: {
         setType(echeance.type);
         setLabel(echeance.label);
         setDueDate(echeance.dueDate);
-        setEstimatedCents(echeance.estimatedCents != null ? String(echeance.estimatedCents / 100) : '');
+        setEstimatedCents(echeance.estimatedCents ?? 0);
         setNotes(echeance.notes ?? '');
       } else {
-        setType('TVA'); setLabel(''); setDueDate(''); setEstimatedCents(''); setNotes('');
+        setType('TVA'); setLabel(''); setDueDate(''); setEstimatedCents(0); setNotes('');
       }
     }
   }, [open, echeance]);
@@ -331,7 +333,7 @@ function EcheanceDialog({ open, onOpenChange, echeance, onSaved }: {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           type, label, dueDate,
-          ...(estimatedCents ? { estimatedCents: Math.round(Number(estimatedCents) * 100) } : {}),
+          ...(estimatedCents > 0 ? { estimatedCents } : {}),
           ...(notes ? { notes } : {}),
         }),
       });
@@ -379,8 +381,7 @@ function EcheanceDialog({ open, onOpenChange, echeance, onSaved }: {
           </div>
           <div className="space-y-1.5">
             <Label>Montant estimé (€)</Label>
-            <Input type="number" value={estimatedCents} onChange={e => setEstimatedCents(e.target.value)}
-              placeholder="0.00" min={0} step={0.01} />
+            <CurrencyInput valueCents={estimatedCents} onChangeCents={setEstimatedCents} />
           </div>
           <div className="space-y-1.5">
             <Label>Notes</Label>

@@ -86,7 +86,6 @@ export const ECRANS_AUDITES: readonly EcranAudite[] = [
   { chemin: '/brief', charger: () => import('@/pages/brief') },
   { chemin: '/chat', charger: () => import('@/pages/chat') },
   { chemin: '/devis', charger: () => import('@/pages/devis') },
-  { chemin: '/devis/dictee', charger: () => import('@/pages/devis-dictee') },
   { chemin: '/classeur', charger: () => import('@/pages/classeur') },
   { chemin: '/analytique', charger: () => import('@/pages/analytique') },
   { chemin: '/marge', charger: () => import('@/pages/marge') },

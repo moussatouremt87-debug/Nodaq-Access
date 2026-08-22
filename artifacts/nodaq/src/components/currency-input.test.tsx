@@ -93,3 +93,45 @@ describe("CurrencyInput — la frappe caractère par caractère n'est jamais cor
     expect(champ.value).toBe("45.90");
   });
 });
+
+// ── Ticket 4.28 : « je dois effacer tous les 0 avant de saisir » ────────────
+
+describe('un champ neuf n’oblige pas à effacer un zéro', () => {
+  test('zéro s’affiche VIDE, avec 0,00 en filigrane', () => {
+    const { container } = render(<CurrencyInput valueCents={0} onChangeCents={() => {}} />);
+    const champ = champUnique(container);
+    // C'EST le reproche : « 0.00 » se comportait comme une valeur saisie qu'il
+    // fallait détruire avant de pouvoir taper, à chaque ligne de devis.
+    expect(champ.value).toBe('');
+    expect(champ).toHaveAttribute('placeholder', '0,00');
+  });
+
+  test('une valeur non nulle reste affichée', () => {
+    const { container } = render(<CurrencyInput valueCents={8900} onChangeCents={() => {}} />);
+    expect(champUnique(container).value).toBe('89.00');
+  });
+
+  test('taper directement sur un champ neuf donne le bon montant', async () => {
+    const { container } = render(<Harness />);
+    await userEvent.type(champUnique(container), '45');
+    expect(champUnique(container).value).toBe('45');
+  });
+
+  test('prendre le focus sélectionne tout : la frappe REMPLACE', () => {
+    const { container } = render(<CurrencyInput valueCents={8900} onChangeCents={() => {}} />);
+    const champ = champUnique(container);
+    champ.focus();
+    // Sans sélection, cliquer au milieu de « 89.00 » pour corriger produisait
+    // « 8945.00 » sans qu'on comprenne pourquoi.
+    expect(champ.selectionStart).toBe(0);
+    expect(champ.selectionEnd).toBe(champ.value.length);
+  });
+
+  test('un montant remis à zéro repasse au filigrane', () => {
+    const { container, rerender } = render(
+      <CurrencyInput valueCents={4500} onChangeCents={() => {}} />,
+    );
+    rerender(<CurrencyInput valueCents={0} onChangeCents={() => {}} />);
+    expect(champUnique(container).value).toBe('');
+  });
+});

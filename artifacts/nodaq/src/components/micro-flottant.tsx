@@ -93,7 +93,7 @@ export function MicroFlottant() {
     [toast],
   );
 
-  const { enregistre, transcrit, demarrer, arreter } = useDictee(interpreter);
+  const { enregistre, transcrit, erreur, demarrer, arreter } = useDictee(interpreter);
 
   /**
    * Corrections saisies avant validation : index d'opération → champ → valeur.
@@ -160,6 +160,17 @@ export function MicroFlottant() {
     <>
       {/* `flex justify-center` : centre le bouton horizontalement — `Button`
           est `inline-flex`, une marge `auto` seule ne le centrerait pas. */}
+      {/* État VISIBLE, et qui reste. Un toast disparaît avant qu'on ait fini
+          de le lire quand on a les mains prises et le soleil dans l'écran. */}
+      {erreur && (
+        <div
+          className="mx-auto mb-2 max-w-md rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-center text-sm text-destructive"
+          role="status"
+          data-testid="erreur-dictee"
+        >
+          {erreur}
+        </div>
+      )}
       <div className="flex justify-center py-8">
         <Button
           aria-label="Dicter une commande"

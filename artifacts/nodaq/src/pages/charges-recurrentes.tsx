@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { CurrencyInput } from '@/components/currency-input';
 import {
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from '@/components/ui/select';
@@ -222,7 +223,9 @@ function ChargeRecurrenteDialog({ open, onOpenChange, charge, onSaved }: {
   const [cadence, setCadence] = useState('mensuel');
   const [label, setLabel] = useState('');
   const [startDate, setStartDate] = useState('');
-  const [amountCents, setAmountCents] = useState('');
+  // En CENTIMES, et non une chaîne d'euros : la conversion vit dans
+  // `CurrencyInput`, à un seul endroit.
+  const [amountCents, setAmountCents] = useState(0);
   const [notes, setNotes] = useState('');
 
   const createMut = useCreateChargeRecurrente();
@@ -236,19 +239,19 @@ function ChargeRecurrenteDialog({ open, onOpenChange, charge, onSaved }: {
         setCadence(charge.cadence);
         setLabel(charge.label);
         setStartDate(charge.startDate);
-        setAmountCents(String(charge.amountCents / 100));
+        setAmountCents(charge.amountCents);
         setNotes(charge.notes ?? '');
       } else {
-        setCategory('LOYER'); setCadence('mensuel'); setLabel(''); setStartDate(''); setAmountCents(''); setNotes('');
+        setCategory('LOYER'); setCadence('mensuel'); setLabel(''); setStartDate(''); setAmountCents(0); setNotes('');
       }
     }
   }, [open, charge]);
 
   const handleSave = async () => {
-    if (!label.trim() || !startDate || !amountCents) return;
+    if (!label.trim() || !startDate || amountCents <= 0) return;
     const data = {
       category, cadence, label, startDate,
-      amountCents: Math.round(Number(amountCents) * 100),
+      amountCents,
       ...(notes ? { notes } : {}),
     };
     const onError = () => toast({ title: 'Erreur', description: "Impossible d'enregistrer", variant: 'destructive' });
@@ -304,8 +307,7 @@ function ChargeRecurrenteDialog({ open, onOpenChange, charge, onSaved }: {
             </div>
             <div className="space-y-1.5">
               <Label>Montant (€) *</Label>
-              <Input type="number" value={amountCents} onChange={e => setAmountCents(e.target.value)}
-                placeholder="0.00" min={0} step={0.01} />
+              <CurrencyInput valueCents={amountCents} onChangeCents={setAmountCents} />
             </div>
           </div>
           <div className="space-y-1.5">
