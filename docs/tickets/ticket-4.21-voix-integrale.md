@@ -79,3 +79,62 @@ les porter explicitement plutôt que de les compter comme un manque :
 authentification, MFA, webhooks entrants, effacement RGPD, rotation de clés.
 Dicter « supprime le client Delacroix » à voix haute sur un chantier est une
 mauvaise idée, pas une fonctionnalité.
+
+---
+
+## Journal des lots
+
+### Lot 1 — les heures (livré)
+
+`pointer_heures`. Le pointage dicté depuis le chantier, au lieu du vendredi soir
+de mémoire.
+
+### Lot 2 — le commerce courant (livré)
+
+`creer_client`, et la correction des champs avant validation : le fondateur a
+tranché — « on doit pouvoir dire les noms simplement, le chat bot affiche le
+texte pour le soumettre à validation à l'humain pour éviter les erreurs ». D'où
+`CHAMPS_CORRIGEABLES` : l'écran rend modifiable ce que l'oreille rate souvent
+(un nom propre), et rien d'autre.
+
+### Lot 3 — l'argent (livré)
+
+`enregistrer_reglement`, `lancer_relance`, `facturer_devis`.
+
+**Ce que `facturer_devis` a coûté en conception, et pourquoi.** La conversion
+devis → facture vivait dans la route `POST /devis/:id/facturer`, mêlée à son
+HTTP. Le chemin vocal ne pouvait donc que la réécrire — c'est-à-dire produire
+une SECONDE conversion, qui aurait dérivé de la première au premier correctif.
+
+Elle est donc extraite dans `lib/facturer-devis.ts` (`facturerDevis`,
+`totauxFacture`, `messageRefusFacturation`), et la route l'appelle désormais.
+L'extraction est *neutre* : les onze tests de `devis-facturer.test.ts` passent
+sans être touchés — c'est ce qui la rend démontrable plutôt que crédible.
+
+**Aucun chiffre ne transite par le modèle.** Le schéma ne porte qu'une mention
+de devis ; c'est le serveur qui lit le total TTC du devis signé et l'affiche
+dans le plan. La garde « aucun schéma d'intention ne déclare de champ
+monétaire » l'impose structurellement — elle avait déjà refusé, au lot
+précédent, un `montantEuros` que j'avais écrit.
+
+**Le contexte ne propose que les devis ACCEPTÉS non encore facturés**, par
+jointure. Un devis déjà facturé n'est donc pas « refusé à l'exécution » : il est
+absent du vocabulaire, et le plan dit pourquoi plutôt que de laisser croire à
+une erreur d'écoute. L'unicité réelle reste tenue par l'index de la migration
+049 — un contrôle applicatif se contourne par deux requêtes simultanées.
+
+**Ce que la voix ne fait toujours pas, délibérément : émettre.** `facturer_devis`
+crée un BROUILLON, sans numéro. L'émission scelle un document immuable et
+consomme un numéro de séquence : elle reste un geste d'écran.
+
+### Lot 4 — la configuration (à faire)
+
+Catalogue, contrats, charges récurrentes, paramètres.
+
+## Dette assumée de ce ticket
+
+`scripts/couverture-vocale.mjs`, annoncé plus haut comme point de départ, **n'a
+pas été écrit** : les lots ont avancé sur la liste tenue à la main de la section
+« l'écart, chiffré ». Ça tient tant que la liste est courte, et ça cessera de
+tenir au lot 4. À écrire avant de déclarer la couverture atteinte — sans quoi
+« TOUT faire » restera une appréciation, pas une mesure.

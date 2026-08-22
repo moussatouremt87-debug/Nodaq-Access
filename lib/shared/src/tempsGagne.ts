@@ -86,6 +86,9 @@ export const BAREME_TEMPS_MANUEL: Record<Intention["type"], { readonly champs: n
   // Aucun champ : monter une campagne à la main, c'est parcourir les impayés
   // un par un. Le barème sous-estime ici plus qu'ailleurs — délibérément.
   lancer_relance: { champs: 0 },
+  // devisMentionne — mais l'alternative manuelle, c'est RESSAISIR toutes les
+  // lignes du devis. Le barème sous-estime ici massivement, et c'est assumé.
+  facturer_devis: { champs: 1 },
 };
 
 /**
