@@ -63,11 +63,33 @@ export const IntentionCreerProspect = z
   })
   .strict();
 
+export const ETAPES_PROSPECT_DICTABLES = [
+  "NOUVEAU", "CONTACTE", "DEVIS_ENVOYE", "NEGOCIATION", "GAGNE", "PERDU",
+] as const;
+
 export const IntentionMajStatutAffaire = z
   .object({
     type: z.literal("maj_statut_affaire"),
     affaireMentionnee: Mention,
     statut: z.enum(STATUTS_AFFAIRE_DICTABLES),
+  })
+  .strict();
+
+/**
+ * Changer l'ÉTAPE d'un prospect (ticket 4.23).
+ *
+ * L'outil `update_prospect` de l'agent de chat existait et était déclaré au
+ * modèle, mais aucune intention ne lui correspondait : il retombait sur le
+ * repli générique et CONSIGNAIT UNE ACTIVITÉ. Demander « passe Dupont en
+ * négociation » enregistrait donc une ligne d'activité, et le prospect ne
+ * bougeait pas — sans que rien ne le signale. Une garde structurelle l'a
+ * attrapé (voir `agent-operateur.test.ts`).
+ */
+export const IntentionMajEtapeProspect = z
+  .object({
+    type: z.literal("maj_etape_prospect"),
+    prospectMentionne: Mention,
+    etape: z.enum(ETAPES_PROSPECT_DICTABLES),
   })
   .strict();
 
@@ -384,6 +406,56 @@ export const IntentionCreerContrat = z
   })
   .strict();
 
+/**
+ * Créer un DEVIS à partir de lignes dictées (ticket 4.23).
+ *
+ * « Fais un devis pour Delacroix : 90 m² de placo, 22 mètres de gouttière. »
+ * C'est la promesse centrale du produit, et elle ne demande aucune entorse.
+ *
+ * ── Aucun prix dans ce schéma, et il n'en faut pas ────────────────────────
+ * Une ligne dictée porte un LIBELLÉ, une QUANTITÉ et une UNITÉ — jamais un
+ * prix. Le chiffrage est fait par le serveur, ligne par ligne, depuis le
+ * CATALOGUE du tenant (`rapprocherDictee`), qui est déjà la seule source de
+ * prix du devis dicté. C'est exactement ce que la règle 3 prescrit :
+ * « il s'appuie sur le catalogue du tenant, puis formule ».
+ *
+ * Une ligne que le catalogue ne connaît pas ressort en `a_completer`, avec un
+ * prix `null` — jamais zéro, parce que zéro est un prix et non une absence.
+ * Le devis est alors créé en BROUILLON : c'est précisément l'état d'un
+ * document qu'il reste à finir, et l'écran devis sait déjà le faire. Rien
+ * n'est envoyé à un client depuis un brouillon.
+ */
+export const LigneDictee = z
+  .object({
+    libelle: z.string().min(1).max(300),
+    quantite: z.number().positive().max(100_000).nullable().optional(),
+    unite: z.string().max(20).nullable().optional(),
+  })
+  .strict();
+
+export const IntentionCreerDevis = z
+  .object({
+    type: z.literal("creer_devis"),
+    clientMentionne: Mention.nullable().optional(),
+    lignes: z.array(LigneDictee).min(1).max(40),
+  })
+  .strict();
+
+/**
+ * Créer une FACTURE en brouillon à partir de lignes dictées.
+ *
+ * Même moteur de chiffrage que le devis. Reste un BROUILLON sans numéro :
+ * l'émission scelle un document immuable et consomme un numéro de séquence,
+ * elle ne se dicte pas.
+ */
+export const IntentionCreerFacture = z
+  .object({
+    type: z.literal("creer_facture"),
+    clientMentionne: Mention.nullable().optional(),
+    lignes: z.array(LigneDictee).min(1).max(40),
+  })
+  .strict();
+
 export const Intention = z.discriminatedUnion("type", [
   IntentionCreerAffaire,
   IntentionCreerProspect,
@@ -401,6 +473,9 @@ export const Intention = z.discriminatedUnion("type", [
   IntentionCreerArticleCatalogue,
   IntentionCreerChargeRecurrente,
   IntentionCreerContrat,
+  IntentionMajEtapeProspect,
+  IntentionCreerDevis,
+  IntentionCreerFacture,
 ]);
 export type Intention = z.infer<typeof Intention>;
 
@@ -437,6 +512,9 @@ export const TYPES_INTENTION = [
   "creer_article_catalogue",
   "creer_charge_recurrente",
   "creer_contrat",
+  "maj_etape_prospect",
+  "creer_devis",
+  "creer_facture",
 ] as const;
 export type TypeIntention = (typeof TYPES_INTENTION)[number];
 
@@ -655,6 +733,14 @@ export const CHAMPS_CORRIGEABLES: Record<TypeIntention, readonly string[]> = {
   // reste donc de la dictée, et se corrige. Contraste avec `affaireId` ou
   // `devisId`, qui sont des rapprochements et n'ont rien à faire ici.
   creer_contrat: ["libelle", "clientName", "montantCents"],
+  // Rien de dicté à corriger : l'étape est une valeur d'une liste fermée, et
+  // le prospect est un rapprochement.
+  maj_etape_prospect: [],
+  // Les lignes ne se corrigent pas ici : ce sont des RÉSULTATS de
+  // rapprochement au catalogue, pas de la dictée brute. Le brouillon créé
+  // s'édite sur l'écran devis, qui sait le faire ligne par ligne.
+  creer_devis: ["clientName"],
+  creer_facture: ["clientName"],
 };
 
 /**
@@ -694,6 +780,12 @@ export const CHAMPS_A_COMPLETER: Record<TypeIntention, readonly string[]> = {
   creer_article_catalogue: ["prixUnitaireHtCents"],
   creer_charge_recurrente: ["montantCents"],
   creer_contrat: ["montantCents"],
+  maj_etape_prospect: [],
+  // Rien à réclamer : un devis dont une ligne n'a pas de prix est un
+  // BROUILLON, c'est-à-dire exactement ce qu'il doit être. Bloquer sa création
+  // obligerait à saisir le catalogue avant de pouvoir dicter quoi que ce soit.
+  creer_devis: [],
+  creer_facture: [],
 };
 
 /** Les champs encore vides d'une opération, parmi ceux qu'elle réclame. */

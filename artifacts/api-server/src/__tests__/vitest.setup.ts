@@ -197,6 +197,15 @@ globalThis.fetch = async function patchedFetch(
                           }],
                           nonCompris: [],
                         }
+                      : userText.includes("voix-test-devis")
+                        ? { intentions: [{ type: "creer_devis", clientMentionne: "Delacroix", lignes: [
+                            { libelle: "Pose de placo", quantite: 90, unite: "m2" },
+                            { libelle: "Truc jamais vu au catalogue", quantite: 3, unite: null },
+                          ] }], nonCompris: [] }
+                      : userText.includes("voix-test-facture-lignes")
+                        ? { intentions: [{ type: "creer_facture", clientMentionne: null, lignes: [
+                            { libelle: "Pose de placo", quantite: 10, unite: "m2" },
+                          ] }], nonCompris: [] }
                       : userText.includes("voix-test-cat-dicte")
                         ? { intentions: [{ type: "creer_article_catalogue", designation: "Pose de placo", unite: "m2", montantEuros: 45 }], nonCompris: [] }
                       : userText.includes("voix-test-cat-halluc")

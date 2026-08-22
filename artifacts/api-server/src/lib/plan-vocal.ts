@@ -63,9 +63,15 @@ import {
   paiementsTable,
   campagnesRelanceTable,
   catalogueLignesTable,
+  catalogueAliasTable,
+  devisTable,
   chargesRecurrentesTable,
   contratsTable,
 } from "@workspace/db";
+// `FactureLine` est le type le PLUS STRICT des deux (`vatRate` y est
+// obligatoire) : construire avec lui satisfait aussi `DevisLine`, et évite
+// deux constructions parallèles des mêmes lignes.
+import type { FactureLine } from "@workspace/db";
 import {
   type Intention,
   type Candidat,
@@ -77,6 +83,11 @@ import {
   toDateString,
   champCorrigeable,
   champsManquants,
+  rapprocherDictee,
+  totalProposition,
+  type CatalogueEntree,
+  type AliasCatalogue,
+  type LigneProposee,
   centimesDepuisDictee,
   CHAMPS_A_COMPLETER,
   type TypeIntention,
@@ -229,6 +240,12 @@ export interface ContexteResolution {
    *  rapprochement ne sert donc qu'à écrire le nom tel qu'il existe déjà,
    *  et une mention introuvable reste écrite telle qu'elle a été dictée. */
   readonly clients: readonly Candidat[];
+  /** Prospects encore ouverts — ni gagnés ni perdus. */
+  readonly prospects: readonly Candidat[];
+  /** Le catalogue tarifaire : LA source de prix d'un devis dicté (règle 3). */
+  readonly catalogue: readonly CatalogueEntree[];
+  /** Alias appris : « ba13 » → la ligne de catalogue « Cloison BA13 ». */
+  readonly aliasCatalogue: AliasCatalogue;
   /** US-A6.1 — le mot du secteur, pour que les libellés soumis à validation
    *  parlent la langue de l'utilisateur (« Créer la mission … » plutôt que
    *  « Créer l'affaire … » chez un consultant). Porté par le contexte, déjà
@@ -303,8 +320,34 @@ export async function chargerContexte(tenantId: string): Promise<ContexteResolut
       .from(clientsTable);
     const clients = clientsLignes.map((c) => ({ id: c.id, libelle: c.nom }));
 
+    const prospectsLignes = await tx
+      .select({ id: prospectsTable.id, nom: prospectsTable.name })
+      .from(prospectsTable)
+      .where(sql`stage NOT IN ('GAGNE', 'PERDU')`);
+    const prospects = prospectsLignes.map((p) => ({ id: p.id, libelle: p.nom }));
+
+    const catalogueLignes = await tx
+      .select()
+      .from(catalogueLignesTable)
+      .where(eq(catalogueLignesTable.actif, true));
+    const catalogue: CatalogueEntree[] = catalogueLignes.map((c) => ({
+      id: c.id,
+      libelle: c.libelle,
+      unite: c.unite,
+      prixUnitaireHtCents: c.prixUnitaireHtCents,
+      tauxTva: c.tauxTva,
+      motsCles: c.motsCles ?? [],
+    }));
+    const aliasLignes = await tx.select().from(catalogueAliasTable);
+    const aliasCatalogue: AliasCatalogue = new Map(
+      aliasLignes.map((a) => [a.aliasNormalise, a.catalogueLigneId]),
+    );
+
     const words = affaireWords(await verticalDepuisTx(tx));
-    return { affaires, membres, factures, devisAFacturer, clients, impayes, words };
+    return {
+      affaires, membres, factures, devisAFacturer, clients, prospects,
+      catalogue, aliasCatalogue, impayes, words,
+    };
   });
 }
 
@@ -345,6 +388,12 @@ function libelleOperation(intention: Intention, words: AffaireWords): string {
       return `Déclarer la charge ${intention.cadence}le « ${intention.libelle} »`;
     case "creer_contrat":
       return `Créer le contrat ${intention.cadence} « ${intention.libelle} »`;
+    case "maj_etape_prospect":
+      return `Passer « ${intention.prospectMentionne} » en ${intention.etape}`;
+    case "creer_devis":
+      return `Créer un devis de ${intention.lignes.length} ligne(s)`;
+    case "creer_facture":
+      return `Créer une facture de ${intention.lignes.length} ligne(s)`;
   }
 }
 
@@ -459,6 +508,100 @@ export function construirePlan(
           dateDebut,
         },
         certitude: "aucune_resolution",
+      });
+      continue;
+    }
+
+    if (intention.type === "creer_devis" || intention.type === "creer_facture") {
+      // Le chiffrage est DÉTERMINISTE, depuis le catalogue du tenant. Le
+      // modèle n'a fourni que des libellés, des quantités et des unités : son
+      // schéma ne peut rien porter d'autre.
+      const proposees = rapprocherDictee(
+        intention.lignes.map((l) => ({
+          libelle: l.libelle,
+          quantite: l.quantite ?? null,
+          unite: l.unite ?? null,
+        })),
+        contexte.catalogue,
+        contexte.aliasCatalogue,
+      );
+      const { totalHtCents, lignesChiffrees, lignesACompleter } = totalProposition(proposees);
+
+      let clientName: string | null = intention.clientMentionne ?? null;
+      let certitude: OperationBrute["certitude"] = "aucune_resolution";
+      if (intention.clientMentionne) {
+        const r = resoudreMention(intention.clientMentionne, contexte.clients);
+        if (r.etat === "ambigu") {
+          questions.push({
+            question: `Quel client « ${intention.clientMentionne} » ?`,
+            candidats: r.candidats,
+            mention: intention.clientMentionne,
+          });
+          continue;
+        }
+        if (r.etat === "resolu") {
+          clientName = r.candidat.libelle;
+          certitude = r.certitude;
+        }
+      }
+
+      const mot = intention.type === "creer_devis" ? "devis" : "facture";
+      // Le libellé dit la PROVENANCE des prix et ce qui manque encore. Un
+      // total annoncé sans dire que deux lignes sont vides ferait croire à un
+      // devis moins cher que la réalité — l'erreur qu'on ne peut pas se
+      // permettre sur un prix envoyé à un client.
+      const manque =
+        lignesACompleter > 0
+          ? ` — ${lignesACompleter} ligne(s) sans prix au catalogue, à compléter`
+          : "";
+      operations.push({
+        type: intention.type,
+        libelle:
+          `Créer un ${mot} en BROUILLON${clientName ? ` pour ${clientName}` : ""} : ` +
+          `${lignesChiffrees} ligne(s) chiffrée(s) depuis votre catalogue, ` +
+          `${euros(totalHtCents)} HT${manque}`,
+        champs: {
+          clientName,
+          // Ce sont les lignes DICTÉES qu'on conserve, pas le rapprochement :
+          // le chiffrage est refait à l'exécution, sur le catalogue tel qu'il
+          // est à ce moment-là. Un plan attend jusqu'à une heure, et un prix
+          // corrigé entre-temps doit être celui qui s'écrit.
+          //
+          // Le total du libellé ci-dessus n'est donc qu'un APERÇU, et c'est
+          // assumé : il est affiché avant validation, sur un document qui sort
+          // en brouillon.
+          lignesDicteesJson: JSON.stringify(
+            intention.lignes.map((l) => ({
+              libelle: l.libelle,
+              quantite: l.quantite ?? null,
+              unite: l.unite ?? null,
+            })),
+          ),
+        },
+        certitude,
+      });
+      continue;
+    }
+
+    if (intention.type === "maj_etape_prospect") {
+      const r = resoudreMention(intention.prospectMentionne, contexte.prospects);
+      if (r.etat === "ambigu") {
+        questions.push({
+          question: `Quel prospect « ${intention.prospectMentionne} » ?`,
+          candidats: r.candidats,
+          mention: intention.prospectMentionne,
+        });
+        continue;
+      }
+      if (r.etat === "introuvable") {
+        incompris.push(`prospect « ${intention.prospectMentionne} » introuvable`);
+        continue;
+      }
+      operations.push({
+        type: intention.type,
+        libelle: `Passer « ${r.candidat.libelle} » en ${intention.etape}`,
+        champs: { prospectId: r.candidat.id, etape: intention.etape },
+        certitude: r.certitude,
       });
       continue;
     }
@@ -996,6 +1139,89 @@ async function executerOperation(
         ...(op.champs["clientNom"] ? { clientName: op.champs["clientNom"] } : {}),
         ...(op.champs["dateDebut"] ? { startDate: op.champs["dateDebut"] } : {}),
       });
+      return;
+    }
+    case "creer_devis":
+    case "creer_facture": {
+      // Le catalogue est relu maintenant : c'est LUI qui fixe les prix, pas le
+      // modèle, et pas un instantané pris une heure plus tôt.
+      const dictees = JSON.parse(op.champs["lignesDicteesJson"] ?? "[]") as {
+        libelle: string; quantite: number | null; unite: string | null;
+      }[];
+      const catalogueCourant = await tx
+        .select()
+        .from(catalogueLignesTable)
+        .where(eq(catalogueLignesTable.actif, true));
+      const aliasCourants = await tx.select().from(catalogueAliasTable);
+      const proposees: LigneProposee[] = rapprocherDictee(
+        dictees,
+        catalogueCourant.map((c) => ({
+          id: c.id, libelle: c.libelle, unite: c.unite,
+          prixUnitaireHtCents: c.prixUnitaireHtCents, tauxTva: c.tauxTva,
+          motsCles: c.motsCles ?? [],
+        })),
+        new Map(aliasCourants.map((a) => [a.aliasNormalise, a.catalogueLigneId])),
+      );
+      // Une ligne sans prix entre à 0 dans le BROUILLON — et c'est le seul
+      // endroit où c'est acceptable : le libellé du plan a annoncé combien de
+      // lignes restaient à compléter, et un brouillon ne part chez personne.
+      // L'émission, elle, refusera un document incohérent.
+      const lignes: FactureLine[] = proposees.map((l) => ({
+        id: crypto.randomUUID(),
+        description: l.libelle,
+        quantity: l.quantite ?? 1,
+        unitPriceCents: l.prixUnitaireHtCents ?? 0,
+        vatRate: l.tauxTva ?? 20,
+        vatCategory: "S",
+        ...(l.unite ? { unit: l.unite } : {}),
+      }));
+      const totalHT = lignes.reduce((n, l) => n + l.quantity * l.unitPriceCents, 0);
+      const totalTVA = lignes.reduce(
+        (n, l) => n + Math.round(l.quantity * l.unitPriceCents * ((l.vatRate ?? 20) / 100)),
+        0,
+      );
+      const client = op.champs["clientName"] ?? "Client à préciser";
+
+      if (op.type === "creer_devis") {
+        const nb = (await tx.select({ id: devisTable.id }).from(devisTable)).length;
+        await tx.insert(devisTable).values({
+          tenantId,
+          reference: `DEV-${new Date().getFullYear()}-${String(nb + 1).padStart(4, "0")}`,
+          clientName: client,
+          status: "BROUILLON",
+          lines: lignes,
+          totalHTCents: totalHT,
+          totalTTCCents: totalHT + totalTVA,
+        });
+        return;
+      }
+
+      await tx.insert(facturesTable).values({
+        tenantId,
+        customerName: client,
+        // Sans numéro, comme toute facture en brouillon : l'émission scelle un
+        // document immuable et consomme un numéro de séquence, elle ne se
+        // dicte pas.
+        number: "",
+        statut: "BROUILLON",
+        issuedDate: toDateString(new Date()),
+        dueDate: toDateString(new Date()),
+        lines: lignes,
+        totalHTCents: totalHT,
+        totalTVACents: totalTVA,
+        amountCents: totalHT + totalTVA,
+      });
+      return;
+    }
+    case "maj_etape_prospect": {
+      const [maj] = await tx
+        .update(prospectsTable)
+        .set({ stage: op.champs["etape"]! })
+        .where(eq(prospectsTable.id, op.champs["prospectId"]!))
+        .returning({ id: prospectsTable.id });
+      // Même exigence que `maj_statut_affaire` : une cible disparue fait
+      // échouer TOUT le plan, elle ne s'ignore pas.
+      if (!maj) throw new Error(`Prospect ${op.champs["prospectId"]} introuvable`);
       return;
     }
     case "creer_article_catalogue": {
