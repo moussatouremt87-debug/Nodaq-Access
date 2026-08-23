@@ -6,6 +6,7 @@ import affairesRouter from "./affaires";
 import contratsRouter from "./contrats";
 import facturesRouter from "./factures";
 import facturationTempsRouter from "./facturation-temps";
+import facturationRecurrenteRouter from "./facturation-recurrente";
 import avoirsRouter from "./avoirs";
 import prospectsRouter from "./prospects";
 import briefRouter from "./brief";
@@ -201,6 +202,7 @@ router.use(financierOnly, facturesRouter);
 // factures : ces routes en CRÉENT, et un rôle qui ne voit pas le dossier
 // financier n'a pas à en produire.
 router.use(financierOnly, facturationTempsRouter);
+router.use(financierOnly, facturationRecurrenteRouter);
 router.use(financierOnly, avoirsRouter);
 router.use(financierOnly, analyticsRouter);
 router.use(financierOnly, paiementsRouter);
