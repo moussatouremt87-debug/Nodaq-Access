@@ -18,7 +18,7 @@ async function seedMetier() {
     // Seed devis
     const existingDevis = await tx.select().from(devisTable);
     if (existingDevis.length === 0) {
-      await tx.insert(devisTable).values([
+      const devisSemes = await tx.insert(devisTable).values([
         {
           tenantId,
           reference: "DEV-2026-0001",
@@ -79,7 +79,21 @@ async function seedMetier() {
           validUntil: "2026-07-15",
           notes: "Budget insuffisant côté client.",
         },
-      ]);
+      ]).returning();
+      // Ticket 4.31 b — un devis de démonstration est un document comme un
+      // autre : sans cette indexation, le Classeur du tenant de démo serait
+      // vide alors que ses devis existent, et la garde statique de
+      // `classeur-exhaustivite.test.ts` échouerait sur ce fichier.
+      await tx.insert(classeurTable).values(
+        devisSemes.map((d) => ({
+          tenantId,
+          name: `Devis ${d.reference}`,
+          category: "DEVIS",
+          mimeType: "application/pdf",
+          sourceType: "DEVIS",
+          sourceId: d.id,
+        })),
+      ).onConflictDoNothing();
       console.log("✓ Seeded devis");
     }
 
