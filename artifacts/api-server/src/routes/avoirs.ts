@@ -29,6 +29,7 @@ import {
 } from "../lib/pdf-generation.js";
 import { loadSellerInfo } from "../lib/seller-info.js";
 import { enregistrerIncidentAvoirCompensationEchouee } from "../lib/incidents-facturation.js";
+import { indexerAuClasseur, nomAuClasseur } from "../lib/indexation-classeur.js";
 
 const router: IRouter = Router();
 
@@ -299,6 +300,11 @@ router.post("/avoirs", async (req, res): Promise<void> => {
         pdfPath: null,   // stored in archived_pdfs
         pdfSha256,
       }).returning();
+
+      await indexerAuClasseur(tx, {
+        tenantId, sourceType: "AVOIR", sourceId: created!.id,
+        nom: nomAuClasseur("AVOIR", created!.numero, created!.id),
+      });
 
       await tx.insert(activityTable).values({
         tenantId,

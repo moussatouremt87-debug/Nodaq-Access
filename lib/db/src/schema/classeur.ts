@@ -13,6 +13,16 @@ export const classeurTable = pgTable("classeur_documents", {
   mimeType: text("mime_type"),
   notes: text("notes"),
   affaireId: text("affaire_id"),
+  /**
+   * Le document métier d'où vient cette entrée — FACTURE, DEVIS, AVOIR,
+   * CONTRAT (ticket 4.31 b). NUL pour un fichier déposé à la main ou envoyé
+   * en photo : il n'a pas d'autre existence que celle-ci.
+   *
+   * Le couple (tenant, type, id) porte un index UNIQUE partiel : c'est lui
+   * qui rend l'indexation idempotente, et non un contrôle applicatif.
+   */
+  sourceType: text("source_type"),
+  sourceId: text("source_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

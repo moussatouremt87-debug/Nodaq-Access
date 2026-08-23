@@ -33,6 +33,7 @@ import {
 } from "@workspace/db";
 import { eq, and, count } from "drizzle-orm";
 import { toDateString, compteDansCapacite , PROFIL_VIDE, peutEmettreDocumentLegal, messageSirenManquant, premiereAction, STADES_ENTREPRISE, EFFECTIFS, GESTIONS_ACTUELLES, IRRITANTS } from "@nodaq/shared";
+import { indexerAuClasseur, nomAuClasseur } from "../lib/indexation-classeur.js";
 
 // ── Validation SIRET (Luhn, inlinée pour éviter la dépendance circulaire) ────
 
@@ -532,7 +533,7 @@ onboardingWriteRouter.post("/reprise/blocs/:bloc", async (req, res): Promise<voi
           const amountCents = Math.round(Number(f.montant) * 100);
           if (isNaN(amountCents) || amountCents <= 0) continue;
           const number = `REPRISE-${isoToday().replace(/-/g, "")}-${crypto.randomUUID().slice(0, 6).toUpperCase()}`;
-          await tx.insert(facturesTable).values({
+          const [reprise] = await tx.insert(facturesTable).values({
             tenantId,
             customerName: f.client,
             number,
@@ -541,6 +542,13 @@ onboardingWriteRouter.post("/reprise/blocs/:bloc", async (req, res): Promise<voi
             amountCents,
             residualCents: amountCents,
             settled: false,
+          }).returning();
+          // Ticket 4.31 b — c'est PAR ICI que le testeur du 22/08 avait
+          // ajouté sa facture, et c'est ici qu'elle n'apparaissait pas au
+          // Classeur.
+          await indexerAuClasseur(tx, {
+            tenantId, sourceType: "FACTURE", sourceId: reprise!.id,
+            nom: nomAuClasseur("FACTURE", reprise!.number, reprise!.id),
           });
         }
       }
@@ -552,7 +560,7 @@ onboardingWriteRouter.post("/reprise/blocs/:bloc", async (req, res): Promise<voi
           const tvaRate = 20;
           const totalTTCCents = Math.round(totalHTCents * (1 + tvaRate / 100));
           const number = `REPRISE-${isoToday().replace(/-/g, "")}-${crypto.randomUUID().slice(0, 6).toUpperCase()}`;
-          await tx.insert(devisTable).values({
+          const [devisRepris] = await tx.insert(devisTable).values({
             tenantId,
             reference: number,
             clientName: d.client,
@@ -563,6 +571,10 @@ onboardingWriteRouter.post("/reprise/blocs/:bloc", async (req, res): Promise<voi
             tvaRate,
             remise: 0,
             validUntil: null,
+          }).returning();
+          await indexerAuClasseur(tx, {
+            tenantId, sourceType: "DEVIS", sourceId: devisRepris!.id,
+            nom: nomAuClasseur("DEVIS", devisRepris!.reference, devisRepris!.id),
           });
         }
       }

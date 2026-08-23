@@ -37,6 +37,7 @@ import { champsErreur } from "../lib/erreur-pg.js";
 import { secretExiste } from "../lib/tenant-secrets.js";
 import { estFactureEnRetard, residuelFactureCents } from "../lib/facturesEnRetard.js";
 import { VERTICAL_SETTING_KEY, DEFAULT_VERTICAL } from "../lib/vertical-tenant.js";
+import { indexerAuClasseur, nomAuClasseur } from "../lib/indexation-classeur.js";
 
 const router: IRouter = Router();
 
@@ -249,8 +250,8 @@ router.post("/factures", async (req, res): Promise<void> => {
 
   const { totalHTCents, totalTVACents, amountCents } = computeTotals(linesWithId, d.autoliquidation);
 
-  const [created] = await withTenant(tenantId, tx =>
-    tx.insert(facturesTable).values({
+  const [created] = await withTenant(tenantId, async (tx) => {
+    const [f] = await tx.insert(facturesTable).values({
       tenantId,
       customerName: d.customerName,
       number: "",
@@ -268,8 +269,15 @@ router.post("/factures", async (req, res): Promise<void> => {
       autoliquidation: d.autoliquidation,
       attestationTvaFournie: d.attestationTvaFournie,
       affaireId: d.affaireId,
-    }).returning(),
-  );
+    }).returning();
+    // Ticket 4.31 b — DANS la transaction : une entrée de Classeur pour une
+    // facture dont la création échouerait ensuite serait un fantôme.
+    await indexerAuClasseur(tx, {
+      tenantId, sourceType: "FACTURE", sourceId: f!.id,
+      nom: nomAuClasseur("FACTURE", f!.number, f!.id), affaireId: f!.affaireId,
+    });
+    return [f];
+  });
 
   res.status(201).json(created);
 });

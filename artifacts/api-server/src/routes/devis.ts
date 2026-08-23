@@ -8,6 +8,7 @@ import { pdfDevisParId, nomFichierDevis, genererPdfDevis, chargerEmetteur } from
 import type { DevisLine, DevisAddress } from "@workspace/db";
 import { sendDocument } from "../lib/canal-emission.js";
 import { toDateString } from "@nodaq/shared";
+import { indexerAuClasseur, nomAuClasseur } from "../lib/indexation-classeur.js";
 import {
   ListDevisQueryParams,
   GetDevisParams,
@@ -174,6 +175,10 @@ router.post("/devis", async (req, res): Promise<void> => {
       ...(notes ? { notes } : {}),
       ...(validUntil ? { validUntil: toDateStr(validUntil as unknown as Date | string) } : {}),
     }).returning();
+    await indexerAuClasseur(tx, {
+      tenantId, sourceType: "DEVIS", sourceId: d!.id,
+      nom: nomAuClasseur("DEVIS", d!.reference, d!.id), affaireId: d!.affaireId,
+    });
     return d;
   });
 
