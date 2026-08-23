@@ -18,6 +18,7 @@ import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import crypto from "node:crypto";
 import app from "../app.js";
+import { toDateString } from "@nodaq/shared";
 import {
   adminPool,
   cleanupTenants,
@@ -115,10 +116,18 @@ describe("b — pas de doublon entre la proposition et la liste", () => {
       await adminPool.query(`SELECT id FROM team_members WHERE tenant_id = $1 LIMIT 1`, [tenantId])
     ).rows[0].id as string;
 
+    // `current_date` est l'horloge de POSTGRES — en UTC dans le conteneur —
+    // alors que la route calcule sa semaine sur l'horloge de NODE. Sous
+    // Pacific/Auckland (UTC+12), après midi UTC, les deux tombent sur des
+    // jours différents : le pointage atterrissait la semaine précédente et
+    // n'apparaissait donc pas dans les lignes de la semaine courante.
+    //
+    // Deux horloges pour une seule date métier : on n'en garde qu'une, celle
+    // de l'application.
     await adminPool.query(
       `INSERT INTO pointages (id, tenant_id, membre_id, affaire_id, date, heures, source)
-       VALUES ($1, $2::uuid, $3, $4, current_date, 7, 'confirme')`,
-      [crypto.randomUUID(), tenantId, membreId, id],
+       VALUES ($1, $2::uuid, $3, $4, $5, 7, 'confirme')`,
+      [crypto.randomUUID(), tenantId, membreId, id, toDateString(new Date())],
     );
 
     const { body } = await recap().expect(200);

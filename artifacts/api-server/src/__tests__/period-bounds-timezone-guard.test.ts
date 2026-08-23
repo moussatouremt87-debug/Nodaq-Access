@@ -38,6 +38,29 @@ const FORBIDDEN_RE = /\.toISOString\(\)\.(?:slice\(0,\s*10\)|split\(["']T["']\)\
 
 const ALLOW_MARKER = "tz-guard-allow";
 
+/*
+ * ── Pourquoi les FIXTURES de test comptent, elles aussi ───────────────────
+ *
+ * Cette garde ne lisait que les fichiers source. Les tests en étaient exclus,
+ * au motif raisonnable qu'un test n'est pas du produit.
+ *
+ * Le 23/08/2026, ce trou a coûté une CI rouge sur `main` et une demi-journée
+ * de recherche. Deux fixtures fabriquaient une date métier depuis un instant
+ * UTC (`new Date().toISOString().slice(0, 10)`) pendant que la route la
+ * calculait sur les composantes LOCALES. Sous `Pacific/Auckland` (UTC+12),
+ * après midi UTC, les deux ne désignent plus le même jour : la fenêtre de
+ * trésorerie s'ouvrait un jour trop tard, et un pointage atterrissait la
+ * semaine précédente.
+ *
+ * Ce qui a rendu la traque si longue : le défaut ne se déclenche qu'APRÈS
+ * MIDI UTC. Le même code était vert à 11 h 23 et rouge à 12 h 02, ce qui l'a
+ * fait passer pour une régression du lot précédent alors qu'il dormait là
+ * depuis toujours.
+ *
+ * Un test qui ment sur la date ne casse pas le produit — il casse la
+ * CONFIANCE dans le produit, ce qui revient au même un jour de livraison.
+ */
+
 const FIX_MESSAGE =
   "Une DATE MÉTIER (jour calendaire) ne doit jamais être formatée avec toISOString().slice(0, 10) " +
   "ou toISOString().split(\"T\")[0] — utilise toDateString() (composantes locales) depuis @nodaq/shared. " +
@@ -52,16 +75,18 @@ function collectSourceFiles(dir: string): string[] {
   for (const entry of entries) {
     const full = join(dir, entry.name);
     if (entry.isDirectory()) {
-      if (["node_modules", "dist", "__tests__", "test", ".git"].includes(entry.name)) continue;
+      // `__tests__` et `test` NE SONT PLUS exclus — voir le bloc « Pourquoi
+      // les fixtures comptent » plus bas.
+      if (["node_modules", "dist", ".git"].includes(entry.name)) continue;
       results = results.concat(collectSourceFiles(full));
     } else if (entry.isFile()) {
       const n = entry.name;
       if (
         (n.endsWith(".ts") || n.endsWith(".tsx") || n.endsWith(".js")) &&
         !n.endsWith(".d.ts") &&
-        !n.endsWith(".test.ts") &&
-        !n.endsWith(".test.tsx") &&
-        !n.endsWith(".spec.ts")
+        // Ce fichier-ci est exclu : il CITE le motif interdit pour le
+        // décrire, et se signalerait lui-même.
+        n !== "period-bounds-timezone-guard.test.ts"
       ) {
         results.push(full);
       }

@@ -15,6 +15,7 @@ import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import app from "../app";
 import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner, texteBrut, serveurTest } from "./helpers";
+import { toDateString } from "@nodaq/shared";
 
 interface Locataire { cookie: string; tenantId: string }
 
@@ -63,8 +64,8 @@ async function creerFacture(l: Locataire, lines: Array<{ vatRate: number; vatCat
   const { body } = await request(serveurTest(app)).post("/api/factures").set("Cookie", l.cookie)
     .send({
       customerName: "Client Test",
-      issuedDate: new Date().toISOString().slice(0, 10),
-      dueDate: new Date().toISOString().slice(0, 10),
+      issuedDate: toDateString(new Date()),
+      dueDate: toDateString(new Date()),
       lines: lines.map((l2, i) => ({
         description: `Prestation ${i}`, quantity: 1, unitPriceCents: 100_000,
         vatRate: l2.vatRate, vatCategory: l2.vatCategory,
