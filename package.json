@@ -9,7 +9,8 @@
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
     "db:migrate": "node lib/db/scripts/migrate.mjs",
-    "db:setup": "node lib/db/scripts/create-app-role.cjs && node lib/db/scripts/migrate.mjs && node lib/db/scripts/seed-owner.cjs"
+    "db:setup": "node lib/db/scripts/create-app-role.cjs && node lib/db/scripts/migrate.mjs && node lib/db/scripts/seed-owner.cjs",
+    "eval:agent": "pnpm --filter @workspace/scripts exec tsx ../scripts/evals-agent.mjs"
   },
   "private": true,
   "dependencies": {

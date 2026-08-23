@@ -58,24 +58,48 @@ Légende : **FAIT** · **PARTIEL** · **NON FAIT** · **BLOQUÉ** (hors de notre
 | [4.20](4.20-mobile.md) | L'application au doigt | PARTIEL | Lot A livré ; lots B, C, D différés volontairement |
 | [4.21](4.21-voix-integrale.md) | La voix fait TOUT | PARTIEL | `scripts/couverture-vocale.mjs` jamais écrit — dette que le ticket s'écrit à lui-même |
 | [4.22](4.22-flottement-suite.md) | Flottement de la suite | FAIT | — |
-| [4.23](4.23-agent-operateur.md) | L'agent refuse de faire son métier | PARTIEL | L'éval sur les 20 tâches produit |
+| [4.23](4.23-agent-operateur.md) | L'agent refuse de faire son métier | FAIT | Éval livrée (#185) — la partie qui juge les RÉPONSES tourne hors CI, voir ci-dessous |
 | [4.24](4.24-commande-vocale.md) | La commande vocale | FAIT | — |
 | [4.25](4.25-pdf-telechargeables.md) | Documents PDF | PARTIEL | Le PDF de **contrat** |
 | [4.26](4.26-annulation-paiement.md) | Action irréversible | FAIT | — |
-| [4.27](4.27-invitations-comptable.md) | Invitation du comptable | **PARTIEL — grave** | L'envoi marche ; l'écran d'état, le renvoi et le lien de secours manquent |
+| [4.27](4.27-invitations-comptable.md) | Invitation du comptable | FAIT | État, renvoi et lien de secours livrés (#183) |
 | [4.28](4.28-champs-numeriques.md) | Champs numériques | PARTIEL | 31 champs `type="number"` bruts restants |
 | [4.29](4.29-vocabulaire-artisan.md) | Vocabulaire | FAIT | — |
 | [4.30](4.30-navigation-compteurs.md) | Navigation | PARTIEL | Le test e2e qui suit chaque lien compteur |
-| [4.31](4.31-coherence-chantiers-heures-classeur.md) | Cohérence | **PARTIEL — grave** | Aucun document n'est indexé au Classeur |
+| [4.31](4.31-coherence-chantiers-heures-classeur.md) | Cohérence | FAIT | Indexation au Classeur livrée (#183, #184) |
 | [4.32](4.32-ecran-integrations.md) | Écran d'intégrations | NON FAIT | La refonte en logique de bénéfice |
 | [4.33](4.33-relance-etapes-commerciales.md) | Relance commerciale | FAIT | — |
 | [4.34](4.34-signature-electronique.md) | Signature électronique | NON FAIT | Aucune trace dans le code |
 | [4.35](4.35-gestion-dechets-devis.md) | Gestion des déchets (AGEC) | FAIT | — |
 | [4.36](4.36-emprunts-execution-obat.md) | Trois emprunts d'exécution | FAIT | Lots A, B, C livrés et branchés à l'écran le 23/08 |
 | [4.37](4.37-pdp-iopole-facturation-electronique.md) | PDP / facturation électronique | BLOQUÉ | Contrat à signer avant le 1ᵉʳ septembre 2026 |
-| [4.38](4.38-lien-paiement-facture-et-reconciliation.md) | Lien de paiement + réconciliation | PARTIEL | QR de virement livré (#179) ; import de relevé et échéancier absents |
+| [4.38](4.38-lien-paiement-facture-et-reconciliation.md) | Lien de paiement + réconciliation | PARTIEL | QR livré (#179) ; import de relevé et échéancier absents |
 | [4.39](4.39-speed-to-lead.md) | Speed-to-lead | NON FAIT | Dépend du 4.18-bis, non configuré |
 | [4.40](4.40-tuiles-cockpit-cliquables.md) | Tuiles du cockpit cliquables | NON FAIT | Tout — 9 tuiles animées au survol, aucune n'est un lien |
+
+---
+
+## Ce que le plan post-audit a livré (23/08/2026)
+
+| PR | Contenu |
+|---|---|
+| #181 | Versionnage des tickets 4.15–4.40 + cet index |
+| #182 | Montants flottants → entiers (migration 056) |
+| #183 | État des invitations + indexation au Classeur (migration 057) |
+| #184 | Garde classeur statique + le rouge d'Auckland |
+| #185 | Évals comportementales de l'agent |
+
+**Une limite assumée sur le 4.23.** Le ticket demandait une porte bloquante en
+CI. Elle n'est pas réalisable : la CI ne dépend d'aucun secret et y simule le
+modèle — une éval qui noterait des réponses simulées mesurerait la simulation.
+La CI vérifie donc le détecteur, le corpus, le prompt et les réponses écrites en
+dur ; `scripts/evals-agent.mjs` pose les 43 cas au modèle réel, hors CI.
+
+**Un piège de calendrier, à ne pas réapprendre.** La CI lance la suite sous UTC,
+Europe/Paris et **Pacific/Auckland**. Auckland est à UTC+12 : passé midi UTC on y
+est déjà le lendemain. Un défaut de date métier n'y apparaît donc qu'à partir de
+12 h UTC — le même code est vert le matin et rouge l'après-midi. Le 23/08, ça
+m'a fait accuser à tort le lot fusionné entre les deux.
 
 ---
 

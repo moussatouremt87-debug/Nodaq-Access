@@ -858,6 +858,10 @@ importers:
         version: 4.1.10(@types/node@25.9.5)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(lightningcss@1.32.0)(tsx@4.23.1)(yaml@2.9.0)
 
   scripts:
+    dependencies:
+      '@nodaq/shared':
+        specifier: workspace:*
+        version: link:../lib/shared
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
