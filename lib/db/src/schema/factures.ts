@@ -48,6 +48,14 @@ export const facturesTable = pgTable("factures", {
    * par deux requêtes simultanées, qui lisent « non » toutes les deux.
    */
   devisId: text("devis_id"),
+  /**
+   * Bornes de la période d'heures facturées, pour une facture au temps passé
+   * (US-A2.4). Sans elles, refacturer deux fois les mêmes heures ne se
+   * détecte pas — et c'est le client qui paierait deux fois. `null` pour
+   * toute autre facture.
+   */
+  heuresDu: text("heures_du"),
+  heuresAu: text("heures_au"),
 
   // ── New columns ────────────────────────────────────────────────────────
   /** Authoritative status. Immutability: EMISE → never PATCH/DELETE. */
