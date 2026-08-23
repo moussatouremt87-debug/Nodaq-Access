@@ -20,10 +20,16 @@
  * empêcher ici.
  *
  * ── L'idempotence appartient au moteur ────────────────────────────────────
- * `onConflictDoNothing` sur l'index unique partiel
- * `(tenant_id, source_type, source_id)`. Un « existe déjà ? » applicatif se
- * contourne par deux requêtes simultanées, qui lisent « non » toutes les
- * deux — même raisonnement que l'unicité des numéros de facture.
+ * `onConflictDoNothing` sur l'index unique `(tenant_id, source_type,
+ * source_id)`. Un « existe déjà ? » applicatif se contourne par deux requêtes
+ * simultanées, qui lisent « non » toutes les deux — même raisonnement que
+ * l'unicité des numéros de facture.
+ *
+ * L'index est partiel (`WHERE source_id IS NOT NULL`) pour sa taille, et non
+ * pour sa correction : NULL étant distinct de NULL dans un index unique
+ * PostgreSQL, les documents déposés à la main ne se gêneraient pas de toute
+ * façon. Le distinguo compte — croire que la clause protège quelque chose
+ * ferait paniquer qui la verrait disparaître.
  *
  * ── Ce que l'entrée porte, et ne porte pas ────────────────────────────────
  * Une RÉFÉRENCE, pas des octets. Le PDF d'une facture émise vit dans

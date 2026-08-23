@@ -53,8 +53,13 @@ COMMENT ON COLUMN classeur_documents.source_type IS
 
 -- L'idempotence est tenue par le MOTEUR, pas par un « existe déjà ? »
 -- applicatif : deux requêtes simultanées liraient « non » toutes les deux.
--- Index PARTIEL — les documents déposés à la main n'ont pas de source, et
--- rien ne doit les empêcher d'être plusieurs.
+--
+-- Le `WHERE source_id IS NOT NULL` n'est PAS ce qui autorise plusieurs
+-- documents sans source : en PostgreSQL, NULL est distinct de NULL dans un
+-- index unique, deux lignes à source nulle ne se gênent donc jamais.
+-- Vérifié plutôt que supposé — une injection retirant la clause n'a fait
+-- échouer aucun test. Elle reste pour la taille de l'index : les fichiers
+-- déposés à la main sont le gros du Classeur et n'ont rien à y faire.
 CREATE UNIQUE INDEX IF NOT EXISTS classeur_source_unique_idx
   ON classeur_documents (tenant_id, source_type, source_id)
   WHERE source_id IS NOT NULL;

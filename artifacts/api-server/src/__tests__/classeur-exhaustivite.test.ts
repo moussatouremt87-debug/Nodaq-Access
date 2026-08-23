@@ -131,8 +131,11 @@ describe("l'indexation est idempotente", () => {
   });
 
   test("deux fichiers déposés à la main peuvent coexister — ils n'ont pas de source", async () => {
-    // L'index est PARTIEL : sans lui, deux photos sans source seraient vues
-    // comme des doublons et la seconde disparaîtrait en silence.
+    // Ce que ce test prouve : l'index d'unicité n'empêche pas deux documents
+    // sans source. Ce n'est PAS la clause `WHERE source_id IS NOT NULL` qui
+    // l'autorise — NULL est distinct de NULL dans un index unique PostgreSQL,
+    // vérifié en retirant la clause : aucun test ne bouge. Le test garde sa
+    // valeur, il documente juste une propriété du moteur plutôt qu'une garde.
     const t = await inscrire("depot");
     for (const nom of ["photo-1.jpg", "photo-2.jpg"]) {
       await adminPool.query(
