@@ -178,6 +178,7 @@ export * from "./coutMainOeuvre.js";
 export * from "./rapprochementCatalogue.js";
 export * from "./conformiteFacturation.js";
 export * from "./gestionDechets.js";
+export * from "./qualificationOnboarding.js";
 export * from "./glossaire.js";
 export * from "./relanceCommerciale.js";
 export * from "./intentionVocale.js";
