@@ -9,6 +9,7 @@ import {
   DeleteContratParams,
 } from "@workspace/api-zod";
 import { maskFinancialFields } from "../lib/maskFinancialFields.js";
+import { indexerAuClasseur, nomAuClasseur } from "../lib/indexation-classeur.js";
 
 function nextOccurrence(startDate: string | null, cadence: string): string | null {
   if (!startDate) return null;
@@ -44,8 +45,8 @@ router.post("/contrats", async (req, res): Promise<void> => {
   const toStr = (v: unknown) => v instanceof Date ? toDateString(v) : (v as string | null | undefined) ?? null;
   const tenantId = req.tenantId!;
 
-  const [contrat] = await withTenant(tenantId, async (tx) =>
-    tx.insert(contratsTable).values({
+  const [contrat] = await withTenant(tenantId, async (tx) => {
+    const [c] = await tx.insert(contratsTable).values({
       tenantId,
       label: data.label,
       clientName: data.clientName ?? null,
@@ -55,8 +56,13 @@ router.post("/contrats", async (req, res): Promise<void> => {
       endDate: toStr(data.endDate),
       notes: data.notes ?? null,
       status: "ACTIF",
-    }).returning()
-  );
+    }).returning();
+    await indexerAuClasseur(tx, {
+      tenantId, sourceType: "CONTRAT", sourceId: c!.id,
+      nom: nomAuClasseur("CONTRAT", c!.label, c!.id),
+    });
+    return [c];
+  });
 
   res.status(201).json({ ...contrat, nextOccurrenceDate: nextOccurrence(contrat!.startDate, contrat!.cadence) });
 });

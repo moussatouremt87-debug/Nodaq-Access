@@ -20,6 +20,7 @@
 import { eq } from "drizzle-orm";
 import { devisTable, facturesTable, type FactureLine } from "@workspace/db";
 import { toDateString } from "@nodaq/shared";
+import { indexerAuClasseur, nomAuClasseur } from "./indexation-classeur.js";
 /** Même définition que `reglement-facture.ts` : la transaction de `withTenant`. */
 type Tx = Parameters<Parameters<typeof import("@workspace/db").withTenant>[1]>[0];
 
@@ -117,6 +118,14 @@ export async function facturerDevis(
       ...(d.notes ? { notes: d.notes } : {}),
     })
     .returning();
+
+  // Ticket 4.31 b — la facture issue d'un devis entre au Classeur comme
+  // toute autre. Ici plutôt que dans la route : ce module est le SEUL chemin
+  // de conversion, l'écran et la voix passent tous les deux par lui.
+  await indexerAuClasseur(tx, {
+    tenantId, sourceType: "FACTURE", sourceId: creee!.id,
+    nom: nomAuClasseur("FACTURE", creee!.number, creee!.id), affaireId: creee!.affaireId,
+  });
 
   return { kind: "ok" as const, facture: creee! };
 }

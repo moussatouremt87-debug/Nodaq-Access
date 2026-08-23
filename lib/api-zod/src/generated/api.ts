@@ -1374,13 +1374,21 @@ export const ListMembresResponse = zod.object({
   "email": zod.string(),
   "role": zod.enum(['OWNER', 'MEMBER', 'ACCOUNTANT', 'VIEWER']),
   "libelle": zod.string().nullish(),
-  "expiresAt": zod.coerce.date().describe('Validité du LIEN d\'invitation (7 jours) — à ne pas confondre avec accesExpireAt.'),
-  "accesExpireAt": zod.coerce.date().nullish().describe('Échéance de l\'ACCÈS une fois l\'invitation acceptée (US-A5.4), reportée sur le membership. Obligatoire pour un VIEWER.'),
-  "envoye": zod.boolean().describe('L\'e-mail d\'invitation est-il RÉELLEMENT parti. `false` quand aucun SMTP n\'est configuré sur le déploiement, ou que l\'envoi a échoué. L\'écran doit le dire : afficher « invitation envoyée » alors que rien n\'est parti fait attendre indéfiniment un courrier qui n\'arrivera pas.'),
-  "motifEchec": zod.string().nullish().describe('Pourquoi l\'envoi a échoué, quand `envoye` vaut false.'),
-  "lienInvitation": zod.string().describe('Le lien d\'invitation en clair, à copier quand le courrier n\'est pas parti. Rendu à l\'OWNER qui vient de créer l\'invitation, et à lui seul — c\'est le même secret que celui expédié par e-mail, pas une information supplémentaire. Il n\'est PAS re-consultable ensuite : seul son condensat SHA-256 est conservé.'),
-  "createdAt": zod.coerce.date()
-}))
+  "expiresAt": zod.coerce.date(),
+  "accesExpireAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "acceptedAt": zod.coerce.date().nullish(),
+  "openedAt": zod.coerce.date().nullish().describe('Premier chargement du lien par son destinataire. Daté au CLIC, jamais par un pixel de suivi.'),
+  "renvoyeeLe": zod.coerce.date().nullish(),
+  "dernierEnvoiLe": zod.coerce.date().nullish(),
+  "etat": zod.enum(['ACCEPTEE', 'EXPIREE', 'OUVERTE', 'ENVOYEE', 'ECHOUEE', 'EN_ATTENTE']).describe('DÉRIVÉ à chaque lecture depuis quatre faits datés — accepté, ouvert, expiré, dernier envoi — jamais stocké. Un état stocké se désynchronise de ses causes.'),
+  "libelleEtat": zod.string().describe('L\'étiquette française affichée. Vient du serveur, pour qu\'il n\'y ait qu\'une vérité.'),
+  "explication": zod.string().nullable().describe('La phrase qui dit quoi FAIRE, quand il y a quelque chose à faire. Nulle pour un état qui se suffit (« Invitation acceptée »).'),
+  "actions": zod.object({
+  "renvoyer": zod.boolean(),
+  "copierLien": zod.boolean()
+}).describe('Ce que l\'utilisateur peut faire. Rendu par le serveur : un bouton « Renvoyer » proposé sur une invitation déjà acceptée casserait un accès qui fonctionne.')
+}).describe('Une invitation telle que l\'écran « Membres » la voit (ticket 4.27). Distincte de `InvitationEnAttente`, qui est la réponse à la CRÉATION : celle-ci porte le lien en clair et le résultat de l\'envoi, une seule fois ; celle-là porte un état recalculé à chaque lecture.'))
 })
 
 

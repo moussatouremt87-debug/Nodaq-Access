@@ -97,6 +97,7 @@ import { conditionFactureEnRetardSql } from "./facturesEnRetard.js";
 import { facturerDevis, messageRefusFacturation } from "./facturer-devis.js";
 import { regleEnVigueur, TYPE_CAMPAGNE_RELANCE } from "./campagnes-relance.js";
 import { recalculerFacture } from "./reglement-facture.js";
+import { indexerAuClasseur, nomAuClasseur } from "./indexation-classeur.js";
 
 type Tx = Parameters<Parameters<typeof withTenant>[1]>[0];
 
@@ -1184,7 +1185,7 @@ async function executerOperation(
 
       if (op.type === "creer_devis") {
         const nb = (await tx.select({ id: devisTable.id }).from(devisTable)).length;
-        await tx.insert(devisTable).values({
+        const [dictee] = await tx.insert(devisTable).values({
           tenantId,
           reference: `DEV-${new Date().getFullYear()}-${String(nb + 1).padStart(4, "0")}`,
           clientName: client,
@@ -1192,11 +1193,15 @@ async function executerOperation(
           lines: lignes,
           totalHTCents: totalHT,
           totalTTCCents: totalHT + totalTVA,
+        }).returning();
+        await indexerAuClasseur(tx, {
+          tenantId, sourceType: "DEVIS", sourceId: dictee!.id,
+          nom: nomAuClasseur("DEVIS", dictee!.reference, dictee!.id),
         });
         return;
       }
 
-      await tx.insert(facturesTable).values({
+      const [facturee] = await tx.insert(facturesTable).values({
         tenantId,
         customerName: client,
         // Sans numéro, comme toute facture en brouillon : l'émission scelle un
@@ -1210,6 +1215,10 @@ async function executerOperation(
         totalHTCents: totalHT,
         totalTVACents: totalTVA,
         amountCents: totalHT + totalTVA,
+      }).returning();
+      await indexerAuClasseur(tx, {
+        tenantId, sourceType: "FACTURE", sourceId: facturee!.id,
+        nom: nomAuClasseur("FACTURE", facturee!.number, facturee!.id),
       });
       return;
     }
@@ -1251,13 +1260,17 @@ async function executerOperation(
     }
     case "creer_contrat": {
       const montant = entierPositifRequis(op, "montantCents");
-      await tx.insert(contratsTable).values({
+      const [contratDicte] = await tx.insert(contratsTable).values({
         tenantId,
         label: op.champs["libelle"]!,
         cadence: op.champs["cadence"]!,
         startDate: toDateString(new Date()),
         amountCents: montant,
         ...(op.champs["clientName"] ? { clientName: op.champs["clientName"] } : {}),
+      }).returning();
+      await indexerAuClasseur(tx, {
+        tenantId, sourceType: "CONTRAT", sourceId: contratDicte!.id,
+        nom: nomAuClasseur("CONTRAT", contratDicte!.label, contratDicte!.id),
       });
       return;
     }

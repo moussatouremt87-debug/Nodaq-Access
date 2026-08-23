@@ -2594,6 +2594,76 @@ components:
           type: string
           format: date-time
 
+    InvitationAvecEtat:
+      type: object
+      required: [id, email, role, expiresAt, createdAt, etat, libelleEtat, explication, actions]
+      description: >-
+        Une invitation telle que l'écran « Membres » la voit (ticket 4.27).
+        Distincte de `InvitationEnAttente`, qui est la réponse à la CRÉATION :
+        celle-ci porte le lien en clair et le résultat de l'envoi, une seule
+        fois ; celle-là porte un état recalculé à chaque lecture.
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [OWNER, MEMBER, ACCOUNTANT, VIEWER]
+        libelle:
+          type: ["string", "null"]
+        expiresAt:
+          type: string
+          format: date-time
+        accesExpireAt:
+          type: ["string", "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        acceptedAt:
+          type: ["string", "null"]
+          format: date-time
+        openedAt:
+          type: ["string", "null"]
+          format: date-time
+          description: >-
+            Premier chargement du lien par son destinataire. Daté au CLIC,
+            jamais par un pixel de suivi.
+        renvoyeeLe:
+          type: ["string", "null"]
+          format: date-time
+        dernierEnvoiLe:
+          type: ["string", "null"]
+          format: date-time
+        etat:
+          type: string
+          enum: [ACCEPTEE, EXPIREE, OUVERTE, ENVOYEE, ECHOUEE, EN_ATTENTE]
+          description: >-
+            DÉRIVÉ à chaque lecture depuis quatre faits datés — accepté,
+            ouvert, expiré, dernier envoi — jamais stocké. Un état stocké se
+            désynchronise de ses causes.
+        libelleEtat:
+          type: string
+          description: L'étiquette française affichée. Vient du serveur, pour qu'il n'y ait qu'une vérité.
+        explication:
+          type: ["string", "null"]
+          description: >-
+            La phrase qui dit quoi FAIRE, quand il y a quelque chose à faire.
+            Nulle pour un état qui se suffit (« Invitation acceptée »).
+        actions:
+          type: object
+          required: [renvoyer, copierLien]
+          description: >-
+            Ce que l'utilisateur peut faire. Rendu par le serveur : un bouton
+            « Renvoyer » proposé sur une invitation déjà acceptée casserait un
+            accès qui fonctionne.
+          properties:
+            renvoyer:
+              type: boolean
+            copierLien:
+              type: boolean
+
     MembresListResponse:
       type: object
       required: [membres, invitationsEnAttente]
@@ -2605,7 +2675,7 @@ components:
         invitationsEnAttente:
           type: array
           items:
-            $ref: "#/components/schemas/InvitationEnAttente"
+            $ref: "#/components/schemas/InvitationAvecEtat"
 
     InviteMembreBody:
       type: object

@@ -10,6 +10,7 @@ import {
   useRevoquerMembre,
   useProgrammerEcheanceMembre,
   getListMembresQueryKey,
+  type InvitationAvecEtat,
 } from '@workspace/api-client-react';
 import type { Membre } from '@workspace/api-client-react';
 import { PageHeader } from '@/components/page-header';
@@ -33,14 +34,7 @@ import { cn } from '@/lib/utils';
 import { apiFetch } from '@/lib/auth';
 import { useModules, useBasculerModule, type ModuleResolu } from '@/hooks/use-modules';
 import { useRegleRelance, useEnregistrerRegleRelance } from '@/hooks/use-regles-relance';
-import {
-  BORNES_REGLE_RELANCE,
-  formaterIban,
-  normaliserIban,
-  verifierIban,
-  messageRefusIban,
-  type RegleRelance,
-} from '@nodaq/shared';
+import { BORNES_REGLE_RELANCE, formaterIban, normaliserIban, verifierIban, messageRefusIban, type RegleRelance, AVERTISSEMENT_RENVOI, type EtatInvitation } from '@nodaq/shared';
 const API = '/api';
 
 type Settings = Record<string, string>;
@@ -422,6 +416,111 @@ function InviteForm() {
   );
 }
 
+/**
+ * Une invitation, avec son état et ce qu'on peut en faire — ticket 4.27.
+ *
+ * ── Ce que cette ligne remplace ───────────────────────────────────────────
+ * Elle n'affichait que la date d'expiration. Une invitation dont le courrier
+ * n'était jamais parti était donc indistinguable d'une invitation reçue et
+ * ignorée : c'est exactement le défaut signalé le 22/08.
+ *
+ * L'état, son libellé et son explication viennent du SERVEUR — `etatInvitation`
+ * vit dans `@nodaq/shared` et le serveur l'applique. Le recalculer ici ferait
+ * deux vérités, et c'est celle qui n'affiche rien qui gagnerait.
+ */
+function LigneInvitation({ invitation }: { invitation: InvitationAvecEtat }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [lien, setLien] = useState<string | null>(null);
+
+  const renvoyer = useMutation({
+    mutationFn: async () => {
+      const res = await apiFetch(`${API}/membres/invitations/${invitation.id}/renvoyer`, { method: 'POST' });
+      const corps = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((corps as { error?: string }).error ?? 'Renvoi refusé');
+      return corps as { envoye: boolean; motifEchec: string | null; lienInvitation: string };
+    },
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: getListMembresQueryKey() });
+      // Le lien est montré DANS TOUS LES CAS, pas seulement en cas d'échec :
+      // c'est la sortie de secours, et la chercher au moment où l'envoi rate
+      // est trop tard.
+      setLien(r.lienInvitation);
+      toast(r.envoye
+        ? { title: 'Invitation renvoyée' }
+        : { title: "Le courrier n'est pas parti", description: `${r.motifEchec ?? ''} Copiez le lien ci-dessous et transmettez-le vous-même.`.trim(), variant: 'destructive' });
+    },
+    onError: (e: Error) => toast({ title: 'Renvoi refusé', description: e.message, variant: 'destructive' }),
+  });
+
+  const echec = invitation.etat === 'ECHOUEE';
+
+  return (
+    <div className="border-t border-border px-5 py-3" data-testid={`invitation-${invitation.email}`}>
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium text-foreground">{invitation.email}</div>
+          <div className="text-xs text-muted-foreground">
+            {invitation.libelle ? `${invitation.libelle} — ` : ''}
+            Expire le {new Date(invitation.expiresAt).toLocaleDateString('fr-FR', { dateStyle: 'medium' })}
+          </div>
+        </div>
+        <span
+          className={cn(
+            'shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium',
+            echec ? 'bg-destructive/10 text-destructive'
+              : invitation.etat === 'OUVERTE' ? 'bg-primary/10 text-primary'
+              : 'bg-muted text-muted-foreground',
+          )}
+          data-testid="etat-invitation"
+        >
+          {invitation.libelleEtat}
+        </span>
+        <RoleBadge role={invitation.role} />
+      </div>
+
+      {invitation.explication && (
+        <p className={cn('mt-1.5 text-xs', echec ? 'text-destructive' : 'text-muted-foreground')}>
+          {invitation.explication}
+        </p>
+      )}
+
+      {invitation.actions?.renvoyer && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline" size="sm" className="h-7 text-xs"
+            disabled={renvoyer.isPending}
+            onClick={() => renvoyer.mutate()}
+            data-testid="renvoyer-invitation"
+          >
+            {renvoyer.isPending ? 'Envoi…' : 'Renvoyer'}
+          </Button>
+          <span className="text-[11px] text-muted-foreground">{AVERTISSEMENT_RENVOI}</span>
+        </div>
+      )}
+
+      {/* Le lien de secours, disponible seulement après un renvoi : celui de
+          la création n'est pas conservé — seul son condensat l'est. Le dire
+          plutôt que d'afficher un bouton « copier » qui n'aurait rien à
+          copier. */}
+      {lien && (
+        <div className="mt-2 flex items-center gap-2">
+          <Input readOnly value={lien} className="h-8 flex-1 font-mono text-[11px]" data-testid="lien-invitation" />
+          <Button
+            variant="outline" size="sm" className="h-8 shrink-0 text-xs"
+            onClick={() => {
+              void navigator.clipboard?.writeText(lien);
+              toast({ title: 'Lien copié' });
+            }}
+          >
+            Copier
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MembresTab() {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -588,16 +687,7 @@ function MembresTab() {
             <Clock className="h-4 w-4 text-muted-foreground" /> Invitations en attente ({invitations.length})
           </h3>
           {invitations.map(inv => (
-            <div key={inv.id} className="flex items-center gap-3 px-5 py-3 border-t border-border">
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-foreground truncate">{inv.email}</div>
-                <div className="text-xs text-muted-foreground">
-                  {inv.libelle ? `${inv.libelle} — ` : ''}
-                  Expire le {new Date(inv.expiresAt).toLocaleDateString('fr-FR', { dateStyle: 'medium' })}
-                </div>
-              </div>
-              <RoleBadge role={inv.role} />
-            </div>
+            <LigneInvitation key={inv.id} invitation={inv} />
           ))}
         </div>
       )}
