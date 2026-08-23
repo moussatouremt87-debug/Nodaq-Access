@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS migration_056_ecarts (
   ligne_id      text    NOT NULL,
   avant_cents   bigint  NOT NULL,
   apres_cents   bigint  NOT NULL,
-  origine       text    NOT NULL,   -- 'source_exacte' | 'arrondi_flottant'
+  origine       text    NOT NULL,   -- 'source_exacte' | 'suspect_au_dela_du_seuil'
   applique_le   timestamptz NOT NULL DEFAULT now()
 );
 
@@ -180,10 +180,39 @@ UPDATE affaires a
 --     a, et la table d'écarts le consigne comme tel — sans quoi on croirait
 --     ces valeurs recalculées.
 --
---     Rien à faire ici : le ROUND() de l'étape 2 est déjà appliqué. Les
---     valeurs au-delà de 167 772,16 € restent donc entachées de leur erreur
---     d'origine, et c'est irrattrapable — la valeur exacte n'existe plus
---     nulle part.
+--     Le ROUND() de l'étape 2 est déjà appliqué et ne change rien : la valeur
+--     avait été faussée à l'ÉCRITURE, pas à la migration. Un contrat saisi à
+--     199 999,99 € était déjà relu 200 000,00 € avant qu'on y touche.
+--
+--     Ces valeurs seraient donc absentes d'un rapport qui ne consigne que ce
+--     qui bouge — et le rapport dirait « aucun écart » là où l'argent est
+--     faux. On les MARQUE comme suspectes : au-delà de 2^24 centimes, la
+--     valeur stockée peut différer de celle qui a été saisie, et l'original
+--     n'existe plus nulle part pour trancher.
+INSERT INTO migration_056_ecarts (nom_table, colonne, ligne_id, avant_cents, apres_cents, origine)
+SELECT 'contrats', 'amount_cents', id, amount_cents, amount_cents, 'suspect_au_dela_du_seuil'
+  FROM contrats WHERE amount_cents > 16777216
+UNION ALL
+SELECT 'prospects', 'estimated_value_cents', id, estimated_value_cents, estimated_value_cents, 'suspect_au_dela_du_seuil'
+  FROM prospects WHERE estimated_value_cents > 16777216
+UNION ALL
+SELECT 'echeances', 'estimated_cents', id, estimated_cents, estimated_cents, 'suspect_au_dela_du_seuil'
+  FROM echeances WHERE estimated_cents > 16777216
+UNION ALL
+SELECT 'echeances', 'paid_cents', id, paid_cents, paid_cents, 'suspect_au_dela_du_seuil'
+  FROM echeances WHERE paid_cents > 16777216
+UNION ALL
+SELECT 'pending_actions', 'amount_cents', id, amount_cents, amount_cents, 'suspect_au_dela_du_seuil'
+  FROM pending_actions WHERE amount_cents > 16777216
+UNION ALL
+SELECT 'affaires', 'quoted_amount_cents', id, quoted_amount_cents, quoted_amount_cents, 'suspect_au_dela_du_seuil'
+  FROM affaires WHERE quoted_amount_cents > 16777216
+UNION ALL
+SELECT 'affaires', 'margin_cents', id, margin_cents, margin_cents, 'suspect_au_dela_du_seuil'
+  FROM affaires WHERE margin_cents > 16777216
+UNION ALL
+SELECT 'affaires', 'montant_vendu_ht', id, montant_vendu_ht, montant_vendu_ht, 'suspect_au_dela_du_seuil'
+  FROM affaires WHERE montant_vendu_ht > 16777216;
 
 -- ── 4. L'invariant de cohérence des factures ──────────────────────────────
 --
