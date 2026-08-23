@@ -30,7 +30,7 @@
  */
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { createHash, randomBytes } from "node:crypto";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import {
   db,
   withTenant,
@@ -38,10 +38,14 @@ import {
   membershipsTable,
   usersTable,
   tenantsTable,
+  envoisJournalTable,
 } from "@workspace/db";
 import { hashPassword, verifyPassword } from "../lib/password.js";
 import { findUserByEmail, createSession, touchLastLogin } from "../lib/authService.js";
 import { sendDocument } from "../lib/canal-emission.js";
+import {
+  etatInvitation, LIBELLE_ETAT, explicationEtat, actionsPossibles,
+} from "@nodaq/shared";
 import { COOKIE_NAME, COOKIE_OPTS } from "./auth.js";
 import {
   InviterMembreBody,
@@ -93,12 +97,55 @@ router.get("/membres", async (req, res): Promise<void> => {
         expiresAt: tenantInvitesTable.expiresAt,
         accesExpireAt: tenantInvitesTable.accesExpireAt,
         createdAt: tenantInvitesTable.createdAt,
+        acceptedAt: tenantInvitesTable.acceptedAt,
+        openedAt: tenantInvitesTable.openedAt,
+        renvoyeeLe: tenantInvitesTable.renvoyeeLe,
       })
       .from(tenantInvitesTable)
       .where(and(eq(tenantInvitesTable.tenantId, tenantId), isNull(tenantInvitesTable.acceptedAt))),
   );
 
-  res.json({ membres, invitationsEnAttente });
+  // Ticket 4.27 — le dernier envoi TENTÉ pour chaque invitation. Le journal
+  // est append-only : c'est la ligne la plus récente qui fait foi, jamais un
+  // statut recopié sur l'invitation, qui se désynchroniserait.
+  const journaux = await withTenant(tenantId, (tx) =>
+    tx.select({
+        documentId: envoisJournalTable.documentId,
+        statut: envoisJournalTable.statut,
+        erreur: envoisJournalTable.erreur,
+        envoyeLe: envoisJournalTable.envoyeLe,
+      })
+      .from(envoisJournalTable)
+      .where(eq(envoisJournalTable.documentType, "INVITATION"))
+      .orderBy(desc(envoisJournalTable.envoyeLe)),
+  );
+  const dernierParInvite = new Map<string, (typeof journaux)[number]>();
+  for (const j of journaux) {
+    if (j.documentId && !dernierParInvite.has(j.documentId)) dernierParInvite.set(j.documentId, j);
+  }
+
+  const invitations = invitationsEnAttente.map((i) => {
+    const dernier = dernierParInvite.get(i.id) ?? null;
+    const etat = etatInvitation({
+      acceptedAt: i.acceptedAt, openedAt: i.openedAt,
+      expiresAt: i.expiresAt, dernierEnvoi: dernier,
+    });
+    return {
+      ...i,
+      etat,
+      libelleEtat: LIBELLE_ETAT[etat],
+      // Le motif technique n'est rendu QUE sur un échec : c'est lui qui
+      // distingue « boîte pleine » de « aucun serveur d'envoi configuré ».
+      explication: explicationEtat(etat, dernier?.erreur ?? null),
+      actions: actionsPossibles(etat),
+      dernierEnvoiLe: dernier?.envoyeLe ?? null,
+    };
+  });
+
+  // `invitationsEnAttente` est conservée sous son nom : des écrans et des
+  // tests la lisent déjà, et la renommer serait un changement de contrat
+  // gratuit dans une PR qui en fait un autre.
+  res.json({ membres, invitationsEnAttente: invitations });
 });
 
 router.post("/membres/inviter", async (req, res): Promise<void> => {
@@ -209,6 +256,85 @@ router.post("/membres/inviter", async (req, res): Promise<void> => {
     // SHA-256 est conservé en base. Le rendre ici n'ajoute aucun secret — c'est
     // exactement ce que l'e-mail transporte — et c'est ce qui permet d'inviter
     // son comptable quand aucun serveur d'envoi n'est branché.
+    lienInvitation: lien,
+  });
+});
+
+/**
+ * Renvoyer une invitation — ticket 4.27.
+ *
+ * ── Renvoyer, c'est REMPLACER le lien ─────────────────────────────────────
+ * Seul le condensat SHA-256 du jeton est conservé : le lien d'origine
+ * n'existe nulle part et ne peut pas être réexpédié tel quel. Le renvoi crée
+ * donc un NOUVEAU jeton, et l'ancien cesse de fonctionner.
+ *
+ * Ce n'est pas la doctrine du ticket 4.19 (« renvoyer n'est pas ré-émettre »,
+ * où le SMS repartait avec l'URL déjà créée). La différence tient au secret :
+ * un lien de paiement est une URL publique qu'on peut relire, un lien
+ * d'invitation ouvre un accès et n'est jamais conservé en clair. L'écran doit
+ * donc prévenir — voir `AVERTISSEMENT_RENVOI`.
+ *
+ * ── Le lien est rendu en clair, une fois de plus ──────────────────────────
+ * Comme à la création. C'est ce qui permet d'inviter son comptable quand
+ * aucun serveur d'envoi n'est branché, et c'est exactement ce que l'e-mail
+ * transporte : aucun secret nouveau n'est divulgué.
+ */
+router.post("/membres/invitations/:id/renvoyer", async (req, res): Promise<void> => {
+  const tenantId = req.tenantId!;
+  const { id } = req.params;
+  if (typeof id !== "string" || id.length === 0) { res.status(400).json({ error: "Identifiant manquant" }); return; }
+
+  const [invite] = await withTenant(tenantId, (tx) =>
+    tx.select().from(tenantInvitesTable).where(eq(tenantInvitesTable.id, id)),
+  );
+  if (!invite) { res.status(404).json({ error: "Invitation introuvable" }); return; }
+  // Une invitation acceptée ne se renvoie pas : le nouveau jeton n'aurait
+  // aucun effet sur un accès déjà ouvert, mais laisserait croire le contraire.
+  if (invite.acceptedAt) {
+    res.status(409).json({ error: "Cette invitation a déjà été acceptée : il n'y a rien à renvoyer." });
+    return;
+  }
+
+  const token = randomBytes(32).toString("hex");
+  const tokenSha256 = createHash("sha256").update(token).digest("hex");
+  // Sept jours à nouveau, comme à la création : un renvoi qui hériterait de
+  // l'ancienne échéance pourrait naître déjà expiré.
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+  await withTenant(tenantId, (tx) =>
+    tx.update(tenantInvitesTable)
+      .set({ tokenSha256, expiresAt, renvoyeeLe: new Date(), openedAt: null })
+      .where(eq(tenantInvitesTable.id, id)),
+  );
+
+  const [tenant] = await db.select({ nom: tenantsTable.nom }).from(tenantsTable).where(eq(tenantsTable.id, tenantId));
+  const tenantNom = tenant?.nom ?? "votre entreprise";
+  const lien = `${process.env["PUBLIC_URL"] ?? "https://nodaq.fr"}/membres/accepter/${token}`;
+
+  const envoi = await sendDocument({
+    canal: "EMAIL",
+    tenantId,
+    to: invite.email,
+    subject: `Rappel — invitation à rejoindre ${tenantNom} sur NODAQ`,
+    body: [
+      `Bonjour,`,
+      ``,
+      `Voici à nouveau votre invitation à rejoindre l'espace « ${tenantNom} » sur NODAQ.`,
+      ``,
+      `Pour accepter : ${lien}`,
+      ``,
+      `Ce lien expire dans 7 jours. Si vous aviez reçu un lien précédent, il ne fonctionne plus.`,
+    ].join("\n"),
+    documentType: "INVITATION",
+    documentId: invite.id,
+  });
+
+  res.json({
+    id: invite.id,
+    email: invite.email,
+    expiresAt,
+    envoye: envoi.success,
+    motifEchec: envoi.success ? null : (envoi.error ?? "envoi impossible"),
     lienInvitation: lien,
   });
 });
@@ -472,6 +598,21 @@ membresPublicRouter.get("/membres/inviter/:token", limiterDebit, async (req, res
 
   const [tenant] = await db.select({ nom: tenantsTable.nom }).from(tenantsTable).where(eq(tenantsTable.id, invite.tenantId));
   const compteExistant = Boolean(await findUserByEmail(invite.email));
+
+  // Ticket 4.27 — l'OUVERTURE se date ici, au chargement du lien par son
+  // destinataire. Pas de pixel de suivi : un pixel piste une lecture d'e-mail
+  // à l'insu du lecteur, alors qu'ici il a délibérément cliqué.
+  //
+  // `isNull` : c'est une PREMIÈRE fois, pas un compteur. Réécrire la date à
+  // chaque rechargement effacerait l'information qu'on cherche — quand
+  // l'invitation a-t-elle été vue pour la première fois.
+  if (invite.acceptedAt === null && invite.openedAt === null) {
+    await withTenant(invite.tenantId, (tx) =>
+      tx.update(tenantInvitesTable)
+        .set({ openedAt: new Date() })
+        .where(and(eq(tenantInvitesTable.id, invite.id), isNull(tenantInvitesTable.openedAt))),
+    );
+  }
 
   res.json({
     tenantNom: tenant?.nom ?? "",

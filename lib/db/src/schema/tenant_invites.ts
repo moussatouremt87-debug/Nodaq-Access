@@ -37,6 +37,19 @@ export const tenantInvitesTable = pgTable("tenant_invites", {
   invitedBy: uuid("invited_by").notNull().references(() => usersTable.id),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  /**
+   * Premier chargement du lien par son destinataire (ticket 4.27). Daté au
+   * CLIC, jamais par un pixel de suivi : un pixel piste une lecture d'e-mail
+   * à l'insu du lecteur. Ne bouge plus ensuite — c'est une première fois, pas
+   * un compteur.
+   */
+  openedAt: timestamp("opened_at", { withTimezone: true }),
+  /**
+   * Dernier renvoi. Un renvoi REMPLACE le jeton — seul son condensat est
+   * conservé, le lien d'origine est perdu — donc l'ancien lien cesse de
+   * fonctionner, et l'écran doit le dire.
+   */
+  renvoyeeLe: timestamp("renvoyee_le", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
