@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { withTenant, affairesTable, contratsTable, facturesTable, prospectsTable, pendingActionsTable, activityTable, incidentsFacturationTable, bankAccountsTable, settingsTable } from "@workspace/db";
-import { sql, eq, isNull } from "drizzle-orm";
+import { sql, eq, isNull, type SQL } from "drizzle-orm";
 import {
   toDateString,
   debutExercice,
@@ -16,6 +16,30 @@ import { conditionFactureEnRetardSql } from "../lib/facturesEnRetard.js";
 import { maskFinancialFields } from "../lib/maskFinancialFields.js";
 import { verticalDepuisTx } from "../lib/vertical-tenant.js";
 
+
+/**
+ * Somme d'une colonne de centimes, rendue en `number` exact.
+ *
+ * ── Le piège que cette fonction existe pour éviter ────────────────────────
+ * `sum()` sur une colonne `integer` rend un **bigint** en PostgreSQL, et le
+ * pilote node-postgres sérialise les bigint en CHAÎNE — parce que leur plage
+ * dépasse ce qu'un `number` JS représente exactement. Un `sql<number>` sans
+ * cast ment alors sur son type, et `0 + total` donne `"0196100"` au lieu de
+ * `196100`.
+ *
+ * Ce n'est pas théorique : la migration 056, qui a fait passer ces colonnes
+ * de `real` à `integer`, a cassé exactement ces deux totaux. Avant elle,
+ * `sum(real)` rendait un `double precision`, que le pilote donnait en nombre.
+ *
+ * `::float` — c'est-à-dire `float8` — est exact pour tout entier jusqu'à
+ * 2^53, soit 90 000 milliards d'euros en centimes. Il n'y a donc aucune perte
+ * ici, et le nom de la fonction le dit plutôt que de laisser un `::float`
+ * dans une requête monétaire inviter au « correctif » de quelqu'un qui
+ * passerait par là.
+ */
+function sommeCentsExacte(colonne: SQL): SQL<number> {
+  return sql<number>`coalesce(sum(${colonne}), 0)::float`;
+}
 
 const router: IRouter = Router();
 
@@ -64,7 +88,7 @@ router.get("/cockpit/kpis", async (req, res): Promise<void> => {
     // résiduel réellement dû).
     const aujourdhui = toDateString(new Date());
     const [totalImpaye] = await tx
-      .select({ total: sql<number>`coalesce(sum(coalesce(residual_cents, amount_cents)), 0)` })
+      .select({ total: sommeCentsExacte(sql`coalesce(residual_cents, amount_cents)`) })
       .from(facturesTable)
       .where(conditionFactureEnRetardSql(aujourdhui));
 
@@ -79,7 +103,7 @@ router.get("/cockpit/kpis", async (req, res): Promise<void> => {
     const delaiPaiementUsuelJours = verticalPack(vertical).delaiPaiementUsuelJours;
     const seuilSignificatif = seuilRetardSignificatif(aujourdhui, delaiPaiementUsuelJours);
     const [totalImpayeSignificatif] = await tx
-      .select({ total: sql<number>`coalesce(sum(coalesce(residual_cents, amount_cents)), 0)` })
+      .select({ total: sommeCentsExacte(sql`coalesce(residual_cents, amount_cents)`) })
       .from(facturesTable)
       .where(conditionFactureEnRetardSql(seuilSignificatif));
 
