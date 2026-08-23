@@ -41,13 +41,28 @@ ALTER TABLE factures
 -- accord. Le tenir par le moteur plutôt que par un contrôle d'écran, c'est
 -- refuser une clause illégale par construction — y compris à une reprise de
 -- données ou à un script de support.
+--
+-- ── `NOT VALID`, et pourquoi ce n'est pas un renoncement ──────────────────
+-- Sans lui, `ADD CONSTRAINT` VALIDE les lignes existantes et la migration
+-- ÉCHOUE si une seule d'entre elles dépasse 5 %. Sur une base vierge tout
+-- passe ; sur une base réelle qui porte un devis à 10 %, la migration entière
+-- avorte — et c'est en production qu'on l'apprendrait.
+--
+-- `NOT VALID` ne désarme pas la contrainte : toute écriture NOUVELLE est
+-- refusée, exactement comme sans lui. Il dispense seulement du contrôle
+-- rétroactif.
+--
+-- On ne corrige PAS les lignes existantes au passage. Une clause au-delà de
+-- 5 % est nulle en droit, mais elle a été écrite dans un contrat signé :
+-- l'écraser en silence réécrirait la mémoire d'un accord, ce qui n'est pas à
+-- une migration de décider. Elles restent visibles, et se corrigent à la main.
 ALTER TABLE devis
   ADD CONSTRAINT devis_retenue_plafond_legal
-  CHECK (retenue_garantie_pct >= 0 AND retenue_garantie_pct <= 5);
+  CHECK (retenue_garantie_pct >= 0 AND retenue_garantie_pct <= 5) NOT VALID;
 
 ALTER TABLE factures
   ADD CONSTRAINT factures_retenue_plafond_legal
-  CHECK (retenue_garantie_pct >= 0 AND retenue_garantie_pct <= 5);
+  CHECK (retenue_garantie_pct >= 0 AND retenue_garantie_pct <= 5) NOT VALID;
 
 COMMENT ON COLUMN factures.garantie_mode IS
   'RETENUE : le pourcentage est déduit du net à payer et consigné. CAUTION : une garantie à première demande le remplace, rien n''est déduit, et la trésorerie n''est pas immobilisée (US-B1.2). Substituable à tout moment.';

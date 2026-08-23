@@ -205,11 +205,14 @@ describe("d — RETENUE DE GARANTIE EXCLUE de ca_facture", () => {
     );
     const affaireId = affaireRes.rows[0]!.id;
 
-    // Create an ACCEPTED devis with 10% retenue de garantie
+    // 5 % et non 10 % : le plafond légal (loi n° 71-584, d'ordre public) est
+    // désormais tenu par une contrainte du moteur. La fixture d'origine avait
+    // choisi un nombre rond, pas un cas réel — l'arithmétique du test est la
+    // même, seul le pourcentage change.
     await adminPool.query(
       `INSERT INTO devis (id, tenant_id, affaire_id, status, retenue_garantie_pct, total_ht_cents,
                           reference, client_name, created_at)
-       VALUES (gen_random_uuid()::text, $1::uuid, $2, 'ACCEPTE', 10, 100000,
+       VALUES (gen_random_uuid()::text, $1::uuid, $2, 'ACCEPTE', 5, 100000,
                'DEV-RET-001', 'Client Retenue', now())`,
       [tenant.id, affaireId],
     );
@@ -224,13 +227,13 @@ describe("d — RETENUE DE GARANTIE EXCLUE de ca_facture", () => {
     );
   });
 
-  test("ca_facture exclut 10 % de retenue : 100 000 → 90 000 centimes", async () => {
+  test("ca_facture exclut 5 % de retenue : 100 000 → 95 000 centimes", async () => {
     const result = await withTenant(tenant.id, (tx) =>
       CALCULATORS["ca_facture"](tx, parsePeriode("12_mois")),
     );
     expect(result.nbSources).toBe(1);
-    // 100 000 × (1 − 10/100) = 90 000
-    expect(result.valeur).toBe(90000);
+    // 100 000 × (1 − 5/100) = 95 000
+    expect(result.valeur).toBe(95000);
   });
 
   test("ca_facture sans devis (facture autonome) compte le montant complet", async () => {
@@ -245,8 +248,8 @@ describe("d — RETENUE DE GARANTIE EXCLUE de ca_facture", () => {
     const result = await withTenant(tenant.id, (tx) =>
       CALCULATORS["ca_facture"](tx, parsePeriode("12_mois")),
     );
-    // 90 000 (with retenue) + 20 000 (standalone) = 110 000
-    expect(result.valeur).toBe(110000);
+    // 95 000 (retenue de 5 %) + 20 000 (sans retenue) = 115 000
+    expect(result.valeur).toBe(115000);
     expect(result.nbSources).toBe(2);
   });
 
@@ -266,12 +269,13 @@ describe("d — RETENUE DE GARANTIE EXCLUE de ca_facture", () => {
     await adminPool.query(
       `INSERT INTO devis (id, tenant_id, affaire_id, status, retenue_garantie_pct, total_ht_cents,
                           reference, client_name, created_at)
-       VALUES (gen_random_uuid()::text, $1::uuid, $2, 'ACCEPTE', 20, 0,
+       VALUES (gen_random_uuid()::text, $1::uuid, $2, 'ACCEPTE', 5, 0,
                'DEV-ADQ-001', 'Client ADQ', now())`,
       [t.id, aid],
     );
 
-    // Unsettled invoice (ENVOYEE statut) — total = 50 000, retenue = 20 % → net = 40 000
+    // 5 % et non 20 % : le plafond légal est désormais tenu par le moteur.
+    // Facture non réglée (statut ENVOYEE) — total 50 000, retenue 5 % → 47 500
     await adminPool.query(
       `INSERT INTO factures (id, tenant_id, affaire_id, statut, total_ht_cents, issued_date, settled, lines,
                              customer_name, number, due_date, amount_cents, created_at)
@@ -283,7 +287,7 @@ describe("d — RETENUE DE GARANTIE EXCLUE de ca_facture", () => {
     const result = await withTenant(t.id, (tx) =>
       CALCULATORS["argent_qui_dort"](tx, parsePeriode("12_mois")),
     );
-    expect(result.valeur).toBe(40000); // 50 000 × 0.80
+    expect(result.valeur).toBe(47500); // 50 000 × 0,95
     expect(result.donneesInsuffisantes).toBe(false);
   });
 });
