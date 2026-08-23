@@ -5,10 +5,10 @@
  * NODAQ API — AI-powered business management for French SMEs
  * OpenAPI spec version: 0.1.0
  */
-import type { InvitationEnAttente } from './invitationEnAttente';
+import type { InvitationAvecEtat } from './invitationAvecEtat';
 import type { Membre } from './membre';
 
 export interface MembresListResponse {
   membres: Membre[];
-  invitationsEnAttente: InvitationEnAttente[];
+  invitationsEnAttente: InvitationAvecEtat[];
 }

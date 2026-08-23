@@ -962,9 +962,79 @@ export interface InvitationEnAttente {
   createdAt: string;
 }
 
+export type InvitationAvecEtatRole = typeof InvitationAvecEtatRole[keyof typeof InvitationAvecEtatRole];
+
+
+export const InvitationAvecEtatRole = {
+  OWNER: 'OWNER',
+  MEMBER: 'MEMBER',
+  ACCOUNTANT: 'ACCOUNTANT',
+  VIEWER: 'VIEWER',
+} as const;
+
+/**
+ * DÉRIVÉ à chaque lecture depuis quatre faits datés — accepté, ouvert, expiré, dernier envoi — jamais stocké. Un état stocké se désynchronise de ses causes.
+ */
+export type InvitationAvecEtatEtat = typeof InvitationAvecEtatEtat[keyof typeof InvitationAvecEtatEtat];
+
+
+export const InvitationAvecEtatEtat = {
+  ACCEPTEE: 'ACCEPTEE',
+  EXPIREE: 'EXPIREE',
+  OUVERTE: 'OUVERTE',
+  ENVOYEE: 'ENVOYEE',
+  ECHOUEE: 'ECHOUEE',
+  EN_ATTENTE: 'EN_ATTENTE',
+} as const;
+
+/**
+ * Ce que l'utilisateur peut faire. Rendu par le serveur : un bouton « Renvoyer » proposé sur une invitation déjà acceptée casserait un accès qui fonctionne.
+ */
+export type InvitationAvecEtatActions = {
+  renvoyer: boolean;
+  copierLien: boolean;
+};
+
+/**
+ * Une invitation telle que l'écran « Membres » la voit (ticket 4.27). Distincte de `InvitationEnAttente`, qui est la réponse à la CRÉATION : celle-ci porte le lien en clair et le résultat de l'envoi, une seule fois ; celle-là porte un état recalculé à chaque lecture.
+ */
+export interface InvitationAvecEtat {
+  id: string;
+  email: string;
+  role: InvitationAvecEtatRole;
+  /** @nullable */
+  libelle?: string | null;
+  expiresAt: string;
+  /** @nullable */
+  accesExpireAt?: string | null;
+  createdAt: string;
+  /** @nullable */
+  acceptedAt?: string | null;
+  /**
+     * Premier chargement du lien par son destinataire. Daté au CLIC, jamais par un pixel de suivi.
+     * @nullable
+     */
+  openedAt?: string | null;
+  /** @nullable */
+  renvoyeeLe?: string | null;
+  /** @nullable */
+  dernierEnvoiLe?: string | null;
+  /** DÉRIVÉ à chaque lecture depuis quatre faits datés — accepté, ouvert, expiré, dernier envoi — jamais stocké. Un état stocké se désynchronise de ses causes. */
+  etat: InvitationAvecEtatEtat;
+  /** L'étiquette française affichée. Vient du serveur, pour qu'il n'y ait qu'une vérité. */
+  libelleEtat: string;
+  /**
+     * La phrase qui dit quoi FAIRE, quand il y a quelque chose à faire. Nulle pour un état qui se suffit (« Invitation acceptée »).
+     * @nullable
+     */
+  explication: string | null;
+  /** Ce que l'utilisateur peut faire. Rendu par le serveur : un bouton « Renvoyer » proposé sur une invitation déjà acceptée casserait un accès qui fonctionne. */
+  actions: InvitationAvecEtatActions;
+}
+
 export interface MembresListResponse {
   membres: Membre[];
-  invitationsEnAttente: InvitationEnAttente[];
+  invitationsEnAttente: InvitationAvecEtat[];
 }
 
 /**
