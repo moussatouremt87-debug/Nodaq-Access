@@ -105,12 +105,11 @@ m'a fait accuser à tort le lot fusionné entre les deux.
 
 ## Ce qui manque encore à ce dossier
 
-**Le backlog US-A\*.** Vingt-sept user stories (`US-A1.1` … `US-A8.4`) sont
-citées dans le code et ne sont versionnées nulle part. Elles souffrent du même
-mal que les tickets 4.x avant aujourd'hui : leur conformité n'est pas
-vérifiable. Le fichier existe côté fondateur
-(`backlog-user-stories-tpe-pme-v3`) ; il n'a pas été versionné ici faute d'être
-demandé.
+**Le backlog des user stories est versionné** depuis le 23/08/2026, dans
+[`docs/backlog/`](../backlog/README.md) — 73 stories en 17 epics et modules.
+L'audit avait sous-estimé son ampleur : il comptait 27 stories `US-A*` citées
+dans le code, mais le backlog en porte **73**, dont 36 de modules sectoriels
+qui ne sont presque jamais cités.
 
 ---
 
