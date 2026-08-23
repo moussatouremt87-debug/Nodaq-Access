@@ -43,7 +43,10 @@ import { apiFetch } from '@/lib/auth';
 import { useLocation } from 'wouter';
 import { useUpdateVerticalMutation, secteursOnboarding, useVertical } from '@/hooks/use-vertical';
 import { useCompanyProfile, COMPANY_PROFILE_QUERY_KEY } from '@/hooks/use-company-profile';
-import { COMPANY_TYPE_PROFIL, type CompanyTypeProfil, type Vertical, type StadeEntreprise } from '@nodaq/shared';
+import {
+  COMPANY_TYPE_PROFIL, couvertureSecteur, LIBELLE_SECTEUR_AUTRE, INVITE_SECTEUR_LIBRE,
+  type CompanyTypeProfil, type Vertical, type StadeEntreprise,
+} from '@nodaq/shared';
 import {
   EcranStade, EcranEffectif, EcranGestion, EcranIrritant, EcranPremiereAction,
 } from '@/components/onboarding-qualification';
@@ -223,11 +226,25 @@ function FormulaireManuel({
 function EcranSecteur({ onNext, onSkip }: { onNext: () => void; onSkip: () => void }) {
   const { toast } = useToast();
   const [selected, setSelected] = useState<Vertical | null>(null);
+  const [metierLibre, setMetierLibre] = useState('');
   const { updateVertical, isPending } = useUpdateVerticalMutation();
   const secteurs = secteursOnboarding();
+  // Calculée à l'écran ICI seulement — l'écran de secteur précède toute
+  // écriture, il n'y a donc rien à lire côté serveur. Partout ailleurs, c'est
+  // le serveur qui la rend (`GET /onboarding/qualification`).
+  const couverture = couvertureSecteur(selected, metierLibre || null);
 
   const handleContinue = () => {
     if (!selected) { onNext(); return; }
+    // Le métier écrit à la main part avec le secteur, jamais après : un
+    // enregistrement en deux temps perdrait le second si l'écran se ferme.
+    if (selected === 'autre' && metierLibre.trim()) {
+      void apiFetch(`${API}/onboarding/qualification`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ secteurLibre: metierLibre.trim() }),
+      }).catch(() => {});
+    }
     updateVertical(selected, {
       onSuccess: onNext,
       onError: () => {
@@ -260,10 +277,45 @@ function EcranSecteur({ onNext, onSkip }: { onNext: () => void; onSkip: () => vo
             data-testid={`option-secteur-${s.id}`}
           >
             <Briefcase className="h-4 w-4 shrink-0" />
-            {s.label}
+            {/* US-A1.4 — « Autre » ne dit rien à personne. La phrase, si. */}
+            {s.id === 'autre' ? LIBELLE_SECTEUR_AUTRE : s.label}
           </button>
         ))}
       </div>
+
+      {/* US-A1.4 — le métier écrit à la main. Il ne configure RIEN : le
+          compte reste sur le pack neutre. Il sert à choisir le prochain
+          module sectoriel, et c'est ce que le texte dit — promettre une date
+          serait un engagement qu'on ne peut pas tenir. */}
+      {selected === 'autre' && (
+        <div className="space-y-1.5" data-testid="secteur-libre-bloc">
+          <Label className="text-xs">{INVITE_SECTEUR_LIBRE}</Label>
+          <Input
+            autoFocus
+            value={metierLibre}
+            onChange={e => setMetierLibre(e.target.value)}
+            placeholder="Fleuriste, photographe, agriculteur…"
+            className="max-w-md"
+            data-testid="secteur-libre"
+          />
+        </div>
+      )}
+
+      {/* Ce qui marche déjà, et ce qui n'existe pas encore. Dit AVANT de
+          continuer, pas découvert trois semaines plus tard. */}
+      {selected && (
+        <div
+          className="rounded-lg border border-card-border bg-muted/40 p-3 text-xs"
+          data-testid="couverture-secteur"
+        >
+          <p className="text-foreground">{couverture.message}</p>
+          {couverture.sectorielles.length > 0 && (
+            <ul className="mt-1.5 space-y-0.5 text-muted-foreground">
+              {couverture.sectorielles.map(f => <li key={f}>• {f}</li>)}
+            </ul>
+          )}
+        </div>
+      )}
 
       <div className="flex gap-2">
         <Button onClick={handleContinue} disabled={isPending} className="gap-1.5">
