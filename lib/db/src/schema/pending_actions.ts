@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, real, uuid, jsonb } from "drizzle-orm/pg-core";
+import { integer, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { tenantsTable } from "./tenants";
@@ -12,7 +12,7 @@ export const pendingActionsTable = pgTable("pending_actions", {
   description: text("description"),
   affaireId: text("affaire_id"),
   affaireLabel: text("affaire_label"),
-  amountCents: real("amount_cents"),
+  amountCents: integer("amount_cents"),
   /**
    * Charge utile structurée — le PLAN. Le libellé lisible reste dans `label` :
    * un humain doit pouvoir comprendre ce qu'il valide sans lire du JSON.

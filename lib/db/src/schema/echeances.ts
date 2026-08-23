@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, real, uuid } from "drizzle-orm/pg-core";
+import { integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { tenantsTable } from "./tenants";
@@ -9,8 +9,8 @@ export const echeancesTable = pgTable("echeances", {
   type: text("type").notNull(), // TVA, IS, URSSAF, CFE, CVAE, AUTRE
   label: text("label").notNull(),
   dueDate: text("due_date").notNull(),
-  estimatedCents: real("estimated_cents"),
-  paidCents: real("paid_cents"),
+  estimatedCents: integer("estimated_cents"),
+  paidCents: integer("paid_cents"),
   status: text("status").notNull().default("A_VENIR"), // A_VENIR, PAYEE, EN_RETARD
   notes: text("notes"),
   paidAt: timestamp("paid_at", { withTimezone: true }),
