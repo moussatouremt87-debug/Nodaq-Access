@@ -213,7 +213,7 @@ export async function createTestTeamMember(
 // Order matters — pointages has FKs to team_members and affaires, so it must be
 // deleted before them.
 const BUSINESS_TABLES = [
-  "pointages", "catalogue_alias", "catalogue_lignes", "envois_journal", "parametres_envoi", "objectifs_franchissements",
+  "pointages", "taux_horaires", "catalogue_alias", "catalogue_lignes", "envois_journal", "parametres_envoi", "objectifs_franchissements",
   "tenant_secrets",
   // Ordre : les enfants avant les parents (client_id référence clients).
   "paiements", "affectations",
@@ -299,6 +299,7 @@ export function tableInsertSql(table: string, tenantId: string, memberAId?: stri
     // regles_relance est APPEND-ONLY comme journal_decisions : même remarque
     // sur le nettoyage, qui tourne sous adminPool.
     regles_relance:     [`INSERT INTO regles_relance (id, tenant_id, version) VALUES ($1, $2, 1)`, [id, tenantId]],
+    taux_horaires:      [`INSERT INTO taux_horaires (id, tenant_id, date_effet, montant_cents) VALUES ($1, $2, '2026-01-01', 8000)`, [id, tenantId]],
     campagnes_relance:  [`INSERT INTO campagnes_relance (id, tenant_id, pending_action_id, mandat) VALUES ($1, $2, 'pa-rls-test', '{}'::jsonb)`, [id, tenantId]],
     // appels_relance référence campagnes_relance : la fixture crée sa propre
     // campagne dans la même instruction, sinon elle n'insérerait rien pour un
