@@ -8,7 +8,8 @@ import {
   type ContratInput,
   type ContratUpdate,
 } from '@workspace/api-client-react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useMutation } from '@tanstack/react-query';
+import { apiFetch } from '@/lib/auth';
 import { useToast } from '@/hooks/use-toast';
 
 export function useContrats() {
@@ -96,5 +97,60 @@ export function useDeleteContratMutation() {
             toast({ title: 'Échec de la suppression', variant: 'destructive' }),
         },
       ),
+  };
+}
+
+/**
+ * Facturer les échéances dues d'un contrat récurrent — US-A2.3.
+ *
+ * ── Ce que ce bouton fait, et ce qu'il ne fait pas ────────────────────────
+ * Il MATÉRIALISE en brouillons les échéances échues et pas encore facturées,
+ * y compris celles de plusieurs mois en arrière. Il n'envoie rien : l'émission
+ * reste le geste délibéré qu'elle a toujours été, et c'est la chaîne de
+ * validation humaine que la story demande.
+ *
+ * Cliquer deux fois ne facture pas deux fois — l'index unique de la base s'en
+ * charge, et la seconde réponse dit simplement « déjà facturées ».
+ */
+export function useFacturerEcheances() {
+  const invalidate = useInvalidateContrats();
+  const { toast } = useToast();
+  const mutation = useMutation({
+    mutationFn: async (contratId?: string) => {
+      const r = await apiFetch('/api/contrats/facturer-echeances', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(contratId ? { contratId } : {}),
+      });
+      if (!r.ok) throw new Error(String(r.status));
+      return (await r.json()) as {
+        creees: number;
+        dejaFacturees: number;
+        ecartes: { contratId: string; motif: string }[];
+      };
+    },
+    onSuccess: (d) => {
+      invalidate();
+      if (d.creees === 0) {
+        // Un succès muet laisserait croire à une panne. Dire « rien à
+        // facturer » est une réponse ; ne rien dire n'en est pas une.
+        toast({
+          title: d.ecartes.length > 0 ? 'Rien n\'a pu être facturé' : 'Aucune échéance à facturer',
+          description: d.ecartes[0]?.motif ?? 'Tous vos contrats sont à jour.',
+          ...(d.ecartes.length > 0 ? { variant: 'destructive' as const } : {}),
+        });
+        return;
+      }
+      toast({
+        title: d.creees === 1 ? '1 facture créée' : `${d.creees} factures créées`,
+        description: 'En brouillon, dans Factures. Rien n\'est encore envoyé — relisez avant d\'émettre.',
+      });
+    },
+    onError: () =>
+      toast({ title: 'Échec de la facturation des échéances', variant: 'destructive' }),
+  });
+  return {
+    ...mutation,
+    facturerEcheances: (contratId?: string) => mutation.mutate(contratId),
   };
 }

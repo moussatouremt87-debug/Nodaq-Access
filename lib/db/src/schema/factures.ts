@@ -72,6 +72,15 @@ export const facturesTable = pgTable("factures", {
   /** L'établissement qui délivre la caution, et jusqu'à quand. */
   cautionOrganisme: text("caution_organisme"),
   cautionEcheance: text("caution_echeance"),
+  /**
+   * Le contrat récurrent dont cette facture matérialise une échéance
+   * (US-A2.3), et l'échéance précise qu'elle règle. Ensemble, ils forment la
+   * clé d'unicité : une échéance ne se facture qu'une fois, et c'est le MOTEUR
+   * qui le tient — un contrôle applicatif se contourne par deux requêtes
+   * simultanées.
+   */
+  contratId: text("contrat_id"),
+  echeanceLe: text("echeance_le"),
   heuresDu: text("heures_du"),
   heuresAu: text("heures_au"),
 

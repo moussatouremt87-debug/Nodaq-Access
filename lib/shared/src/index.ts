@@ -184,6 +184,7 @@ export * from "./etatInvitation.js";
 export * from "./evalAgent.js";
 export * from "./couvertureSectorielle.js";
 export * from "./facturationTemps.js";
+export * from "./facturationRecurrente.js";
 export * from "./glossaire.js";
 export * from "./relanceCommerciale.js";
 export * from "./intentionVocale.js";

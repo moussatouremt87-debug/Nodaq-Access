@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Plus, Repeat, Pencil, Trash2, MoreVertical, PauseCircle, PlayCircle, CheckCircle2 } from 'lucide-react';
+import { Plus, Repeat, Pencil, Trash2, MoreVertical, PauseCircle, PlayCircle, CheckCircle2, FileText } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -36,7 +36,9 @@ import {
 } from '@/components/ui/empty';
 import { ContratStatusBadge, cadenceLabel } from '@/components/status-badge';
 import { fmtEUR, fmtDate } from '@/lib/format';
-import { useContrats, useUpdateContratMutation, useDeleteContratMutation } from '@/hooks/use-contrats';
+import {
+  useContrats, useUpdateContratMutation, useDeleteContratMutation, useFacturerEcheances,
+} from '@/hooks/use-contrats';
 import { ContratDialog } from '@/components/contrat-dialog';
 import type { Contrat } from '@workspace/api-client-react';
 
@@ -55,6 +57,7 @@ export default function Contrats() {
   const { data: contrats, isLoading, isError } = useContrats();
   const { updateContrat } = useUpdateContratMutation();
   const { deleteContrat } = useDeleteContratMutation();
+  const { facturerEcheances, isPending: facturationEnCours } = useFacturerEcheances();
 
   const filtered = useMemo(() => {
     const list = contrats ?? [];
@@ -95,9 +98,22 @@ export default function Contrats() {
         title="Contrats récurrents"
         description="Vos revenus récurrents, cadence par cadence."
         actions={
-          <Button onClick={openCreate} data-testid="button-create-contrat" className="gap-1.5">
-            <Plus className="h-4 w-4" /> Nouveau contrat
-          </Button>
+          <div className="flex gap-2">
+            {/* Le geste qui remplace la ressaisie mensuelle (US-A2.3). Il crée
+                des BROUILLONS : rien ne part sans une émission explicite. */}
+            <Button
+              variant="outline"
+              onClick={() => facturerEcheances()}
+              disabled={facturationEnCours}
+              data-testid="button-facturer-echeances"
+              className="gap-1.5"
+            >
+              <FileText className="h-4 w-4" /> Facturer les échéances dues
+            </Button>
+            <Button onClick={openCreate} data-testid="button-create-contrat" className="gap-1.5">
+              <Plus className="h-4 w-4" /> Nouveau contrat
+            </Button>
+          </div>
         }
       />
 
