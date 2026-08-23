@@ -40,6 +40,9 @@ le seul secteur construit — mais cela n'avait jamais été chiffré.
 
 ## Index
 
+Le cadrage commun — comment lire le document, ce que la v3 a changé — vit dans
+[`00-preambule.md`](00-preambule.md).
+
 ### Partie A — tronc commun
 
 | Groupe | Stories | Citées |
