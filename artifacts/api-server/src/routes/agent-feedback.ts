@@ -34,9 +34,16 @@ router.post("/agent/feedback", async (req, res): Promise<void> => {
   const d = parsed.data;
 
   await withTenant(tenantId, async (tx) => {
-    // Un double-clic ne compte pas deux fois. L'index unique le refuserait de
-    // toute façon ; on ne veut simplement pas rendre une erreur pour un geste
-    // que l'utilisateur croit anodin.
+    // Un double-clic ne compte pas deux fois : l'index unique
+    // (tenant, type, référence, auteur) garantit UNE ligne par production.
+    //
+    // Mais « ne compte pas deux fois » n'est pas « ignore le second envoi ».
+    // L'écran envoie le pouce dès le clic — pour ne rien perdre si on ferme
+    // l'onglet — puis le verbatim quand il arrive : avec un DoNothing, ce
+    // second envoi tombait dans le vide et le commentaire était perdu, sans
+    // que personne ne le voie. Le dernier geste gagne donc sur la note, et le
+    // `coalesce` protège un verbatim déjà donné contre un envoi qui n'en
+    // porte pas.
     await tx
       .insert(agentFeedbackTable)
       .values({
@@ -47,7 +54,21 @@ router.post("/agent/feedback", async (req, res): Promise<void> => {
         ...(d.verbatim ? { verbatim: d.verbatim } : {}),
         ...(req.session?.userId ? { auteurUserId: req.session.userId } : {}),
       })
-      .onConflictDoNothing();
+      .onConflictDoUpdate({
+        target: [
+          agentFeedbackTable.tenantId,
+          agentFeedbackTable.typeProduction,
+          agentFeedbackTable.referenceId,
+          agentFeedbackTable.auteurUserId,
+        ],
+        // L'index est partiel : sans ce prédicat, PostgreSQL ne sait pas
+        // quel index arbitre le conflit et rejette la requête.
+        targetWhere: sql`reference_id IS NOT NULL AND auteur_user_id IS NOT NULL`,
+        set: {
+          note: sql`excluded.note`,
+          verbatim: sql`coalesce(excluded.verbatim, ${agentFeedbackTable.verbatim})`,
+        },
+      });
   });
 
   // Aucun contenu renvoyé : l'écran n'a rien à afficher, et le geste ne doit

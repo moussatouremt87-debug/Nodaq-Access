@@ -26,6 +26,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useDictee } from '@/hooks/use-dictee';
 import { apiFetch } from '@/lib/auth';
 import { Input } from '@/components/ui/input';
+import { RetourAgent } from '@/components/retour-agent';
 import { CHAMPS_CORRIGEABLES } from '@nodaq/shared';
 
 const API = '/api';
@@ -285,6 +286,16 @@ export function MicroFlottant() {
                   {plan.nonCompris.map((n, i) => <li key={i}>• {n}</li>)}
                 </ul>
               </div>
+            ) : null}
+
+            {/* Ticket 4.36 lot C — le jugement se recueille ICI, pendant que la
+                feuille est lue, pas après la validation : c'est le plan qu'on
+                juge, et un plan refusé est le signal le plus utile.
+                Sans `planId`, l'index d'unicité ne s'applique pas et un
+                double-clic compterait deux fois — on préfère ne rien demander
+                (plans d'avant le lot 4, en voie d'extinction). */}
+            {plan?.planId ? (
+              <RetourAgent typeProduction="plan_vocal" referenceId={plan.planId} />
             ) : null}
           </div>
 
