@@ -91,6 +91,15 @@ export interface FactureForPdf {
   autoliquidation: boolean;
   attestationTvaFournie?: boolean;
   retenueGarantiePct?: number;
+  /**
+   * US-B1.2 — `RETENUE` déduit le pourcentage du net à payer et le consigne ;
+   * `CAUTION` le remplace par une garantie à première demande, et ne déduit
+   * RIEN. Le client paie alors l'intégralité du TTC, la banque garantit, et la
+   * trésorerie n'est pas immobilisée.
+   */
+  garantieMode?: "RETENUE" | "CAUTION";
+  cautionOrganisme?: string | null | undefined;
+  cautionEcheance?: string | null | undefined;
   notes?: string;
   /**
    * Bloc réglementaire imprimé APRÈS le corps du document et AVANT les
@@ -228,6 +237,9 @@ export function calculerTotaux(data: FactureForPdf): {
   totalTVA: number;
   totalTTC: number;
   retenueGarantie: number;
+  /** Le montant garanti, dans les DEUX modes — déduit ou seulement affiché. */
+  garantieCents: number;
+  parCaution: boolean;
   netAPayer: number;
 } {
   const vatCategories: Record<string, { base: number; vat: number }> = {};
@@ -250,12 +262,21 @@ export function calculerTotaux(data: FactureForPdf): {
   const totalHT = Object.values(vatCategories).reduce((s, b) => s + b.base, 0);
   const totalTVA = Object.values(vatCategories).reduce((s, b) => s + b.vat, 0);
   const totalTTC = totalHT + totalTVA;
-  const retenueGarantie = data.retenueGarantiePct && data.retenueGarantiePct > 0
+  // US-B1.2 — le montant de la garantie se calcule dans les deux modes : en
+  // CAUTION il n'est pas déduit, mais il reste à AFFICHER, sans quoi le client
+  // ne saurait pas quelle somme la banque garantit.
+  const garantieCents = data.retenueGarantiePct && data.retenueGarantiePct > 0
     ? Math.round(totalTTC * data.retenueGarantiePct / 100)
     : 0;
+  const parCaution = data.garantieMode === "CAUTION";
+  // Déduite seulement en mode RETENUE. C'est la seule ligne qui distingue les
+  // deux modes côté argent, et elle décide aussi du montant du QR de virement
+  // — `netAPayer` en est la source unique.
+  const retenueGarantie = parCaution ? 0 : garantieCents;
 
   return {
     vatCategories, masquerTva, totalHT, totalTVA, totalTTC, retenueGarantie,
+    garantieCents, parCaution,
     // Le net à payer EST le montant du QR : retenue de garantie déduite,
     // puisque c'est précisément ce que le client doit virer aujourd'hui.
     netAPayer: totalTTC - retenueGarantie,
@@ -457,6 +478,21 @@ export async function generateHumanPdf(data: FactureForPdf): Promise<Buffer> {
       doc.text("Total TVA", totX, y, { width: totW }); doc.text(fmtCents(totalTVA), amtX, y, { width: amtW, align: "right" }); y += 12;
     }
     doc.fontSize(11).text("Total TTC", totX, y, { width: totW }); doc.text(fmtCents(totalTTC), amtX, y, { width: amtW, align: "right" }); y += 18;
+
+    // ── US-B1.2 — la garantie, dans l'un ou l'autre mode ────────────────
+    // En CAUTION, le montant N'EST PAS déduit : la ligne l'annonce quand même,
+    // sans quoi le client ignorerait ce que la banque garantit — et
+    // découvrirait la garantie au moment de la faire jouer.
+    if (totaux.parCaution && totaux.garantieCents > 0) {
+      doc.fontSize(9).font("Helvetica");
+      const texte =
+        `Garantie à première demande ${data.retenueGarantiePct} % — `
+        + `${fmtCents(totaux.garantieCents)}`
+        + (data.cautionOrganisme ? `, ${data.cautionOrganisme}` : "")
+        + (data.cautionEcheance ? `, jusqu'au ${fmtDateFr(data.cautionEcheance)}` : "")
+        + ". Aucune retenue n'est appliquée sur cette facture.";
+      doc.text(texte, 50, y, { width: W }); y += 14;
+    }
 
     if (totaux.retenueGarantie > 0) {
       const rg = totaux.retenueGarantie;

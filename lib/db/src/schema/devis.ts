@@ -50,6 +50,19 @@ export const devisTable = pgTable("devis", {
   /** Retention guarantee percentage (retenue de garantie) */
   retenueGarantiePct: real("retenue_garantie_pct").notNull().default(0),
   /**
+   * US-B1.2 — `RETENUE` : le pourcentage est déduit du net à payer et
+   * consigné jusqu'à sa levée. `CAUTION` : une garantie à première demande le
+   * remplace, rien n'est déduit, et la trésorerie n'est pas immobilisée.
+   *
+   * Substituable À TOUT MOMENT — la story l'exige explicitement. Ce n'est pas
+   * une décision gravée à la création du document.
+   */
+  garantieMode: text("garantie_mode").notNull().default("RETENUE"),
+  /** L'établissement qui délivre la caution, et jusqu'à quand. */
+  cautionOrganisme: text("caution_organisme"),
+  cautionEcheance: text("caution_echeance"),
+
+  /**
    * CONDENSAT SHA-256 du jeton d'acceptation publique — jamais le jeton.
    *
    * Le jeton ne vit que dans le lien envoyé au client. Le conserver en clair

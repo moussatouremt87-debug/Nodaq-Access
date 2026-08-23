@@ -1,4 +1,4 @@
-import { boolean, integer, json, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, integer, json, pgTable, real, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { tenantsTable } from "./tenants";
@@ -54,6 +54,24 @@ export const facturesTable = pgTable("factures", {
    * détecte pas — et c'est le client qui paierait deux fois. `null` pour
    * toute autre facture.
    */
+  /**
+   * Retenue de garantie — plafond légal 5 %, loi n° 71-584 du 16/07/1971,
+   * d'ordre public. Une contrainte du moteur le tient : une clause au-delà
+   * est illégale même si les deux parties l'acceptent.
+   */
+  retenueGarantiePct: real("retenue_garantie_pct").notNull().default(0),
+  /**
+   * US-B1.2 — `RETENUE` : le pourcentage est déduit du net à payer et
+   * consigné jusqu'à sa levée. `CAUTION` : une garantie à première demande le
+   * remplace, rien n'est déduit, et la trésorerie n'est pas immobilisée.
+   *
+   * Substituable À TOUT MOMENT — la story l'exige explicitement. Ce n'est pas
+   * une décision gravée à la création du document.
+   */
+  garantieMode: text("garantie_mode").notNull().default("RETENUE"),
+  /** L'établissement qui délivre la caution, et jusqu'à quand. */
+  cautionOrganisme: text("caution_organisme"),
+  cautionEcheance: text("caution_echeance"),
   heuresDu: text("heures_du"),
   heuresAu: text("heures_au"),
 
