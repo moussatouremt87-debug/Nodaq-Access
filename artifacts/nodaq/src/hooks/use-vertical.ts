@@ -75,6 +75,12 @@ export function secteursOnboarding() {
     'batiment', 'retail', 'restauration_chr', 'services_personne',
     'professions_liberales', 'artisanat_service', 'services_entreprises',
     'transport', 'sante_liberale',
+    // US-A1.4 — la porte de sortie, en DERNIER. Sans elle, un fleuriste, un
+    // agriculteur ou un photographe ne trouve pas son métier : il en choisit
+    // un autre au hasard, ou passe l'écran — et le défaut serveur le range
+    // alors en `industrie_btp`. Le rebond que US-A1.1 corrige à cet écran
+    // revenait donc à l'écran suivant, sous une autre forme.
+    'autre',
   ];
   const tous = [...cible, ...ancien];
   return retenus

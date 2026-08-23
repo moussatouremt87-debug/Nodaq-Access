@@ -182,6 +182,7 @@ export * from "./qualificationOnboarding.js";
 export * from "./qrVirement.js";
 export * from "./etatInvitation.js";
 export * from "./evalAgent.js";
+export * from "./couvertureSectorielle.js";
 export * from "./glossaire.js";
 export * from "./relanceCommerciale.js";
 export * from "./intentionVocale.js";

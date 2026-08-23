@@ -19,6 +19,12 @@ export const onboardingQualificationTable = pgTable("onboarding_qualification", 
   irritant: text("irritant").$type<Irritant>(),
   /** Peut nommer un client : même régime que les verbatims de feedback. */
   irritantVerbatim: text("irritant_verbatim"),
+  /**
+   * Le métier tel que l'utilisateur l'écrit, quand aucun secteur de la liste
+   * ne convient (US-A1.4). Sert à choisir le prochain module sectoriel — pas
+   * à configurer le compte, qui reste sur le pack neutre « autre ».
+   */
+  secteurLibre: text("secteur_libre"),
   termineeLe: timestamp("terminee_le", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

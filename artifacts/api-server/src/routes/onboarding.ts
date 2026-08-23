@@ -34,6 +34,8 @@ import {
 import { eq, and, count } from "drizzle-orm";
 import { toDateString, compteDansCapacite , PROFIL_VIDE, peutEmettreDocumentLegal, messageSirenManquant, premiereAction, STADES_ENTREPRISE, EFFECTIFS, GESTIONS_ACTUELLES, IRRITANTS } from "@nodaq/shared";
 import { indexerAuClasseur, nomAuClasseur } from "../lib/indexation-classeur.js";
+import { verticalDepuisTx } from "../lib/vertical-tenant.js";
+import { couvertureSecteur } from "@nodaq/shared";
 
 // ── Validation SIRET (Luhn, inlinée pour éviter la dépendance circulaire) ────
 
@@ -224,7 +226,11 @@ onboardingReadRouter.get("/onboarding/qualification", async (req, res): Promise<
       .select()
       .from(settingsTable)
       .where(eq(settingsTable.key, "company.siret"));
-    return { q, siret: reglages[0]?.value ?? "" };
+    // US-A1.4 — le métier choisi, pour dire ce qui est outillé et ce qui ne
+    // l'est pas. `verticalDepuisTx` est la MÊME résolution que partout
+    // ailleurs : la recalculer ici ferait diverger l'écran du reste.
+    const vertical = await verticalDepuisTx(tx);
+    return { q, siret: reglages[0]?.value ?? "", vertical };
   });
 
   const profil = {
@@ -239,6 +245,10 @@ onboardingReadRouter.get("/onboarding/qualification", async (req, res): Promise<
     peutEmettre: peutEmettreDocumentLegal(profil, siretRenseigne),
     messageSiren: siretRenseigne ? null : messageSirenManquant(profil.stade),
     premiereAction: premiereAction(profil),
+    // US-A1.4 — ce qui est déjà outillé pour ce métier, et ce qui ne l'est
+    // pas. Rendu par le SERVEUR : le recalculer à l'écran ferait deux
+    // vérités, et c'est celle qui promet le plus qui gagnerait.
+    couverture: couvertureSecteur(data.vertical, profil.secteurLibre),
   });
 });
 
@@ -373,6 +383,10 @@ const CorpsQualification = z.object({
   logicielActuel: z.string().trim().max(120).nullable().optional(),
   irritant: z.enum(IRRITANTS).nullable().optional(),
   irritantVerbatim: z.string().trim().max(1000).nullable().optional(),
+  // US-A1.4 — le métier dit par l'utilisateur quand aucun secteur de la liste
+  // ne convient. Il ne CONFIGURE rien : le compte reste sur le pack neutre
+  // « autre ». Il sert à choisir le prochain module à construire.
+  secteurLibre: z.string().trim().max(120).nullable().optional(),
   terminee: z.boolean().optional(),
 }).strict();
 
@@ -396,6 +410,7 @@ onboardingWriteRouter.patch("/onboarding/qualification", async (req, res): Promi
     ...(d.logicielActuel !== undefined ? { logicielActuel: d.logicielActuel } : {}),
     ...(d.irritant !== undefined ? { irritant: d.irritant } : {}),
     ...(d.irritantVerbatim !== undefined ? { irritantVerbatim: d.irritantVerbatim } : {}),
+    ...(d.secteurLibre !== undefined ? { secteurLibre: d.secteurLibre } : {}),
     ...(d.terminee ? { termineeLe: new Date() } : {}),
     updatedAt: new Date(),
   };
