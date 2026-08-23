@@ -88,6 +88,10 @@ export const COMPANY_KEYS = [
   "company.conditions_reglement",
   "company.format_numerotation",
   "company.iban",
+  // Ticket 4.21 — facultatif : la version 002 de la norme EPC s'en passe
+  // pour un IBAN de l'EEE. Réclamer un champ de plus coûterait plus que
+  // ce qu'il rapporte.
+  "company.bic",
   "company.plateforme_agreee",
   "company.pack_metier",
   // 4.9 — reprise

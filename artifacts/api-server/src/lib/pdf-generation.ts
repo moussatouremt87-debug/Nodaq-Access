@@ -20,7 +20,9 @@ import {
   computeVatBreakdown,
 } from "@nodaq/facturx";
 import type { FacturXInvoice, FacturXLine, FacturXParty } from "@nodaq/facturx";
+import QRCode from "qrcode";
 import type { Vertical, GestionDechets } from "@nodaq/shared";
+import { chargeUtileEpc, formaterIban, type VirementSepa } from "@nodaq/shared";
 import { REGLES_MENTIONS } from "./mentions-obligatoires.js";
 
 // ── Local type aliases (mirror lib/db/src/schema/factures.ts) ────────────────
@@ -69,6 +71,10 @@ export interface SellerInfo {
   rcsVille?: string;
   /** Franchise en base de TVA, art. 293 B CGI (US-A1.3) — déclaré, jamais deviné. */
   tvaFranchise?: boolean;
+  /** IBAN d'encaissement (ticket 4.19), source du QR de virement du 4.21. */
+  iban?: string;
+  /** BIC, facultatif : la version 002 de la norme EPC s'en passe dans l'EEE. */
+  bic?: string;
 }
 
 export interface FactureForPdf {
@@ -206,6 +212,123 @@ function mentionCapitalRcs(seller: SellerInfo): string {
 }
 
 /**
+ * Les totaux du document, en centimes.
+ *
+ * ── Pourquoi une fonction, et pas un calcul au fil du rendu ───────────────
+ * Le QR de virement (ticket 4.21) doit porter EXACTEMENT le net à payer
+ * imprimé au-dessus de lui. Un second calcul, même écrit à l'identique,
+ * diverge un jour — et le jour où il diverge, personne ne le voit : le QR
+ * s'ouvre chez le client avec un autre montant, et c'est lui qui paie
+ * l'écart. Un seul calcul, lu deux fois.
+ */
+export function calculerTotaux(data: FactureForPdf): {
+  vatCategories: Record<string, { base: number; vat: number }>;
+  masquerTva: boolean;
+  totalHT: number;
+  totalTVA: number;
+  totalTTC: number;
+  retenueGarantie: number;
+  netAPayer: number;
+} {
+  const vatCategories: Record<string, { base: number; vat: number }> = {};
+  for (const line of data.lines) {
+    const net = Math.round(line.quantity * line.unitPriceCents);
+    const vatKey = String(line.vatRate ?? 20);
+    if (!vatCategories[vatKey]) vatCategories[vatKey] = { base: 0, vat: 0 };
+    vatCategories[vatKey]!.base += net;
+  }
+
+  // Franchise en base (art. 293 B CGI) : aucune TVA n'est due, quel que soit
+  // le taux porté par une ligne — même garde que l'autoliquidation.
+  // `auditMentionsFR` bloque déjà l'émission d'une facture incohérente ; ce
+  // calcul reste défensif pour les documents (devis) qui n'y passent pas.
+  const masquerTva = data.autoliquidation || data.seller.tvaFranchise === true;
+  for (const [rate, bucket] of Object.entries(vatCategories)) {
+    bucket.vat = masquerTva ? 0 : Math.round((bucket.base * Number(rate)) / 100);
+  }
+
+  const totalHT = Object.values(vatCategories).reduce((s, b) => s + b.base, 0);
+  const totalTVA = Object.values(vatCategories).reduce((s, b) => s + b.vat, 0);
+  const totalTTC = totalHT + totalTVA;
+  const retenueGarantie = data.retenueGarantiePct && data.retenueGarantiePct > 0
+    ? Math.round(totalTTC * data.retenueGarantiePct / 100)
+    : 0;
+
+  return {
+    vatCategories, masquerTva, totalHT, totalTVA, totalTTC, retenueGarantie,
+    // Le net à payer EST le montant du QR : retenue de garantie déduite,
+    // puisque c'est précisément ce que le client doit virer aujourd'hui.
+    netAPayer: totalTTC - retenueGarantie,
+  };
+}
+
+/**
+ * Ce que le QR d'une facture doit encoder, ou `null` s'il ne doit pas exister.
+ *
+ * SÉPARÉ du rendu, et exporté, pour une raison précise : le montant encodé est
+ * la seule chose de ce lot qu'on ne peut pas relire à l'œil sur le PDF. Sans
+ * cette fonction, le prouver exigerait de décoder une image PNG — et un test
+ * qu'on n'écrit pas est une garde qui n'existe pas.
+ */
+export function virementPourFacture(
+  data: FactureForPdf,
+  netAPayer: number,
+): VirementSepa | null {
+  if (data.type !== "FACTURE") return null;
+  if (!data.seller.iban) return null;
+  return {
+    beneficiaire: data.seller.nom,
+    iban: data.seller.iban,
+    bic: data.seller.bic,
+    // Le net à payer, pas le total TTC : c'est ce que le client doit virer
+    // aujourd'hui, retenue de garantie déduite.
+    montantCents: netAPayer,
+    reference: data.numero,
+  };
+}
+
+/**
+ * L'image du QR, ou `null`.
+ *
+ * ── Trois refus délibérés, tenus par `virementPourFacture` ────────────────
+ * 1. Jamais sur un DEVIS : rien n'est dû tant qu'il n'est pas accepté, et un
+ *    QR invite à payer.
+ * 2. Jamais sur un AVOIR : l'argent va dans l'autre sens. Un QR y ferait
+ *    payer le client une seconde fois — le pire défaut possible de ce lot.
+ * 3. Jamais sans IBAN valide : `chargeUtileEpc` tranche.
+ *
+ * Un échec de rendu n'interrompt PAS l'émission : une facture sans QR reste
+ * une facture conforme, alors qu'une émission bloquée par un ornement serait
+ * un défaut bien plus grave que celui qu'on évite.
+ */
+async function imageQrVirement(
+  data: FactureForPdf,
+  netAPayer: number,
+): Promise<{ image: Buffer; iban: string } | null> {
+  const virement = virementPourFacture(data, netAPayer);
+  if (virement === null) return null;
+
+  const charge = chargeUtileEpc(virement);
+  if (charge === null) return null;
+
+  try {
+    const image = await QRCode.toBuffer(charge, {
+      // Niveau M : le compromis retenu par la norme EPC. Plus haut, le QR
+      // devient dense au point d'être illisible sur une facture imprimée.
+      errorCorrectionLevel: "M",
+      type: "png",
+      margin: 0,
+      scale: 6,
+    });
+    return { image, iban: formaterIban(virement.iban) };
+  } catch {
+    // Le contenu du QR n'est PAS journalisé : il porte l'IBAN.
+    console.warn("[pdf] QR de virement non rendu");
+    return null;
+  }
+}
+
+/**
  * PDF lisible, sans pièce jointe XML.
  *
  * EXPORTÉ pour les DEVIS : Factur-X est un format de facture, et un devis n'en
@@ -213,6 +336,11 @@ function mentionCapitalRcs(seller: SellerInfo): string {
  * ajoute le XML par-dessus ce même rendu.
  */
 export async function generateHumanPdf(data: FactureForPdf): Promise<Buffer> {
+  const totaux = calculerTotaux(data);
+  // Fabriqué ici, hors du rendu : `qrcode` est asynchrone et pdfkit ne l'est
+  // pas. Rien n'est écrit sur le disque — l'image reste un tampon.
+  const qrVirement = await imageQrVirement(data, totaux.netAPayer);
+
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: "A4", margin: 50, autoFirstPage: true });
     const chunks: Buffer[] = [];
@@ -291,13 +419,10 @@ export async function generateHumanPdf(data: FactureForPdf): Promise<Buffer> {
     y += 8;
 
     doc.font("Helvetica").fontSize(8);
-    const vatCategories: Record<string, { base: number; vat: number }> = {};
+    const { vatCategories, masquerTva, totalHT, totalTVA, totalTTC } = totaux;
     for (const line of data.lines) {
       const net = Math.round(line.quantity * line.unitPriceCents);
       const vatRate = line.vatRate ?? 20;
-      const vatKey = String(vatRate);
-      if (!vatCategories[vatKey]) vatCategories[vatKey] = { base: 0, vat: 0 };
-      vatCategories[vatKey]!.base += net;
 
       const desc = line.description.length > 55 ? line.description.slice(0, 52) + "…" : line.description;
       if (y > 720) { doc.addPage(); y = doc.page.margins.top; }
@@ -308,19 +433,6 @@ export async function generateHumanPdf(data: FactureForPdf): Promise<Buffer> {
       doc.text(fmtCents(net), 445, y, { width: 55, align: "right" });
       y += 14;
     }
-
-    // Compute VAT by bucket. Franchise en base (art. 293 B CGI) : aucune TVA
-    // n'est due, quel que soit le taux porté par une ligne — même garde que
-    // l'autoliquidation. `auditMentionsFR` bloque déjà l'émission d'une
-    // facture incohérente ; ce calcul reste défensif pour les documents
-    // (devis) qui ne passent pas par cet audit.
-    const masquerTva = data.autoliquidation || data.seller.tvaFranchise === true;
-    for (const [rate, bucket] of Object.entries(vatCategories)) {
-      bucket.vat = masquerTva ? 0 : Math.round((bucket.base * Number(rate)) / 100);
-    }
-    const totalHT = Object.values(vatCategories).reduce((s, b) => s + b.base, 0);
-    const totalTVA = Object.values(vatCategories).reduce((s, b) => s + b.vat, 0);
-    const totalTTC = totalHT + totalTVA;
 
     // Totals
     y += 10;
@@ -346,13 +458,44 @@ export async function generateHumanPdf(data: FactureForPdf): Promise<Buffer> {
     }
     doc.fontSize(11).text("Total TTC", totX, y, { width: totW }); doc.text(fmtCents(totalTTC), amtX, y, { width: amtW, align: "right" }); y += 18;
 
-    if (data.retenueGarantiePct && data.retenueGarantiePct > 0) {
-      const rg = Math.round(totalTTC * data.retenueGarantiePct / 100);
+    if (totaux.retenueGarantie > 0) {
+      const rg = totaux.retenueGarantie;
       doc.fontSize(9).font("Helvetica");
-      doc.text(`Retenue de garantie ${data.retenueGarantiePct} %`, totX, y, { width: totW });
+      // Boîte élargie vers la gauche : à `totW` (95 pt), « Retenue de garantie
+      // 5 % » passait à la ligne et le « % » disparaissait sous la ligne
+      // suivante. Le libellé restait lisible — c'est ce qui l'a laissé passer.
+      doc.text(`Retenue de garantie ${data.retenueGarantiePct} %`, totX - 60, y, { width: totW + 60 });
       doc.text(fmtCents(rg), amtX, y, { width: amtW, align: "right" }); y += 12;
       doc.font("Helvetica-Bold").text("Net à payer", totX, y, { width: totW });
-      doc.text(fmtCents(totalTTC - rg), amtX, y, { width: amtW, align: "right" }); y += 14;
+      doc.text(fmtCents(totaux.netAPayer), amtX, y, { width: amtW, align: "right" }); y += 14;
+    }
+
+    // ── QR de virement SEPA (ticket 4.21) ───────────────────────────────
+    // Posé APRÈS les totaux, donc juste sous le montant qu'il encode : lu à
+    // côté de « Net à payer », personne ne peut se tromper sur ce qu'il fait.
+    if (qrVirement) {
+      const HAUTEUR_BLOC = 92;
+      if (y + HAUTEUR_BLOC > 720) { doc.addPage(); y = doc.page.margins.top; }
+      y += 12;
+
+      doc.image(qrVirement.image, 50, y, { width: 72, height: 72 });
+
+      const tx = 134;
+      doc.fontSize(9).font("Helvetica-Bold")
+        .text("Payer par virement", tx, y, { width: W - 84 });
+      doc.fontSize(8).font("Helvetica")
+        .text(
+          "Scannez ce code avec votre application bancaire : bénéficiaire, "
+          + "IBAN, montant et référence seront pré-remplis.",
+          tx, y + 13, { width: W - 84 },
+        );
+      // L'IBAN reste écrit en clair : une application qui ne lit pas les QR,
+      // un client qui préfère saisir, une facture photocopiée — le QR est un
+      // raccourci, jamais la seule voie.
+      doc.font("Helvetica-Bold").text(qrVirement.iban, tx, y + 40, { width: W - 84 });
+      doc.font("Helvetica").text(`Référence à rappeler : ${data.numero}`, tx, y + 52, { width: W - 84 });
+
+      y += HAUTEUR_BLOC;
     }
 
     // Legal mentions
