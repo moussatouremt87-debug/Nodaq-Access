@@ -92,6 +92,12 @@ const ConfirmerBody = z.object({
           clientId: z.string().min(1).optional(),
           date: z.string().regex(DATE_ISO),
           heures: z.coerce.number().min(0).max(24),
+          /**
+           * US-B5.4 — ce temps part-il en facture ? Facultatif et vrai par
+           * défaut : un récapitulatif confirmé avant ce lot n'a pas ce champ,
+           * et le supposer faux ferait disparaître du chiffre d'affaires.
+           */
+          facturable: z.boolean().optional(),
         })
         .refine((l) => Boolean(l.affaireId) !== Boolean(l.clientId), {
           message: RATTACHEMENT_EXCLUSIF_MESSAGE,
@@ -233,6 +239,7 @@ router.get("/pointages/recapitulatif-semaine", async (req, res): Promise<void> =
     clientLabel: string | null;
     date: string;
     heures: number;
+    facturable: boolean;
     origine: "pointe" | "propose";
   }> = [];
 
@@ -324,6 +331,10 @@ router.get("/pointages/recapitulatif-semaine", async (req, res): Promise<void> =
           membreNom: membre.name,
           affaireId: candidat.affaireId,
           affaireLabel,
+          // Une ligne PROPOSÉE n'existe pas encore en base : elle hérite du
+          // défaut, facturable. La marquer autrement inventerait une décision
+          // que personne n'a prise.
+          facturable: existant?.facturable ?? true,
           clientId: candidat.clientId,
           clientLabel,
           date: jour,
@@ -356,6 +367,9 @@ router.get("/pointages/recapitulatif-semaine", async (req, res): Promise<void> =
       clientLabel: p.clientId ? (client?.nom ?? "—") : null,
       date: p.date,
       heures: heuresEnNombre(p.heures),
+      // US-B5.4 — l'écran doit pouvoir le montrer ET le modifier ; sans
+      // lecture, la case reviendrait cochée à chaque rechargement.
+      facturable: p.facturable,
       origine: "pointe",
     });
   }
@@ -497,7 +511,14 @@ router.post("/pointages/recapitulatif-semaine/confirmer", async (req, res): Prom
       if (existant) {
         await tx
           .update(pointagesTable)
-          .set({ heures: ligne.heures.toFixed(2), source: "confirme" })
+          .set({
+            heures: ligne.heures.toFixed(2),
+            source: "confirme",
+            // Absent = inchangé, et non « remis à vrai » : un récapitulatif
+            // servi avant ce lot ne porte pas le champ, et l'écraser
+            // reficturerait du temps qu'on avait justement écarté.
+            ...(ligne.facturable !== undefined ? { facturable: ligne.facturable } : {}),
+          })
           .where(eq(pointagesTable.id, existant.id));
       } else {
         await tx.insert(pointagesTable).values({
@@ -508,6 +529,7 @@ router.post("/pointages/recapitulatif-semaine/confirmer", async (req, res): Prom
           date: ligne.date,
           heures: ligne.heures.toFixed(2),
           source: "confirme",
+          ...(ligne.facturable !== undefined ? { facturable: ligne.facturable } : {}),
         });
       }
       ecrits += 1;

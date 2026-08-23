@@ -21,6 +21,7 @@ import { useVertical } from '@/hooks/use-vertical';
 import { apiFetch } from '@/lib/auth';
 import { toDateString } from '@/lib/format';
 import { containerVariants, itemVariants } from '@/lib/motion-variants';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const API = '/api';
 
@@ -36,6 +37,8 @@ type Ligne = {
   clientLabel: string | null;
   date: string;
   heures: number;
+  /** US-B5.4 — ce temps part-il en facture ? */
+  facturable: boolean;
   origine: 'pointe' | 'propose';
 };
 
@@ -80,6 +83,12 @@ export default function Pointages() {
   const { words } = useVertical();
   const feminin = words.indefinite.startsWith('une ');
   const queryClient = useQueryClient();
+  /**
+   * Les cases décochées, avant confirmation. Le défaut vient du serveur : une
+   * ligne déjà pointée garde ce qu'on avait décidé pour elle, et une ligne
+   * proposée arrive facturable.
+   */
+  const [facturables, setFacturables] = useState<Record<string, boolean>>({});
   const [semaineRef, setSemaineRef] = useState<string | null>(null);
   /** Heures ajustées par l'utilisateur, par clé de ligne. */
   const [ajustements, setAjustements] = useState<Record<string, number>>({});
@@ -146,6 +155,13 @@ export default function Pointages() {
 
   const heuresDe = (l: Ligne): number => ajustements[cleLigne(l)] ?? l.heures;
 
+  /**
+   * L'état de la case. Le défaut vient du SERVEUR : une ligne déjà pointée
+   * garde ce qu'on avait décidé pour elle. Repartir de `true` à chaque
+   * chargement refacturerait ce qu'on venait d'écarter.
+   */
+  const facturableDe = (l: Ligne): boolean => facturables[cleLigne(l)] ?? l.facturable;
+
   const ajouterChantier = (c: ChantierDisponible, membre: { id: string; nom: string }) => {
     setLignesAjoutees((actuelles) => {
       const ligne: Ligne = {
@@ -157,6 +173,7 @@ export default function Pointages() {
         clientLabel: c.clientId ? c.libelle : null,
         date: data?.semaine.debut ?? toDateString(new Date()),
         heures: 0,
+        facturable: true,
         origine: 'propose',
       };
       // Deux clics sur la même paire ne créent pas deux lignes : la clé est
@@ -184,6 +201,41 @@ export default function Pointages() {
 
   const total = groupes.reduce((acc, g) => acc + g.heures, 0);
 
+  /**
+   * US-A2.4 — la facture depuis les heures de la semaine affichée.
+   *
+   * Elle produit un BROUILLON : rien n'est émis, rien n'est envoyé. Ce qui
+   * n'a pas pu être facturé revient dans la réponse et est DIT — une facture
+   * silencieuse sur du travail écarté est une facture qu'on croit complète.
+   */
+  const facturerTemps = useMutation({
+    mutationFn: async (affaireId: string) => {
+      const r = await apiFetch(`${API}/factures/depuis-heures`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          affaireId,
+          du: data!.semaine.debut,
+          au: data!.semaine.fin,
+        }),
+      });
+      const corps = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error((corps as { error?: string }).error ?? 'Facturation impossible');
+      return corps as { totalHeures: number; ecartes: { motif: string }[] };
+    },
+    onSuccess: (res) => {
+      const ecartees = res.ecartes.length;
+      toast({
+        title: 'Facture préparée',
+        description:
+          `${res.totalHeures} h facturées, en brouillon.`
+          + (ecartees > 0 ? ` ${ecartees} pointage(s) écarté(s) : ${res.ecartes[0]!.motif}.` : ''),
+      });
+    },
+    onError: (e: Error) =>
+      toast({ title: 'Facturation impossible', description: e.message, variant: 'destructive' }),
+  });
+
   const confirmer = useMutation({
     mutationFn: async () => {
       const lignes = toutesLignes.map((l) => ({
@@ -191,6 +243,7 @@ export default function Pointages() {
         ...(l.affaireId ? { affaireId: l.affaireId } : { clientId: l.clientId }),
         date: l.date,
         heures: heuresDe(l),
+        facturable: facturableDe(l),
       }));
       const r = await apiFetch(`${API}/pointages/recapitulatif-semaine/confirmer`, {
         method: 'POST',
@@ -326,6 +379,20 @@ export default function Pointages() {
                           }))
                         }
                       />
+                      {/* US-B5.4 — les trajets, la reprise d'un défaut, la
+                          formation interne se décochent ici. Ces heures
+                          restent PAYÉES et pointées : elles sortent de la
+                          facture, pas du relevé. */}
+                      <label className="flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+                        <Checkbox
+                          checked={facturableDe(l)}
+                          onCheckedChange={(v) =>
+                            setFacturables((f) => ({ ...f, [cleLigne(l)]: v === true }))
+                          }
+                          data-testid={`facturable-${cleLigne(l)}`}
+                        />
+                        facturable
+                      </label>
                       {l.origine === 'propose' && (
                         <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
                           proposé
@@ -338,6 +405,38 @@ export default function Pointages() {
             </motion.div>
           ))}
         </motion.div>
+      )}
+
+      {/* US-A2.4 — facturer le temps passé. Posé ICI, sous les heures qu'il
+          facture : le chercher ailleurs supposerait qu'on sache qu'il existe.
+          Il n'apparaît que sur un groupe RATTACHÉ À UNE AFFAIRE — la route
+          accepte aussi un client, mais l'écran des heures groupe par
+          rattachement et l'affaire est le cas courant. */}
+      {groupes.filter((g) => g.cle.startsWith('affaire:')).length > 0 && (
+        <div className="mt-4 rounded-xl border border-card-border p-3" data-testid="facturer-temps">
+          <p className="text-xs font-medium text-foreground">Facturer ce temps</p>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">
+            Une facture en brouillon, une ligne par journée, au taux en vigueur
+            à la date de chaque intervention. Les heures décochées n'y entrent pas.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {groupes
+              .filter((g) => g.cle.startsWith('affaire:'))
+              .map((g) => (
+                <Button
+                  key={g.cle}
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs"
+                  disabled={facturerTemps.isPending}
+                  onClick={() => facturerTemps.mutate(g.cle.slice('affaire:'.length))}
+                  data-testid={`facturer-${g.cle}`}
+                >
+                  {g.label} — {g.heures} h
+                </Button>
+              ))}
+          </div>
+        </div>
       )}
 
       {/* Ajouter un chantier absent de la proposition. Sans ça, un chantier
