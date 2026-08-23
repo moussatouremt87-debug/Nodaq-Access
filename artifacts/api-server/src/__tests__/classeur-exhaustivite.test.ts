@@ -164,37 +164,77 @@ describe("l'isolation du Classeur", () => {
 });
 
 describe("la garde d'exhaustivité", () => {
-  test("aucun document en base n'est absent du Classeur", async () => {
-    // La garde qui rattrape ce que l'architecture ne peut pas empêcher : un
-    // futur producteur qui oublierait d'appeler `indexerAuClasseur`.
-    //
-    // Elle porte sur TOUS les tenants de la base de test, pas seulement ceux
-    // de ce fichier : c'est ce qui la rend sensible aux autres suites, qui
-    // créent bien plus de documents que celle-ci.
-    const manquants = await adminPool.query(`
-      SELECT 'FACTURE' AS type, f.id FROM factures f
-        WHERE NOT EXISTS (SELECT 1 FROM classeur_documents c
-                           WHERE c.source_type = 'FACTURE' AND c.source_id = f.id)
-      UNION ALL
-      SELECT 'DEVIS', d.id FROM devis d
-        WHERE NOT EXISTS (SELECT 1 FROM classeur_documents c
-                           WHERE c.source_type = 'DEVIS' AND c.source_id = d.id)
-      UNION ALL
-      SELECT 'AVOIR', a.id FROM avoirs a
-        WHERE NOT EXISTS (SELECT 1 FROM classeur_documents c
-                           WHERE c.source_type = 'AVOIR' AND c.source_id = a.id)
-      UNION ALL
-      SELECT 'CONTRAT', ct.id FROM contrats ct
-        WHERE NOT EXISTS (SELECT 1 FROM classeur_documents c
-                           WHERE c.source_type = 'CONTRAT' AND c.source_id = ct.id)
-      LIMIT 20
-    `);
+  /**
+   * Les fichiers source qui ont le droit de créer un document métier.
+   *
+   * `seed-metier.ts` n'y figure pas : il vit dans `lib/db`, hors de la portée
+   * de ce test, et il indexe désormais lui-même — voir son propre code.
+   */
+  const TABLES_DOCUMENT = ["devisTable", "facturesTable", "avoirsTable", "contratsTable"] as const;
 
-    const detail = manquants.rows.map((r) => `${r.type}:${r.id}`).join(", ");
+  test("tout fichier qui crée un document appelle `indexerAuClasseur`", async () => {
+    // ── Pourquoi une garde STATIQUE, et non un comptage en base ───────────
+    // La première version comptait les documents de la base et les comparait
+    // aux entrées de Classeur. Elle a échoué en CI sur quatre devis — insérés
+    // en SQL BRUT par des fixtures de test, qui ne passent pas par
+    // l'application. Un faux positif : ces devis n'ont aucun producteur à
+    // corriger.
+    //
+    // Pire, le défaut ne se voyait pas en local : la base y contenait
+    // d'autres lignes, l'ordre des fichiers change ce qui traîne. Une garde
+    // qui dépend de l'état de la base est une garde qui flotte.
+    //
+    // Celle-ci lit le CODE. Elle ne dépend d'aucune donnée, elle ne flotte
+    // pas, et elle attrape le onzième producteur au moment où il est écrit.
+    const { readdir, readFile } = await import("node:fs/promises");
+    const { join } = await import("node:path");
+
+    const racine = new URL("../", import.meta.url).pathname;
+    const fichiers: string[] = [];
+    for (const dossier of ["routes", "lib"]) {
+      for (const f of await readdir(join(racine, dossier))) {
+        if (f.endsWith(".ts")) fichiers.push(join(racine, dossier, f));
+      }
+    }
+
+    const fautifs: string[] = [];
+    for (const chemin of fichiers) {
+      const source = await readFile(chemin, "utf8");
+      const cree = TABLES_DOCUMENT.filter((t) => source.includes(`.insert(${t})`));
+      if (cree.length === 0) continue;
+      // Un APPEL, pas la sous-chaîne : `indexerAuClasseurDESACTIVE` contient
+      // « indexerAuClasseur » et passerait une recherche naïve. Vérifié —
+      // c'est exactement ce qu'une injection a fait, sans que la garde bronche.
+      if (!/\bindexerAuClasseur\s*\(/.test(source)) {
+        fautifs.push(`${chemin.split("/src/")[1]} (crée ${cree.join(", ")})`);
+      }
+    }
+
     expect(
-      manquants.rows,
-      `documents absents du Classeur : ${detail}\n`
-      + "→ un producteur de document n'appelle pas `indexerAuClasseur`.",
-    ).toHaveLength(0);
+      fautifs,
+      `fichiers qui créent un document sans l'indexer au Classeur :\n  ${fautifs.join("\n  ")}\n`
+      + "→ appeler `indexerAuClasseur` dans la même transaction.",
+    ).toEqual([]);
+  });
+
+  test("la garde a un objet : elle voit bien les fichiers concernés", async () => {
+    // Sans ce test, la garde ci-dessus passerait aussi si elle ne lisait
+    // aucun fichier — l'échec le plus silencieux qui soit.
+    const { readdir, readFile } = await import("node:fs/promises");
+    const { join } = await import("node:path");
+    const racine = new URL("../", import.meta.url).pathname;
+
+    let producteurs = 0;
+    for (const dossier of ["routes", "lib"]) {
+      for (const f of await readdir(join(racine, dossier))) {
+        if (!f.endsWith(".ts")) continue;
+        const source = await readFile(join(racine, dossier, f), "utf8");
+        if (TABLES_DOCUMENT.some((t) => source.includes(`.insert(${t})`))) producteurs += 1;
+      }
+    }
+    // Sept aujourd'hui : devis, factures, avoirs, contrats, plan-vocal,
+    // facturer-devis, onboarding. Le chiffre n'est pas figé — l'assertion
+    // vérifie seulement que la lecture trouve quelque chose.
+    expect(producteurs).toBeGreaterThanOrEqual(6);
   });
 });

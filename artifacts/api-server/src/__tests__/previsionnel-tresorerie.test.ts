@@ -12,6 +12,7 @@ import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import crypto from "node:crypto";
 import app from "../app";
+import { toDateString } from "@nodaq/shared";
 import {
   adminPool,
   createTestTenant,
@@ -75,7 +76,13 @@ describe("b — peuplé, calcul de bout en bout", () => {
 
     const dansUneSemaine = new Date();
     dansUneSemaine.setDate(dansUneSemaine.getDate() + 3);
-    const dueDate = dansUneSemaine.toISOString().slice(0, 10);
+    // `toDateString` et non `toISOString().slice(0, 10)` : la seconde forme
+    // fabrique une date métier depuis un INSTANT, donc en UTC, alors que la
+    // route la calcule sur les composantes LOCALES. Sous Pacific/Auckland
+    // (UTC+12), après midi UTC, les deux ne désignent plus le même jour — et
+    // la fenêtre de huit semaines s'ouvrait un jour trop tard, laissant la
+    // charge récurrente dehors.
+    const dueDate = toDateString(dansUneSemaine);
 
     // Facture impayée (EMISE) échéant dans la fenêtre.
     await adminPool.query(
@@ -94,7 +101,7 @@ describe("b — peuplé, calcul de bout en bout", () => {
     // pour garantir EXACTEMENT une occurrence dans une fenêtre de 8 semaines
     // (une charge mensuelle ancrée aujourd'hui en produirait DEUX : celle du
     // jour même et celle du mois suivant, toutes deux à moins de 56 jours).
-    const aujourdhui = new Date().toISOString().slice(0, 10);
+    const aujourdhui = toDateString(new Date());
     await adminPool.query(
       `INSERT INTO charges_recurrentes (id, tenant_id, label, category, cadence, start_date, amount_cents, active) VALUES ($1, $2::uuid, 'Loyer prévisionnel', 'LOYER', 'trimestriel', $3, 80000, true)`,
       [crypto.randomUUID(), tenantId, aujourdhui],

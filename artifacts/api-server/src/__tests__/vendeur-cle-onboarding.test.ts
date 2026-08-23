@@ -20,6 +20,7 @@ import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import app from "../app";
 import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner, texteBrut, serveurTest } from "./helpers";
+import { toDateString } from "@nodaq/shared";
 
 const suffix = Date.now().toString(36);
 const email = `vendeur-cle-${suffix}@test.nodaq`;
@@ -73,8 +74,8 @@ describe("le vendeur d'une facture émise vient du vrai profil onboarding", () =
       .set("Cookie", cookie)
       .send({
         customerName: "Client Test",
-        issuedDate: new Date().toISOString().slice(0, 10),
-        dueDate: new Date().toISOString().slice(0, 10),
+        issuedDate: toDateString(new Date()),
+        dueDate: toDateString(new Date()),
         lines: [{ description: "Prestation", quantity: 1, unitPriceCents: 100_000, vatRate: 20, vatCategory: "S" }],
       })
       .expect(201);
