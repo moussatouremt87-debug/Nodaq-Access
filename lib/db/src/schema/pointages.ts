@@ -1,12 +1,4 @@
-import {
-  pgTable,
-  text,
-  date,
-  numeric,
-  timestamp,
-  uuid,
-  index,
-} from "drizzle-orm/pg-core";
+import { boolean, date, index, numeric, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { tenantsTable } from "./tenants";
 import { teamMembersTable } from "./team_members";
 import { affairesTable } from "./affaires";
@@ -48,7 +40,14 @@ export const pointagesTable = pgTable(
     /** Hours as a NUMERIC string, e.g. "7.50". Parse, never coerce blindly. */
     heures: numeric("heures", { precision: 5, scale: 2 }).notNull(),
     /** 'confirme' (weekly recap, main path) | 'saisi' (manual) | 'importe' */
-    source: text("source").notNull().default("confirme"),
+    /**
+   * Ce temps part-il en facture ? (US-B5.4). Défaut vrai : le temps pointé est
+   * facturable jusqu'à preuve du contraire. Les trajets, la reprise d'un
+   * défaut, la formation interne se marquent faux — et sortent alors du taux
+   * d'occupation comme de la facturation au temps.
+   */
+  facturable: boolean("facturable").notNull().default(true),
+  source: text("source").notNull().default("confirme"),
     commentaire: text("commentaire"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true })

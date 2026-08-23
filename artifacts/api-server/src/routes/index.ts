@@ -5,6 +5,7 @@ import cockpitRouter from "./cockpit";
 import affairesRouter from "./affaires";
 import contratsRouter from "./contrats";
 import facturesRouter from "./factures";
+import facturationTempsRouter from "./facturation-temps";
 import avoirsRouter from "./avoirs";
 import prospectsRouter from "./prospects";
 import briefRouter from "./brief";
@@ -196,6 +197,10 @@ router.use(financierOnly, margeRouter);
 router.use(financierOnly, rapportsRouter);
 router.use(financierOnly, compteResultatRouter);
 router.use(financierOnly, facturesRouter);
+// US-A2.4 — facturer le temps passé. Derrière `financierOnly` comme les
+// factures : ces routes en CRÉENT, et un rôle qui ne voit pas le dossier
+// financier n'a pas à en produire.
+router.use(financierOnly, facturationTempsRouter);
 router.use(financierOnly, avoirsRouter);
 router.use(financierOnly, analyticsRouter);
 router.use(financierOnly, paiementsRouter);
