@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, real, uuid } from "drizzle-orm/pg-core";
+import { integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { tenantsTable } from "./tenants";
@@ -9,7 +9,7 @@ export const contratsTable = pgTable("contrats", {
   label: text("label").notNull(),
   clientName: text("client_name"),
   cadence: text("cadence").notNull().default("mensuel"),
-  amountCents: real("amount_cents"),
+  amountCents: integer("amount_cents"),
   status: text("status").notNull().default("ACTIF"),
   startDate: text("start_date"),
   endDate: text("end_date"),

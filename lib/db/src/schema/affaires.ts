@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, real, uuid } from "drizzle-orm/pg-core";
+import { integer, pgTable, real, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { tenantsTable } from "./tenants";
@@ -10,14 +10,14 @@ export const affairesTable = pgTable("affaires", {
   label: text("label").notNull(),
   clientName: text("client_name"),
   status: text("status").notNull().default("PROSPECT"),
-  quotedAmountCents: real("quoted_amount_cents"),
-  invoicedAmountCents: real("invoiced_amount_cents"),
-  marginCents: real("margin_cents"),
+  quotedAmountCents: integer("quoted_amount_cents"),
+  invoicedAmountCents: integer("invoiced_amount_cents"),
+  marginCents: integer("margin_cents"),
   notes: text("notes"),
   startDate: text("start_date"),
   completedAt: text("completed_at"),
   /** Montant vendu HT en centimes (issu du devis signé ou de la reprise) */
-  montantVenduHt: real("montant_vendu_ht"),
+  montantVenduHt: integer("montant_vendu_ht"),
   /** Avancement en % (0-100), null = non renseigné */
   avancementPct: real("avancement_pct"),
   /** Date de fin prévisionnelle (ISO YYYY-MM-DD) */

@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, real, boolean, uuid, integer, json } from "drizzle-orm/pg-core";
+import { boolean, integer, json, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { tenantsTable } from "./tenants";
@@ -36,8 +36,8 @@ export const facturesTable = pgTable("factures", {
   issuedDate: text("issued_date").notNull(),
   dueDate: text("due_date").notNull(),
   /** Total TTC in (real) cents — kept for backward compat. */
-  amountCents: real("amount_cents").notNull(),
-  residualCents: real("residual_cents"),
+  amountCents: integer("amount_cents").notNull(),
+  residualCents: integer("residual_cents"),
   /** Kept for backward compat; PAYEE statut is authoritative. */
   settled: boolean("settled").notNull().default(false),
   affaireId: text("affaire_id"),

@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, real, uuid } from "drizzle-orm/pg-core";
+import { integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { tenantsTable } from "./tenants";
@@ -12,7 +12,7 @@ export const prospectsTable = pgTable("prospects", {
   email: text("email"),
   stage: text("stage").notNull().default("NOUVEAU"),
   source: text("source").notNull().default("AUTRE"),
-  estimatedValueCents: real("estimated_value_cents"),
+  estimatedValueCents: integer("estimated_value_cents"),
   notes: text("notes"),
   /**
    * Lien vers la fiche client. NULLABLE, et le nom en clair de cette table
