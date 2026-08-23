@@ -131,8 +131,26 @@ export const REGLES_MENTIONS: readonly RegleMention[] = [
   },
   {
     code: "decennale_manquante",
+    // ── US-B1.3 : le message DIT la sanction, il ne la sous-entend pas ────
+    // Le libellé d'avant — « la mention est obligatoire […] complétez votre
+    // profil » — était exactement le « simple rappel générique
+    // sous-dimensionné par rapport au risque » que la story nomme. Un
+    // avertissement non bloquant qu'on lit comme une formalité administrative
+    // se remet à demain ; celui-ci se lit une fois.
+    //
+    // La sanction est PÉNALE et non administrative (art. L.243-3 C.assur.), et
+    // la responsabilité civile du dirigeant est personnelle — elle ne s'arrête
+    // pas à la société. C'est ce qui justifie d'écrire les chiffres.
+    //
+    // Non bloquant reste non bloquant : contrairement au SIRET, l'absence de
+    // décennale n'empêche pas d'émettre. Une facture émise vaut mieux qu'une
+    // facture retenue, et l'artisan est seul juge de son assurance.
     message:
-      "Assurance décennale non renseignée dans Profil entreprise. La mention est obligatoire sur les factures de travaux (art. L.241-1 C.assur.). Complétez votre profil.",
+      "Assurance décennale non renseignée dans Profil entreprise. Sa mention est "
+      + "obligatoire sur vos factures de travaux (art. L.241-1 du Code des assurances). "
+      + "Ne pas être assuré est un délit : jusqu'à 6 mois d'emprisonnement et "
+      + "75 000 € d'amende (art. L.243-3), et votre responsabilité civile reste "
+      + "engagée à titre personnel pendant dix ans. Complétez votre profil.",
     bloquant: false,
     verticals: VERTICALS_TRAVAUX,
     enDefaut: (d) => !d.seller.decennaleAssureur && !d.autoliquidation,
