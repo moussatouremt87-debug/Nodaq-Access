@@ -100,7 +100,21 @@ function octetsUtf8(texte: string): number {
   return total;
 }
 
-/** Le montant au format de la norme : `EUR` suivi d'unités.centimes. */
+/**
+ * Le montant au format de la norme : `EUR` suivi d'unités.centimes.
+ *
+ * ── Pourquoi en arithmétique entière ──────────────────────────────────────
+ * `(centimes / 100).toFixed(2)` donne le même résultat sur toute la plage
+ * SEPA — vérifié en injectant la variante flottante : aucun test ne bouge. Ce
+ * n'est donc PAS un correctif de bug, et le commentaire ne prétendra pas le
+ * contraire.
+ *
+ * C'est un choix de robustesse : le format du montant est la seule chose de ce
+ * module qu'on ne peut pas relire sur le document imprimé. Une expression dont
+ * la justesse tient à la plage des valeurs demande, à chaque relecture, de
+ * refaire le raisonnement sur les doubles. Deux entiers et un `padStart` n'en
+ * demandent aucun.
+ */
 function montantEpc(centimes: number): string {
   const unites = Math.trunc(centimes / 100);
   const cents = centimes % 100;

@@ -46,9 +46,11 @@ describe("la charge utile EPC069-12", () => {
   });
 
   test("le montant est rendu au centime, sans arrondi ni virgule", () => {
-    // Le piège : `(centimes / 100).toFixed(2)` passe par un flottant. Sur des
-    // montants de facture, il finit par rendre 1450.49 ou 1450.51 — et le QR
-    // dirait autre chose que la ligne « Total TTC » juste au-dessus.
+    // Ce test décrit le FORMAT exigé par la norme, pas la correction d'un
+    // défaut : la variante flottante `(centimes / 100).toFixed(2)` passe elle
+    // aussi, sur toute la plage SEPA — injectée, aucun test ne bouge. Les
+    // bornes ci-dessous sont là pour figer le format, y compris aux extrêmes
+    // où un lecteur trop laxiste accepterait « EUR1450,50 » ou « EUR1450.5 ».
     const m = (c: number) => chargeUtileEpc({ ...VIREMENT, montantCents: c })!.split("\n")[7];
     expect(m(1)).toBe("EUR0.01");
     expect(m(100)).toBe("EUR1.00");
