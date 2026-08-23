@@ -75,21 +75,11 @@ Légende : **FAIT** · **PARTIEL** · **NON FAIT** · **BLOQUÉ** (hors de notre
 | [4.37](4.37-pdp-iopole-facturation-electronique.md) | PDP / facturation électronique | BLOQUÉ | Contrat à signer avant le 1ᵉʳ septembre 2026 |
 | [4.38](4.38-lien-paiement-facture-et-reconciliation.md) | Lien de paiement + réconciliation | PARTIEL | QR de virement livré (#179) ; import de relevé et échéancier absents |
 | [4.39](4.39-speed-to-lead.md) | Speed-to-lead | NON FAIT | Dépend du 4.18-bis, non configuré |
-| **4.40** | **Tuiles cliquables** | **TEXTE NON TRANSMIS** | Voir ci-dessous |
+| [4.40](4.40-tuiles-cockpit-cliquables.md) | Tuiles du cockpit cliquables | NON FAIT | Tout — 9 tuiles animées au survol, aucune n'est un lien |
 
 ---
 
 ## Ce qui manque encore à ce dossier
-
-**4.40 — tuiles cliquables.** Annoncé comme « dans la conversation » par le plan
-post-audit. Recherché le 23/08 dans les deux sessions du projet, sur toutes les
-occurrences de « tuile » et « cliquable », côté fondateur comme côté assistant :
-**aucun énoncé de ticket**. Les seules occurrences sont incidentes — les tuiles
-du cockpit, les tuiles de l'écran d'intégrations. Le numéro 4.40 lui est
-réservé ; le texte reste à coller.
-
-Ne pas le reconstruire de mémoire : un ticket inventé qu'un index présente comme
-authentique est précisément ce que ce dossier existe pour empêcher.
 
 **Le backlog US-A\*.** Vingt-sept user stories (`US-A1.1` … `US-A8.4`) sont
 citées dans le code et ne sont versionnées nulle part. Elles souffrent du même
@@ -97,6 +87,17 @@ mal que les tickets 4.x avant aujourd'hui : leur conformité n'est pas
 vérifiable. Le fichier existe côté fondateur
 (`backlog-user-stories-tpe-pme-v3`) ; il n'a pas été versionné ici faute d'être
 demandé.
+
+---
+
+## Une règle produit issue du 4.40
+
+> **Tout élément qui s'anime au survol doit être cliquable, sinon on retire
+> l'animation.** Une carte qui réagit au survol annonce qu'elle est
+> actionnable ; si elle ne l'est pas, la promesse n'est pas tenue.
+
+Elle dépasse le cockpit et s'applique à tout le produit — à verser dans
+`CLAUDE.md` si elle survit à l'implémentation du 4.40.
 
 ---
 
