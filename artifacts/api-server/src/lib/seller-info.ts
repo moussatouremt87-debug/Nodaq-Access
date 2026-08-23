@@ -43,6 +43,11 @@ export function sellerInfoFromSettings(byKey: Record<string, string>): SellerInf
     capitalSocial: byKey["company.capital"] as string | undefined,
     rcsVille: byKey["company.rcs_ville"] as string | undefined,
     tvaFranchise: byKey["company.tva_franchise"] === "true",
+    // Ticket 4.21 — source du QR de virement. Sa validité est vérifiée à
+    // l'impression, pas ici : un IBAN devenu faux ne doit pas empêcher de
+    // charger les coordonnées de l'entreprise.
+    iban: byKey["company.iban"] as string | undefined,
+    bic: byKey["company.bic"] as string | undefined,
   };
 }
 

@@ -73,12 +73,19 @@ function useSettings() {
 }
 
 /**
- * L'IBAN qui encaissera les liens de paiement (ticket 4.19).
+ * L'IBAN qui encaisse — liens de paiement (4.19) ET QR de facture (4.21).
  *
- * Affiché sous la bascule qu'il conditionne : un lien de paiement sans compte
- * bénéficiaire n'existe pas. La validation de la clé de contrôle appartient à
- * la route — cet écran se contente d'afficher son refus, et de formater la
- * saisie par groupes de 4 pour qu'une relecture à l'œil soit possible.
+ * ── Pourquoi il a quitté la bascule qui le contenait ──────────────────────
+ * Il vivait sous « Autoriser l'envoi d'un lien de paiement », dans les
+ * réglages de relance téléphonique : invisible tant que cette bascule était
+ * éteinte. Depuis le ticket 4.21, le même IBAN imprime aussi le QR de virement
+ * sur chaque facture — un artisan qui ne fait aucune relance par téléphone n'a
+ * alors AUCUN endroit où le saisir, et le QR n'apparaît jamais sans que
+ * personne sache pourquoi.
+ *
+ * La validation de la clé de contrôle appartient à la route — cet écran se
+ * contente d'afficher son refus, et de formater la saisie par groupes de 4
+ * pour qu'une relecture à l'œil soit possible.
  */
 function IbanEncaissement() {
   const { data } = useSettings();
@@ -132,7 +139,7 @@ function IbanEncaissement() {
       <div className="text-[11px] text-muted-foreground">
         {refus
           ? messageRefusIban(refus)
-          : "Le compte qui recevra les virements. C'est le vôtre : l'argent ne transite jamais par nous."}
+          : "Le compte qui recevra les virements. C'est le vôtre : l'argent ne transite jamais par nous. Il sert aussi à imprimer le QR de paiement sur vos factures."}
       </div>
     </div>
   );
@@ -848,7 +855,14 @@ function RelanceTab() {
           label="Autoriser l'envoi d'un lien de paiement"
           description="Par SMS, pendant l'appel, si cela débloque la conversation."
         />
-        {brouillon.lienPaiementAutorise && <IbanEncaissement />}
+        {/* Plus de second champ ici : l'IBAN se règle en haut de cette page,
+            parce qu'il sert aussi aux factures. Deux champs liés à la même
+            clé se contrediraient à l'écran au premier enregistrement. */}
+        {brouillon.lienPaiementAutorise && (
+          <p className="ml-1 border-l-2 border-card-border pl-4 text-[11px] text-muted-foreground">
+            L'IBAN d'encaissement se règle en haut de cette page.
+          </p>
+        )}
         <Toggle
           checked={brouillon.remiseAutorisee}
           onChange={v => maj('remiseAutorisee', v)}
@@ -948,6 +962,17 @@ export default function ParametresPage() {
             objectif non renseigné ne s'affiche nulle part ailleurs. */}
         <div className="mb-6 max-w-2xl">
           <ObjectifsParametres />
+        </div>
+
+        {/* IBAN — hors onglets depuis le ticket 4.21 : il conditionne à la
+            fois les liens de paiement et le QR imprimé sur chaque facture.
+            Rangé dans un onglet, il redeviendrait introuvable pour qui ne
+            cherche pas ce qu'il ne sait pas exister. */}
+        <div className="mb-6 max-w-2xl rounded-xl border border-card-border p-4">
+          <div className="mb-2 text-sm font-medium text-foreground">
+            Comment vos clients vous paient
+          </div>
+          <IbanEncaissement />
         </div>
 
         {/* Souveraineté — hors onglets pour la même raison que le seuil de
