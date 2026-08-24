@@ -238,6 +238,26 @@ Ce n'est PAS un épuisement de ports : mesuré, le pic est de 677 sockets en `TI
 sur 16 384. C'est un recyclage trop rapide. (Ce paragraphe a longtemps dit le
 contraire ; le diagnostic était faux, voir ticket 4.22.)
 
+**Il y avait DEUX causes, et la seconde a survécu au ticket 4.22.** Le recyclage des
+ports décrit ci-dessus était réel et il est traité. Mais un second `ECONNRESET`, plus
+rare, est resté — mesuré une fois sur 41 exécutions complètes au ticket 4.41, alors que
+ce paragraphe le donnait pour réglé.
+
+Depuis **Node 19**, `http.globalAgent.keepAlive` vaut `true` par défaut, et superagent —
+donc supertest — passe par cet agent : le client garde ses connexions ouvertes et les
+réutilise. En face, un serveur Node ferme toute connexion inactive au bout de
+`keepAliveTimeout`, **5 000 ms** par défaut. Quand un test laisse passer à peu près cinq
+secondes entre deux requêtes — une insertion lente, une génération de PDF, un
+`spawnSync` — la fermeture du serveur et l'envoi du client se croisent, et le client lit
+`ECONNRESET`.
+
+D'où, dans `serveurTest`, `keepAliveTimeout = 0` : le serveur ne referme plus jamais une
+connexion sous les pieds du client. Et `closeAllConnections()` à l'arrêt, sans quoi
+`close()` attendrait des connexions qui ne se termineraient jamais.
+
+La leçon vaut au-delà de ce cas : un diagnostic juste peut être **incomplet**, et un
+paragraphe qui dit « traité à la source » fait perdre des heures à qui le lit ensuite.
+
 Les tests passent donc par `serveurTest(app)` — UN serveur, mémoïsé par application.
 Une garde l'impose (`serveur-partage.test.ts`). L'application est un PARAMÈTRE et n'est
 jamais importée par `helpers.ts` : plusieurs fichiers simulent un module puis chargent
