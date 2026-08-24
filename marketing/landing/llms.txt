@@ -42,6 +42,19 @@
 - [Gestion de chantier](https://nodaq.fr/gestion-chantier) : devis, heures,
   documents et facturation rassemblés par chantier.
 
+## Métiers
+
+- [Plombier](https://nodaq.fr/metiers/plombier)
+- [Électricien](https://nodaq.fr/metiers/electricien)
+- [Peintre en bâtiment](https://nodaq.fr/metiers/peintre)
+- [Couvreur](https://nodaq.fr/metiers/couvreur)
+- [Maçon](https://nodaq.fr/metiers/macon)
+- [Menuisier](https://nodaq.fr/metiers/menuisier)
+- [Chauffagiste](https://nodaq.fr/metiers/chauffagiste)
+- [Carreleur](https://nodaq.fr/metiers/carreleur)
+- [Paysagiste](https://nodaq.fr/metiers/paysagiste)
+- [Entreprise de rénovation](https://nodaq.fr/metiers/entreprise-renovation)
+
 ## Pages
 
 - [Accueil](https://nodaq.fr/) : présentation, chiffres sourcés sur les

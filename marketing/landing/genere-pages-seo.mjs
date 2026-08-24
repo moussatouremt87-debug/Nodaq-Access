@@ -54,6 +54,15 @@ const PAGES = [
         h2: "Exemple concret (scénario illustratif)",
         html: `<p>Fin de journée, un artisan termine une salle de bains. Dans le fourgon, il dicte le devis du chantier suivant : nodaq le met en forme avec ses tarifs, il le relit et l'envoie avant de rentrer. Il photographie la facture du grossiste — lue et classée au bon endroit. Le cockpit lui montre que l'estimation de marge du chantier en cours a glissé : les heures de la semaine, confirmées ce matin, pèsent plus que prévu. Une campagne de relance est prête pour une facture arrivée à échéance : un clic, le mandat est donné. La soirée reste la sienne.</p>`,
       },
+      {
+        h2: "Votre métier",
+        html: `<p>Chaque métier du bâtiment a son rythme — nodaq s'y plie :</p>
+        <ul>
+          <li><a href="/metiers/plombier">Plombier</a> · <a href="/metiers/electricien">Électricien</a> · <a href="/metiers/chauffagiste">Chauffagiste</a></li>
+          <li><a href="/metiers/macon">Maçon</a> · <a href="/metiers/couvreur">Couvreur</a> · <a href="/metiers/entreprise-renovation">Entreprise de rénovation</a></li>
+          <li><a href="/metiers/peintre">Peintre</a> · <a href="/metiers/carreleur">Carreleur</a> · <a href="/metiers/menuisier">Menuisier</a> · <a href="/metiers/paysagiste">Paysagiste</a></li>
+        </ul>`,
+      },
     ],
     faq: [
       {
@@ -587,7 +596,224 @@ ${jsonld(faqld)}
 `;
 }
 
+// ── Phase 3 : pages métiers (/metiers/<slug>) ──────────────────────────────
+// Même produit pour tous — la différenciation est dans le QUOTIDIEN du
+// métier (des faits de terrain, pas des fonctionnalités inventées), le
+// scénario illustratif et la FAQ métier. Les capacités citées sont celles
+// vérifiées à l'inventaire du code : devis dictés, photo de facture
+// extraite/classée, heures pointées → estimation de marge, campagnes de
+// relance sur mandat, contrats récurrents facturés à échéance, affectations
+// d'équipe et absences.
+const METIERS = [
+  {
+    slug: "plombier",
+    nom: "plombier",
+    titre: "Logiciel de gestion pour plombier : devis dictés, marge, impayés | nodaq",
+    desc: "Le copilote de gestion des plombiers : devis dictés entre deux interventions, factures photographiées, marge par chantier et relances d'impayés sur votre mandat.",
+    h1: "Le logiciel de gestion pensé pour les plombiers.",
+    reponse:
+      "Un plombier jongle entre dépannages urgents et chantiers planifiés — la gestion se fait dans les creux. Avec nodaq, le devis se dicte au pied de la chaudière, la facture du grossiste se photographie, la relance d'un impayé se déclenche d'un clic. Vous validez tout ; nodaq prépare tout.",
+    quotidien: `<p>Des journées hachées : un dépannage qui s'intercale, un chantier de salle de bains qui attend, un devis promis « ce soir » qui glisse au week-end. Les fournitures pèsent lourd dans le prix, et le temps passé à chiffrer un chauffe-eau ou une rénovation complète est du temps non facturé.</p>`,
+    exemple: `<p>Fuite chez un client à 8 h, chantier de salle d'eau à 10 h. Entre les deux, dans le fourgon : le devis du prochain chantier se dicte en une minute, avec les tarifs de l'entreprise. À midi, la facture du grossiste est photographiée — lue et classée. Le soir, une campagne de relance attend son mandat pour une facture de dépannage impayée depuis trois semaines : un clic.</p>`,
+    faqMetier: {
+      q: "Je fais surtout du dépannage, avec beaucoup de petites factures — est-ce adapté ?",
+      a: "Oui : chaque intervention peut devenir une affaire ou se rattacher à un client, la facture suit son échéance, et les campagnes de relance se préparent dès qu'un paiement tarde — vous gardez la main sur chaque envoi.",
+    },
+    proches: ["chauffagiste", "electricien"],
+  },
+  {
+    slug: "electricien",
+    nom: "électricien",
+    titre: "Logiciel de gestion pour électricien : devis, chantiers, impayés | nodaq",
+    desc: "Le copilote de gestion des électriciens : devis dictés, suivi par chantier (neuf et rénovation), heures de l'équipe, relances d'impayés sur votre mandat.",
+    h1: "Le logiciel de gestion pensé pour les électriciens.",
+    reponse:
+      "Entre le neuf, la rénovation et les mises aux normes, un électricien mène plusieurs chantiers de front — et les devis s'empilent le soir. Avec nodaq, vous dictez le devis en sortant du rendez-vous, suivez chaque chantier avec ses heures, et déclenchez les relances d'impayés d'un clic. Rien ne part sans vous.",
+    quotidien: `<p>Des chantiers en parallèle — un tableau à reprendre ici, une rénovation complète là — et des devis qui demandent du détail : postes nombreux, fournitures précises, variantes demandées par le client. Les heures de l'équipe se dispersent entre les chantiers, et la rentabilité réelle de chacun reste floue jusqu'au bilan.</p>`,
+    exemple: `<p>Visite d'une maison à rénover en fin de journée. Sur le parking, l'électricien dicte le devis pièce par pièce : nodaq structure les postes avec ses tarifs, il relit et envoie le soir même — pas le dimanche. Dans la semaine, les heures des deux salariés se confirment en un récapitulatif ; l'estimation de marge du chantier suit, chantier par chantier.</p>`,
+    faqMetier: {
+      q: "Je travaille avec deux salariés sur plusieurs chantiers — peut-on suivre qui fait quoi ?",
+      a: "Oui : les membres de l'équipe s'affectent aux affaires, leurs heures se pointent par chantier (récapitulatif hebdomadaire à confirmer, ou à la voix), et chaque heure alimente l'estimation de marge du chantier concerné.",
+    },
+    proches: ["plombier", "chauffagiste"],
+  },
+  {
+    slug: "peintre",
+    nom: "peintre en bâtiment",
+    titre: "Logiciel de gestion pour peintre en bâtiment : devis, suivi, impayés | nodaq",
+    desc: "Le copilote de gestion des peintres : devis dictés après la visite, chantiers courts enchaînés, factures suivies jusqu'au paiement, relances sur votre mandat.",
+    h1: "Le logiciel de gestion pensé pour les peintres en bâtiment.",
+    reponse:
+      "Des chantiers courts qui s'enchaînent, des devis au métré à rendre vite, des paiements qui traînent d'un chantier sur l'autre : la gestion d'un peintre se joue à la cadence. Avec nodaq, le devis se dicte après la visite, chaque facture suit son échéance, et la relance se déclenche d'un clic quand un client tarde.",
+    quotidien: `<p>Celui qui rend son devis le premier prend souvent le chantier — mais les devis se chiffrent le soir, après les heures de peinture. Les chantiers durent quelques jours : un retard de paiement sur deux ou trois chantiers d'affilée, et c'est la trésorerie du mois qui se tend.</p>`,
+    exemple: `<p>Visite d'un appartement mardi soir : trois pièces, plafonds compris. Le devis se dicte dans la voiture — surfaces, préparation, deux couches — et part le soir même. Le chantier suivant est facturé vendredi ; à l'échéance dépassée, la campagne de relance est prête : le peintre donne son mandat entre deux chantiers.</p>`,
+    faqMetier: {
+      q: "Mes chantiers durent trois jours — est-ce que l'outil n'est pas trop lourd pour ça ?",
+      a: "Non : dicter un devis prend une minute, une facture se crée depuis le devis accepté, et le suivi (échéance, relance, encaissement) est automatique jusqu'à votre validation. L'outil suit votre cadence, pas l'inverse.",
+    },
+    proches: ["carreleur", "menuisier"],
+  },
+  {
+    slug: "couvreur",
+    nom: "couvreur",
+    titre: "Logiciel de gestion pour couvreur : devis, urgences, chantiers | nodaq",
+    desc: "Le copilote de gestion des couvreurs : devis dictés après la visite de toiture, urgences facturées sans retard, chantiers suivis malgré la météo.",
+    h1: "Le logiciel de gestion pensé pour les couvreurs.",
+    reponse:
+      "Le métier de couvreur se plie à la météo : des chantiers qui s'arrêtent et reprennent, des urgences après un coup de vent, des devis à rendre pendant que le client regarde encore son plafond. Avec nodaq, le devis se dicte en redescendant de l'échelle, l'urgence se facture sans attendre, et chaque chantier garde son fil malgré les interruptions.",
+    quotidien: `<p>Une tempête remplit le carnet de demandes en une nuit — et c'est précisément la semaine où il n'y a pas une heure pour chiffrer. Les chantiers s'interrompent avec la pluie, reprennent, s'entremêlent ; les acomptes et les factures de fin de chantier se perdent facilement dans ce désordre imposé par le ciel.</p>`,
+    exemple: `<p>Lundi matin après un week-end venté : quatre appels pour des tuiles envolées. Entre deux bâchages, chaque devis se dicte sur place — nodaq les met en forme, le couvreur les relit le soir et les envoie d'un coup. Le chantier de réfection en cours, arrêté deux jours pour pluie, garde ses heures et ses documents rattachés : rien ne se perd dans l'interruption.</p>`,
+    faqMetier: {
+      q: "Mes chantiers s'arrêtent et reprennent au gré de la météo — le suivi tient-il ?",
+      a: "Oui : une affaire reste ouverte tant que vous ne la clôturez pas. Heures, documents photographiés et factures s'y rattachent au fil de l'eau, même avec des interruptions — et le cockpit vous montre où en est chaque chantier.",
+    },
+    proches: ["macon", "entreprise-renovation"],
+  },
+  {
+    slug: "macon",
+    nom: "maçon",
+    titre: "Logiciel de gestion pour maçon : chantiers longs, acomptes, marge | nodaq",
+    desc: "Le copilote de gestion des maçons : chantiers longs facturés au fil de l'avancement, acomptes suivis, heures de l'équipe pointées, marge suivie en continu.",
+    h1: "Le logiciel de gestion pensé pour les maçons.",
+    reponse:
+      "Le gros œuvre, ce sont des chantiers longs, des équipes, des acomptes et une facturation au fil de l'avancement — le tout avec des montants qui ne pardonnent pas l'à-peu-près. Avec nodaq, chaque chantier se facture par étapes depuis l'affaire, les heures de l'équipe se pointent par semaine, et l'estimation de marge suit pendant le chantier, pas après.",
+    quotidien: `<p>Un chantier de plusieurs mois engage l'entreprise : de la main-d'œuvre chaque semaine, des factures à émettre au fil de l'avancement pour tenir la trésorerie, un client qui paie parfois avec retard alors que les salaires, eux, tombent chaque mois. La rentabilité réelle ne peut pas attendre la fin du chantier pour être connue.</p>`,
+    exemple: `<p>Extension de 40 m² sur quatre mois, à trois. Chaque vendredi, le récapitulatif d'heures se confirme en une minute ; l'estimation de marge du chantier s'ajuste. À chaque étape franchie, une facture part depuis l'affaire — et à la première échéance dépassée, la campagne de relance attend le mandat du chef d'entreprise, pas l'inverse.</p>`,
+    faqMetier: {
+      q: "Je facture mes chantiers en plusieurs fois — c'est possible ?",
+      a: "Oui : une affaire peut donner lieu à plusieurs factures au fil de l'avancement, chacune suivie jusqu'à son paiement, avec les encaissements rattachés au chantier.",
+    },
+    proches: ["entreprise-renovation", "couvreur"],
+  },
+  {
+    slug: "menuisier",
+    nom: "menuisier",
+    titre: "Logiciel de gestion pour menuisier : sur-mesure, acomptes, pose | nodaq",
+    desc: "Le copilote de gestion des menuisiers : devis de fabrication sur mesure dictés, acomptes avant commande, heures d'atelier et de pose suivies par affaire.",
+    h1: "Le logiciel de gestion pensé pour les menuisiers.",
+    reponse:
+      "Entre l'atelier et la pose, un menuisier avance de l'argent : les fournitures d'un ouvrage sur mesure se commandent bien avant la facture finale. Avec nodaq, le devis se dicte au retour de la prise de cotes, l'acompte se facture avant de commander, et les heures d'atelier comme de pose se rattachent à l'affaire — la marge se suit en continu.",
+    quotidien: `<p>Un escalier ou un agencement sur mesure, c'est des semaines entre la prise de cotes et la pose — et des fournitures payées longtemps avant d'être facturées au client. Sans acompte encaissé au bon moment, c'est l'entreprise qui finance le chantier du client. Et les heures d'atelier, moins visibles que la pose, sont celles qu'on oublie de compter.</p>`,
+    exemple: `<p>Prise de cotes pour une bibliothèque sur mesure le jeudi. Le devis se dicte au retour — fabrication, finition, pose — et part le soir. À l'acceptation, une facture d'acompte est émise avant la commande du bois. Trois semaines d'atelier plus tard, les heures pointées montrent que la fabrication a pris plus que prévu : le menuisier le sait avant la pose, pas après.</p>`,
+    faqMetier: {
+      q: "Puis-je facturer un acompte à la commande ?",
+      a: "Oui : un devis accepté devient une affaire, et vous émettez les factures à votre rythme — acompte à la commande, solde à la pose — chacune suivie jusqu'au paiement.",
+    },
+    proches: ["peintre", "carreleur"],
+  },
+  {
+    slug: "chauffagiste",
+    nom: "chauffagiste",
+    titre: "Logiciel de gestion pour chauffagiste : contrats d'entretien, urgences | nodaq",
+    desc: "Le copilote de gestion des chauffagistes : contrats d'entretien facturés à échéance, urgences d'hiver absorbées, devis dictés, relances sur votre mandat.",
+    h1: "Le logiciel de gestion pensé pour les chauffagistes.",
+    reponse:
+      "Le métier de chauffagiste vit en deux saisons : l'hiver des urgences et l'année des contrats d'entretien. Avec nodaq, vos contrats génèrent leurs factures à échéance sans ressaisie, les dépannages se facturent dans la foulée, et les devis de remplacement se dictent entre deux interventions. Chaque envoi attend votre validation.",
+    quotidien: `<p>De novembre à février, les pannes s'enchaînent et la paperasse s'accumule — précisément quand il n'y a pas le temps. Le reste de l'année, ce sont les entretiens sous contrat : récurrents, prévisibles, mais fastidieux à facturer un par un. Deux rythmes opposés, une seule gestion.</p>`,
+    exemple: `<p>Janvier, trois dépannages dans la journée. Chacun devient une facture le soir même, dictée en quelques mots. Pendant ce temps, les contrats d'entretien du mois ont généré leurs factures à leur échéance — le chauffagiste les a validées d'un coup au café du matin. Et le devis de remplacement de chaudière promis la veille est parti avant la deuxième intervention.</p>`,
+    faqMetier: {
+      q: "J'ai des contrats d'entretien annuels — la facturation peut-elle suivre toute seule ?",
+      a: "Vos contrats récurrents sont enregistrés avec leur échéance, et nodaq prépare leurs factures à date. Vous validez — rien n'est émis sans vous — et chaque facture suit ensuite son paiement.",
+    },
+    proches: ["plombier", "electricien"],
+  },
+  {
+    slug: "carreleur",
+    nom: "carreleur",
+    titre: "Logiciel de gestion pour carreleur : métrés, sous-traitance, paiements | nodaq",
+    desc: "Le copilote de gestion des carreleurs : devis au métré dictés, chantiers en propre ou en sous-traitance, factures suivies jusqu'au paiement.",
+    h1: "Le logiciel de gestion pensé pour les carreleurs.",
+    reponse:
+      "Le carreleur travaille souvent sur deux fronts : ses propres clients, et la sous-traitance pour des entreprises générales — où les délais de paiement s'allongent. Avec nodaq, le devis au métré se dicte après la visite, chaque chantier garde ses heures et ses documents, et les factures — au particulier comme au donneur d'ordre — sont suivies jusqu'au paiement, relance comprise.",
+    quotidien: `<p>Chez le particulier, tout va vite : visite, métré, devis, chantier. En sous-traitance, tout va lentement : le chantier est fini depuis des semaines que la facture court toujours. Relancer un donneur d'ordre demande du doigté — mais ne pas relancer coûte la trésorerie.</p>`,
+    exemple: `<p>Une salle de bains de 14 m² chez un particulier, dictée en devis mardi, posée la semaine suivante, payée à quinze jours. En parallèle, un chantier en sous-traitance facturé depuis 45 jours : la campagne de relance est prête, courtoise et factuelle — le carreleur donne son mandat, l'appel est passé en journée, le paiement suit.</p>`,
+    faqMetier: {
+      q: "Je fais de la sous-traitance — puis-je relancer un donneur d'ordre sans me fâcher ?",
+      a: "La relance est préparée par nodaq, factuelle et courtoise, et rien ne part sans votre mandat. Vous choisissez quand relancer, qui relancer, et vous pouvez écarter un client d'un clic.",
+    },
+    proches: ["peintre", "macon"],
+  },
+  {
+    slug: "paysagiste",
+    nom: "paysagiste",
+    titre: "Logiciel de gestion pour paysagiste : contrats d'entretien, saisons | nodaq",
+    desc: "Le copilote de gestion des paysagistes : contrats d'entretien facturés à échéance, chantiers de création suivis avec les heures d'équipe, relances sur mandat.",
+    h1: "Le logiciel de gestion pensé pour les paysagistes.",
+    reponse:
+      "Création au printemps, entretien toute l'année : le paysagiste cumule chantiers ponctuels et contrats récurrents, avec des équipes sur le terrain. Avec nodaq, les contrats d'entretien génèrent leurs factures à échéance, les chantiers de création gardent heures et documents rattachés, et l'estimation de marge suit chaque affaire — pendant la saison, pas après.",
+    quotidien: `<p>La belle saison concentre tout : les chantiers de création, les tontes sous contrat, les équipes à répartir — et la facturation qui devrait suivre chaque semaine mais attend l'automne. Les contrats d'entretien, eux, méritent d'être facturés à l'heure dite : c'est la trésorerie stable de l'entreprise.</p>`,
+    exemple: `<p>Avril : deux créations de jardin en cours, trois équipes, et quarante contrats de tonte qui démarrent. Les factures d'entretien du mois se génèrent à leur échéance — validées en une fois. Sur la création la plus grosse, les heures pointées de la semaine font glisser l'estimation de marge : le paysagiste resserre le planning avant que la saison n'avale la rentabilité.</p>`,
+    faqMetier: {
+      q: "J'ai des dizaines de contrats d'entretien — comment éviter la ressaisie chaque mois ?",
+      a: "Chaque contrat récurrent est enregistré une fois, avec son montant et sa cadence. nodaq prépare les factures à échéance ; vous les validez en une passe, et elles suivent ensuite leur paiement.",
+    },
+    proches: ["macon", "entreprise-renovation"],
+  },
+  {
+    slug: "entreprise-renovation",
+    nom: "entreprise de rénovation",
+    titre: "Logiciel de gestion pour entreprise de rénovation : multi-corps, marge | nodaq",
+    desc: "Le copilote des entreprises de rénovation : chantiers multi-corps suivis de bout en bout, équipes affectées, facturation par étapes, marge suivie en continu.",
+    h1: "Le logiciel de gestion pensé pour les entreprises de rénovation.",
+    reponse:
+      "Une rénovation complète, c'est tous les corps d'état à coordonner, des semaines de chantier, une équipe à répartir et une facturation par étapes. Avec nodaq, chaque chantier rassemble son devis, ses heures, ses documents et ses factures ; l'équipe s'affecte par affaire ; et l'estimation de marge se suit pendant le chantier — là où elle peut encore être défendue.",
+    quotidien: `<p>Le dirigeant d'une entreprise de rénovation passe ses journées à arbitrer : quelle équipe sur quel chantier, quel lot commence quand, quelle étape facturer. Chaque chantier est un petit projet — et la marge se joue dans mille détails que personne ne consigne quand tout va vite.</p>`,
+    exemple: `<p>Rénovation complète d'un appartement en huit semaines : démolition, plomberie, électricité, plâtrerie, peinture. Les deux équipes sont affectées à l'affaire, leurs heures confirmées chaque semaine. À chaque lot terminé, une facture d'étape part — validée par le dirigeant. À mi-chantier, l'estimation de marge tient : il le sait, au lieu de l'espérer.</p>`,
+    faqMetier: {
+      q: "Je gère plusieurs chantiers et plusieurs équipes en même temps — l'outil suit ?",
+      a: "Oui : chaque affaire a ses membres affectés, ses heures, ses documents et ses factures. Le cockpit montre l'ensemble des chantiers en cours, et les absences de l'équipe se déclarent en un mot.",
+    },
+    proches: ["macon", "couvreur"],
+  },
+];
+
+function construirePageMetier(m) {
+  return {
+    slug: `metiers/${m.slug}`,
+    title: m.titre,
+    description: m.desc,
+    h1: m.h1,
+    reponse: m.reponse,
+    sections: [
+      { h2: `Le quotidien d'un ${m.nom}`, html: m.quotidien },
+      {
+        h2: "Ce que nodaq change",
+        html: `<ul>
+          <li><a href="/devis-ia">Devis dictés à la voix</a>, chiffrés avec vos tarifs — jamais un prix inventé par l'IA.</li>
+          <li>Factures fournisseurs <strong>photographiées</strong>, lues et classées au bon endroit.</li>
+          <li><a href="/calcul-marge-chantier">Marge par chantier</a> réévaluée à chaque heure pointée, comparée à votre seuil de rentabilité.</li>
+          <li><a href="/relance-facture-impayee">Campagnes de relance</a> d'impayés préparées par nodaq, déclenchées sur votre mandat.</li>
+          <li><a href="/suivi-tresorerie-tpe">Trésorerie lisible</a> : cockpit, échéancier, prévisionnel à 8 semaines.</li>
+        </ul>`,
+      },
+      { h2: "Exemple concret (scénario illustratif)", html: m.exemple },
+    ],
+    faq: [
+      m.faqMetier,
+      {
+        q: "Quand est-ce disponible ?",
+        a: "nodaq est en développement actif. Le programme fondateurs ouvre l'accès prioritaire dès le 1er octobre 2026, avant toute disponibilité publique.",
+      },
+      {
+        q: "Combien ça coûte ?",
+        a: "Le tarif Essentiel démarre à 49 € HT/mois + 9 € HT/mois par salarié. Les 50 premiers inscrits gardent ce tarif à vie.",
+      },
+    ],
+    freres: [
+      ...m.proches.map((s) => {
+        const p = METIERS.find((x) => x.slug === s);
+        return { href: `/metiers/${p.slug}`, label: `Pour un ${p.nom}` };
+      }),
+      { href: "/logiciel-batiment", label: "Le logiciel bâtiment" },
+    ],
+  };
+}
+
+PAGES.push(...METIERS.map(construirePageMetier));
+
 for (const p of PAGES) {
-  fs.writeFileSync(path.join(ici, `${p.slug}.html`), rendre(p));
+  const sortie = path.join(ici, `${p.slug}.html`);
+  fs.mkdirSync(path.dirname(sortie), { recursive: true });
+  fs.writeFileSync(sortie, rendre(p));
   console.log(`${p.slug}.html généré${EN_VALIDATION ? " (noindex — validation)" : ""}`);
 }
