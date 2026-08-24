@@ -189,7 +189,38 @@ export default function Contrats() {
               </EmptyContent>
             </Empty>
           ) : (
-            <div className="overflow-x-auto">
+                        <>
+            {/* Sous `md:`, des CARTES. Un tableau qui défile est utilisable,
+                pas utilisable agréablement : atteindre la dernière colonne
+                fait perdre de vue la première. Les MÊMES composants qu'au
+                tableau — deux présentations, une seule source de vérité. */}
+            <div className="md:hidden divide-y divide-border">
+              {filtered.map((contrat) => (
+                <div key={contrat.id} className="px-4 py-3 space-y-1.5" data-testid={`carte-contrat-${contrat.id}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="font-medium text-foreground truncate min-w-0">{contrat.label}</span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <ContratStatusBadge status={contrat.status} />
+                      <ContratRowMenu contrat={contrat}
+                        onEdit={() => openEdit(contrat)}
+                        onDelete={() => deleteContrat(contrat.id)}
+                        onSetStatus={(status) => updateContrat(contrat.id, { status })} />
+                    </div>
+                  </div>
+                  <div className="text-muted-foreground truncate min-w-0">{contrat.clientName ?? '—'}</div>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="font-mono-nums tabular-nums font-semibold text-foreground">
+                      {contrat.amountCents != null ? fmtEUR(contrat.amountCents) : '—'}
+                    </span>
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">
+                      {cadenceLabel(contrat.cadence)} · {fmtDate(contrat.nextOccurrenceDate)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm min-w-[640px]">
                 <thead>
                   <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -234,6 +265,7 @@ export default function Contrats() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
         </div>
       </div>

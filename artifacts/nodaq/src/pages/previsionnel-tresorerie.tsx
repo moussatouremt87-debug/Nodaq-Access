@@ -94,7 +94,24 @@ export default function PrevisionnelTresoreriePage() {
             )}
 
             <div className="rounded-xl border border-card-border bg-card overflow-hidden">
-              <div className="overflow-x-auto">
+              <>
+              {/* Sous `md:`, des CARTES : un tableau qui défile fait perdre de
+                  vue la semaine quand on lit le solde. */}
+              <div className="md:hidden divide-y divide-border">
+                {data!.semaines.map((s, i) => (
+                  <div key={i} className="px-4 py-3 space-y-1">
+                    <div className="text-foreground text-sm">{fmtDate(s.debut)} – {fmtDate(s.fin)}</div>
+                    <div className="flex items-baseline justify-between gap-2 text-xs">
+                      <span className="text-primary font-mono-nums">+ {fmtEUR(s.entreesCents)}</span>
+                      <span className="text-destructive font-mono-nums">− {fmtEUR(s.sortiesCents)}</span>
+                      <span className="font-mono-nums font-semibold text-foreground">
+                        {s.soldeFinCents != null ? fmtEUR(s.soldeFinCents) : '—'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-sm min-w-[640px]">
                   <thead>
                     <tr className="border-b border-card-border text-[10px] uppercase tracking-wide text-muted-foreground">
@@ -124,6 +141,7 @@ export default function PrevisionnelTresoreriePage() {
                   </tbody>
                 </table>
               </div>
+              </>
             </div>
           </>
         )}

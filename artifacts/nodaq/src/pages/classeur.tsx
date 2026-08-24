@@ -223,7 +223,41 @@ export default function ClasseurPage() {
 function DocumentList({ docs, onDelete }: { docs: ClasseurDocument[]; onDelete: (d: ClasseurDocument) => void }) {
   return (
     <div className="rounded-xl border border-card-border bg-card shadow-sm overflow-hidden">
-      <div className="overflow-x-auto">
+      <>
+      {/* Sous `md:`, des CARTES. Le nom d'un document est long — c'est lui
+          qu'on cherche, pas sa taille en octets. */}
+      <div className="md:hidden divide-y divide-border">
+        {docs.map(doc => {
+          const cat = CATEGORIES.find(c => c.value === doc.category);
+          const Icon = cat?.icon ?? FileText;
+          return (
+            <div key={doc.id} className="px-4 py-3 space-y-1.5">
+              <div className="flex items-start gap-2.5">
+                <Icon className={`h-4 w-4 mt-0.5 shrink-0 ${cat?.color ?? 'text-muted-foreground'}`} />
+                <span className="text-foreground truncate min-w-0 flex-1">{doc.name}</span>
+                <div className="flex items-center gap-1 shrink-0">
+                  {doc.hasContent && (
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" asChild>
+                      <a href={`${API}/classeur/${doc.id}/telechargement`} target="_blank" rel="noreferrer" title="Télécharger">
+                        <Download className="h-3.5 w-3.5" />
+                      </a>
+                    </Button>
+                  )}
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground"
+                    onClick={() => onDelete(doc)} title="Supprimer">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+              <div className="flex items-baseline justify-between gap-2 text-xs text-muted-foreground pl-6">
+                <span>{cat?.label ?? doc.category}</span>
+                <span className="whitespace-nowrap">{fmtSize(doc.size)} · {fmtDate(doc.createdAt)}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-sm min-w-[640px]">
           <thead>
             <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -280,6 +314,7 @@ function DocumentList({ docs, onDelete }: { docs: ClasseurDocument[]; onDelete: 
           </tbody>
         </table>
       </div>
+      </>
     </div>
   );
 }
