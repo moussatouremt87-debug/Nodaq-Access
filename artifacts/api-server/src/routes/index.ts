@@ -54,6 +54,7 @@ import { requireMembership } from "../middleware/requireMembership";
 import { requireRole } from "../middleware/requireRole";
 import { requireMfaVerified } from "../middleware/requireMfaVerified";
 import { lectureSeuleMethode, lectureSeulePerimetre } from "../middleware/lectureSeule";
+import { perimetreSante } from "../middleware/perimetreSante";
 import { FINANCIAL_ROLES } from "@nodaq/shared";
 import journalDecisionsRouter from "./journal-decisions";
 import souveraineteRouter from "./souverainete";
@@ -134,6 +135,12 @@ router.use([requireAuth], mfaRouter);
 const biz: RequestHandler[] = [
   requireAuth, resolveTenant, requireMembership, requireMfaVerified,
   lectureSeuleMethode, lectureSeulePerimetre,
+  // US-B9.4 — la limite de périmètre en secteur santé. Posée ICI, dans `biz`,
+  // pour la même raison que les deux gardes ci-dessus : elle vaut pour les
+  // routes actuelles ET pour celles qui n'existent pas encore. Un contrôle
+  // posé routeur par routeur serait un « principe d'usage », ce que la story
+  // refuse explicitement.
+  perimetreSante,
 ];
 const ownerOnly: RequestHandler[] = [...biz, requireRole(["OWNER"])];
 // Routeurs EXCLUSIVEMENT financiers — bloqués en entier pour un MEMBER, pas
@@ -157,6 +164,9 @@ router.use(biz, pendingActionsRouter);
 router.use(biz, chatRouter);
 router.use(biz, chatMediaRouter);
 router.use(biz, devisRouter);
+// US-B9.4 — la garde du téléversement vit DANS `classeur.ts`, après multer :
+// `affaireId` arrive dans un corps multipart, qui n'est analysé qu'à ce
+// moment-là. Montée ici, elle aurait inspecté un corps vide et laissé passer.
 router.use(biz, classeurRouter);
 router.use(biz, prospectsRouter);
 router.use(biz, votreMetierRouter);

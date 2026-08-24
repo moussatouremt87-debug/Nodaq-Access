@@ -1,5 +1,6 @@
 import { Router, type IRouter, type RequestHandler } from "express";
 import multer from "multer";
+import { perimetreSanteClasseur } from "../middleware/perimetreSante.js";
 import crypto from "node:crypto";
 import { z } from "zod/v4";
 import { withTenant, classeurTable, classeurDocumentBytesTable } from "@workspace/db";
@@ -96,7 +97,10 @@ router.get("/classeur", async (req, res): Promise<void> => {
   res.json({ documents, total: documents.length });
 });
 
-router.post("/classeur", uploadUnique, async (req, res): Promise<void> => {
+// US-B9.4 — l'ordre est essentiel : `uploadUnique` (multer) analyse le corps
+// multipart, et c'est seulement APRÈS que `affaireId` devient lisible. La
+// garde placée avant aurait inspecté un objet vide et tout laissé passer.
+router.post("/classeur", uploadUnique, perimetreSanteClasseur, async (req, res): Promise<void> => {
   if (!req.file) {
     res.status(400).json({ error: "Aucun fichier reçu (champ 'file' attendu)." });
     return;
