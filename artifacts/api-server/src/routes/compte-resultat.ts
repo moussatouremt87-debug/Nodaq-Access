@@ -1,5 +1,8 @@
 import { Router, type IRouter } from "express";
-import { withTenant, DrizzleTx, crEntriesTable, facturesTable } from "@workspace/db";
+import {
+  withTenant, DrizzleTx, crEntriesTable, facturesTable, avoirsTable, settingsTable,
+} from "@workspace/db";
+import { productionVendue, type RepriseCA } from "@nodaq/shared";
 import { and, eq } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
@@ -97,13 +100,37 @@ export type LineResult = PcgLine & {
   manualAmountCents: number | null;
 };
 
+/**
+ * Le chiffre d'affaires déclaré à la mise en route (US-A1.2).
+ *
+ * Enregistré par l'onboarding en EUROS, dans `settings` — la conversion en
+ * centimes appartient à `productionVendue`, qui est testée pour ça.
+ */
+async function chargerReprise(tx: DrizzleTx): Promise<RepriseCA> {
+  const lire = async (cle: string): Promise<string | null> => {
+    const [row] = await tx.select({ value: settingsTable.value })
+      .from(settingsTable).where(eq(settingsTable.key, cle));
+    return row?.value ?? null;
+  };
+  const ca = await lire("reprise.ca_facture_ytd");
+  const nombre = ca === null ? null : Number(ca);
+  return {
+    // Une valeur illisible vaut absence : mieux vaut une ligne sans reprise
+    // qu'un `NaN` propagé jusqu'au total d'un compte de résultat.
+    caFactureEuros: nombre === null || !Number.isFinite(nombre) ? null : nombre,
+    dateDebutExercice: await lire("reprise.date_debut_exercice"),
+  };
+}
+
 export async function buildLineResults(tx: DrizzleTx, from: string, to: string): Promise<LineResult[]> {
   const pKey = periodKey(from, to);
 
   const factures = await tx.select().from(facturesTable);
-  const caFactures = factures
-    .filter(f => f.issuedDate >= from && f.issuedDate <= to)
-    .reduce((acc, f) => acc + f.amountCents, 0);
+  const avoirs = await tx.select().from(avoirsTable);
+  // Le calcul entier — statuts, HT contre TTC, avoirs, reprise — vit dans
+  // `productionVendue`, qui est pur et éprouvé. Cette ligne produit un
+  // document comptable : elle n'a rien à faire de non testé.
+  const production = productionVendue(factures, avoirs, await chargerReprise(tx), from, to);
 
   const entries = await tx.select().from(crEntriesTable);
   const entryMap = new Map(entries.filter(e => e.periodKey === pKey).map(e => [e.lineCode, e.amountCents]));
@@ -112,12 +139,15 @@ export async function buildLineResults(tx: DrizzleTx, from: string, to: string):
 
   return PCG_LINES.map(line => {
     let autoAmountCents = 0;
-    if (line.lineCode === "PRODUCTION_VENDUE_SERVICES") autoAmountCents = Math.round(caFactures);
+    if (line.lineCode === "PRODUCTION_VENDUE_SERVICES") autoAmountCents = production.totalCents;
     const manualAmountCents = entryMap.has(line.lineCode) ? (entryMap.get(line.lineCode) ?? 0) : null;
     return {
       ...line,
       autoAmountCents,
       manualAmountCents,
+      ...(line.lineCode === "PRODUCTION_VENDUE_SERVICES" && production.avertissement !== null
+        ? { autoHint: production.avertissement }
+        : {}),
       ...(line.lineCode === "SALAIRES" && manualAmountCents === null
         ? { autoHint: `Estimation Équipe : ${fmtEURFr(salaireHint)} (${Math.round(salaireHint / 100).toLocaleString("fr-FR")} €)` }
         : {}),
