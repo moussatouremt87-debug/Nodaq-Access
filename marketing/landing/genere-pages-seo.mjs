@@ -27,10 +27,10 @@ const PAGES = [
     slug: "logiciel-batiment",
     title: "Logiciel de gestion bâtiment pour TPE — devis, marge, impayés | nodaq",
     description:
-      "nodaq est le copilote de gestion des TPE du bâtiment : devis dictés à la voix, marge par chantier en temps réel, relances d'impayés validées en un clic.",
+      "nodaq est le copilote de gestion des TPE du bâtiment : devis dictés à la voix, marge par chantier suivie en continu, relances d'impayés déclenchées sur votre mandat.",
     h1: "Le logiciel de gestion pensé pour les artisans du bâtiment.",
     reponse:
-      "nodaq est un copilote de gestion pour les TPE du bâtiment : vous dictez vos devis, photographiez vos factures, et validez ce que nodaq prépare — marge par chantier en temps réel, trésorerie lisible, relances d'impayés envoyées avec votre accord. Données hébergées en France. Programme fondateurs ouvert le 1er octobre 2026.",
+      "nodaq est un copilote de gestion pour les TPE du bâtiment : vous dictez vos devis, photographiez vos factures, et validez ce que nodaq prépare — marge par chantier suivie en continu, trésorerie lisible, relances d'impayés déclenchées avec votre accord. Données hébergées en France. Programme fondateurs ouvert le 1er octobre 2026.",
     sections: [
       {
         h2: "Comment ça fonctionne ?",
@@ -44,15 +44,15 @@ const PAGES = [
         h2: "Fonctionnalités utiles sur un chantier",
         html: `<ul>
           <li><strong>Devis dictés</strong> — votre voix devient un devis prêt à envoyer, avec vos tarifs. <a href="/devis-ia">Voir le détail</a>.</li>
-          <li><strong>Marge par chantier</strong> — recalculée en temps réel dès qu'une facture ou une heure est enregistrée : vous savez si un chantier est rentable avant qu'il soit trop tard.</li>
+          <li><strong>Marge par chantier</strong> — réévaluée à chaque heure pointée, comparée à votre seuil de rentabilité, avec ce qui manque pour la connaître exactement : vous savez si un chantier tient son prix avant qu'il soit trop tard.</li>
           <li><strong>Trésorerie et échéancier</strong> — le cockpit montre ce qui rentre, ce qui sort et ce qui arrive à échéance.</li>
-          <li><strong>Relances d'impayés</strong> — préparées automatiquement, envoyées après votre validation. <a href="/relance-facture-impayee">Voir le détail</a>.</li>
+          <li><strong>Relances d'impayés</strong> — des campagnes de relance téléphonique préparées par nodaq, déclenchées uniquement sur votre mandat. <a href="/relance-facture-impayee">Voir le détail</a>.</li>
           <li><strong>Lecture automatique de factures</strong> — photographiez, nodaq extrait et classe.</li>
         </ul>`,
       },
       {
         h2: "Exemple concret (scénario illustratif)",
-        html: `<p>Fin de journée, un artisan termine une salle de bains. Dans le fourgon, il dicte le devis du chantier suivant : nodaq le met en forme avec ses tarifs, il le relit et l'envoie avant de rentrer. Le cockpit lui montre que la marge du chantier en cours a baissé — une facture fournisseur photographiée le matin vient d'être comptée. Une relance est prête pour une facture arrivée à échéance : un clic, elle part. La soirée reste la sienne.</p>`,
+        html: `<p>Fin de journée, un artisan termine une salle de bains. Dans le fourgon, il dicte le devis du chantier suivant : nodaq le met en forme avec ses tarifs, il le relit et l'envoie avant de rentrer. Il photographie la facture du grossiste — lue et classée au bon endroit. Le cockpit lui montre que l'estimation de marge du chantier en cours a glissé : les heures de la semaine, confirmées ce matin, pèsent plus que prévu. Une campagne de relance est prête pour une facture arrivée à échéance : un clic, le mandat est donné. La soirée reste la sienne.</p>`,
       },
     ],
     faq: [
@@ -127,14 +127,14 @@ const PAGES = [
     slug: "relance-facture-impayee",
     title: "Relancer une facture impayée : préparée par nodaq, envoyée avec votre accord",
     description:
-      "nodaq surveille vos échéances, prépare les relances d'impayés et ne les envoie qu'après votre validation en un clic. En France, une facture est payée à 44 jours en moyenne.",
+      "nodaq surveille vos échéances et prépare des campagnes de relance téléphonique — aucun appel ne part sans votre mandat, donné en un clic. En France, une facture est payée à 44 jours en moyenne.",
     h1: "Relancez vos impayés — préparé automatiquement, envoyé avec votre accord.",
     reponse:
-      "Relancer un client est désagréable, alors on repousse — et l'impayé s'installe. nodaq surveille vos échéances, prépare la relance au bon moment et vous la présente : un clic pour l'envoyer, ou pour la retenir. Rien ne part jamais dans votre dos. En France, une facture est payée à 44 jours en moyenne, pour 36 jours convenus.",
+      "Relancer un client est désagréable, alors on repousse — et l'impayé s'installe. nodaq surveille vos échéances et prépare une campagne de relance téléphonique : vous donnez votre mandat en un clic, ou vous l'écartez. Rien ne part jamais dans votre dos. En France, une facture est payée à 44 jours en moyenne, pour 36 jours convenus.",
     sections: [
       {
         h2: "Comment ça fonctionne ?",
-        html: `<p>Chaque facture émise entre dans l'échéancier. À l'approche de l'échéance, nodaq vous prévient ; passée l'échéance, il <strong>prépare</strong> la relance — courtoise, factuelle, avec les bonnes références. Elle apparaît dans vos actions à valider : <strong>un clic pour envoyer, un clic pour écarter</strong>. La relation client reste votre décision.</p>`,
+        html: `<p>Chaque facture émise entre dans l'échéancier. À l'approche de l'échéance, nodaq vous prévient ; passée l'échéance, il <strong>prépare une campagne de relance téléphonique</strong> — selon votre règle : fenêtre horaire, nombre de tentatives, ton. Elle apparaît dans vos actions à valider : <strong>un clic pour donner le mandat, un clic pour écarter</strong>. Une fois le mandat donné, l'agent vocal appelle, rappelle la facture et l'échéance, peut envoyer un lien de paiement par SMS pendant l'appel — et s'arrête définitivement si votre client demande à ne plus être appelé.</p>`,
       },
       {
         h2: "Pourquoi valider plutôt qu'automatiser à 100 % ?",
@@ -146,13 +146,13 @@ const PAGES = [
       },
       {
         h2: "Exemple concret (scénario illustratif)",
-        html: `<p>Une facture de 4 800 € arrive à échéance un vendredi. Le lundi, nodaq présente une relance prête : rappel de la facture, de l'échéance, coordonnées de paiement. La dirigeante sait que ce client est fiable mais distrait — elle valide. Le paiement arrive le jeudi. Sans nodaq, la relance serait partie « quand j'aurai le temps » : trois semaines plus tard.</p>`,
+        html: `<p>Une facture de 4 800 € arrive à échéance un vendredi. Le lundi, nodaq présente une campagne de relance prête : ce client, cette facture, un appel courtois en journée. La dirigeante sait que ce client est fiable mais distrait — elle donne son mandat. L'appel a lieu dans l'après-midi, un lien de paiement est envoyé par SMS pendant la conversation, le règlement arrive le jeudi. Sans nodaq, la relance serait partie « quand j'aurai le temps » : trois semaines plus tard.</p>`,
       },
     ],
     faq: [
       {
         q: "Les relances partent-elles automatiquement ?",
-        a: "Non. nodaq les prépare et vous les présente ; chaque relance n'est envoyée qu'après votre validation en un clic. Vous pouvez aussi l'écarter.",
+        a: "Non. nodaq prépare la campagne et vous la présente ; aucun appel n'est passé sans votre mandat, donné en un clic. Vous pouvez aussi l'écarter, et votre client peut demander à ne plus être appelé — c'est respecté définitivement.",
       },
       {
         q: "Quand est-ce disponible ?",
@@ -200,7 +200,7 @@ PAGES.push(
       "nodaq réunit devis dictés, suivi de factures, marge par affaire, heures, trésorerie et relances d'impayés dans un seul copilote pour TPE. Hébergé en France.",
     h1: "Le logiciel de gestion tout-en-un des TPE.",
     reponse:
-      "nodaq réunit dans un seul outil ce qu'une TPE gère aujourd'hui entre un tableur, une bannette et la mémoire du dirigeant : devis dictés à la voix, factures suivies jusqu'au paiement, marge par affaire en temps réel, heures, trésorerie et relances d'impayés — chaque envoi validé par vous. Hébergé en France.",
+      "nodaq réunit dans un seul outil ce qu'une TPE gère aujourd'hui entre un tableur, une bannette et la mémoire du dirigeant : devis dictés à la voix, factures suivies jusqu'au paiement, marge par affaire suivie en continu, heures, trésorerie et relances d'impayés — chaque action validée par vous. Hébergé en France.",
     sections: [
       {
         h2: "Comment ça fonctionne ?",
@@ -247,7 +247,7 @@ PAGES.push(
     sections: [
       {
         h2: "Comment ça fonctionne ?",
-        html: `<p>Vous <strong>dictez</strong> un devis comme vous l'expliqueriez à un collègue : nodaq le structure avec vos tarifs. Vous <strong>photographiez</strong> une facture : elle est lue, classée, comptée dans la marge du chantier. Vous <strong>validez</strong> les envois préparés — jamais d'envoi automatique.</p>`,
+        html: `<p>Vous <strong>dictez</strong> un devis comme vous l'expliqueriez à un collègue : nodaq le structure avec vos tarifs. Vous <strong>photographiez</strong> une facture : elle est lue, résumée et classée au bon endroit. Vous <strong>validez</strong> ce que nodaq prépare — jamais d'envoi automatique.</p>`,
       },
       {
         h2: "Pour qui ?",
@@ -299,7 +299,7 @@ PAGES.push(
       },
       {
         h2: "Et si le paiement tarde",
-        html: `<p>nodaq prépare la relance au bon moment et vous la présente : un clic pour l'envoyer, un clic pour l'écarter. Détail sur la page <a href="/relance-facture-impayee">relance de factures impayées</a>.</p>`,
+        html: `<p>nodaq prépare la campagne de relance et vous la présente : un clic pour donner le mandat, un clic pour l'écarter. Détail sur la page <a href="/relance-facture-impayee">relance de factures impayées</a>.</p>`,
       },
     ],
     faq: [
@@ -320,18 +320,18 @@ PAGES.push(
     noindex: true,
     title: "Facturation pour TPE : factures suivies, échéances tenues, relances validées | nodaq",
     description:
-      "nodaq suit vos factures et avoirs jusqu'au paiement : échéancier, taux de recouvrement, relances préparées automatiquement et envoyées avec votre accord.",
+      "nodaq suit vos factures et avoirs jusqu'au paiement : échéancier, taux de recouvrement, campagnes de relance préparées par nodaq et déclenchées sur votre mandat.",
     h1: "Une facturation qui ne perd rien en route.",
     reponse:
-      "Émettre la facture n'est que la moitié du travail — l'autre moitié est de la voir payée. nodaq suit chaque facture et chaque avoir jusqu'au paiement : échéancier, taux de recouvrement visible au cockpit, et relances préparées dès qu'une échéance passe, envoyées seulement après votre validation.",
+      "Émettre la facture n'est que la moitié du travail — l'autre moitié est de la voir payée. nodaq suit chaque facture et chaque avoir jusqu'au paiement : échéancier, taux de recouvrement visible au cockpit, et campagnes de relance prêtes dès qu'une échéance passe — déclenchées seulement sur votre mandat.",
     sections: [
       {
         h2: "Comment ça fonctionne ?",
-        html: `<p>Chaque facture émise entre dans l'échéancier avec sa date. Le cockpit affiche ce qui est émis, ce qui est en attente et le <strong>taux de recouvrement</strong>. À l'échéance dépassée, la relance est prête — <a href="/relance-facture-impayee">un clic pour l'envoyer</a>.</p>`,
+        html: `<p>Chaque facture émise entre dans l'échéancier avec sa date. Le cockpit affiche ce qui est émis, ce qui est en attente et le <strong>taux de recouvrement</strong>. À l'échéance dépassée, la campagne de relance se prépare — <a href="/relance-facture-impayee">un clic pour donner le mandat</a>.</p>`,
       },
       {
         h2: "Les factures fournisseurs aussi",
-        html: `<p>Une facture reçue se photographie : nodaq la lit, l'extrait et la compte — dans la trésorerie, et dans la <a href="/calcul-marge-chantier">marge du chantier</a> concerné. Fini la bannette qui attend la fin du mois.</p>`,
+        html: `<p>Une facture reçue se photographie : nodaq la lit, en extrait l'essentiel (type, montant, contact, date) et la classe au bon endroit du classeur. Fini la bannette qui attend la fin du mois. Et une facture reçue au format électronique Factur-X est lue depuis ses données structurées, sans ressaisie.</p>`,
       },
       {
         h2: "Pour qui ?",
@@ -390,16 +390,16 @@ PAGES.push(
   {
     slug: "calcul-marge-chantier",
     noindex: true,
-    title: "Calculer la marge d'un chantier en temps réel, pas après coup | nodaq",
+    title: "Suivre la marge d'un chantier pendant le chantier, pas après coup | nodaq",
     description:
       "nodaq recalcule la marge de chaque chantier dès qu'une facture ou une heure est enregistrée. Vous savez si un chantier est rentable pendant le chantier.",
     h1: "La marge d'un chantier se découvre pendant, pas après.",
     reponse:
-      "Trop de chantiers se révèlent non rentables une fois terminés — quand il est trop tard. nodaq recalcule la marge de chaque chantier en temps réel, dès qu'une facture fournisseur ou une heure est enregistrée, et la compare à votre seuil de rentabilité. Vous corrigez le tir pendant le chantier.",
+      "Trop de chantiers se révèlent non rentables une fois terminés — quand il est trop tard. nodaq réévalue la marge de chaque chantier à chaque heure pointée, la compare à votre seuil de rentabilité, et vous dit précisément ce qui manque pour la connaître exactement. Vous corrigez le tir pendant le chantier.",
     sections: [
       {
         h2: "Comment ça fonctionne ?",
-        html: `<p>Le devis fixe le prix de vente. Ensuite, chaque <strong>facture fournisseur photographiée</strong> et chaque <strong>heure enregistrée</strong> viennent en face : la marge du chantier est recalculée à chaque événement, sans ressaisie. Le cockpit vous alerte quand elle décroche.</p>`,
+        html: `<p>Le devis fixe le prix de vente. En face, chaque <strong>heure pointée</strong> est valorisée au coût horaire chargé de chaque membre de l'équipe : la marge est réévaluée sans ressaisie, mission par mission. Et nodaq est honnête sur ce qu'il ne sait pas : tant que tous les coûts ne sont pas renseignés, il affiche une <strong>estimation haute</strong> et liste ce qui manque — jamais un faux chiffre exact.</p>`,
       },
       {
         h2: "Le seuil de rentabilité",
@@ -411,14 +411,14 @@ PAGES.push(
       },
       {
         h2: "Exemple concret (scénario illustratif)",
-        html: `<p>Chantier vendu 12 000 €. À mi-parcours, les factures photographiées et les heures saisies montrent une marge qui glisse sous le seuil : une commande fournisseur a dépassé le prévu. Le dirigeant le voit maintenant — il peut négocier un avenant ou resserrer la fin de chantier, au lieu de le découvrir au bilan.</p>`,
+        html: `<p>Chantier vendu 12 000 €. À mi-parcours, les heures pointées par l'équipe pèsent déjà plus que prévu : l'estimation de marge glisse vers le seuil de rentabilité. Le dirigeant le voit maintenant — il peut négocier un avenant ou resserrer la fin de chantier, au lieu de le découvrir au bilan.</p>`,
       },
     ],
     faq: [
       ...FAQ_COMMUNES,
       {
         q: "D'où viennent les chiffres de la marge ?",
-        a: "Du réel : le devis pour le prix de vente, les factures fournisseurs photographiées et les heures enregistrées pour les coûts. Jamais d'une estimation de l'IA — un chiffre affiché vient toujours d'un calcul déterministe.",
+        a: "Du réel : le devis pour le prix de vente, et les heures pointées — valorisées au coût horaire de chaque membre — pour les coûts. Jamais d'une estimation de l'IA : un chiffre affiché vient toujours d'un calcul déterministe, et nodaq dit explicitement ce qui manque pour passer de l'estimation à la marge exacte.",
       },
     ],
     freres: [
@@ -432,29 +432,29 @@ PAGES.push(
     noindex: true,
     title: "Gestion de chantier pour TPE : heures, dépenses, marge et facturation | nodaq",
     description:
-      "Suivez chaque chantier dans nodaq : heures de l'équipe, factures fournisseurs photographiées, marge en temps réel et facturation — du devis à l'encaissement.",
+      "Suivez chaque chantier dans nodaq : heures de l'équipe, factures fournisseurs photographiées et classées, marge suivie en continu et facturation — du devis à l'encaissement.",
     h1: "Chaque chantier suivi, du devis à l'encaissement.",
     reponse:
-      "Un chantier, c'est un devis, des heures, des achats, des factures — éparpillés entre des carnets, des photos et un tableur. nodaq les rassemble par chantier : les heures de l'équipe, les factures fournisseurs photographiées, la marge recalculée en temps réel et la facturation, jusqu'à l'encaissement.",
+      "Un chantier, c'est un devis, des heures, des achats, des factures — éparpillés entre des carnets, des photos et un tableur. nodaq les rassemble : les heures de l'équipe pointées par chantier, les factures fournisseurs photographiées et classées, la marge réévaluée à chaque heure enregistrée, et la facturation jusqu'à l'encaissement.",
     sections: [
       {
         h2: "Comment ça fonctionne ?",
-        html: `<p>Chaque chantier ouvert regroupe son devis, ses <strong>heures</strong> (rattachées au chantier ou au client), ses <strong>dépenses</strong> (factures photographiées) et ses <strong>factures client</strong>. Le cockpit affiche les chantiers en cours et leur état en un regard.</p>`,
+        html: `<p>Chaque chantier ouvert regroupe son devis, ses <strong>heures</strong> (rattachées au chantier ou au client), ses <strong>documents</strong> (factures fournisseurs photographiées, classées au classeur) et ses <strong>factures client</strong>. Le cockpit affiche les chantiers en cours et leur état en un regard.</p>`,
       },
       {
         h2: "La marge, pendant le chantier",
-        html: `<p>Heures et dépenses alimentent la <a href="/calcul-marge-chantier">marge en temps réel</a> : vous savez si le chantier tient son prix pendant qu'il est encore temps d'agir.</p>`,
+        html: `<p>Les heures pointées alimentent la <a href="/calcul-marge-chantier">marge, réévaluée en continu</a> : vous savez si le chantier tient son prix pendant qu'il est encore temps d'agir — et nodaq vous dit ce qui manque pour la connaître exactement.</p>`,
       },
       {
         h2: "Et à la fin",
-        html: `<p>La <a href="/facturation-tpe">facturation</a> part du réel du chantier, l'échéancier suit le paiement, et la <a href="/relance-facture-impayee">relance</a> est prête si le client tarde. Les <strong>rapports</strong> gardent la trace de ce que chaque chantier a vraiment rapporté.</p>`,
+        html: `<p>La <a href="/facturation-tpe">facturation</a> part du réel du chantier — y compris les heures pointées facturables —, l'échéancier suit le paiement, et la <a href="/relance-facture-impayee">campagne de relance</a> se prépare si le client tarde. Les <strong>rapports</strong> gardent la trace de ce que chaque chantier a vraiment rapporté.</p>`,
       },
     ],
     faq: [
       ...FAQ_COMMUNES,
       {
         q: "Mes salariés peuvent-ils saisir leurs heures ?",
-        a: "Les heures s'enregistrent par membre d'équipe et se rattachent à un chantier ou à un client — elles alimentent directement la marge du chantier.",
+        a: "Les heures s'enregistrent par membre d'équipe — via un récapitulatif hebdomadaire à confirmer ou à la voix — et se rattachent à un chantier ou à un client. Elles alimentent directement l'estimation de marge du chantier.",
       },
     ],
     freres: [

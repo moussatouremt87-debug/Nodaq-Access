@@ -34,7 +34,7 @@ const VARIANTES = [
     titre: "NODAQ — Savoir si un chantier est rentable",
     label: "La marge qu’on découvre trop tard",
     grad: "découvre trop tard",
-    sous: "nodaq calcule la marge de chaque mission en temps réel, dès qu’une facture ou une heure est enregistrée.",
+    sous: "nodaq réévalue la marge de chaque mission dès qu’une heure est enregistrée — et vous dit ce qui manque pour la connaître exactement.",
   },
 ];
 
