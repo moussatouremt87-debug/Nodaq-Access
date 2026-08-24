@@ -508,7 +508,12 @@ function rendre(p) {
     dateModified: MAJ,
     mainEntityOfPage: url,
     author: { "@type": "Organization", name: "nodaq", url: "https://nodaq.fr/" },
-    publisher: { "@type": "Organization", name: "nodaq", url: "https://nodaq.fr/" },
+    publisher: {
+      "@type": "Organization",
+      name: "nodaq",
+      url: "https://nodaq.fr/",
+      logo: { "@type": "ImageObject", url: "https://nodaq.fr/logo.png" },
+    },
   } : null;
   const blocSources = p.sources?.length
     ? `<section>\n    <h2>Sources</h2>\n    <ul>\n      ${p.sources.map((s) => `<li><a href="${s.href}" rel="nofollow noopener">${esc(s.label)}</a></li>`).join("\n      ")}\n    </ul>\n    <p style="font-size:.85rem;color:var(--muted)">Contenu informatif, à jour au ${MAJ}. Les règles évoluent : vérifiez les textes en vigueur — ceci ne constitue pas un conseil juridique.</p>\n  </section>`

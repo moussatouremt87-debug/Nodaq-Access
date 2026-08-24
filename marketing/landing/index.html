@@ -140,14 +140,17 @@
 }
 </script>
 <!-- Organisation (kit SEO/GEO) : les faits qui permettent à un assistant de
-     répondre « nodaq est un éditeur français qui… ». Ni logo ni email tant
-     qu'ils n'existent pas réellement (règle : ne rien inventer). -->
+     répondre « nodaq est un éditeur français qui… ». Logo et email fournis
+     par le fondateur le 24/08 (logo.png déposé au build, contact@nodaq.fr
+     opérationnelle). -->
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@type": "Organization",
   "name": "nodaq",
   "url": "https://nodaq.fr",
+  "logo": "https://nodaq.fr/logo.png",
+  "email": "contact@nodaq.fr",
   "description": "Éditeur d'un logiciel SaaS de pilotage d'activité pour les TPE et PME : devis dictés, suivi de marge, relances de factures, hébergé en France.",
   "areaServed": { "@type": "Country", "name": "France" },
   "foundingDate": "2026",
@@ -1198,17 +1201,17 @@ button, input, textarea { font: inherit; color: inherit; }
 <!-- ═══ MÉTHODE (sans numéro — brief §7) ════════════════════════════════
      La page reste impersonnelle (décision arrêtée : pas de section
      fondateur). La crédibilité repose sur la méthode : uniquement des faits
-     vérifiables. Le nombre d'entretiens est un jeton tant que le fondateur
-     ne l'a pas fourni — ne jamais écrire de formulation vague à la place. -->
+     vérifiables. Le fondateur a choisi (24/08) de ne pas publier de nombre
+     d'entretiens pour l'instant : la phrase reste sans chiffre — ne pas en
+     inventer un. -->
 <section class="section section--slim" aria-label="D'où viennent ces constats">
   <div class="shell">
     <div class="card methode reveal">
       <p>
         D’où viennent ces constats : des chiffres publics, tous sourcés plus haut
         (Coface, CAPEB, Ipsos/Payt) ; des entretiens menés avec des dirigeants de
-        TPE — <span class="placeholder-token">[À COMPLÉTER : nombre d’entretiens
-        menés et métiers interrogés]</span> ; et le choix de ne montrer que l’état
-        réel du produit, jamais des maquettes marketing.
+        TPE du bâtiment ; et le choix de ne montrer que l’état réel du produit,
+        jamais des maquettes marketing.
       </p>
     </div>
   </div>
@@ -1370,6 +1373,36 @@ button, input, textarea { font: inherit; color: inherit; }
   </div>
 </footer>
 
+<!-- ═══ BANDEAU DE CONSENTEMENT (Consent Mode v2) ═══════════════════════
+     Masqué tant que la mesure Google Ads n'est pas configurée : sans
+     traceur, il n'y a rien à consentir (position CNIL) et le bandeau ne
+     ferait que gêner. Il apparaîtra automatiquement dès que GOOGLE_ADS_ID
+     sera renseigné, pour les visiteurs n'ayant pas encore choisi. -->
+<style>
+  .consentement { position: fixed; inset: auto 16px 16px 16px; z-index: 60;
+    max-width: 480px; margin-left: auto; padding: 16px 18px;
+    background: #12141a; border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 14px; box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    font-size: 0.85rem; line-height: 1.5; color: #cbd5e1; }
+  .consentement p { margin: 0 0 12px; }
+  .consentement__actions { display: flex; gap: 10px; justify-content: flex-end; }
+  .consentement button { cursor: pointer; border-radius: 9px; padding: 8px 16px;
+    font: inherit; font-weight: 600; }
+  .consentement__refuser { background: transparent; color: #cbd5e1;
+    border: 1px solid rgba(255,255,255,0.25); }
+  .consentement__accepter { background: #a3e635; color: #0a0b0f; border: 0; }
+</style>
+<div id="bandeau-consentement" class="consentement" hidden role="dialog"
+     aria-live="polite" aria-label="Consentement à la mesure publicitaire">
+  <p>nodaq utilise un cookie de mesure publicitaire, uniquement pour savoir
+     quelles annonces amènent des inscriptions. Refuser ne change rien à
+     votre navigation.</p>
+  <div class="consentement__actions">
+    <button type="button" id="consentement-refuser" class="consentement__refuser">Refuser</button>
+    <button type="button" id="consentement-accepter" class="consentement__accepter">Accepter</button>
+  </div>
+</div>
+
 <script>
 (function () {
   "use strict";
@@ -1456,6 +1489,40 @@ button, input, textarea { font: inherit; color: inherit; }
       }
     } catch (e) { /* la mesure ne doit jamais casser la page */ }
   }
+
+  /* ── Bandeau de consentement (Consent Mode v2) ───────────────────────────
+     N'apparaît que si la mesure est active ET qu'aucun choix n'est
+     enregistré. Le choix est conservé en localStorage ; « accepté » rejoue
+     l'update à chaque visite. localStorage peut être indisponible
+     (navigation privée) : dans ce cas le bandeau revient, le refus par
+     défaut reste garanti par le consent default ci-dessus. */
+  (function () {
+    var bandeau = document.getElementById("bandeau-consentement");
+    if (!bandeau || !mesureActive) return;
+    var CLE = "nodaq-consentement";
+    var choix = null;
+    try { choix = localStorage.getItem(CLE); } catch (e) { /* privé */ }
+    function accorder() {
+      gtag("consent", "update", {
+        ad_storage: "granted",
+        ad_user_data: "granted",
+        ad_personalization: "granted",
+        analytics_storage: "granted",
+      });
+    }
+    if (choix === "accorde") { accorder(); return; }
+    if (choix === "refuse") return;
+    bandeau.hidden = false;
+    document.getElementById("consentement-accepter").addEventListener("click", function () {
+      try { localStorage.setItem(CLE, "accorde"); } catch (e) { /* privé */ }
+      accorder();
+      bandeau.hidden = true;
+    });
+    document.getElementById("consentement-refuser").addEventListener("click", function () {
+      try { localStorage.setItem(CLE, "refuse"); } catch (e) { /* privé */ }
+      bandeau.hidden = true;
+    });
+  })();
 
   /* ── Révélation au scroll (sobre) ───────────────────────────────────── */
   var revealables = document.querySelectorAll(".reveal");
