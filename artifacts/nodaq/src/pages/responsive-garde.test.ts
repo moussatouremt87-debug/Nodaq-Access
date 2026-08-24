@@ -123,6 +123,32 @@ describe("aucune page ne déborde horizontalement sous 390 px", () => {
     ).toEqual([]);
   });
 
+  test("toute liste en tableau a sa présentation en CARTES", () => {
+    // Lot 2 — un tableau qui défile est utilisable, pas agréable : atteindre
+    // la dernière colonne fait perdre de vue la première, et le bouton
+    // d'action se trouve au bout du glissement.
+    //
+    // Sont EXEMPTÉS les tableaux d'ÉDITION, qui portent des champs de saisie :
+    // empiler quatre champs par ligne est une autre décision, à prendre
+    // séparément. On les reconnaît à la présence d'un composant de saisie
+    // dans le corps du tableau.
+    const manquantes = pages().filter((f) => {
+      const t = readFileSync(join(PAGES, f), "utf8");
+      if (!/<table\b/.test(t)) return false;
+      const editable = /<(Input|CurrencyInput|Select|Textarea|Checkbox)\b/.test(t)
+        && /<td[^>]*>\s*(\n\s*)?<(Input|CurrencyInput|Select)/.test(t);
+      if (editable) return false;
+      return !/md:hidden/.test(t);
+    });
+    expect(
+      manquantes,
+      "Cette page affiche une liste en tableau sans version mobile. Ajoutez un " +
+      "bloc `md:hidden` en cartes et masquez le tableau en `hidden md:block` — " +
+      "en réutilisant LES MÊMES composants, sans quoi les deux présentations " +
+      "divergeront.",
+    ).toEqual([]);
+  });
+
   test("les tableaux denses défilent au lieu de se comprimer", () => {
     // Un tableau de six colonnes comprimé sur 390 px est illisible ; le même
     // tableau qui défile reste utilisable. La différence tient au conteneur.
