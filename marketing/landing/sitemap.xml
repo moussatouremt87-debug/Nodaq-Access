@@ -126,6 +126,31 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://nodaq.fr/guides/calcul-prix-main-oeuvre</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://nodaq.fr/guides/calcul-cout-chantier</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://nodaq.fr/guides/comment-suivre-tresorerie-tpe</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://nodaq.fr/guides/comment-facturer-un-chantier</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://nodaq.fr/guides/logiciel-gestion-artisan</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://nodaq.fr/mentions-legales</loc>
     <priority>0.3</priority>
   </url>

@@ -1037,7 +1037,226 @@ const GUIDES = [
   },
 ];
 
-PAGES.push(...GUIDES);
+const GUIDES_LOT2 = [
+  {
+    slug: "guides/calcul-prix-main-oeuvre",
+    type: "guide",
+    datePub: "2026-08-24",
+    title: "Calculer son prix de main-d'œuvre : du coût chargé au taux horaire vendu | nodaq",
+    description:
+      "Salaire brut, charges patronales, temps improductifs, frais généraux : la méthode pour calculer un coût horaire chargé, puis fixer un taux horaire vendu qui protège votre marge.",
+    h1: "Comment calculer son prix de main-d'œuvre, pas à pas.",
+    reponse:
+      "Le prix de main-d'œuvre se construit en deux temps : d'abord le coût horaire chargé (salaire brut + charges patronales, divisé par les heures réellement productives), puis le taux vendu, qui ajoute une quote-part de frais généraux et la marge. Vendre au coût chargé, c'est travailler gratuitement ; vendre au salaire net, c'est perdre de l'argent à chaque heure.",
+    sections: [
+      {
+        h2: "1. Le coût horaire chargé",
+        html: `<p>Partez du <strong>salaire brut annuel</strong>, ajoutez les <strong>charges patronales</strong>, puis divisez par les <strong>heures productives</strong> — pas les heures payées : congés, formation, trajets, préparation et temps d'atelier non facturables réduisent sensiblement le nombre d'heures réellement vendables dans l'année. C'est ce ratio qui surprend : le coût d'une heure productive est bien plus élevé que le salaire horaire.</p>`,
+      },
+      {
+        h2: "2. La quote-part de frais généraux",
+        html: `<p>Local, véhicules, carburant, assurances (dont la décennale), outillage, logiciels, comptable : ces coûts existent que vous vendiez ou non. Rapportez-les aux heures productives de l'équipe pour obtenir un montant par heure — il s'ajoute au coût chargé.</p>`,
+      },
+      {
+        h2: "3. Le taux vendu : ajouter la marge",
+        html: `<p>Le taux horaire vendu = coût chargé + quote-part de frais généraux + <strong>marge</strong>. La marge n'est pas du luxe : elle finance les imprévus, les investissements et votre rémunération de dirigeant. Un taux « aligné sur le voisin » sans ce calcul est un pari, pas un prix.</p>`,
+      },
+      {
+        h2: "Comment nodaq vous aide",
+        html: `<p>Dans nodaq, chaque membre de l'équipe a son <strong>coût horaire chargé</strong>, et les heures pointées sont valorisées à ce coût dans <a href="/calcul-marge-chantier">l'estimation de marge de chaque chantier</a> — vous voyez immédiatement si vos taux vendus tiennent la route sur le terrain.</p>`,
+      },
+    ],
+    faq: [
+      {
+        q: "Quel écart entre salaire net et coût réel d'une heure ?",
+        a: "Selon les charges et la part d'heures improductives, une heure productive coûte couramment du simple au double du salaire horaire net — d'où l'importance de faire le calcul pour votre entreprise plutôt que d'appliquer un ratio entendu ailleurs.",
+      },
+      {
+        q: "Faut-il un taux différent par salarié ?",
+        a: "Le coût chargé, oui — il varie avec chaque salaire. Le taux vendu peut rester unique ou varier par qualification : l'essentiel est que chacun couvre le coût réel de l'heure qu'il facture.",
+      },
+    ],
+    sources: [],
+    freres: [
+      { href: "/guides/comment-calculer-marge-chantier", label: "Calculer la marge d'un chantier" },
+      { href: "/guides/calcul-cout-chantier", label: "Calculer le coût d'un chantier" },
+    ],
+  },
+  {
+    slug: "guides/calcul-cout-chantier",
+    type: "guide",
+    datePub: "2026-08-24",
+    title: "Calculer le coût d'un chantier : déboursé sec, frais, prix de vente | nodaq",
+    description:
+      "Déboursé sec (fournitures + main-d'œuvre), frais de chantier, frais généraux, marge : la méthode complète pour calculer le coût d'un chantier et en tirer un prix de vente.",
+    h1: "Comment calculer le coût d'un chantier avant de le vendre.",
+    reponse:
+      "Le coût d'un chantier se construit par couches : le déboursé sec (fournitures au prix d'achat + main-d'œuvre au coût chargé), les frais de chantier (location de matériel, évacuation, déplacements), puis une quote-part de frais généraux. Le prix de vente ajoute la marge par-dessus. Chiffrer en dessous d'une de ces couches, c'est financer le chantier de son client.",
+    sections: [
+      {
+        h2: "1. Le déboursé sec",
+        html: `<p>C'est le cœur du chiffrage : les <strong>fournitures au prix d'achat réel</strong> (tarifs fournisseurs à jour, pas de mémoire) et les <strong>heures prévues × coût horaire chargé</strong> de ceux qui les feront (voir notre guide du <a href="/guides/calcul-prix-main-oeuvre">prix de main-d'œuvre</a>). Un déboursé sec honnête suppose des tarifs entretenus.</p>`,
+      },
+      {
+        h2: "2. Les frais de chantier",
+        html: `<p>Propres à ce chantier : location d'engins ou d'échafaudage, benne et évacuation, déplacements et péages, hébergement si le chantier est loin, consommables. Faciles à oublier au devis, impossibles à éviter sur le terrain.</p>`,
+      },
+      {
+        h2: "3. Frais généraux et marge",
+        html: `<p>Ajoutez la <strong>quote-part de frais généraux</strong> de l'entreprise, puis la <strong>marge</strong>. L'ordre importe : la marge se calcule sur un coût complet. Une « marge » posée sur le seul déboursé sec est en réalité déjà entamée par tout ce qui n'a pas été compté.</p>`,
+      },
+      {
+        h2: "4. Après la vente : confronter le prévu au réel",
+        html: `<p>Le chiffrage est une hypothèse ; le chantier est la réalité. Comparer les heures réellement pointées au prévu, chantier après chantier, est le meilleur outil pour chiffrer juste la fois suivante — c'est ainsi que les entreprises apprennent leurs vrais temps.</p>`,
+      },
+      {
+        h2: "Comment nodaq vous aide",
+        html: `<p>Le <a href="/devis-ia">devis se dicte</a> et se chiffre depuis vos tarifs entretenus au catalogue ; pendant le chantier, les heures pointées confrontent le prévu au réel dans <a href="/calcul-marge-chantier">l'estimation de marge</a> — vous savez si le chiffrage tient pendant qu'il est encore temps d'agir.</p>`,
+      },
+    ],
+    faq: [
+      {
+        q: "Quelle est l'erreur de chiffrage la plus courante ?",
+        a: "Sous-estimer les heures — par optimisme ou par méconnaissance de ses temps réels. Le pointage des heures par chantier est le seul remède durable : il transforme chaque chantier en donnée pour le suivant.",
+      },
+    ],
+    sources: [],
+    freres: [
+      { href: "/guides/calcul-prix-main-oeuvre", label: "Le prix de main-d'œuvre" },
+      { href: "/guides/comment-calculer-marge-chantier", label: "La marge d'un chantier" },
+    ],
+  },
+  {
+    slug: "guides/comment-suivre-tresorerie-tpe",
+    type: "guide",
+    datePub: "2026-08-24",
+    title: "Comment suivre la trésorerie d'une TPE sans tableur ni comptable | nodaq",
+    description:
+      "Les trois horizons du suivi de trésorerie d'une TPE — aujourd'hui, les 8 prochaines semaines, l'année — et la méthode pour ne plus piloter de tête.",
+    h1: "Comment suivre la trésorerie d'une TPE, simplement.",
+    reponse:
+      "La trésorerie d'une TPE se suit sur trois horizons : ce qu'il y a en banque aujourd'hui, ce qui va entrer et sortir dans les prochaines semaines (factures en attente, échéances fiscales, charges récurrentes), et la tendance de l'année. Le piège classique : confondre le solde en banque avec la santé de l'entreprise, alors que l'URSSAF et la TVA du mois prochain sont déjà engagées.",
+    sections: [
+      {
+        h2: "1. Aujourd'hui : le solde ne dit pas tout",
+        html: `<p>Un solde confortable peut cacher une TVA à reverser, des salaires à venir et un fournisseur à payer. Le bon réflexe est de lire le solde <strong>avec</strong> ce qui est déjà engagé — c'est la différence entre « ce que j'ai » et « ce qui est à moi ».</p>`,
+      },
+      {
+        h2: "2. Les prochaines semaines : le prévisionnel",
+        html: `<p>Un prévisionnel utile croise quatre flux : les <strong>factures clients en attente</strong> (au montant résiduel réel), les <strong>échéances fiscales et sociales</strong>, les <strong>charges récurrentes</strong> (loyer, salaires, assurances, abonnements) et le <strong>solde bancaire de départ</strong>. Sur 6 à 8 semaines, cela suffit à voir venir un creux — et à agir : accélérer une relance, décaler une dépense.</p>`,
+      },
+      {
+        h2: "3. L'année : la tendance",
+        html: `<p>Mois après mois, la question devient : l'activité génère-t-elle de la trésorerie ou en consomme-t-elle ? Un chiffre d'affaires en hausse avec une trésorerie en baisse signale presque toujours un problème de délais de paiement — voir notre guide des <a href="/guides/delai-paiement-facture">délais de paiement</a> — ou de marge.</p>`,
+      },
+      {
+        h2: "Comment nodaq vous aide",
+        html: `<p>Le <a href="/suivi-tresorerie-tpe">cockpit nodaq</a> assemble exactement ces flux : trésorerie disponible (compte bancaire connecté), factures en attente au résiduel réel, échéancier, charges récurrentes, et un <strong>prévisionnel à 8 semaines</strong> — honnête quand une donnée manque, plutôt qu'un zéro inventé.</p>`,
+      },
+    ],
+    faq: [
+      {
+        q: "À quelle fréquence regarder sa trésorerie ?",
+        a: "Un regard hebdomadaire sur le prévisionnel suffit à une TPE — à condition que les données (factures, encaissements, charges) soient à jour en continu, ce qui est précisément le travail de l'outil, pas du dirigeant.",
+      },
+    ],
+    sources: [],
+    freres: [
+      { href: "/suivi-tresorerie-tpe", label: "La trésorerie dans nodaq" },
+      { href: "/guides/delai-paiement-facture", label: "Les délais de paiement" },
+    ],
+  },
+  {
+    slug: "guides/comment-facturer-un-chantier",
+    type: "guide",
+    datePub: "2026-08-24",
+    title: "Comment facturer un chantier : acompte, avancement, solde | nodaq",
+    description:
+      "Acompte à la commande, factures d'avancement, facture de solde : comment facturer un chantier pour protéger sa trésorerie, et les mentions à ne pas oublier.",
+    h1: "Comment facturer un chantier sans étrangler sa trésorerie.",
+    reponse:
+      "Sur un chantier de plusieurs semaines, facturer une seule fois à la fin, c'est financer le chantier à la place du client. La bonne pratique : un acompte à la commande, des factures au fil de l'avancement pour les chantiers longs, et une facture de solde à la réception — chacune portant les mentions obligatoires et suivie jusqu'à son paiement.",
+    sections: [
+      {
+        h2: "1. L'acompte à la commande",
+        html: `<p>Il engage le client, finance les premières fournitures et teste sa capacité à payer. Prévu au devis (pourcentage et moment), il se facture dès l'acceptation — particulièrement indispensable quand les fournitures se commandent en amont, comme en menuiserie ou en chauffage.</p>`,
+      },
+      {
+        h2: "2. Les factures d'avancement pour les chantiers longs",
+        html: `<p>Au-delà de quelques semaines, découpez : une facture à chaque étape franchie (fin du gros œuvre, hors d'eau, fin d'un lot…). Le rythme se prévoit au devis pour que le client ne le découvre pas en cours de route. Chaque facture suit alors sa propre échéance — et se relance individuellement si besoin.</p>`,
+      },
+      {
+        h2: "3. Le solde à la réception",
+        html: `<p>La facture de solde clôt le chantier : elle reprend le marché, les avenants signés, et déduit acomptes et situations déjà réglés. C'est aussi le moment de vérité de la <a href="/guides/comment-calculer-marge-chantier">marge réelle</a> du chantier.</p>`,
+      },
+      {
+        h2: "Les mentions, à chaque facture",
+        html: `<p>Chaque facture — acompte compris — porte les mentions obligatoires : identités, numéro et date, détail, TVA, échéance, taux des pénalités de retard et indemnité forfaitaire de 40 € (voir notre guide des <a href="/guides/delai-paiement-facture">délais de paiement</a>), et la mention d'assurance professionnelle pour les activités concernées.</p>`,
+      },
+      {
+        h2: "Comment nodaq vous aide",
+        html: `<p>Dans nodaq, un devis accepté devient un chantier, et <a href="/facturation-tpe">chaque facture s'émet depuis l'affaire</a> — acompte, avancement, solde — avec une numérotation propre, un PDF archivé, et un suivi jusqu'à l'encaissement, relance comprise. Les heures pointées facturables peuvent alimenter la facture.</p>`,
+      },
+    ],
+    faq: [
+      {
+        q: "Quel pourcentage d'acompte demander ?",
+        a: "Il n'y a pas de règle unique : l'usage varie selon le métier et le poids des fournitures. L'essentiel est de le prévoir clairement au devis, et de le facturer réellement à l'acceptation.",
+      },
+    ],
+    sources: [],
+    freres: [
+      { href: "/facturation-tpe", label: "La facturation dans nodaq" },
+      { href: "/guides/delai-paiement-facture", label: "Les délais de paiement" },
+    ],
+  },
+  {
+    slug: "guides/logiciel-gestion-artisan",
+    type: "guide",
+    datePub: "2026-08-24",
+    title: "Choisir un logiciel de gestion artisan : les 7 critères qui comptent | nodaq",
+    description:
+      "Rapidité du devis, suivi des paiements, marge par chantier, validation humaine, hébergement des données : les critères pour choisir un logiciel de gestion quand on est artisan.",
+    h1: "Comment choisir un logiciel de gestion quand on est artisan.",
+    reponse:
+      "Le bon logiciel de gestion d'artisan se juge sur le terrain, pas en démo : la vitesse à produire un devis, le suivi réel des paiements et des relances, la marge par chantier, la place laissée à votre décision, et où vivent vos données. Voici les sept critères à vérifier — quel que soit l'outil que vous choisirez.",
+    sections: [
+      {
+        h2: "Les 7 critères",
+        html: `<ol style="padding-left:20px;display:grid;gap:8px">
+          <li><strong>Le temps du devis</strong> — combien de minutes entre la visite et l'envoi ? C'est le critère nº 1 : le premier devis rendu prend souvent le chantier.</li>
+          <li><strong>Le suivi jusqu'au paiement</strong> — l'outil sait-il ce qui est payé, en retard, à relancer ? Une facturation sans suivi d'encaissement ne protège pas la trésorerie.</li>
+          <li><strong>La marge par chantier</strong> — pendant le chantier, pas au bilan. Et honnête : un outil qui affiche une marge « exacte » sans connaître vos coûts vous ment.</li>
+          <li><strong>Votre décision au centre</strong> — qui appuie sur « envoyer » ? Un envoi automatique à un client est une relation client déléguée à une machine.</li>
+          <li><strong>La saisie sur le terrain</strong> — voix, photo, mobile : la gestion d'artisan se fait dans les creux, pas au bureau.</li>
+          <li><strong>Les données</strong> — où sont-elles hébergées, pouvez-vous les récupérer, qui y accède ?</li>
+          <li><strong>Le prix complet</strong> — abonnement, coût par salarié, modules cachés, engagement.</li>
+        </ol>`,
+      },
+      {
+        h2: "Le piège des fonctionnalités",
+        html: `<p>Une liste de fonctionnalités ne dit rien de l'usage réel. La bonne question n'est pas « que sait faire l'outil ? » mais « que ferai-je encore dans trois mois ? ». Un outil utilisé à 20 % qui fait gagner ses soirées bat un outil complet abandonné en janvier.</p>`,
+      },
+      {
+        h2: "Où se situe nodaq",
+        html: `<p>nodaq est construit sur ces critères : <a href="/devis-ia">devis dictés</a> en sortant de la visite, <a href="/facturation-tpe">factures suivies jusqu'au paiement</a> avec <a href="/relance-facture-impayee">campagnes de relance sur mandat</a>, <a href="/calcul-marge-chantier">marge honnête</a> réévaluée à chaque heure pointée, validation humaine sur chaque envoi, données hébergées en France — à partir de 49 € HT/mois. À vous de le confronter aux mêmes sept questions que les autres.</p>`,
+      },
+    ],
+    faq: [
+      {
+        q: "Faut-il un logiciel spécialisé bâtiment ?",
+        a: "L'important n'est pas l'étiquette mais l'adéquation aux gestes du métier : devis rapides, suivi par chantier, saisie sur le terrain. Vérifiez ces usages précis plutôt que la catégorie marketing de l'outil.",
+      },
+    ],
+    sources: [],
+    freres: [
+      { href: "/logiciel-artisan", label: "nodaq pour les artisans" },
+      { href: "/logiciel-batiment", label: "Le logiciel bâtiment" },
+    ],
+  },
+];
+
+PAGES.push(...GUIDES, ...GUIDES_LOT2);
 
 for (const p of PAGES) {
   const sortie = path.join(ici, `${p.slug}.html`);
