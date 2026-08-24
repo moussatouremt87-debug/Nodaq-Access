@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
-import { withTenant, affairesTable, facturesTable, prospectsTable, pendingActionsTable, settingsTable, teamMembersTable, teamMemberHabilitationsTable } from "@workspace/db";
+import { attestationsSapTable, withTenant, affairesTable, facturesTable, prospectsTable, pendingActionsTable, settingsTable, teamMembersTable, teamMemberHabilitationsTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
-import { toDateString, verticalPack, estRetardSignificatif, statutHabilitation, type Vertical } from "@nodaq/shared";
+import { toDateString, verticalPack, estRetardSignificatif, statutHabilitation, rappelAttestation, type Vertical } from "@nodaq/shared";
 import { conditionFactureEnRetardSql } from "../lib/facturesEnRetard.js";
 import { verticalDepuisTx } from "../lib/vertical-tenant.js";
 
@@ -65,7 +65,18 @@ router.get("/brief", async (req, res): Promise<void> => {
       .from(teamMemberHabilitationsTable)
       .innerJoin(teamMembersTable, eq(teamMemberHabilitationsTable.membreId, teamMembersTable.id));
 
-    return { overdueFactures, affairesEnCours, newProspects, pendingActions, habilitationsRows };
+    // US-B4.1 — le rappel de l'attestation fiscale. Les ANNÉES déjà générées
+    // suffisent : le rappel se tait dès qu'une génération a eu lieu, il n'a
+    // pas à savoir combien de clients elle a couverts.
+    const anneesAttestees = await tx
+      .selectDistinct({ annee: attestationsSapTable.annee })
+      .from(attestationsSapTable);
+
+    return {
+      overdueFactures, affairesEnCours, newProspects, pendingActions, habilitationsRows,
+      anneesAttestees: anneesAttestees.map((a) => a.annee),
+      vertical: await verticalDepuisTx(tx),
+    };
   });
 
   const hour = today.getHours();
@@ -99,6 +110,37 @@ router.get("/brief", async (req, res): Promise<void> => {
         link: "/factures",
       })),
     });
+  }
+
+  // ── US-B4.1 — le rappel proactif de l'attestation fiscale ──────────────
+  // « Étant donné l'approche de cette échéance, alors un rappel proactif est
+  // adressé au tenant s'il n'a pas encore lancé la génération. »
+  //
+  // Réservé aux services à la personne : c'est le seul secteur où cette
+  // obligation existe, et l'afficher à un maçon serait du bruit qui apprend à
+  // ignorer le brief.
+  if (data.vertical === "services_personne") {
+    const rappel = rappelAttestation(todayStr, data.anneesAttestees);
+    if (rappel?.alerter) {
+      const enRetard = rappel.joursRestants < 0;
+      sections.push({
+        type: "attestation_sap",
+        title: enRetard
+          ? `Attestations fiscales ${rappel.annee} : ${-rappel.joursRestants} jours de retard`
+          : `Attestations fiscales ${rappel.annee} : ${rappel.joursRestants} jours restants`,
+        items: [{
+          // Le montant du crédit d'impôt est ce qui rend l'échéance concrète :
+          // « avant le 31 mars » est une date, « vos clients perdent la moitié
+          // de ce qu'ils vous ont payé » est une raison d'agir.
+          label: "Vos clients en ont besoin pour leur crédit d'impôt de 50 %",
+          meta: enRetard
+            ? `l'envoi était dû le 31 mars ${rappel.annee + 1}`
+            : `à envoyer avant le 31 mars ${rappel.annee + 1}`,
+          urgent: rappel.joursRestants <= 30,
+          link: "/parametres",
+        }],
+      });
+    }
   }
 
   if (habilitationsASurveiller.length > 0) {

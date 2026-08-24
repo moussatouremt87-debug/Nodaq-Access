@@ -97,6 +97,9 @@ export const COMPANY_KEYS = [
   "company.bic",
   "company.plateforme_agreee",
   "company.pack_metier",
+  // US-B4.1 — délivré par la DREETS. Sans lui, aucune attestation fiscale ne
+  // vaut quoi que ce soit : c'est ce numéro qui prouve l'éligibilité.
+  "company.sap_numero_declaration",
   // 4.9 — reprise
   "reprise.ca_facture_ytd",
   "reprise.ca_encaisse_ytd",
