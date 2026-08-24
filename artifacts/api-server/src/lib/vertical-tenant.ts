@@ -68,6 +68,17 @@ export function vocabulaireAssistant(vertical: Vertical): string {
     `  • un devis se dit « ${pack.proposalWord} »`,
     `  • un prestataire externe se dit « ${pack.externalWorkerWords.singular} »`,
     "",
+    // ── Les unités, et pourquoi elles vivent ICI (US-A2.2) ──────────────
+    // Les descriptions d'outils sont un tableau de module, partagé par tous
+    // les tenants : elles ne peuvent PAS être sectorielles, et la liste
+    // qu'elles portaient — « m², ml, heure, forfait… » — amorçait donc chaque
+    // modèle sur du chantier, y compris pour une coiffeuse ou une infirmière.
+    // Ce bloc-ci est construit par tenant : c'est le seul endroit où l'unité
+    // du métier peut être dite sans mentir aux seize autres.
+    `Les unités de facturation usuelles de ce métier : ${pack.unitesExemples.join(", ")}.`,
+    "Ce sont des exemples, pas une liste fermée — reprends toujours l'unité",
+    "que l'utilisateur a dictée, ou celle que porte sa ligne de catalogue.",
+    "",
     // Formulé SANS nommer le mot d'un autre secteur : écrire ici « ne dis
     // jamais chantier » serait absurde pour un maçon, à qui ce même bloc
     // vient de demander de dire « chantier ». La consigne porte sur la

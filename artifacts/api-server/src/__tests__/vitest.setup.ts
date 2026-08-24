@@ -130,6 +130,48 @@ globalThis.fetch = async function patchedFetch(
     // unité) et JAMAIS de prix — exactement ce que le vrai modèle a le droit de
     // produire. Un simulateur qui renverrait un prix masquerait une régression :
     // la route doit rester incapable d'en faire passer un.
+    // US-A2.2 — le même découpage, dicté par d'autres métiers. Le simulateur
+    // ne prouve évidemment PAS que le vrai modèle comprend « shampoing » ; il
+    // prouve que tout ce qui entoure le modèle — rapprochement au catalogue,
+    // marquage « à compléter », total — fonctionne à l'identique hors du
+    // bâtiment. C'est la moitié de la chaîne qui est à nous.
+    const DICTEES_SECTORIELLES: Record<string, { libelle: string; quantite: number | null; unite: string | null }[]> = {
+      "menu du soir": [
+        { libelle: "Menu du soir", quantite: 40, unite: "couvert" },
+        { libelle: "Location de la salle", quantite: 1, unite: "forfait" },
+      ],
+      shampoing: [
+        { libelle: "Shampoing", quantite: 2, unite: "prestation" },
+        { libelle: "Balayage californien", quantite: 1, unite: "prestation" },
+      ],
+      "ménage": [
+        { libelle: "Prestation de ménage", quantite: 6, unite: "h" },
+        { libelle: "Nettoyage des vitres en hauteur", quantite: 1, unite: "forfait" },
+      ],
+      consultation: [
+        { libelle: "Consultation", quantite: 3, unite: "séance" },
+        { libelle: "Bilan postural complet", quantite: 1, unite: "séance" },
+      ],
+    };
+    const cleSectorielle = Object.keys(DICTEES_SECTORIELLES)
+      .find((cle) => userText.includes(cle));
+    if (cleSectorielle) {
+      return new Response(JSON.stringify({
+        id: "chatcmpl-vitest-dictee-secteur",
+        object: "chat.completion",
+        model: "test/fake-chat-model",
+        choices: [{
+          index: 0,
+          message: {
+            role: "assistant",
+            content: JSON.stringify({ intentions: DICTEES_SECTORIELLES[cleSectorielle] }),
+          },
+          finish_reason: "stop",
+        }],
+        usage: { prompt_tokens: 20, completion_tokens: 30, total_tokens: 50 },
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+
     if (userText.includes("cloison") || userText.includes("dictee-test")) {
       const decoupage = JSON.stringify({
         id: "chatcmpl-vitest-dictee",
