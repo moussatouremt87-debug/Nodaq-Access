@@ -15,6 +15,9 @@ import {
 import { and, eq, desc, sql } from "drizzle-orm";
 import { z } from "zod";
 import { facturerDevis, messageRefusFacturation } from "../lib/facturer-devis.js";
+import { facturerAffaire, messageRefusAffaire } from "../lib/facturer-affaire.js";
+import { verticalDepuisTx } from "../lib/vertical-tenant.js";
+import { verticalPack } from "@nodaq/shared";
 import { auditInvoice } from "@nodaq/facturx";
 import { toDateString, type Vertical } from "@nodaq/shared";
 import { encaisseSurFacture, recalculerFacture } from "../lib/reglement-facture.js";
@@ -897,6 +900,52 @@ router.post("/devis/:id/facturer", async (req, res): Promise<void> => {
       return;
     case "ok":
       res.status(201).json(resultat.facture);
+      return;
+  }
+});
+
+/**
+ * POST /affaires/:id/facturer — facturer une mission ponctuelle (US-B8.1).
+ *
+ * L'autre voie du même besoin est `POST /contrats/facturer-echeances`
+ * (US-A2.3) : un contrat récurrent se facture périodiquement, une mission se
+ * facture à son terme. Deux gestes distincts, parce que ce sont deux modes de
+ * facturation — « sans forcer un modèle unique », dit la story.
+ */
+router.post("/affaires/:id/facturer", async (req, res): Promise<void> => {
+  const tenantId = req.tenantId!;
+  const { id } = req.params;
+  const corps = z.object({
+    confirmerSecondeFacture: z.boolean().default(false),
+    vatRate: z.number().min(0).max(100).optional(),
+  }).safeParse(req.body ?? {});
+  if (!corps.success) { res.status(400).json({ error: corps.error.message }); return; }
+
+  const { resultat, motMission } = await withTenant(tenantId, async (tx) => ({
+    resultat: await facturerAffaire(tx, tenantId, id!, corps.data),
+    // Le refus parle le vocabulaire du tenant : « la mission » pour un
+    // transporteur, « le chantier » pour un maçon.
+    motMission: verticalPack(await verticalDepuisTx(tx)).words.definite,
+  }));
+
+  switch (resultat.kind) {
+    case "introuvable":
+      res.status(404).json({ error: messageRefusAffaire(resultat, motMission) });
+      return;
+    case "sans_montant":
+      res.status(422).json({ error: messageRefusAffaire(resultat, motMission) });
+      return;
+    case "deja_facturee":
+      res.status(409).json({
+        error: messageRefusAffaire(resultat, motMission),
+        existantes: resultat.existantes,
+      });
+      return;
+    case "refus_devis":
+      res.status(422).json({ error: messageRefusFacturation(resultat.refus) });
+      return;
+    case "ok":
+      res.status(201).json({ facture: resultat.facture, source: resultat.source });
       return;
   }
 });
