@@ -6,15 +6,15 @@
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://nodaq.fr/mentions-legales.html</loc>
+    <loc>https://nodaq.fr/mentions-legales</loc>
     <priority>0.3</priority>
   </url>
   <url>
-    <loc>https://nodaq.fr/confidentialite.html</loc>
+    <loc>https://nodaq.fr/confidentialite</loc>
     <priority>0.3</priority>
   </url>
   <url>
-    <loc>https://nodaq.fr/cgv.html</loc>
+    <loc>https://nodaq.fr/cgv</loc>
     <priority>0.3</priority>
   </url>
 </urlset>

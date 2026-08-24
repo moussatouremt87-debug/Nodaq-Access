@@ -21,6 +21,6 @@
 
 - [Accueil](https://nodaq.fr/) : présentation, chiffres sourcés sur les
   délais de paiement et la charge administrative des TPE, FAQ, inscription.
-- [Mentions légales](https://nodaq.fr/mentions-legales.html)
-- [Confidentialité](https://nodaq.fr/confidentialite.html)
-- [CGV](https://nodaq.fr/cgv.html)
+- [Mentions légales](https://nodaq.fr/mentions-legales)
+- [Confidentialité](https://nodaq.fr/confidentialite)
+- [CGV](https://nodaq.fr/cgv)
