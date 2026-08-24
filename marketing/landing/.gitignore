@@ -1,0 +1,18 @@
+# Pages generees au build (genere-pages-seo.mjs, genere-variantes.mjs) —
+# jamais committees : la source de verite est le generateur, le build.sh du
+# deploiement les produit dans public/. Voir PR #200.
+/devis.html
+/impayes.html
+/marge.html
+/logiciel-batiment.html
+/devis-ia.html
+/relance-facture-impayee.html
+/logiciel-gestion-tpe.html
+/logiciel-artisan.html
+/logiciel-devis-facture.html
+/facturation-tpe.html
+/suivi-tresorerie-tpe.html
+/calcul-marge-chantier.html
+/gestion-chantier.html
+/metiers/
+/guides/
