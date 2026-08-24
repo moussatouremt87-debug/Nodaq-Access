@@ -53,6 +53,30 @@ export function serveurTest(app: object): http.Server {
   // `listen(0)` rend `address()` disponible dans le même tick : supertest peut
   // lire le port tout de suite, donc aucun démarrage asynchrone n'est requis.
   const serveur = http.createServer(app as unknown as http.RequestListener).listen(0);
+
+  // ── Ticket 4.41 — la course du keep-alive ───────────────────────────────
+  // Depuis Node 19, `http.globalAgent.keepAlive` vaut TRUE par défaut, et
+  // superagent — donc supertest — passe par cet agent. Le client garde donc
+  // ses connexions ouvertes et les réutilise.
+  //
+  // En face, un serveur Node ferme toute connexion inactive au bout de
+  // `keepAliveTimeout`, 5 000 ms par défaut. Quand un test laisse passer à peu
+  // près cinq secondes entre deux requêtes — une insertion lente, une
+  // génération de PDF, un `spawnSync` — la fermeture du serveur et l'envoi du
+  // client se croisent : le client écrit dans une socket que le serveur vient
+  // de fermer, et lit `ECONNRESET`.
+  //
+  // C'est rare, ça dépend de la charge, et ça tombe sur un fichier différent à
+  // chaque fois — la signature exacte mesurée au ticket 4.41. `CLAUDE.md`
+  // décrit ce défaut comme traité à la source au ticket 4.22 : la mémoïsation
+  // de `serveurTest` a supprimé le recyclage des PORTS, qui était un problème
+  // réel, mais pas cette course-ci, qui est indépendante.
+  //
+  // `0` désactive la fermeture pour inactivité : le serveur ne referme plus
+  // jamais une connexion sous les pieds du client. Les sockets restantes sont
+  // coupées d'un coup à l'arrêt, par `closeAllConnections`.
+  serveur.keepAliveTimeout = 0;
+
   serveursParApp.set(app, serveur);
   serveursOuverts.push(serveur);
   return serveur;
@@ -62,7 +86,13 @@ export function serveurTest(app: object): http.Server {
 export async function arreterServeurTest(): Promise<void> {
   const ouverts = serveursOuverts.splice(0);
   await Promise.all(
-    ouverts.map((s) => new Promise<void>((resolve) => s.close(() => resolve()))),
+    ouverts.map((s) => new Promise<void>((resolve) => {
+      // `keepAliveTimeout = 0` laisse les connexions ouvertes indéfiniment :
+      // `close()` seul attendrait qu'elles se terminent, c'est-à-dire jamais,
+      // et le fichier de test resterait suspendu jusqu'au délai de garde.
+      s.close(() => resolve());
+      s.closeAllConnections();
+    })),
   );
 }
 
