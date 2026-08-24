@@ -55,6 +55,17 @@
 - [Paysagiste](https://nodaq.fr/metiers/paysagiste)
 - [Entreprise de rénovation](https://nodaq.fr/metiers/entreprise-renovation)
 
+## Guides
+
+- [Délai de paiement d'une facture](https://nodaq.fr/guides/delai-paiement-facture) :
+  30 jours par défaut, 60 max, pénalités et indemnité de 40 € — sourcé.
+- [Relancer une facture impayée](https://nodaq.fr/guides/comment-relancer-facture-impayee) :
+  relance amiable, mise en demeure, injonction de payer, étape par étape.
+- [Faire un devis bâtiment](https://nodaq.fr/guides/comment-faire-devis-batiment) :
+  mentions obligatoires (dont assurance décennale) et méthode.
+- [Calculer la marge d'un chantier](https://nodaq.fr/guides/comment-calculer-marge-chantier) :
+  coût horaire chargé, frais généraux, suivi pendant le chantier.
+
 ## Pages
 
 - [Accueil](https://nodaq.fr/) : présentation, chiffres sourcés sur les

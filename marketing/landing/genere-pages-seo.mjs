@@ -498,6 +498,21 @@ function rendre(p) {
       acceptedAnswer: { "@type": "Answer", text: f.a },
     })),
   };
+  // Guides éditoriaux : Article balisé, sources visibles, avertissement.
+  const articleld = p.type === "guide" ? {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: p.h1.replace(/\.$/, ""),
+    inLanguage: "fr-FR",
+    datePublished: p.datePub || MAJ,
+    dateModified: MAJ,
+    mainEntityOfPage: url,
+    author: { "@type": "Organization", name: "nodaq", url: "https://nodaq.fr/" },
+    publisher: { "@type": "Organization", name: "nodaq", url: "https://nodaq.fr/" },
+  } : null;
+  const blocSources = p.sources?.length
+    ? `<section>\n    <h2>Sources</h2>\n    <ul>\n      ${p.sources.map((s) => `<li><a href="${s.href}" rel="nofollow noopener">${esc(s.label)}</a></li>`).join("\n      ")}\n    </ul>\n    <p style="font-size:.85rem;color:var(--muted)">Contenu informatif, à jour au ${MAJ}. Les règles évoluent : vérifiez les textes en vigueur — ceci ne constitue pas un conseil juridique.</p>\n  </section>`
+    : "";
 
   return `<!doctype html>
 <html lang="fr">
@@ -569,6 +584,7 @@ footer a:hover{color:var(--lime)}
       ${p.faq.map((f) => `<details><summary>${esc(f.q)}</summary><p>${esc(f.a)}</p></details>`).join("\n      ")}
     </div>
   </section>
+  ${blocSources}
   <a class="cta" href="/#inscription"><strong>Découvrir nodaq</strong><span>Programme fondateurs — 50 places, tarif garanti à vie, sans carte bancaire.</span></a>
   <h2 style="font-size:1rem">À lire aussi</h2>
   <div class="freres">
@@ -591,6 +607,7 @@ ${jsonld(webpage)}
 <script type="application/ld+json">
 ${jsonld(faqld)}
 </script>
+${articleld ? `<script type="application/ld+json">\n${jsonld(articleld)}\n</script>` : ""}
 </body>
 </html>
 `;
@@ -810,6 +827,217 @@ function construirePageMetier(m) {
 }
 
 PAGES.push(...METIERS.map(construirePageMetier));
+
+// ── Phase 4, lot 1 : guides éditoriaux (/guides/<slug>) ────────────────────
+// Faits réglementaires vérifiés par recherche (sources en bas de page) ;
+// les capacités nodaq citées sont celles de l'inventaire du code. Les
+// guides « meilleur logiciel » et comparatifs attendent le go du fondateur
+// (publicité comparative encadrée).
+const GUIDES = [
+  {
+    slug: "guides/delai-paiement-facture",
+    type: "guide",
+    datePub: "2026-08-24",
+    title: "Délai de paiement d'une facture entre professionnels : les règles | nodaq",
+    description:
+      "30 jours par défaut, 60 jours maximum, pénalités de retard et indemnité forfaitaire de 40 € : les règles des délais de paiement entre professionnels, expliquées simplement.",
+    h1: "Délai de paiement d'une facture : ce que dit la loi entre professionnels.",
+    reponse:
+      "Entre professionnels, une facture est payable sous 30 jours par défaut. Le contrat peut prévoir jusqu'à 60 jours à compter de la facture (ou 45 jours fin de mois). Au-delà, des pénalités de retard courent automatiquement, et une indemnité forfaitaire de 40 € de frais de recouvrement est due par facture en retard — sans relance préalable nécessaire.",
+    sections: [
+      {
+        h2: "Les trois délais à connaître",
+        html: `<ul>
+          <li><strong>30 jours</strong> — le délai par défaut, à compter de la réception de la marchandise ou de l'exécution de la prestation, quand le contrat ne dit rien.</li>
+          <li><strong>60 jours date de facture</strong> — le plafond que les parties peuvent convenir au contrat.</li>
+          <li><strong>45 jours fin de mois</strong> — l'alternative possible si elle est expressément prévue au contrat.</li>
+        </ul>`,
+      },
+      {
+        h2: "Ce qui court automatiquement en cas de retard",
+        html: `<p>Dès le lendemain de l'échéance, deux choses sont dues <strong>sans relance préalable</strong> : les <strong>pénalités de retard</strong> au taux prévu dans vos conditions générales (avec un minimum légal), et l'<strong>indemnité forfaitaire de 40 €</strong> pour frais de recouvrement — par facture en retard, une seule fois par facture. Le taux des pénalités et cette indemnité doivent figurer sur vos factures et dans vos CGV.</p>`,
+      },
+      {
+        h2: "En pratique : les artisans attendent plus longtemps",
+        html: `<p>Le droit est une chose, le terrain une autre : en France, une facture est payée en moyenne à <strong>44 jours</strong> pour environ 36 convenus (chiffres sourcés sur <a href="/">notre page d'accueil</a>). Ce sont les plus petites entreprises qui portent ce décalage — la trésorerie d'une TPE ne peut pas absorber deux ou trois retards en même temps.</p>`,
+      },
+      {
+        h2: "Comment nodaq vous aide",
+        html: `<p>Chaque facture émise entre dans <a href="/facturation-tpe">l'échéancier</a> avec sa date, le cockpit montre ce qui est en retard, et une <a href="/relance-facture-impayee">campagne de relance</a> se prépare dès qu'une échéance passe — déclenchée uniquement sur votre mandat.</p>`,
+      },
+    ],
+    faq: [
+      {
+        q: "L'indemnité de 40 € s'applique-t-elle à chaque jour de retard ?",
+        a: "Non : elle est due une seule fois par facture en retard, en plus des pénalités de retard qui, elles, courent dans le temps.",
+      },
+      {
+        q: "Dois-je mentionner les pénalités sur mes factures ?",
+        a: "Oui : le taux des pénalités de retard et le montant de l'indemnité forfaitaire de 40 € doivent figurer sur vos factures et dans vos conditions générales de vente.",
+      },
+    ],
+    sources: [
+      { href: "https://www.justice.fr/fiche/delais-paiement-entre-professionnels-penalites-retard", label: "Justice.fr — Délais de paiement entre professionnels et pénalités de retard" },
+    ],
+    freres: [
+      { href: "/guides/comment-relancer-facture-impayee", label: "Comment relancer une facture impayée" },
+      { href: "/facturation-tpe", label: "La facturation dans nodaq" },
+    ],
+  },
+  {
+    slug: "guides/comment-relancer-facture-impayee",
+    type: "guide",
+    datePub: "2026-08-24",
+    title: "Comment relancer une facture impayée : étapes, ton et outils | nodaq",
+    description:
+      "Relance amiable, mise en demeure, injonction de payer : les étapes pour relancer une facture impayée sans abîmer la relation client, et ce que la loi prévoit (40 €, pénalités).",
+    h1: "Comment relancer une facture impayée, étape par étape.",
+    reponse:
+      "La bonne relance est précoce, factuelle et courtoise : la plupart des retards sont des oublis. Commencez par une relance amiable dès l'échéance dépassée, rappelez les pénalités et l'indemnité de 40 € qui courent de plein droit, puis graduez — seconde relance, mise en demeure, et en dernier recours l'injonction de payer. Le plus important : ne pas attendre.",
+    sections: [
+      {
+        h2: "1. La relance amiable, tout de suite",
+        html: `<p>Dès quelques jours après l'échéance : un message court, factuel, sans reproche — numéro de facture, montant, date d'échéance, moyen de payer. Un appel téléphonique fonctionne souvent mieux qu'un e-mail : il lève l'ambiguïté en une conversation, et la plupart des « impayés » se règlent là.</p>`,
+      },
+      {
+        h2: "2. La seconde relance, plus ferme",
+        html: `<p>Sans réponse sous une à deux semaines : rappelez que des <strong>pénalités de retard</strong> et l'<strong>indemnité forfaitaire de 40 €</strong> sont dues de plein droit depuis l'échéance (voir notre guide des <a href="/guides/delai-paiement-facture">délais de paiement</a>). Restez professionnel : l'objectif est d'être payé, pas d'avoir raison.</p>`,
+      },
+      {
+        h2: "3. La mise en demeure",
+        html: `<p>Si les relances restent lettre morte : une <strong>mise en demeure</strong> par lettre recommandée avec accusé de réception, qui récapitule la créance et fixe un dernier délai. C'est un préalable utile aux étapes judiciaires, et son sérieux suffit souvent à débloquer le paiement.</p>`,
+      },
+      {
+        h2: "4. En dernier recours : l'injonction de payer",
+        html: `<p>Pour une créance non contestée, la procédure d'<strong>injonction de payer</strong> devant le tribunal de commerce est simple et peu coûteuse. À ce stade, faites-vous accompagner — et pesez le coût relationnel et commercial face au montant en jeu.</p>`,
+      },
+      {
+        h2: "Comment nodaq vous aide",
+        html: `<p>nodaq surveille vos échéances et prépare des <a href="/relance-facture-impayee">campagnes de relance téléphonique</a> — courtoises, factuelles, dans une fenêtre horaire que vous choisissez. Aucun appel ne part sans votre mandat, donné en un clic, et un lien de paiement peut être envoyé pendant l'appel.</p>`,
+      },
+    ],
+    faq: [
+      {
+        q: "À partir de quand puis-je relancer ?",
+        a: "Dès le lendemain de l'échéance. Pénalités et indemnité de 40 € sont dues de plein droit sans relance préalable — la relance sert surtout à obtenir le paiement vite et sans conflit.",
+      },
+      {
+        q: "La relance téléphonique est-elle plus efficace que l'e-mail ?",
+        a: "Un appel lève l'ambiguïté immédiatement et traite l'objection en direct — c'est pour cela que nodaq a fait du téléphone son canal de relance, toujours sous votre mandat.",
+      },
+    ],
+    sources: [
+      { href: "https://www.justice.fr/fiche/delais-paiement-entre-professionnels-penalites-retard", label: "Justice.fr — Délais de paiement entre professionnels et pénalités de retard" },
+    ],
+    freres: [
+      { href: "/guides/delai-paiement-facture", label: "Les délais de paiement" },
+      { href: "/relance-facture-impayee", label: "La relance dans nodaq" },
+    ],
+  },
+  {
+    slug: "guides/comment-faire-devis-batiment",
+    type: "guide",
+    datePub: "2026-08-24",
+    title: "Comment faire un devis bâtiment : mentions obligatoires et méthode | nodaq",
+    description:
+      "Les mentions obligatoires d'un devis bâtiment (dont l'assurance décennale depuis 2014), la structure d'un bon devis et une méthode pour le produire vite — sans y passer la soirée.",
+    h1: "Comment faire un devis bâtiment dans les règles — et vite.",
+    reponse:
+      "Un devis bâtiment engage : il doit identifier l'entreprise et le client, détailler chaque poste (désignation, quantité, prix unitaire, main-d'œuvre), afficher TVA et totaux, la durée de validité — et, pour les métiers de la construction, mentionner l'assurance professionnelle avec les coordonnées de l'assureur, obligatoire depuis la loi du 18 juin 2014. Le reste est une affaire de méthode et de rapidité : le premier devis rendu prend souvent le chantier.",
+    sections: [
+      {
+        h2: "Les mentions qui doivent y figurer",
+        html: `<ul>
+          <li>Identité complète de l'entreprise (raison sociale, adresse, SIREN/SIRET) et du client.</li>
+          <li>Date du devis et <strong>durée de validité</strong> de l'offre.</li>
+          <li>Le détail par poste : désignation, quantité, prix unitaire HT, main-d'œuvre.</li>
+          <li>Taux de TVA applicable(s), total HT et TTC.</li>
+          <li>Conditions de paiement (acompte, échéances).</li>
+          <li><strong>Assurance professionnelle</strong> : pour les activités de construction soumises à la décennale, le devis doit mentionner l'assurance souscrite, les coordonnées de l'assureur et la zone de couverture — obligation issue de la loi n° 2014-626 du 18 juin 2014.</li>
+        </ul>`,
+      },
+      {
+        h2: "La méthode : chiffrer depuis ses tarifs, pas de tête",
+        html: `<p>Les devis les plus fiables partent d'un <strong>catalogue de tarifs</strong> entretenu — fournitures et main-d'œuvre — plutôt que d'un chiffrage de mémoire, variable d'un soir à l'autre. Un tarif se fixe une fois, se corrige quand les prix bougent, et chaque devis l'applique : le chiffrage devient cohérent d'un chantier à l'autre, et défendable devant le client.</p>`,
+      },
+      {
+        h2: "La rapidité est un avantage commercial",
+        html: `<p>Beaucoup de chantiers se gagnent à la vitesse de réponse : le client qui a trois artisans en visite signe souvent avec celui qui rend son devis le premier. C'est là que la dictée change le métier : décrire le chantier à voix haute en sortant de la visite, relire le soir, envoyer — au lieu d'y passer le week-end.</p>`,
+      },
+      {
+        h2: "Comment nodaq vous aide",
+        html: `<p>Avec nodaq, le devis se <a href="/devis-ia">dicte à la voix</a> et se chiffre depuis vos tarifs — jamais un prix inventé par l'IA. Vous relisez, corrigez, envoyez ; le client peut accepter en ligne, et le devis accepté devient un chantier suivi de bout en bout.</p>`,
+      },
+    ],
+    faq: [
+      {
+        q: "Le devis est-il obligatoire dans le bâtiment ?",
+        a: "Il est obligatoire dans de nombreux cas (notamment travaux et dépannage chez les particuliers au-delà de certains seuils) et toujours recommandé : signé, il vaut engagement contractuel sur le prix et le contenu.",
+      },
+      {
+        q: "Que risque-t-on sans la mention d'assurance décennale ?",
+        a: "L'obligation de mention est légale pour les activités concernées ; son absence expose à des sanctions et fragilise la confiance du client. Les coordonnées de l'assureur et la zone de couverture doivent figurer sur devis et factures.",
+      },
+    ],
+    sources: [
+      { href: "https://www.capeb.fr/actualites/nouvelle-mention-obligatoire-sur-les-devis-et-les-factures-l-assurance-professionnelle", label: "CAPEB — La mention obligatoire d'assurance professionnelle sur devis et factures" },
+    ],
+    freres: [
+      { href: "/devis-ia", label: "Les devis à la voix dans nodaq" },
+      { href: "/logiciel-batiment", label: "Le logiciel bâtiment" },
+    ],
+  },
+  {
+    slug: "guides/comment-calculer-marge-chantier",
+    type: "guide",
+    datePub: "2026-08-24",
+    title: "Comment calculer la marge d'un chantier : méthode complète | nodaq",
+    description:
+      "Prix de vente, déboursé sec, coût horaire chargé, frais généraux : la méthode pour calculer la marge d'un chantier — et pourquoi il faut la suivre pendant, pas après.",
+    h1: "Comment calculer la marge d'un chantier, sans se mentir.",
+    reponse:
+      "La marge d'un chantier, c'est le prix vendu moins tous les coûts : fournitures, main-d'œuvre au coût horaire chargé (salaire + charges, pas le salaire net), sous-traitance, et une quote-part de frais généraux. L'erreur classique est double : compter la main-d'œuvre au salaire net, et découvrir le résultat à la fin. La marge se calcule sur des chiffres réels, pendant le chantier.",
+    sections: [
+      {
+        h2: "1. Partir du prix vendu hors taxes",
+        html: `<p>La référence est le montant HT du devis accepté — pas le TTC, pas « ce qu'on pense facturer ». Les avenants signés s'y ajoutent ; les gestes commerciaux s'en déduisent.</p>`,
+      },
+      {
+        h2: "2. Compter la main-d'œuvre au coût chargé",
+        html: `<p>Une heure de salarié coûte le <strong>salaire brut plus les charges patronales</strong> — souvent 1,4 à 1,8 fois le net selon les situations — plus les temps improductifs (trajets, préparation). C'est ce <strong>coût horaire chargé</strong>, propre à chaque membre de l'équipe, qui doit valoriser les heures pointées sur le chantier. Le calculer une fois, puis pointer les heures : c'est la moitié de la vérité de votre marge.</p>`,
+      },
+      {
+        h2: "3. Ajouter fournitures, sous-traitance et frais généraux",
+        html: `<p>Les fournitures se rattachent au chantier à leur coût réel (factures fournisseurs, pas le prix « de tête »). La sous-traitance de même. Enfin, chaque chantier doit porter une <strong>quote-part de frais généraux</strong> — local, véhicules, assurances, logiciels — sinon l'entreprise « gagne » sur chaque chantier et perd à la fin de l'année.</p>`,
+      },
+      {
+        h2: "4. Suivre pendant, pas après",
+        html: `<p>Un chantier qui dérape se rattrape à mi-parcours — par un avenant, un resserrement du planning — jamais au bilan. D'où l'importance d'une marge <strong>réévaluée au fil des heures pointées</strong>, comparée à votre <strong>seuil de rentabilité</strong>, et honnête sur ce qu'elle ne sait pas encore : tant que tous les coûts ne sont pas enregistrés, c'est une estimation haute, et il faut la lire comme telle.</p>`,
+      },
+      {
+        h2: "Comment nodaq vous aide",
+        html: `<p>nodaq applique exactement cette méthode : les <a href="/calcul-marge-chantier">heures pointées sont valorisées au coût horaire chargé de chaque membre</a>, l'estimation de marge se réévalue en continu et se compare à votre seuil de rentabilité — en vous disant précisément ce qui manque pour passer de l'estimation à la marge exacte. Jamais un chiffre inventé.</p>`,
+      },
+    ],
+    faq: [
+      {
+        q: "Quelle est l'erreur la plus fréquente ?",
+        a: "Compter la main-d'œuvre au salaire net plutôt qu'au coût chargé : l'écart fait paraître rentables des chantiers qui ne le sont pas.",
+      },
+      {
+        q: "Marge brute ou marge nette ?",
+        a: "La marge brute (prix vendu moins coûts directs du chantier) sert à piloter chantier par chantier ; la marge nette intègre les frais généraux et dit si l'entreprise gagne sa vie. Il faut les deux.",
+      },
+    ],
+    sources: [],
+    freres: [
+      { href: "/calcul-marge-chantier", label: "La marge de chantier dans nodaq" },
+      { href: "/guides/delai-paiement-facture", label: "Les délais de paiement" },
+    ],
+  },
+];
+
+PAGES.push(...GUIDES);
 
 for (const p of PAGES) {
   const sortie = path.join(ici, `${p.slug}.html`);

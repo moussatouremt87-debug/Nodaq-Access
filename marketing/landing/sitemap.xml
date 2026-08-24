@@ -106,6 +106,26 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://nodaq.fr/guides/delai-paiement-facture</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://nodaq.fr/guides/comment-relancer-facture-impayee</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://nodaq.fr/guides/comment-faire-devis-batiment</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://nodaq.fr/guides/comment-calculer-marge-chantier</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://nodaq.fr/mentions-legales</loc>
     <priority>0.3</priority>
   </url>
