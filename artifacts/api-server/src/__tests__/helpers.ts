@@ -255,7 +255,7 @@ const BUSINESS_TABLES = [
   // classeur_document_bytes référence classeur_documents (document_id) : avant elle.
   "classeur_document_bytes", "classeur_documents",
   "connectors", "contrats", "cr_entries", "echeances",
-  "avoirs", "attestations_sap", "facture_sequences",
+  "avoirs", "attestations_sap", "sites", "facture_sequences",
   // incidents_facturation référence factures (facture_id) : avant elle.
   // Et depuis la migration 049, factures référence devis (devis_id) : les
   // factures partent donc AVANT les devis. Une facture est un document
@@ -365,6 +365,9 @@ export function tableInsertSql(table: string, tenantId: string, memberAId?: stri
     team_member_habilitations: memberAId
       ? [`INSERT INTO team_member_habilitations (id, membre_id, type, libelle, tenant_id) VALUES ($1, $2, 'rls_test', 'RLS Habilitation', $3) ON CONFLICT DO NOTHING`, [id, memberAId, tenantId]]
       : [`SELECT 1`, []], // skip if no member provided
+    // sites : id TEXT sans défaut, client_id NOT NULL sans clé étrangère —
+    // un identifiant arbitraire suffit pour éprouver la RLS.
+    sites: [`INSERT INTO sites (id, tenant_id, client_id, libelle) VALUES ($1, $2::uuid, 'rls-client', 'Agence RLS') ON CONFLICT DO NOTHING`, [id, tenantId]],
     // attestations_sap : id TEXT sans défaut, et `montant_eligible_cents` porte
     // un CHECK > 0 — une attestation à zéro n'ouvrant aucun droit.
     attestations_sap: [`INSERT INTO attestations_sap (id, tenant_id, client_id, annee, montant_eligible_cents) VALUES ($1, $2::uuid, 'rls-client', 2026, 1000) ON CONFLICT DO NOTHING`, [id, tenantId]],

@@ -8,6 +8,7 @@ import facturesRouter from "./factures";
 import facturationTempsRouter from "./facturation-temps";
 import facturationRecurrenteRouter from "./facturation-recurrente";
 import attestationsSapRouter from "./attestations-sap";
+import sitesRouter from "./sites";
 import avoirsRouter from "./avoirs";
 import prospectsRouter from "./prospects";
 import briefRouter from "./brief";
@@ -168,6 +169,10 @@ router.use(biz, devisRouter);
 // US-B9.4 — la garde du téléversement vit DANS `classeur.ts`, après multer :
 // `affaireId` arrive dans un corps multipart, qui n'est analysé qu'à ce
 // moment-là. Montée ici, elle aurait inspecté un corps vide et laissé passer.
+// US-B7.1 — les sites d'un contrat multi-sites. MEMBER+ comme les affaires :
+// un chef d'équipe doit voir où il intervient. Le `montantCents` est masqué
+// pour les rôles non financiers par la même mécanique que les affaires.
+router.use(biz, sitesRouter);
 router.use(biz, classeurRouter);
 router.use(biz, prospectsRouter);
 router.use(biz, votreMetierRouter);
