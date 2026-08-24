@@ -22,6 +22,7 @@ import { describe, test, expect, beforeAll, afterAll, vi } from "vitest";
 import request from "supertest";
 import { randomBytes } from "node:crypto";
 import { spawnSync } from "node:child_process";
+import pg from "pg";
 import { resolve } from "node:path";
 import app from "../app";
 import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner, serveurTest } from "./helpers";
@@ -32,6 +33,65 @@ const RACINE = resolve(__dirname, "../../../..");
 const sentinelle = (): string => `SENTINELLE-${randomBytes(12).toString("hex")}`;
 
 const nouvelleCle = (): string => randomBytes(32).toString("base64");
+
+/*
+ * ── Ticket 4.41 — pourquoi la rotation a besoin de SA base ────────────────
+ * `rotate-encryption-key.mjs` traverse TOUS les tenants : son SELECT n'a pas
+ * de clause WHERE, et c'est délibéré — une rotation de clé qui n'en tournerait
+ * qu'une partie serait pire qu'aucune rotation.
+ *
+ * Correct en production, destructeur sur la base de test PARTAGÉE : les autres
+ * fichiers tournent en parallèle (`fileParallelism: true`) et écrivent leurs
+ * propres secrets. D'où deux défaillances mesurées, une exécution complète sur
+ * trois ou quatre :
+ *
+ *  1. ici — un secret neuf écrit par un autre fichier entre les deux
+ *     lancements fait rapporter « tournés: 1 » au second, et l'assertion
+ *     d'idempotence tombe alors que le script a raison ;
+ *  2. ailleurs — le script ré-chiffre les secrets des autres fichiers en
+ *     version 2 pendant que leurs processus tiennent encore l'ancienne clé.
+ *
+ * La correction ne touche PAS au script : elle lui donne une base à lui. La
+ * ligne éprouvée reste celle que l'application a réellement chiffrée — elle est
+ * copiée telle quelle — donc le vrai chemin global est toujours éprouvé, sur
+ * une table que personne d'autre ne partage.
+ */
+let baseIsolee: string | null = null;
+
+/** Crée une base jetable, y applique les migrations, rend son URL. */
+async function baseJetable(): Promise<string> {
+  const nom = `nodaq_rot_${Date.now()}_${randomBytes(3).toString("hex")}`;
+  await adminPool.query(`CREATE DATABASE ${nom}`);
+  baseIsolee = nom;
+  const url = process.env["DATABASE_URL"]!.replace(/\/[^/?]+(\?|$)/, `/${nom}$1`);
+  const m = spawnSync(process.execPath, ["lib/db/scripts/migrate.mjs"], {
+    cwd: RACINE, encoding: "utf8", env: { ...process.env, DATABASE_URL: url },
+  });
+  if (m.status !== 0) throw new Error(`migrations: ${m.stderr}`);
+  return url;
+}
+
+/**
+ * Recopie le tenant et son secret — DÉJÀ chiffrés par l'application — dans la
+ * base isolée. Rechiffrer à la main ici éprouverait le chiffrement du test,
+ * pas celui du produit.
+ */
+async function copierSecret(url: string, tenantId: string): Promise<pg.Pool> {
+  const cible = new pg.Pool({ connectionString: url });
+  await cible.query("INSERT INTO tenants (id, nom) VALUES ($1::uuid, 'Rotation isolée')", [tenantId]);
+  const { rows } = await adminPool.query(
+    "SELECT cle, valeur_chiffree, version_cle FROM tenant_secrets WHERE tenant_id = $1::uuid",
+    [tenantId],
+  );
+  for (const r of rows) {
+    await cible.query(
+      `INSERT INTO tenant_secrets (tenant_id, cle, valeur_chiffree, version_cle)
+       VALUES ($1::uuid, $2, $3, $4)`,
+      [tenantId, r.cle, r.valeur_chiffree, r.version_cle],
+    );
+  }
+  return cible;
+}
 
 interface Locataire { cookie: string; tenantId: string }
 
@@ -77,6 +137,12 @@ beforeAll(async () => {
 }, 90_000);
 
 afterAll(async () => {
+  // La base jetable du test de rotation (ticket 4.41). Supprimée ici plutôt
+  // que dans le test : elle doit disparaître même si celui-ci échoue.
+  if (baseIsolee) {
+    await adminPool.query(`DROP DATABASE IF EXISTS ${baseIsolee} WITH (FORCE)`);
+    baseIsolee = null;
+  }
   await adminPool.query(`DELETE FROM tenant_secrets WHERE tenant_id = ANY($1::uuid[])`, [cleanupTenantIds]);
   await adminPool.query(`DELETE FROM parametres_envoi WHERE tenant_id = ANY($1::uuid[])`, [cleanupTenantIds]);
   await cleanupTenants(...cleanupTenantIds);
@@ -324,12 +390,19 @@ describe("e — rotation de la clé", () => {
     const ancienne = process.env["ENCRYPTION_KEY"]!;
     const nouvelle = nouvelleCle();
 
+    // Ticket 4.41 — le script tourne TOUTE la table. Sur la base partagée il
+    // emporterait les secrets des fichiers voisins, et un secret neuf écrit
+    // par l'un d'eux ferait échouer l'assertion d'idempotence plus bas.
+    const url = await baseJetable();
+    const cible = await copierSecret(url, rotation.tenantId);
+
     const lancer = () =>
       spawnSync(process.execPath, ["lib/db/scripts/rotate-encryption-key.mjs"], {
         cwd: RACINE,
         encoding: "utf8",
         env: {
           ...process.env,
+          DATABASE_URL: url,
           ENCRYPTION_KEY: nouvelle,
           ENCRYPTION_KEY_PREVIOUS: ancienne,
         },
@@ -343,7 +416,7 @@ describe("e — rotation de la clé", () => {
     expect(premier.stdout).not.toContain(nouvelle);
     expect(premier.stdout).not.toContain(ancienne);
 
-    const apres = await adminPool.query(
+    const apres = await cible.query(
       `SELECT version_cle, valeur_chiffree FROM tenant_secrets WHERE tenant_id = $1::uuid`,
       [rotation.tenantId],
     );
@@ -352,11 +425,21 @@ describe("e — rotation de la clé", () => {
 
     // Le secret se relit bien avec la NOUVELLE clé, et vaut toujours la même
     // chose : une rotation qui perd la valeur est pire qu'une rotation ratée.
+    //
+    // On déchiffre la valeur RÉELLEMENT TOURNÉE, prise dans la base isolée.
+    // La version d'avant passait par `lireSecret`, qui lit la base partagée —
+    // donc la ligne NON tournée, encore en version 1. Avec l'ancienne clé
+    // toujours présente en repli, elle se déchiffrait sans peine : l'assertion
+    // était verte sans jamais toucher au résultat de la rotation.
     process.env["ENCRYPTION_KEY"] = nouvelle;
     process.env["ENCRYPTION_KEY_PREVIOUS"] = ancienne;
     try {
-      const { lireSecret } = await import("../lib/tenant-secrets.js");
-      await expect(lireSecret(rotation.tenantId, "envoi.smtp_password")).resolves.toBe(secret);
+      const { dechiffrer } = await import("@nodaq/crypto");
+      expect(
+        dechiffrer(String(apres.rows[0].valeur_chiffree), {
+          scope: rotation.tenantId, cle: "envoi.smtp_password",
+        }),
+      ).toBe(secret);
     } finally {
       process.env["ENCRYPTION_KEY"] = ancienne;
       delete process.env["ENCRYPTION_KEY_PREVIOUS"];
@@ -367,12 +450,27 @@ describe("e — rotation de la clé", () => {
     expect(second.status, second.stderr).toBe(0);
     expect(second.stdout).toMatch(/tournés: 0/);
 
-    const inchange = await adminPool.query(
+    const inchange = await cible.query(
       `SELECT version_cle, valeur_chiffree FROM tenant_secrets WHERE tenant_id = $1::uuid`,
       [rotation.tenantId],
     );
     expect(inchange.rows[0].version_cle).toBe(2);
     expect(inchange.rows[0].valeur_chiffree).toBe(apres.rows[0].valeur_chiffree);
+
+    // ── LA garde du ticket 4.41 ────────────────────────────────────────────
+    // La base PARTAGÉE n'a pas bougé. C'est ce qui rend l'isolation vérifiable
+    // au lieu d'être une intention : sans elle, un `DATABASE_URL` oublié dans
+    // l'environnement du sous-processus ferait tourner toute la table commune
+    // — et tous les tests ci-dessus resteraient verts, puisqu'ils regardent la
+    // base isolée. Le défaut se manifesterait ailleurs, une fois sur trois,
+    // sur un fichier au hasard : exactement ce qu'on vient de corriger.
+    const partagee = await adminPool.query(
+      "SELECT version_cle FROM tenant_secrets WHERE tenant_id = $1::uuid",
+      [rotation.tenantId],
+    );
+    expect(partagee.rows[0].version_cle, "la rotation a touché la base partagée").toBe(1);
+
+    await cible.end();
   }, 60_000);
 
   test("deux clés identiques : le script refuse au lieu de ne rien faire", () => {
