@@ -52,7 +52,49 @@ export function serveurTest(app: object): http.Server {
   if (connu) return connu;
   // `listen(0)` rend `address()` disponible dans le même tick : supertest peut
   // lire le port tout de suite, donc aucun démarrage asynchrone n'est requis.
-  const serveur = http.createServer(app as unknown as http.RequestListener).listen(0);
+  // ── Ticket 4.41 — la sonde du 404, à demeure ───────────────────────────
+  // Un 404 sur une route de `/api/` que le test attendait vivante n'a été
+  // observé que QUATRE fois en une centaine d'exécutions complètes, et n'a
+  // jamais pu être reproduit à la demande. Chasser une occurrence coûte des
+  // heures ; la journaliser en coûte une fermeture par requête.
+  //
+  // La dernière occurrence — `POST /api/auth/register`, route PUBLIQUE, dans
+  // un `beforeAll` — a écarté les droits, la session et le tenant. Ce qu'il
+  // reste à trancher tient en deux nombres :
+  //
+  //   type=text/html  → c'est Express : AUCUNE route ne correspond ;
+  //   type=…/json     → c'est l'application, et le problème est ailleurs ;
+  //   api très bas ou ABSENT → le routeur `/api` est monté INCOMPLET.
+  //
+  // La valeur d'`api` grandit à chaque route ajoutée — 420 en août 2026, 491
+  // deux tickets plus tard. Ce qui compte n'est donc pas un nombre écrit ici,
+  // qui se périmerait, mais l'ÉCART avec les autres lignes de la même
+  // exécution : elles sont toutes identiques quand tout va bien.
+  //
+  // Ces lignes ne sortent que sur l'anomalie. Une exécution saine reste muette
+  // en dehors des 404 délibérés des tests de périmètre.
+  const brut = app as unknown as http.RequestListener & {
+    router?: { stack?: unknown[] }; _router?: { stack?: unknown[] };
+  };
+  const sonde: http.RequestListener = (req, res) => {
+    const fin = res.end.bind(res);
+    res.end = function (...args: Parameters<typeof fin>) {
+      if (res.statusCode === 404 && (req.url ?? "").startsWith("/api/")) {
+        const pile = (brut.router?.stack ?? brut._router?.stack ?? []) as {
+          handle?: { stack?: unknown[] };
+        }[];
+        const api = pile.find((c) => (c.handle?.stack?.length ?? 0) > 20);
+        console.error(
+          `[404-4.41] pid=${process.pid} ${req.method} ${req.url}` +
+          ` type=${res.getHeader("content-type")}` +
+          ` app=${pile.length} api=${api?.handle?.stack?.length ?? "ABSENT"}`,
+        );
+      }
+      return fin(...args);
+    } as typeof res.end;
+    brut(req, res);
+  };
+  const serveur = http.createServer(sonde).listen(0);
 
   // ── Ticket 4.41 — la course du keep-alive ───────────────────────────────
   // Depuis Node 19, `http.globalAgent.keepAlive` vaut TRUE par défaut, et
