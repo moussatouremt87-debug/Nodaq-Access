@@ -58,7 +58,7 @@ let testEmails: string[] = [];
 const BUSINESS_TABLES = [
   "activity", "affaires", "analytics_tool_logs", "archived_pdfs", "chat_messages", "classeur_documents", "classeur_document_bytes",
   "connectors", "contrats", "cr_entries", "devis", "echeances", "factures",
-  "avoirs", "facture_sequences", "incidents_facturation",
+  "avoirs", "attestations_sap", "facture_sequences", "incidents_facturation",
   "appels_relance", "liens_paiement", "campagnes_relance", "pending_actions", "journal_decisions", "regles_relance", "prospects", "settings", "team_members", "absences", "team_member_habilitations",
   "pointages", "taux_horaires", "catalogue_alias", "catalogue_lignes", "envois_journal", "parametres_envoi", "objectifs_franchissements",
   "tenant_secrets",

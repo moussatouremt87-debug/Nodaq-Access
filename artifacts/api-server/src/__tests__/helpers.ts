@@ -255,7 +255,7 @@ const BUSINESS_TABLES = [
   // classeur_document_bytes référence classeur_documents (document_id) : avant elle.
   "classeur_document_bytes", "classeur_documents",
   "connectors", "contrats", "cr_entries", "echeances",
-  "avoirs", "facture_sequences",
+  "avoirs", "attestations_sap", "facture_sequences",
   // incidents_facturation référence factures (facture_id) : avant elle.
   // Et depuis la migration 049, factures référence devis (devis_id) : les
   // factures partent donc AVANT les devis. Une facture est un document
@@ -365,6 +365,9 @@ export function tableInsertSql(table: string, tenantId: string, memberAId?: stri
     team_member_habilitations: memberAId
       ? [`INSERT INTO team_member_habilitations (id, membre_id, type, libelle, tenant_id) VALUES ($1, $2, 'rls_test', 'RLS Habilitation', $3) ON CONFLICT DO NOTHING`, [id, memberAId, tenantId]]
       : [`SELECT 1`, []], // skip if no member provided
+    // attestations_sap : id TEXT sans défaut, et `montant_eligible_cents` porte
+    // un CHECK > 0 — une attestation à zéro n'ouvrant aucun droit.
+    attestations_sap: [`INSERT INTO attestations_sap (id, tenant_id, client_id, annee, montant_eligible_cents) VALUES ($1, $2::uuid, 'rls-client', 2026, 1000) ON CONFLICT DO NOTHING`, [id, tenantId]],
     // archived_pdfs: id is TEXT PK, bytes is BYTEA — both must be supplied explicitly.
     archived_pdfs:    [`INSERT INTO archived_pdfs (id, tenant_id, document_type, document_id, bytes, sha256, byte_size) VALUES ($1, $2::uuid, 'FACTURE', $3, $4, $5, $6) ON CONFLICT DO NOTHING`, [id, tenantId, crypto.randomUUID(), Buffer.from("rls-test-pdf"), "rls-test-sha256-placeholder", 12]],
     // avoirs: id is a TEXT PK with no default — must be supplied in raw SQL.

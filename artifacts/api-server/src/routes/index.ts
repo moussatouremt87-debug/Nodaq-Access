@@ -7,6 +7,7 @@ import contratsRouter from "./contrats";
 import facturesRouter from "./factures";
 import facturationTempsRouter from "./facturation-temps";
 import facturationRecurrenteRouter from "./facturation-recurrente";
+import attestationsSapRouter from "./attestations-sap";
 import avoirsRouter from "./avoirs";
 import prospectsRouter from "./prospects";
 import briefRouter from "./brief";
@@ -213,6 +214,9 @@ router.use(financierOnly, facturesRouter);
 // financier n'a pas à en produire.
 router.use(financierOnly, facturationTempsRouter);
 router.use(financierOnly, facturationRecurrenteRouter);
+// US-B4.1 — l'attestation porte des montants encaissés par client : elle est
+// financière au même titre que les factures.
+router.use(financierOnly, attestationsSapRouter);
 router.use(financierOnly, avoirsRouter);
 router.use(financierOnly, analyticsRouter);
 router.use(financierOnly, paiementsRouter);
