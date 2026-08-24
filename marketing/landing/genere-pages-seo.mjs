@@ -194,7 +194,6 @@ const FAQ_COMMUNES = [
 PAGES.push(
   {
     slug: "logiciel-gestion-tpe",
-    noindex: true,
     title: "Logiciel de gestion pour TPE : devis, factures, marge, trésorerie | nodaq",
     description:
       "nodaq réunit devis dictés, suivi de factures, marge par affaire, heures, trésorerie et relances d'impayés dans un seul copilote pour TPE. Hébergé en France.",
@@ -237,7 +236,6 @@ PAGES.push(
   },
   {
     slug: "logiciel-artisan",
-    noindex: true,
     title: "Logiciel de gestion pour artisan : dictez vos devis, suivez votre marge | nodaq",
     description:
       "Un logiciel pensé pour le quotidien d'artisan : devis dictés dans le fourgon, factures photographiées, marge par chantier, relances validées en un clic.",
@@ -281,7 +279,6 @@ PAGES.push(
   },
   {
     slug: "logiciel-devis-facture",
-    noindex: true,
     title: "Logiciel devis et factures pour TPE : du devis dicté à la facture payée | nodaq",
     description:
       "Du devis dicté à la voix jusqu'à la facture suivie et relancée : nodaq couvre le cycle complet, avec validation humaine à chaque envoi. Pour TPE et artisans.",
@@ -317,7 +314,6 @@ PAGES.push(
   },
   {
     slug: "facturation-tpe",
-    noindex: true,
     title: "Facturation pour TPE : factures suivies, échéances tenues, relances validées | nodaq",
     description:
       "nodaq suit vos factures et avoirs jusqu'au paiement : échéancier, taux de recouvrement, campagnes de relance préparées par nodaq et déclenchées sur votre mandat.",
@@ -353,7 +349,6 @@ PAGES.push(
   },
   {
     slug: "suivi-tresorerie-tpe",
-    noindex: true,
     title: "Suivi de trésorerie pour TPE : ce qui rentre, ce qui sort, ce qui arrive | nodaq",
     description:
       "Le cockpit nodaq montre la trésorerie disponible, les factures en attente, l'échéancier fiscal et les charges récurrentes d'une TPE — en temps réel, sans tableur.",
@@ -389,7 +384,6 @@ PAGES.push(
   },
   {
     slug: "calcul-marge-chantier",
-    noindex: true,
     title: "Suivre la marge d'un chantier pendant le chantier, pas après coup | nodaq",
     description:
       "nodaq recalcule la marge de chaque chantier dès qu'une facture ou une heure est enregistrée. Vous savez si un chantier est rentable pendant le chantier.",
@@ -429,7 +423,6 @@ PAGES.push(
   },
   {
     slug: "gestion-chantier",
-    noindex: true,
     title: "Gestion de chantier pour TPE : heures, dépenses, marge et facturation | nodaq",
     description:
       "Suivez chaque chantier dans nodaq : heures de l'équipe, factures fournisseurs photographiées et classées, marge suivie en continu et facturation — du devis à l'encaissement.",

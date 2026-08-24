@@ -25,7 +25,22 @@
 - [Devis à la voix](https://nodaq.fr/devis-ia) : dictez, l'IA rédige avec
   vos tarifs, vous validez avant envoi.
 - [Relance de factures impayées](https://nodaq.fr/relance-facture-impayee) :
-  relances préparées automatiquement, envoyées après validation.
+  campagnes de relance téléphonique préparées par nodaq, déclenchées
+  uniquement sur mandat du dirigeant.
+- [Logiciel de gestion TPE](https://nodaq.fr/logiciel-gestion-tpe) :
+  le tout-en-un — devis, factures, marge, heures, trésorerie, relances.
+- [Logiciel pour artisan](https://nodaq.fr/logiciel-artisan) : la gestion
+  dans les creux de la journée, à la voix et en photo.
+- [Devis et factures](https://nodaq.fr/logiciel-devis-facture) : du devis
+  dicté à la facture payée, sans rupture.
+- [Facturation TPE](https://nodaq.fr/facturation-tpe) : factures et avoirs
+  suivis jusqu'au paiement, échéancier, taux de recouvrement.
+- [Suivi de trésorerie](https://nodaq.fr/suivi-tresorerie-tpe) : cockpit,
+  prévisionnel à 8 semaines, échéancier fiscal, charges récurrentes.
+- [Marge de chantier](https://nodaq.fr/calcul-marge-chantier) : marge
+  réévaluée à chaque heure pointée, comparée au seuil de rentabilité.
+- [Gestion de chantier](https://nodaq.fr/gestion-chantier) : devis, heures,
+  documents et facturation rassemblés par chantier.
 
 ## Pages
 
