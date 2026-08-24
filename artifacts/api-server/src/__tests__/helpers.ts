@@ -311,6 +311,7 @@ const BUSINESS_TABLES = [
   // bank_accounts référence bank_connections (connection_id) : avant elle.
   "bank_accounts", "bank_connections",
   "charges_recurrentes", "agent_feedback", "onboarding_qualification",
+  "subscriptions", "usage_franchissements",
 ];
 
 export async function cleanupTenants(...tenantIds: string[]): Promise<void> {
@@ -399,6 +400,12 @@ export function tableInsertSql(table: string, tenantId: string, memberAId?: stri
                           INSERT INTO liens_paiement (id, tenant_id, appel_id, empreinte_numero, montant_cents)
                           SELECT $1, $2, a.id, 'rls-empreinte', 12345 FROM a`, [id, tenantId]],
     prospects:          [`INSERT INTO prospects (id, name, tenant_id) VALUES ($1, 'RLS Prospect', $2)`, [id, tenantId]],
+    // subscriptions : UNIQUE (tenant_id) — ON CONFLICT car abonnementCourant
+    // a pu en créer un au fil d'une requête HTTP antérieure du même fichier.
+    subscriptions:      [`INSERT INTO subscriptions (id, tenant_id, plan_id, statut) VALUES ($1, $2, 'equipe', 'TRIAL') ON CONFLICT (tenant_id) DO NOTHING`, [id, tenantId]],
+    // usage_franchissements est APPEND-ONLY comme journal_decisions : le
+    // nettoyage tourne sous adminPool, pas sous app_user.
+    usage_franchissements: [`INSERT INTO usage_franchissements (id, tenant_id, mois, seuil_pct) VALUES ($1, $2, '2026-08', 80) ON CONFLICT DO NOTHING`, [id, tenantId]],
     settings:           [`INSERT INTO settings (key, value, tenant_id) VALUES ('rls_test_key', 'v', $1) ON CONFLICT DO NOTHING`, [tenantId]],
     team_members:       [`INSERT INTO team_members (id, name, tenant_id) VALUES ($1, 'RLS Member', $2)`, [id, tenantId]],
     absences:           memberAId

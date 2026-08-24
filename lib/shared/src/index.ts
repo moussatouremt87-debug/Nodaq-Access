@@ -214,3 +214,4 @@ export * from "./decisionAppel.js";
 export * from "./oralite.js";
 export * from "./formulation.js";
 export * from "./fenetreAppel.js";
+export * from "./tarification.js";

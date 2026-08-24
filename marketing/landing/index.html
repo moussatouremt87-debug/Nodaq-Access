@@ -120,14 +120,35 @@
     "@type": "BusinessAudience",
     "audienceType": "TPE et petites entreprises"
   },
-  "offers": {
-    "@type": "Offer",
-    "price": "49",
-    "priceCurrency": "EUR",
-    "availability": "https://schema.org/PreOrder",
-    "url": "https://nodaq.fr",
-    "description": "Tarif fondateur garanti à vie — à partir de 49 € HT/mois, + 9 € HT/mois par salarié. 50 places pour le programme pilote."
-  }
+  "offers": [
+    {
+      "@type": "Offer",
+      "name": "Fondateurs",
+      "price": "29",
+      "priceCurrency": "EUR",
+      "availability": "https://schema.org/PreOrder",
+      "url": "https://nodaq.fr/tarifs",
+      "description": "Offre Fondateurs garantie à vie — 29 € HT/mois, tout le contenu d'Équipe inclus. Réservée aux 50 premiers inscrits."
+    },
+    {
+      "@type": "Offer",
+      "name": "Solo",
+      "price": "49",
+      "priceCurrency": "EUR",
+      "availability": "https://schema.org/PreOrder",
+      "url": "https://nodaq.fr/tarifs",
+      "description": "Solo — 49 € HT/mois, 1 utilisateur : devis, factures, chantiers, trésorerie, relances."
+    },
+    {
+      "@type": "Offer",
+      "name": "Équipe",
+      "price": "89",
+      "priceCurrency": "EUR",
+      "availability": "https://schema.org/PreOrder",
+      "url": "https://nodaq.fr/tarifs",
+      "description": "Équipe — 89 € HT/mois, jusqu'à 5 utilisateurs inclus puis 15 € HT/mois par utilisateur : heures, plannings, marge multi-équipes, accès comptable."
+    }
+  ]
 }
 </script>
 <script type="application/ld+json">
@@ -1040,7 +1061,7 @@ button, input, textarea { font: inherit; color: inherit; }
            la page, au moment où le calcul vient d'être lu. Ancre interne. -->
       <p class="bbyt__punch bbyt__regard">
         Près de 2 000 € par mois d’un côté —
-        <a href="#fondateurs">un tarif fondateur à partir de 49 € HT/mois de l’autre</a>.
+        <a href="#fondateurs">un tarif fondateur à 29 € HT/mois de l’autre</a>.
       </p>
     </div>
   </div>
@@ -1226,7 +1247,7 @@ button, input, textarea { font: inherit; color: inherit; }
     <div class="perks">
       <div class="card perk reveal">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
-        <span>Tarif fondateur garanti à vie — à partir de <span class="fig fig--lime">49 € HT/mois</span> (+ <span class="fig fig--lime">9 € HT/mois</span> par salarié)</span>
+        <span>Offre Fondateurs garantie à vie — <span class="fig fig--lime">29 € HT/mois</span>, tout le contenu d’Équipe inclus (<a href="/tarifs" style="color:inherit">voir les formules</a>)</span>
       </div>
       <div class="card perk reveal" style="--d:0.05s">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
@@ -1264,8 +1285,11 @@ button, input, textarea { font: inherit; color: inherit; }
       <details>
         <summary>Combien ça coûte, et le tarif fondateur est-il vraiment garanti ?</summary>
         <p>
-          Le tarif Essentiel démarre à 49 € HT/mois + 9 € HT/mois par salarié. Les 50
-          premiers inscrits gardent ce tarif à vie.
+          Trois formules : Solo à 49 € HT/mois (1 utilisateur), Équipe à 89 € HT/mois
+          (jusqu’à 5 utilisateurs inclus, puis 15 € HT/mois par utilisateur), et
+          l’offre Fondateurs à 29 € HT/mois — tout Équipe, garantie à vie, réservée
+          aux 50 premiers inscrits. En annuel, deux mois sont offerts. Le détail est
+          sur la <a href="/tarifs">page tarifs</a>.
         </p>
       </details>
       <details>
@@ -1348,6 +1372,7 @@ button, input, textarea { font: inherit; color: inherit; }
     <!-- Maillage SEO (master plan §6) : liens vers les pages produit, dans
          le pied de page pour préserver le ratio d'attention du formulaire. -->
     <nav class="footer__legal-links" aria-label="En savoir plus">
+      <a href="/tarifs">Tarifs</a>
       <a href="/logiciel-gestion-tpe">Logiciel gestion TPE</a>
       <a href="/logiciel-batiment">Logiciel bâtiment</a>
       <a href="/logiciel-artisan">Logiciel artisan</a>
@@ -1726,7 +1751,7 @@ button, input, textarea { font: inherit; color: inherit; }
       "name": "Combien ça coûte, et le tarif fondateur est-il vraiment garanti ?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Le tarif Essentiel démarre à 49 € HT/mois + 9 € HT/mois par salarié. Les 50 premiers inscrits gardent ce tarif à vie."
+        "text": "Trois formules : Solo à 49 € HT/mois (1 utilisateur), Équipe à 89 € HT/mois (jusqu'à 5 utilisateurs inclus, puis 15 € HT/mois par utilisateur), et l'offre Fondateurs à 29 € HT/mois — tout Équipe, garantie à vie, réservée aux 50 premiers inscrits. En annuel, deux mois sont offerts."
       }
     },
     {

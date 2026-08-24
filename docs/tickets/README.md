@@ -76,6 +76,8 @@ Légende : **FAIT** · **PARTIEL** · **NON FAIT** · **BLOQUÉ** (hors de notre
 | [4.38](4.38-lien-paiement-facture-et-reconciliation.md) | Lien de paiement + réconciliation | PARTIEL | QR livré (#179) ; import de relevé et échéancier absents |
 | [4.39](4.39-speed-to-lead.md) | Speed-to-lead | NON FAIT | Dépend du 4.18-bis, non configuré |
 | [4.40](4.40-tuiles-cockpit-cliquables.md) | Tuiles du cockpit cliquables | NON FAIT | Tout — 9 tuiles animées au survol, aucune n'est un lien |
+| [4.41](4.41-flottement-rotation-cle-base-partagee.md) | Flottement — rotation de clé sur base partagée | FAIT | — (postérieur à l'audit du 23/08) |
+| [4.42](4.42-grille-tarifaire.md) | Grille tarifaire | FAIT | L'encaissement (Stripe Billing) est un ticket séparé ; écran fondateur de fermeture anticipée de l'offre |
 
 ---
 

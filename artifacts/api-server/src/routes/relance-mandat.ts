@@ -47,6 +47,7 @@ import {
 } from "@nodaq/shared";
 import { loadCompanySettings } from "../lib/seller-info.js";
 import { poserOppositionAppel } from "../lib/appels-relance.js";
+import { constaterUsageVocal } from "../lib/abonnement.js";
 import { emettreLienPaiement } from "../lib/lien-paiement.js";
 
 const router: IRouter = Router();
@@ -196,6 +197,11 @@ router.post("/demarre", async (req, res): Promise<void> => {
       .set({ statut: "EN_COURS", startedAt: new Date() })
       .where(eq(appelsRelanceTable.id, appelId)),
   );
+  // Grille tarifaire : le compteur du mois avance à l'instant où l'appel
+  // démarre — c'est ici que le franchissement des 80 % se constate, pas
+  // quand quelqu'un ouvre l'écran. Au-delà des appels inclus on COMPTE, on
+  // ne coupe jamais un appel ni un mois en cours.
+  await constaterUsageVocal(req.tenantId!);
   res.json({ ok: true });
 });
 
