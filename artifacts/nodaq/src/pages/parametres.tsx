@@ -932,7 +932,7 @@ function RelanceTab() {
           label="Autoriser un échelonnement"
           description="L'agent peut proposer de lui-même un paiement en plusieurs fois, dans les limites ci-dessous."
         />
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {nombre('maxVersements', 'Versements maximum', 'Au moins 2 pour un échelonnement.', !brouillon.echelonnementAutorise)}
           {nombre('delaiMaxPremierVersementJours', 'Premier versement sous', 'En jours.', !brouillon.echelonnementAutorise)}
         </div>

@@ -176,7 +176,7 @@ export default function ConnecteursPage() {
 
       <div className="px-5 md:px-8 pt-6 space-y-6">
         {/* Global status bar */}
-        <div className="rounded-xl border border-card-border bg-card p-4 flex items-center gap-6 text-sm">
+        <div className="rounded-xl border border-card-border bg-card p-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
           <div className="flex items-center gap-2">
             <span className="relative flex h-2 w-2 shrink-0">
               <span className={`absolute inline-flex h-full w-full rounded-full ${(data?.connected ?? 0) > 0 ? 'animate-pulse bg-primary' : 'bg-muted'}`} />

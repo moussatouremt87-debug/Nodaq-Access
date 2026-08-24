@@ -108,36 +108,38 @@ export default function FacturationElectroniquePage() {
           </Empty>
         ) : (
           <div className="rounded-xl border border-card-border bg-card shadow-sm overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                  <th className="px-5 py-3 font-medium">Fournisseur (SIREN)</th>
-                  <th className="px-4 py-3 font-medium text-right">Montant TTC</th>
-                  <th className="px-4 py-3 font-medium">Date facture</th>
-                  <th className="px-4 py-3 font-medium">Reçu le</th>
-                  <th className="px-4 py-3 font-medium">Source</th>
-                  <th className="px-3 py-3" />
-                </tr>
-              </thead>
-              <tbody>
-                {documents.map((doc) => (
-                  <tr key={doc.id} className="border-b border-border last:border-0 hover-elevate">
-                    <td className="px-5 py-3 font-mono-nums text-foreground">{doc.fournisseurSiren ?? '—'}</td>
-                    <td className="px-4 py-3 text-right font-mono-nums tabular-nums">{fmtMontant(doc.montantTtcCents)}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{doc.dateFacture ? fmtDate(doc.dateFacture) : '—'}</td>
-                    <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{fmtDate(doc.receivedAt)}</td>
-                    <td className="px-4 py-3 text-muted-foreground text-xs">{doc.source === 'manuel' ? 'Dépôt manuel' : 'Plateforme agréée'}</td>
-                    <td className="px-3 py-3 text-right">
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" asChild>
-                        <a href={`${API}/facturation-electronique/documents/${doc.id}/pdf`} target="_blank" rel="noreferrer" title="Télécharger">
-                          <Download className="h-3.5 w-3.5" />
-                        </a>
-                      </Button>
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[640px]">
+                <thead>
+                  <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                    <th className="px-5 py-3 font-medium">Fournisseur (SIREN)</th>
+                    <th className="px-4 py-3 font-medium text-right">Montant TTC</th>
+                    <th className="px-4 py-3 font-medium">Date facture</th>
+                    <th className="px-4 py-3 font-medium">Reçu le</th>
+                    <th className="px-4 py-3 font-medium">Source</th>
+                    <th className="px-3 py-3" />
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {documents.map((doc) => (
+                    <tr key={doc.id} className="border-b border-border last:border-0 hover-elevate">
+                      <td className="px-5 py-3 font-mono-nums text-foreground">{doc.fournisseurSiren ?? '—'}</td>
+                      <td className="px-4 py-3 text-right font-mono-nums tabular-nums">{fmtMontant(doc.montantTtcCents)}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{doc.dateFacture ? fmtDate(doc.dateFacture) : '—'}</td>
+                      <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{fmtDate(doc.receivedAt)}</td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs">{doc.source === 'manuel' ? 'Dépôt manuel' : 'Plateforme agréée'}</td>
+                      <td className="px-3 py-3 text-right">
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" asChild>
+                          <a href={`${API}/facturation-electronique/documents/${doc.id}/pdf`} target="_blank" rel="noreferrer" title="Télécharger">
+                            <Download className="h-3.5 w-3.5" />
+                          </a>
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
@@ -357,7 +359,7 @@ function EReportingCard({ paConfiguree }: { paConfiguree: boolean }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="space-y-1.5">
           {/* `htmlFor`/`id` : le libellé était visuellement présent mais
               rattaché à rien — un lecteur d'écran annonçait « champ date »

@@ -94,34 +94,36 @@ export default function PrevisionnelTresoreriePage() {
             )}
 
             <div className="rounded-xl border border-card-border bg-card overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-card-border text-[10px] uppercase tracking-wide text-muted-foreground">
-                    <th className="text-left font-medium px-4 py-3">Semaine</th>
-                    <th className="text-right font-medium px-4 py-3">Entrées</th>
-                    <th className="text-right font-medium px-4 py-3">Sorties</th>
-                    <th className="text-right font-medium px-4 py-3">Solde fin de semaine</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data!.semaines.map((s, i) => (
-                    <tr key={i} className="border-b border-card-border last:border-0">
-                      <td className="px-4 py-3 text-foreground">{fmtDate(s.debut)} – {fmtDate(s.fin)}</td>
-                      <td className="px-4 py-3 text-right font-mono-nums text-primary">
-                        {s.entreesCents > 0 && <TrendingUp className="inline h-3 w-3 mr-1 -mt-0.5" />}
-                        {fmtEUR(s.entreesCents)}
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono-nums text-destructive">
-                        {s.sortiesCents > 0 && <TrendingDown className="inline h-3 w-3 mr-1 -mt-0.5" />}
-                        {fmtEUR(s.sortiesCents)}
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono-nums font-semibold text-foreground">
-                        {s.soldeFinCents != null ? fmtEUR(s.soldeFinCents) : '—'}
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[640px]">
+                  <thead>
+                    <tr className="border-b border-card-border text-[10px] uppercase tracking-wide text-muted-foreground">
+                      <th className="text-left font-medium px-4 py-3">Semaine</th>
+                      <th className="text-right font-medium px-4 py-3">Entrées</th>
+                      <th className="text-right font-medium px-4 py-3">Sorties</th>
+                      <th className="text-right font-medium px-4 py-3">Solde fin de semaine</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {data!.semaines.map((s, i) => (
+                      <tr key={i} className="border-b border-card-border last:border-0">
+                        <td className="px-4 py-3 text-foreground">{fmtDate(s.debut)} – {fmtDate(s.fin)}</td>
+                        <td className="px-4 py-3 text-right font-mono-nums text-primary">
+                          {s.entreesCents > 0 && <TrendingUp className="inline h-3 w-3 mr-1 -mt-0.5" />}
+                          {fmtEUR(s.entreesCents)}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono-nums text-destructive">
+                          {s.sortiesCents > 0 && <TrendingDown className="inline h-3 w-3 mr-1 -mt-0.5" />}
+                          {fmtEUR(s.sortiesCents)}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono-nums font-semibold text-foreground">
+                          {s.soldeFinCents != null ? fmtEUR(s.soldeFinCents) : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </>
         )}

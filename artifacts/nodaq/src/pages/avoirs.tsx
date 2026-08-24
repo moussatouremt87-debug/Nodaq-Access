@@ -199,7 +199,7 @@ function AvoirDialog({ open, onOpenChange, onSave, saving }: {
             <Input value={factureRefId} onChange={e => setFactureRefId(e.target.value)}
               placeholder="Collez l'ID de la facture à corriger" />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label>Montant HT de l'avoir (€) *</Label>
               <CurrencyInput valueCents={montantHT} onChangeCents={setMontantHT} />

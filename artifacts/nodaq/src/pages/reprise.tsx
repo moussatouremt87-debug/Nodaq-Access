@@ -398,7 +398,7 @@ function BlocEquipe({ onValidate }: { onValidate: (data: Record<string, unknown>
         <Plus className="h-3.5 w-3.5" /> Ajouter un membre
       </Button>
       {rows.some(r => r.name) && (
-        <div className="text-xs text-muted-foreground flex gap-4">
+        <div className="text-xs text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
           <span><Users className="h-3 w-3 inline mr-1" />{capacite} j/sem de capacité</span>
           {totalCout > 0 && <span><Calculator className="h-3 w-3 inline mr-1" />{fmtEUR(totalCout * 100)}/mois</span>}
         </div>

@@ -223,61 +223,63 @@ export default function ClasseurPage() {
 function DocumentList({ docs, onDelete }: { docs: ClasseurDocument[]; onDelete: (d: ClasseurDocument) => void }) {
   return (
     <div className="rounded-xl border border-card-border bg-card shadow-sm overflow-hidden">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-            <th className="px-5 py-3 font-medium">Nom</th>
-            <th className="px-4 py-3 font-medium">Catégorie</th>
-            <th className="px-4 py-3 font-medium text-right">Taille</th>
-            <th className="px-4 py-3 font-medium">Ajouté le</th>
-            <th className="px-3 py-3" />
-          </tr>
-        </thead>
-        <tbody>
-          {docs.map(doc => {
-            const cat = CATEGORIES.find(c => c.value === doc.category);
-            const Icon = cat?.icon ?? FileText;
-            return (
-              <tr key={doc.id} className="border-b border-border last:border-0 hover-elevate">
-                <td className="px-5 py-3">
-                  <div className="flex items-center gap-2.5">
-                    <Icon className={`h-4 w-4 shrink-0 ${cat?.color ?? 'text-muted-foreground'}`} />
-                    {doc.hasContent ? (
-                      <a href={`${API}/classeur/${doc.id}/telechargement`} target="_blank" rel="noreferrer"
-                        className="font-medium text-foreground truncate max-w-xs hover:text-primary hover:underline"
-                        title="Télécharger">
-                        {doc.name}
-                      </a>
-                    ) : (
-                      <span className="font-medium text-foreground truncate max-w-xs" title="Document sans contenu archivé">
-                        {doc.name}
-                      </span>
-                    )}
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-muted-foreground text-xs">{cat?.label ?? doc.category}</td>
-                <td className="px-4 py-3 text-right font-mono-nums text-muted-foreground text-xs">{fmtSize(doc.size)}</td>
-                <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{fmtDate(doc.createdAt)}</td>
-                <td className="px-3 py-3 text-right">
-                  <div className="flex items-center justify-end gap-1">
-                    {doc.hasContent && (
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" asChild>
-                        <a href={`${API}/classeur/${doc.id}/telechargement`} target="_blank" rel="noreferrer" title="Télécharger">
-                          <Download className="h-3.5 w-3.5" />
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[640px]">
+          <thead>
+            <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+              <th className="px-5 py-3 font-medium">Nom</th>
+              <th className="px-4 py-3 font-medium">Catégorie</th>
+              <th className="px-4 py-3 font-medium text-right">Taille</th>
+              <th className="px-4 py-3 font-medium">Ajouté le</th>
+              <th className="px-3 py-3" />
+            </tr>
+          </thead>
+          <tbody>
+            {docs.map(doc => {
+              const cat = CATEGORIES.find(c => c.value === doc.category);
+              const Icon = cat?.icon ?? FileText;
+              return (
+                <tr key={doc.id} className="border-b border-border last:border-0 hover-elevate">
+                  <td className="px-5 py-3">
+                    <div className="flex items-center gap-2.5">
+                      <Icon className={`h-4 w-4 shrink-0 ${cat?.color ?? 'text-muted-foreground'}`} />
+                      {doc.hasContent ? (
+                        <a href={`${API}/classeur/${doc.id}/telechargement`} target="_blank" rel="noreferrer"
+                          className="font-medium text-foreground truncate max-w-xs hover:text-primary hover:underline"
+                          title="Télécharger">
+                          {doc.name}
                         </a>
+                      ) : (
+                        <span className="font-medium text-foreground truncate max-w-xs" title="Document sans contenu archivé">
+                          {doc.name}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground text-xs">{cat?.label ?? doc.category}</td>
+                  <td className="px-4 py-3 text-right font-mono-nums text-muted-foreground text-xs">{fmtSize(doc.size)}</td>
+                  <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{fmtDate(doc.createdAt)}</td>
+                  <td className="px-3 py-3 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      {doc.hasContent && (
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" asChild>
+                          <a href={`${API}/classeur/${doc.id}/telechargement`} target="_blank" rel="noreferrer" title="Télécharger">
+                            <Download className="h-3.5 w-3.5" />
+                          </a>
+                        </Button>
+                      )}
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                        onClick={() => onDelete(doc)} title="Supprimer">
+                        <Trash2 className="h-3.5 w-3.5" />
                       </Button>
-                    )}
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                      onClick={() => onDelete(doc)} title="Supprimer">
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
