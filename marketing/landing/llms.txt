@@ -17,10 +17,69 @@
 - Aucune action automatique vers l'extérieur : chaque envoi (devis, relance)
   est validé par le dirigeant avant de partir.
 
+## Produit
+
+- [Logiciel de gestion bâtiment](https://nodaq.fr/logiciel-batiment) :
+  devis dictés, marge par chantier, trésorerie, relances — pour les TPE
+  du bâtiment.
+- [Devis à la voix](https://nodaq.fr/devis-ia) : dictez, l'IA rédige avec
+  vos tarifs, vous validez avant envoi.
+- [Relance de factures impayées](https://nodaq.fr/relance-facture-impayee) :
+  campagnes de relance téléphonique préparées par nodaq, déclenchées
+  uniquement sur mandat du dirigeant.
+- [Logiciel de gestion TPE](https://nodaq.fr/logiciel-gestion-tpe) :
+  le tout-en-un — devis, factures, marge, heures, trésorerie, relances.
+- [Logiciel pour artisan](https://nodaq.fr/logiciel-artisan) : la gestion
+  dans les creux de la journée, à la voix et en photo.
+- [Devis et factures](https://nodaq.fr/logiciel-devis-facture) : du devis
+  dicté à la facture payée, sans rupture.
+- [Facturation TPE](https://nodaq.fr/facturation-tpe) : factures et avoirs
+  suivis jusqu'au paiement, échéancier, taux de recouvrement.
+- [Suivi de trésorerie](https://nodaq.fr/suivi-tresorerie-tpe) : cockpit,
+  prévisionnel à 8 semaines, échéancier fiscal, charges récurrentes.
+- [Marge de chantier](https://nodaq.fr/calcul-marge-chantier) : marge
+  réévaluée à chaque heure pointée, comparée au seuil de rentabilité.
+- [Gestion de chantier](https://nodaq.fr/gestion-chantier) : devis, heures,
+  documents et facturation rassemblés par chantier.
+
+## Métiers
+
+- [Plombier](https://nodaq.fr/metiers/plombier)
+- [Électricien](https://nodaq.fr/metiers/electricien)
+- [Peintre en bâtiment](https://nodaq.fr/metiers/peintre)
+- [Couvreur](https://nodaq.fr/metiers/couvreur)
+- [Maçon](https://nodaq.fr/metiers/macon)
+- [Menuisier](https://nodaq.fr/metiers/menuisier)
+- [Chauffagiste](https://nodaq.fr/metiers/chauffagiste)
+- [Carreleur](https://nodaq.fr/metiers/carreleur)
+- [Paysagiste](https://nodaq.fr/metiers/paysagiste)
+- [Entreprise de rénovation](https://nodaq.fr/metiers/entreprise-renovation)
+
+## Guides
+
+- [Délai de paiement d'une facture](https://nodaq.fr/guides/delai-paiement-facture) :
+  30 jours par défaut, 60 max, pénalités et indemnité de 40 € — sourcé.
+- [Relancer une facture impayée](https://nodaq.fr/guides/comment-relancer-facture-impayee) :
+  relance amiable, mise en demeure, injonction de payer, étape par étape.
+- [Faire un devis bâtiment](https://nodaq.fr/guides/comment-faire-devis-batiment) :
+  mentions obligatoires (dont assurance décennale) et méthode.
+- [Calculer la marge d'un chantier](https://nodaq.fr/guides/comment-calculer-marge-chantier) :
+  coût horaire chargé, frais généraux, suivi pendant le chantier.
+- [Calculer son prix de main-d'œuvre](https://nodaq.fr/guides/calcul-prix-main-oeuvre) :
+  du coût chargé au taux horaire vendu.
+- [Calculer le coût d'un chantier](https://nodaq.fr/guides/calcul-cout-chantier) :
+  déboursé sec, frais de chantier, frais généraux, marge.
+- [Suivre la trésorerie d'une TPE](https://nodaq.fr/guides/comment-suivre-tresorerie-tpe) :
+  les trois horizons — aujourd'hui, 8 semaines, l'année.
+- [Facturer un chantier](https://nodaq.fr/guides/comment-facturer-un-chantier) :
+  acompte, factures d'avancement, solde, mentions.
+- [Choisir un logiciel de gestion artisan](https://nodaq.fr/guides/logiciel-gestion-artisan) :
+  les 7 critères qui comptent, sans jargon.
+
 ## Pages
 
 - [Accueil](https://nodaq.fr/) : présentation, chiffres sourcés sur les
   délais de paiement et la charge administrative des TPE, FAQ, inscription.
-- [Mentions légales](https://nodaq.fr/mentions-legales.html)
-- [Confidentialité](https://nodaq.fr/confidentialite.html)
-- [CGV](https://nodaq.fr/cgv.html)
+- [Mentions légales](https://nodaq.fr/mentions-legales)
+- [Confidentialité](https://nodaq.fr/confidentialite)
+- [CGV](https://nodaq.fr/cgv)
