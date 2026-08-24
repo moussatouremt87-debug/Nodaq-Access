@@ -44,6 +44,7 @@ const poster = (cookie: string, chemin: string, corps: Record<string, unknown>) 
   request(serveurTest(app)).post(`/api${chemin}`).set("Cookie", cookie).send(corps);
 
 afterAll(async () => {
+  await adminPool.query(`DELETE FROM sites WHERE tenant_id = ANY($1::uuid[])`, [tenantIds]);
   await adminPool.query(`DELETE FROM factures WHERE tenant_id = ANY($1::uuid[])`, [tenantIds]);
   await adminPool.query(`DELETE FROM devis WHERE tenant_id = ANY($1::uuid[])`, [tenantIds]);
   await cleanupTenants(...tenantIds);
@@ -82,6 +83,32 @@ describe("un praticien ne PEUT pas saisir de prose sur un patient", () => {
     const t = await inscrire("bisa", "sante_liberale");
     const { body } = await poster(t.cookie, "/clients", { nom: "X", notes: "d" }).expect(422);
     expect(body.error).toMatch(/factur/i);
+  });
+
+  test("une note sur un SITE est refusée aussi — US-B7.1", async () => {
+    // Un site est rattaché à un CLIENT, et en santé le client est le patient.
+    // « Accès difficile, patient en fauteuil » est une donnée de santé autant
+    // qu'un diagnostic.
+    //
+    // Ce test existe parce que la garde structurelle a REFUSÉ de passer quand
+    // la table `sites` est arrivée. Elle exige une entrée dans la liste ; elle
+    // ne prouve pas que le refus s'applique — d'où ce test-ci.
+    const t = await inscrire("site", "sante_liberale");
+    const cl = crypto.randomUUID();
+    await adminPool.query(
+      `INSERT INTO clients (id, tenant_id, nom) VALUES ($1, $2::uuid, 'Madame Martin')`,
+      [cl, t.tenantId],
+    );
+
+    const { body } = await poster(t.cookie, "/sites", {
+      clientId: cl, libelle: "Domicile", notes: "Accès difficile, patient en fauteuil",
+    }).expect(422);
+    expect(body.code).toBe("PERIMETRE_HORS_HDS");
+
+    const { rows } = await adminPool.query(
+      "SELECT count(*)::int AS n FROM sites WHERE tenant_id = $1", [t.tenantId],
+    );
+    expect(rows[0].n).toBe(0);
   });
 
   test("effacer une note reste possible", async () => {

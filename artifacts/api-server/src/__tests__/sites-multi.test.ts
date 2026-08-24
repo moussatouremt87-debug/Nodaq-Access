@@ -205,6 +205,79 @@ describe("le planning par site", () => {
   });
 });
 
+describe("la facturation CONSOLIDÉE — le bout en bout", () => {
+  test("trois agences, UNE facture, trois lignes", async () => {
+    // Avant, il fallait trois contrats — donc trois factures mensuelles à un
+    // client qui en attend une.
+    const t = await inscrire("consolide");
+    const cl = await client(t.tenantId);
+    const co = await contrat(t.tenantId);
+    for (const [libelle, montant] of [
+      ["Agence Nord", 25_000], ["Agence Sud", 40_000], ["Siège", 90_000],
+    ] as const) {
+      await poser(t.cookie, { clientId: cl, contratId: co, libelle, montantCents: montant }).expect(201);
+    }
+
+    const { body } = await request(serveurTest(app))
+      .post("/api/contrats/facturer-echeances").set("Cookie", t.cookie)
+      .send({ contratId: co }).expect(201);
+
+    expect(body.creees).toBe(1);
+    const f = body.factures[0];
+    expect(f.lines).toHaveLength(3);
+    expect(f.totalHTCents).toBe(155_000);
+    expect(f.lines.map((l: { description: string }) => l.description).join(" "))
+      .toMatch(/Agence Nord/);
+  });
+
+  test("un site sans montant n'apparaît PAS comme une ligne à zéro", async () => {
+    // Une ligne à 0 € ferait croire à une prestation gratuite, et le client
+    // demanderait pourquoi il paie ailleurs pour la même chose. Ce site est
+    // inclus dans le forfait : il se planifie, il ne se facture pas à part.
+    //
+    // Trou révélé par l'injection : la garde pure était éprouvée, le câblage
+    // ne l'était pas.
+    const t = await inscrire("forfait");
+    const cl = await client(t.tenantId);
+    const co = await contrat(t.tenantId);
+    await poser(t.cookie, {
+      clientId: cl, contratId: co, libelle: "Agence facturée", montantCents: 25_000,
+    }).expect(201);
+    await poser(t.cookie, { clientId: cl, contratId: co, libelle: "Tournée incluse" }).expect(201);
+
+    const { body } = await request(serveurTest(app))
+      .post("/api/contrats/facturer-echeances").set("Cookie", t.cookie)
+      .send({ contratId: co }).expect(201);
+
+    const lignes = body.factures[0].lines as { description: string; unitPriceCents: number }[];
+    expect(lignes).toHaveLength(1);
+    expect(lignes.some((l) => l.unitPriceCents === 0)).toBe(false);
+    expect(body.factures[0].totalHTCents).toBe(25_000);
+  });
+
+  test("un site DÉSACTIVÉ sort de la facture, sans perdre son historique", async () => {
+    const t = await inscrire("desactive-fact");
+    const cl = await client(t.tenantId);
+    const co = await contrat(t.tenantId);
+    const { body: garde } = await poser(t.cookie, {
+      clientId: cl, contratId: co, libelle: "Agence gardée", montantCents: 25_000,
+    }).expect(201);
+    const { body: ferme } = await poser(t.cookie, {
+      clientId: cl, contratId: co, libelle: "Agence fermée", montantCents: 40_000,
+    }).expect(201);
+    await request(serveurTest(app))
+      .delete(`/api/sites/${ferme.id}`).set("Cookie", t.cookie).expect(200);
+
+    const { body } = await request(serveurTest(app))
+      .post("/api/contrats/facturer-echeances").set("Cookie", t.cookie)
+      .send({ contratId: co }).expect(201);
+
+    expect(body.factures[0].lines).toHaveLength(1);
+    expect(body.factures[0].totalHTCents).toBe(25_000);
+    expect(garde.id).toBeTruthy();
+  });
+});
+
 describe("l'isolation", () => {
   test("les sites d'un tenant ne sont pas lus par un autre", async () => {
     const a = await inscrire("iso-a");
