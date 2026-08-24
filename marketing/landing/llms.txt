@@ -17,6 +17,16 @@
 - Aucune action automatique vers l'extérieur : chaque envoi (devis, relance)
   est validé par le dirigeant avant de partir.
 
+## Produit
+
+- [Logiciel de gestion bâtiment](https://nodaq.fr/logiciel-batiment) :
+  devis dictés, marge par chantier, trésorerie, relances — pour les TPE
+  du bâtiment.
+- [Devis à la voix](https://nodaq.fr/devis-ia) : dictez, l'IA rédige avec
+  vos tarifs, vous validez avant envoi.
+- [Relance de factures impayées](https://nodaq.fr/relance-facture-impayee) :
+  relances préparées automatiquement, envoyées après validation.
+
 ## Pages
 
 - [Accueil](https://nodaq.fr/) : présentation, chiffres sourcés sur les

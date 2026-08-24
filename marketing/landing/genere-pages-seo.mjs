@@ -19,7 +19,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 const ici = path.dirname(fileURLToPath(import.meta.url));
-const EN_VALIDATION = true;
+const EN_VALIDATION = false;
 const MAJ = "2026-08-24";
 
 const PAGES = [
