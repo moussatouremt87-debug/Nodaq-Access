@@ -202,53 +202,55 @@ export default function MargePage() {
               {words.noneLabel} avec données de marge pour ce filtre.
             </div>
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                  <th className="px-5 py-3 font-medium">{capitalize(words.singular)}</th>
-                  <th className="px-4 py-3 font-medium">Client</th>
-                  <th className="px-4 py-3 font-medium text-right">CA facturé</th>
-                  <th className="px-4 py-3 font-medium text-right">Marge (€)</th>
-                  <th className="px-4 py-3 font-medium text-right">Marge (% facturé)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(data?.affaires ?? []).map(a => {
-                  const pct = a.marginPct ?? 0;
-                  return (
-                    <tr key={a.id} className="border-b border-border last:border-0 hover-elevate">
-                      <td className="px-5 py-3 font-medium text-foreground">{a.label}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{a.clientName ?? '—'}</td>
-                      <td className="px-4 py-3 text-right font-mono-nums tabular-nums">
-                        {a.invoicedAmountCents != null ? fmtEUR(a.invoicedAmountCents) : '—'}
-                      </td>
-                      <td className={`px-4 py-3 text-right font-mono-nums tabular-nums ${
-                        (a.marginCents ?? 0) >= 0 ? 'text-primary' : 'text-destructive'
-                      }`}>
-                        {a.marginCents != null ? fmtEUR(a.marginCents) : '—'}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        {a.marginPct != null ? (
-                          <div className="inline-flex items-center gap-2">
-                            <div className="w-16 h-1.5 rounded-full bg-muted overflow-hidden">
-                              <div className={`h-full rounded-full transition-all ${
-                                pct >= 30 ? 'bg-primary' : pct >= 15 ? 'bg-yellow-400' : 'bg-destructive'
-                              }`}
-                                style={{ width: `${Math.min(Math.abs(pct), 100)}%` }} />
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[640px]">
+                <thead>
+                  <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                    <th className="px-5 py-3 font-medium">{capitalize(words.singular)}</th>
+                    <th className="px-4 py-3 font-medium">Client</th>
+                    <th className="px-4 py-3 font-medium text-right">CA facturé</th>
+                    <th className="px-4 py-3 font-medium text-right">Marge (€)</th>
+                    <th className="px-4 py-3 font-medium text-right">Marge (% facturé)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(data?.affaires ?? []).map(a => {
+                    const pct = a.marginPct ?? 0;
+                    return (
+                      <tr key={a.id} className="border-b border-border last:border-0 hover-elevate">
+                        <td className="px-5 py-3 font-medium text-foreground">{a.label}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{a.clientName ?? '—'}</td>
+                        <td className="px-4 py-3 text-right font-mono-nums tabular-nums">
+                          {a.invoicedAmountCents != null ? fmtEUR(a.invoicedAmountCents) : '—'}
+                        </td>
+                        <td className={`px-4 py-3 text-right font-mono-nums tabular-nums ${
+                          (a.marginCents ?? 0) >= 0 ? 'text-primary' : 'text-destructive'
+                        }`}>
+                          {a.marginCents != null ? fmtEUR(a.marginCents) : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          {a.marginPct != null ? (
+                            <div className="inline-flex items-center gap-2">
+                              <div className="w-16 h-1.5 rounded-full bg-muted overflow-hidden">
+                                <div className={`h-full rounded-full transition-all ${
+                                  pct >= 30 ? 'bg-primary' : pct >= 15 ? 'bg-yellow-400' : 'bg-destructive'
+                                }`}
+                                  style={{ width: `${Math.min(Math.abs(pct), 100)}%` }} />
+                              </div>
+                              <span className={`font-mono-nums tabular-nums text-xs ${
+                                pct >= 30 ? 'text-primary' : pct >= 15 ? 'text-yellow-400' : 'text-destructive'
+                              }`}>
+                                {pct.toFixed(1)}%
+                              </span>
                             </div>
-                            <span className={`font-mono-nums tabular-nums text-xs ${
-                              pct >= 30 ? 'text-primary' : pct >= 15 ? 'text-yellow-400' : 'text-destructive'
-                            }`}>
-                              {pct.toFixed(1)}%
-                            </span>
-                          </div>
-                        ) : '—'}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                          ) : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </div>

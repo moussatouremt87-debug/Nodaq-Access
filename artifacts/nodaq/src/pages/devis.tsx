@@ -286,52 +286,54 @@ export default function DevisPage() {
               </EmptyContent>
             </Empty>
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                  <th className="px-5 py-3 font-medium">Référence</th>
-                  <th className="px-4 py-3 font-medium">Client</th>
-                  <th className="px-4 py-3 font-medium">Statut</th>
-                  <th className="px-4 py-3 font-medium text-right">Total TTC</th>
-                  <th className="px-4 py-3 font-medium">Validité</th>
-                  <th className="px-4 py-3 font-medium">Créé le</th>
-                  <th className="px-3 py-3" />
-                </tr>
-              </thead>
-              <AnimatePresence>
-                <tbody>
-                  {devisList.map(d => (
-                    <motion.tr key={d.id} layout
-                      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                      className="border-b border-border last:border-0 hover-elevate"
-                    >
-                      <td className="px-5 py-3 font-mono-nums font-medium text-foreground">{d.reference}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{d.clientName}</td>
-                      <td className="px-4 py-3"><DevisStatusBadge status={d.status} /></td>
-                      <td className="px-4 py-3 text-right font-mono-nums tabular-nums font-semibold">
-                        {fmtEUR(d.totalTTCCents)}
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
-                        {d.validUntil ? fmtDate(d.validUntil) : '—'}
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{fmtDate(d.createdAt)}</td>
-                      <td className="px-3 py-3 text-right">
-                        <DevisRowMenu
-                          devis={d}
-                          onEdit={() => openEdit(d)}
-                          onDelete={() => deleteMut.mutate(d.id)}
-                          onConvert={() => convertMut.mutate(d.id)}
-                          onSend={() => setSendDialogDevis(d)}
-                          onNouveauLien={() => setNouveauLienDevis(d)}
-                          convertPending={convertMut.isPending}
-                          sendPending={sendMut.isPending && sendMut.variables?.id === d.id}
-                        />
-                      </td>
-                    </motion.tr>
-                  ))}
-                </tbody>
-              </AnimatePresence>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[640px]">
+                <thead>
+                  <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                    <th className="px-5 py-3 font-medium">Référence</th>
+                    <th className="px-4 py-3 font-medium">Client</th>
+                    <th className="px-4 py-3 font-medium">Statut</th>
+                    <th className="px-4 py-3 font-medium text-right">Total TTC</th>
+                    <th className="px-4 py-3 font-medium">Validité</th>
+                    <th className="px-4 py-3 font-medium">Créé le</th>
+                    <th className="px-3 py-3" />
+                  </tr>
+                </thead>
+                <AnimatePresence>
+                  <tbody>
+                    {devisList.map(d => (
+                      <motion.tr key={d.id} layout
+                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                        className="border-b border-border last:border-0 hover-elevate"
+                      >
+                        <td className="px-5 py-3 font-mono-nums font-medium text-foreground">{d.reference}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{d.clientName}</td>
+                        <td className="px-4 py-3"><DevisStatusBadge status={d.status} /></td>
+                        <td className="px-4 py-3 text-right font-mono-nums tabular-nums font-semibold">
+                          {fmtEUR(d.totalTTCCents)}
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
+                          {d.validUntil ? fmtDate(d.validUntil) : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{fmtDate(d.createdAt)}</td>
+                        <td className="px-3 py-3 text-right">
+                          <DevisRowMenu
+                            devis={d}
+                            onEdit={() => openEdit(d)}
+                            onDelete={() => deleteMut.mutate(d.id)}
+                            onConvert={() => convertMut.mutate(d.id)}
+                            onSend={() => setSendDialogDevis(d)}
+                            onNouveauLien={() => setNouveauLienDevis(d)}
+                            convertPending={convertMut.isPending}
+                            sendPending={sendMut.isPending && sendMut.variables?.id === d.id}
+                          />
+                        </td>
+                      </motion.tr>
+                    ))}
+                  </tbody>
+                </AnimatePresence>
+              </table>
+            </div>
           )}
         </div>
       </div>
@@ -670,7 +672,7 @@ function DevisDialog({ open, onOpenChange, devis, onSaved }: {
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label>Client *</Label>
               <Input value={clientName} onChange={e => setClientName(e.target.value)} placeholder="Nom du client" />
@@ -686,7 +688,7 @@ function DevisDialog({ open, onOpenChange, devis, onSaved }: {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-1.5">
               <Label>TVA (%)</Label>
               <Input type="number" value={tvaRate} onChange={e => setTvaRate(Number(e.target.value))} min={0} max={100} />
@@ -705,47 +707,49 @@ function DevisDialog({ open, onOpenChange, devis, onSaved }: {
           <div className="space-y-2">
             <Label>Lignes</Label>
             <div className="rounded-lg border border-border overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-muted/30 text-[11px] uppercase tracking-wide text-muted-foreground">
-                    <th className="px-3 py-2 text-left font-medium">Description</th>
-                    <th className="px-3 py-2 text-right font-medium w-20">Qté</th>
-                    <th className="px-3 py-2 text-right font-medium w-28">P.U. HT (€)</th>
-                    <th className="px-3 py-2 text-right font-medium w-24">Total HT</th>
-                    <th className="px-2 py-2 w-8" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {lines.map(line => (
-                    <tr key={line.id} className="border-b border-border last:border-0">
-                      <td className="px-2 py-1.5">
-                        <Input value={line.description} onChange={e => updateLine(line.id, 'description', e.target.value)}
-                          placeholder="Description..." className="h-8 text-sm border-0 bg-transparent px-1 focus-visible:ring-0" />
-                      </td>
-                      <td className="px-2 py-1.5">
-                        <Input type="number" value={line.quantity}
-                          onChange={e => updateLine(line.id, 'quantity', Number(e.target.value))}
-                          className="h-8 text-sm text-right border-0 bg-transparent px-1 focus-visible:ring-0" min={1} />
-                      </td>
-                      <td className="px-2 py-1.5">
-                        <CurrencyInput valueCents={line.unitPriceCents}
-                          onChangeCents={cents => updateLine(line.id, 'unitPriceCents', cents)}
-                          className="h-8 text-sm text-right border-0 bg-transparent px-1 focus-visible:ring-0" min={0} />
-                      </td>
-                      <td className="px-3 py-1.5 text-right font-mono-nums text-xs text-muted-foreground">
-                        {(line.quantity * line.unitPriceCents / 100).toFixed(2)} €
-                      </td>
-                      <td className="px-2 py-1.5">
-                        {lines.length > 1 && (
-                          <button onClick={() => removeLine(line.id)} className="text-muted-foreground hover:text-destructive">
-                            <XCircle className="h-4 w-4" />
-                          </button>
-                        )}
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[640px]">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/30 text-[11px] uppercase tracking-wide text-muted-foreground">
+                      <th className="px-3 py-2 text-left font-medium">Description</th>
+                      <th className="px-3 py-2 text-right font-medium w-20">Qté</th>
+                      <th className="px-3 py-2 text-right font-medium w-28">P.U. HT (€)</th>
+                      <th className="px-3 py-2 text-right font-medium w-24">Total HT</th>
+                      <th className="px-2 py-2 w-8" />
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {lines.map(line => (
+                      <tr key={line.id} className="border-b border-border last:border-0">
+                        <td className="px-2 py-1.5">
+                          <Input value={line.description} onChange={e => updateLine(line.id, 'description', e.target.value)}
+                            placeholder="Description..." className="h-8 text-sm border-0 bg-transparent px-1 focus-visible:ring-0" />
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <Input type="number" value={line.quantity}
+                            onChange={e => updateLine(line.id, 'quantity', Number(e.target.value))}
+                            className="h-8 text-sm text-right border-0 bg-transparent px-1 focus-visible:ring-0" min={1} />
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <CurrencyInput valueCents={line.unitPriceCents}
+                            onChangeCents={cents => updateLine(line.id, 'unitPriceCents', cents)}
+                            className="h-8 text-sm text-right border-0 bg-transparent px-1 focus-visible:ring-0" min={0} />
+                        </td>
+                        <td className="px-3 py-1.5 text-right font-mono-nums text-xs text-muted-foreground">
+                          {(line.quantity * line.unitPriceCents / 100).toFixed(2)} €
+                        </td>
+                        <td className="px-2 py-1.5">
+                          {lines.length > 1 && (
+                            <button onClick={() => removeLine(line.id)} className="text-muted-foreground hover:text-destructive">
+                              <XCircle className="h-4 w-4" />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
               <div className="px-3 py-2 border-t border-border bg-muted/20">
                 <Button variant="ghost" size="sm" onClick={addLine} className="h-7 gap-1 text-xs">
                   <Plus className="h-3.5 w-3.5" /> Ajouter une ligne

@@ -138,7 +138,7 @@ export default function JournalDecisions() {
           variants={containerVariants}
           initial="hidden"
           animate="visible"
-          className="grid grid-cols-3 gap-3"
+          className="grid grid-cols-1 sm:grid-cols-3 gap-3"
         >
           {(['APPROUVEE', 'REJETEE', 'EXPIREE'] as const).map((d) => (
             <motion.div

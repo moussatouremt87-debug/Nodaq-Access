@@ -93,7 +93,7 @@ export default function AffaireDetail() {
       {(affaire.startDate || affaire.completedAt || affaire.dateFinPrevue) && (
         <div className="rounded-2xl border border-card-border bg-card p-5 space-y-3">
           <h2 className="font-semibold text-sm text-foreground">Dates</h2>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {affaire.startDate && (
               <div className="rounded-xl bg-muted/30 px-4 py-3">
                 <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">
@@ -144,7 +144,7 @@ export default function AffaireDetail() {
       {(quoted > 0 || invoiced > 0 || sold > 0) && (
         <div className="rounded-2xl border border-card-border bg-card p-5 space-y-3">
           <h2 className="font-semibold text-sm text-foreground">Finances</h2>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {quoted > 0 && (
               <div className="rounded-xl bg-muted/30 px-4 py-3">
                 <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">

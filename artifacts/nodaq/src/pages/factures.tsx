@@ -133,73 +133,75 @@ function LineEditor({ lines, onChange, tvaFranchise = false }: {
   return (
     <div className="space-y-2">
       <div className="rounded-lg border border-border overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border bg-muted/30 text-[11px] uppercase tracking-wide text-muted-foreground">
-              <th className="px-3 py-2 text-left font-medium">Description</th>
-              <th className="px-2 py-2 text-right font-medium w-16">Qté</th>
-              <th className="px-2 py-2 text-right font-medium w-24">PU HT (€)</th>
-              <th className="px-2 py-2 text-right font-medium w-20">TVA %</th>
-              <th className="px-2 py-2 text-right font-medium w-20">Total HT</th>
-              <th className="px-2 py-2 w-7" />
-            </tr>
-          </thead>
-          <tbody>
-            {lines.map(l => {
-              const net = l.quantity * (l.unitPriceCents / 100);
-              return (
-                <tr key={l.id} className="border-b border-border last:border-0">
-                  <td className="px-2 py-1.5">
-                    <Input value={l.description}
-                      onChange={e => update(l.id, 'description', e.target.value)}
-                      placeholder="Description…" className="h-7 text-xs border-0 bg-transparent px-1 focus-visible:ring-0" />
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <Input type="number" value={l.quantity}
-                      onChange={e => update(l.id, 'quantity', Number(e.target.value))}
-                      className="h-7 text-xs text-right border-0 bg-transparent px-1 focus-visible:ring-0" min={0.01} step={0.01} />
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <CurrencyInput valueCents={l.unitPriceCents}
-                      onChangeCents={cents => update(l.id, 'unitPriceCents', cents)}
-                      className="h-7 text-xs text-right border-0 bg-transparent px-1 focus-visible:ring-0" min={0} />
-                  </td>
-                  <td className="px-2 py-1.5 text-right">
-                    {tvaFranchise ? (
-                      <span className="text-xs text-muted-foreground">Franchise</span>
-                    ) : (
-                      <Select value={String(l.vatRate)}
-                        onValueChange={v => {
-                          const rate = Number(v);
-                          update(l.id, 'vatRate', rate);
-                          update(l.id, 'vatCategory', rate === 0 ? 'Z' : 'S');
-                        }}>
-                        <SelectTrigger className="h-7 text-xs border-0 bg-transparent focus:ring-0" aria-label="Taux de TVA de la ligne">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {VAT_RATES.map(r => (
-                            <SelectItem key={r} value={String(r)}>{r} %</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  </td>
-                  <td className="px-2 py-1.5 text-right font-mono-nums text-xs text-muted-foreground">
-                    {net.toFixed(2)} €
-                  </td>
-                  <td className="px-1 py-1.5">
-                    {lines.length > 1 && (
-                      <button onClick={() => remove(l.id)} className="text-muted-foreground hover:text-destructive p-1">
-                        <XCircle className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[640px]">
+            <thead>
+              <tr className="border-b border-border bg-muted/30 text-[11px] uppercase tracking-wide text-muted-foreground">
+                <th className="px-3 py-2 text-left font-medium">Description</th>
+                <th className="px-2 py-2 text-right font-medium w-16">Qté</th>
+                <th className="px-2 py-2 text-right font-medium w-24">PU HT (€)</th>
+                <th className="px-2 py-2 text-right font-medium w-20">TVA %</th>
+                <th className="px-2 py-2 text-right font-medium w-20">Total HT</th>
+                <th className="px-2 py-2 w-7" />
+              </tr>
+            </thead>
+            <tbody>
+              {lines.map(l => {
+                const net = l.quantity * (l.unitPriceCents / 100);
+                return (
+                  <tr key={l.id} className="border-b border-border last:border-0">
+                    <td className="px-2 py-1.5">
+                      <Input value={l.description}
+                        onChange={e => update(l.id, 'description', e.target.value)}
+                        placeholder="Description…" className="h-7 text-xs border-0 bg-transparent px-1 focus-visible:ring-0" />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input type="number" value={l.quantity}
+                        onChange={e => update(l.id, 'quantity', Number(e.target.value))}
+                        className="h-7 text-xs text-right border-0 bg-transparent px-1 focus-visible:ring-0" min={0.01} step={0.01} />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <CurrencyInput valueCents={l.unitPriceCents}
+                        onChangeCents={cents => update(l.id, 'unitPriceCents', cents)}
+                        className="h-7 text-xs text-right border-0 bg-transparent px-1 focus-visible:ring-0" min={0} />
+                    </td>
+                    <td className="px-2 py-1.5 text-right">
+                      {tvaFranchise ? (
+                        <span className="text-xs text-muted-foreground">Franchise</span>
+                      ) : (
+                        <Select value={String(l.vatRate)}
+                          onValueChange={v => {
+                            const rate = Number(v);
+                            update(l.id, 'vatRate', rate);
+                            update(l.id, 'vatCategory', rate === 0 ? 'Z' : 'S');
+                          }}>
+                          <SelectTrigger className="h-7 text-xs border-0 bg-transparent focus:ring-0" aria-label="Taux de TVA de la ligne">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {VAT_RATES.map(r => (
+                              <SelectItem key={r} value={String(r)}>{r} %</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5 text-right font-mono-nums text-xs text-muted-foreground">
+                      {net.toFixed(2)} €
+                    </td>
+                    <td className="px-1 py-1.5">
+                      {lines.length > 1 && (
+                        <button onClick={() => remove(l.id)} className="text-muted-foreground hover:text-destructive p-1">
+                          <XCircle className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
         <div className="px-3 py-2 border-t border-border bg-muted/20">
           <Button variant="ghost" size="sm" onClick={add} className="h-7 gap-1 text-xs">
             <Plus className="h-3.5 w-3.5" /> Ajouter une ligne
@@ -279,7 +281,7 @@ function FactureDialog({ open, onOpenChange, onSaved }: {
           <DialogTitle>Nouvelle facture</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label>Client *</Label>
               <Input value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="Nom du client" />
@@ -289,14 +291,14 @@ function FactureDialog({ open, onOpenChange, onSaved }: {
               <Input type="date" value={issuedDate} onChange={e => setIssuedDate(e.target.value)} />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label>Échéance *</Label>
               <Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
             </div>
           </div>
 
-          <div className="flex items-center gap-6">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
             <label className="flex items-center gap-2 text-sm cursor-pointer">
               <Checkbox checked={autoliquidation} onCheckedChange={v => setAutoliquidation(!!v)} />
               Autoliquidation (art. 283-2 nonies CGI)
@@ -585,7 +587,7 @@ export default function FacturesPage() {
 
         {/* Summary */}
         {data && (
-          <div className="flex gap-6 text-sm text-muted-foreground">
+          <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted-foreground">
             <span>Total émis : <strong className="text-foreground font-mono-nums">{fmtEUR(data.totalAmountCents)}</strong></span>
             {data.totalOverdueCents > 0 && (
               <span className="text-orange-400">Impayés en retard : <strong className="font-mono-nums">{fmtEUR(data.totalOverdueCents)}</strong></span>
@@ -615,58 +617,60 @@ export default function FacturesPage() {
               )}
             </Empty>
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                  <th className="px-5 py-3 font-medium">Numéro</th>
-                  <th className="px-4 py-3 font-medium">Client</th>
-                  <th className="px-4 py-3 font-medium">Statut</th>
-                  <th className="px-4 py-3 font-medium text-right">Total TTC</th>
-                  <th className="px-4 py-3 font-medium">Échéance</th>
-                  <th className="px-4 py-3 font-medium">PDF</th>
-                  <th className="px-3 py-3" />
-                </tr>
-              </thead>
-              <AnimatePresence>
-                <tbody>
-                  {factures.map(f => (
-                    <motion.tr key={f.id} layout
-                      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                      className="border-b border-border last:border-0 hover-elevate"
-                    >
-                      <td className="px-5 py-3 font-mono-nums font-medium text-foreground">
-                        {f.number || <span className="text-muted-foreground italic text-xs">Brouillon</span>}
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground">{f.customerName}</td>
-                      <td className="px-4 py-3"><StatutBadge statut={f.statut} /></td>
-                      <td className="px-4 py-3 text-right font-mono-nums tabular-nums font-semibold">
-                        {fmtEUR(f.amountCents)}
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{fmtDate(f.dueDate)}</td>
-                      <td className="px-4 py-3">
-                        {f.pdfSha256 ? (
-                          <a href={`${API}/factures/${f.id}/pdf`} target="_blank" rel="noreferrer"
-                            className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
-                            <ExternalLink className="h-3.5 w-3.5" /> PDF
-                          </a>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-3 text-right">
-                        <FactureRowMenu
-                          facture={f}
-                          onEmettre={() => { setSelectedFacture(f); setEmettreOpen(true); }}
-                          onPayer={() => payerMut.mutate(f.id)}
-                          onAnnulerPaiement={() => annulerPaiementMut.mutate(f.id)}
-                          onDelete={() => deleteMut.mutate(f.id)}
-                        />
-                      </td>
-                    </motion.tr>
-                  ))}
-                </tbody>
-              </AnimatePresence>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[640px]">
+                <thead>
+                  <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                    <th className="px-5 py-3 font-medium">Numéro</th>
+                    <th className="px-4 py-3 font-medium">Client</th>
+                    <th className="px-4 py-3 font-medium">Statut</th>
+                    <th className="px-4 py-3 font-medium text-right">Total TTC</th>
+                    <th className="px-4 py-3 font-medium">Échéance</th>
+                    <th className="px-4 py-3 font-medium">PDF</th>
+                    <th className="px-3 py-3" />
+                  </tr>
+                </thead>
+                <AnimatePresence>
+                  <tbody>
+                    {factures.map(f => (
+                      <motion.tr key={f.id} layout
+                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                        className="border-b border-border last:border-0 hover-elevate"
+                      >
+                        <td className="px-5 py-3 font-mono-nums font-medium text-foreground">
+                          {f.number || <span className="text-muted-foreground italic text-xs">Brouillon</span>}
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">{f.customerName}</td>
+                        <td className="px-4 py-3"><StatutBadge statut={f.statut} /></td>
+                        <td className="px-4 py-3 text-right font-mono-nums tabular-nums font-semibold">
+                          {fmtEUR(f.amountCents)}
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{fmtDate(f.dueDate)}</td>
+                        <td className="px-4 py-3">
+                          {f.pdfSha256 ? (
+                            <a href={`${API}/factures/${f.id}/pdf`} target="_blank" rel="noreferrer"
+                              className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                              <ExternalLink className="h-3.5 w-3.5" /> PDF
+                            </a>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-3 text-right">
+                          <FactureRowMenu
+                            facture={f}
+                            onEmettre={() => { setSelectedFacture(f); setEmettreOpen(true); }}
+                            onPayer={() => payerMut.mutate(f.id)}
+                            onAnnulerPaiement={() => annulerPaiementMut.mutate(f.id)}
+                            onDelete={() => deleteMut.mutate(f.id)}
+                          />
+                        </td>
+                      </motion.tr>
+                    ))}
+                  </tbody>
+                </AnimatePresence>
+              </table>
+            </div>
           )}
         </div>
       </div>

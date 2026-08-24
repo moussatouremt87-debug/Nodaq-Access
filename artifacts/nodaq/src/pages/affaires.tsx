@@ -201,88 +201,90 @@ export default function Affaires() {
               </EmptyContent>
             </Empty>
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                  <th className="px-5 py-3 font-medium">
-                    {words.singular.charAt(0).toUpperCase() + words.singular.slice(1)}
-                  </th>
-                  <th className="px-4 py-3 font-medium">Client</th>
-                  <th className="px-4 py-3 font-medium">Statut</th>
-                  <th className="px-4 py-3 font-medium text-right">Devisé</th>
-                  <th className="px-4 py-3 font-medium text-right">Facturé</th>
-                  <th className="px-4 py-3 font-medium text-right">Marge</th>
-                  <th className="px-4 py-3 font-medium">Début</th>
-                  <th className="px-3 py-3"></th>
-                </tr>
-              </thead>
-              <motion.tbody
-                variants={reducedMotion ? undefined : listContainerVariants}
-                initial={reducedMotion ? false : 'hidden'}
-                animate="visible"
-              >
-                {filtered.map((affaire) => (
-                  <motion.tr
-                    key={affaire.id}
-                    variants={reducedMotion ? undefined : itemVariants}
-                    className="border-b border-border last:border-0 hover-elevate cursor-pointer"
-                    data-testid={`row-affaire-${affaire.id}`}
-                    onClick={() => navigate(`/affaires/${affaire.id}`)}
-                  >
-                    <td className="px-5 py-3">
-                      <div className="font-medium text-foreground">{affaire.label}</div>
-                      {affaire.reference && (
-                        <div className="text-xs text-muted-foreground font-mono-nums">
-                          {affaire.reference}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {affaire.clientName ?? '—'}
-                    </td>
-                    <td className="px-4 py-3">
-                      <AffaireStatusBadge status={affaire.status} />
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono-nums tabular-nums">
-                      {affaire.quotedAmountCents != null
-                        ? fmtEUR(affaire.quotedAmountCents)
-                        : affaire.montantVenduHt != null
-                          ? fmtEUR(affaire.montantVenduHt)
-                          : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono-nums tabular-nums">
-                      {affaire.invoicedAmountCents != null ? fmtEUR(affaire.invoicedAmountCents) : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono-nums tabular-nums">
-                      {affaire.marginCents != null ? (
-                        <span
-                          className={
-                            affaire.marginCents >= 0 ? 'text-primary' : 'text-destructive'
-                          }
-                        >
-                          {fmtEUR(affaire.marginCents)}
-                        </span>
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
-                      {fmtDate(affaire.startDate)}
-                    </td>
-                    {/* La ligne entière navigue vers le détail : ce menu est
-                        dans son propre îlot de clic, sinon l'ouvrir
-                        naviguerait aussi. */}
-                    <td className="px-3 py-3 text-right" onClick={(e) => e.stopPropagation()}>
-                      <AffaireRowMenu
-                        affaire={affaire}
-                        onEdit={() => openEdit(affaire)}
-                        onDelete={() => deleteAffaire(affaire.id)}
-                      />
-                    </td>
-                  </motion.tr>
-                ))}
-              </motion.tbody>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[640px]">
+                <thead>
+                  <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                    <th className="px-5 py-3 font-medium">
+                      {words.singular.charAt(0).toUpperCase() + words.singular.slice(1)}
+                    </th>
+                    <th className="px-4 py-3 font-medium">Client</th>
+                    <th className="px-4 py-3 font-medium">Statut</th>
+                    <th className="px-4 py-3 font-medium text-right">Devisé</th>
+                    <th className="px-4 py-3 font-medium text-right">Facturé</th>
+                    <th className="px-4 py-3 font-medium text-right">Marge</th>
+                    <th className="px-4 py-3 font-medium">Début</th>
+                    <th className="px-3 py-3"></th>
+                  </tr>
+                </thead>
+                <motion.tbody
+                  variants={reducedMotion ? undefined : listContainerVariants}
+                  initial={reducedMotion ? false : 'hidden'}
+                  animate="visible"
+                >
+                  {filtered.map((affaire) => (
+                    <motion.tr
+                      key={affaire.id}
+                      variants={reducedMotion ? undefined : itemVariants}
+                      className="border-b border-border last:border-0 hover-elevate cursor-pointer"
+                      data-testid={`row-affaire-${affaire.id}`}
+                      onClick={() => navigate(`/affaires/${affaire.id}`)}
+                    >
+                      <td className="px-5 py-3">
+                        <div className="font-medium text-foreground">{affaire.label}</div>
+                        {affaire.reference && (
+                          <div className="text-xs text-muted-foreground font-mono-nums">
+                            {affaire.reference}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {affaire.clientName ?? '—'}
+                      </td>
+                      <td className="px-4 py-3">
+                        <AffaireStatusBadge status={affaire.status} />
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono-nums tabular-nums">
+                        {affaire.quotedAmountCents != null
+                          ? fmtEUR(affaire.quotedAmountCents)
+                          : affaire.montantVenduHt != null
+                            ? fmtEUR(affaire.montantVenduHt)
+                            : '—'}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono-nums tabular-nums">
+                        {affaire.invoicedAmountCents != null ? fmtEUR(affaire.invoicedAmountCents) : '—'}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono-nums tabular-nums">
+                        {affaire.marginCents != null ? (
+                          <span
+                            className={
+                              affaire.marginCents >= 0 ? 'text-primary' : 'text-destructive'
+                            }
+                          >
+                            {fmtEUR(affaire.marginCents)}
+                          </span>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
+                        {fmtDate(affaire.startDate)}
+                      </td>
+                      {/* La ligne entière navigue vers le détail : ce menu est
+                          dans son propre îlot de clic, sinon l'ouvrir
+                          naviguerait aussi. */}
+                      <td className="px-3 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                        <AffaireRowMenu
+                          affaire={affaire}
+                          onEdit={() => openEdit(affaire)}
+                          onDelete={() => deleteAffaire(affaire.id)}
+                        />
+                      </td>
+                    </motion.tr>
+                  ))}
+                </motion.tbody>
+              </table>
+            </div>
           )}
         </div>
       </div>

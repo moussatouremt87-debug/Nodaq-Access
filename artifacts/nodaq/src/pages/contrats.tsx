@@ -189,49 +189,51 @@ export default function Contrats() {
               </EmptyContent>
             </Empty>
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                  <th className="px-5 py-3 font-medium">Contrat</th>
-                  <th className="px-4 py-3 font-medium">Client</th>
-                  <th className="px-4 py-3 font-medium">Cadence</th>
-                  <th className="px-4 py-3 font-medium text-right">Montant</th>
-                  <th className="px-4 py-3 font-medium">Statut</th>
-                  <th className="px-4 py-3 font-medium">Prochaine échéance</th>
-                  <th className="px-3 py-3"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((contrat) => (
-                  <tr
-                    key={contrat.id}
-                    className="border-b border-border last:border-0 hover-elevate"
-                    data-testid={`row-contrat-${contrat.id}`}
-                  >
-                    <td className="px-5 py-3 font-medium text-foreground">{contrat.label}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{contrat.clientName ?? '—'}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{cadenceLabel(contrat.cadence)}</td>
-                    <td className="px-4 py-3 text-right font-mono-nums tabular-nums">
-                      {contrat.amountCents != null ? fmtEUR(contrat.amountCents) : '—'}
-                    </td>
-                    <td className="px-4 py-3">
-                      <ContratStatusBadge status={contrat.status} />
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
-                      {fmtDate(contrat.nextOccurrenceDate)}
-                    </td>
-                    <td className="px-3 py-3 text-right">
-                      <ContratRowMenu
-                        contrat={contrat}
-                        onEdit={() => openEdit(contrat)}
-                        onDelete={() => deleteContrat(contrat.id)}
-                        onSetStatus={(status) => updateContrat(contrat.id, { status })}
-                      />
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[640px]">
+                <thead>
+                  <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                    <th className="px-5 py-3 font-medium">Contrat</th>
+                    <th className="px-4 py-3 font-medium">Client</th>
+                    <th className="px-4 py-3 font-medium">Cadence</th>
+                    <th className="px-4 py-3 font-medium text-right">Montant</th>
+                    <th className="px-4 py-3 font-medium">Statut</th>
+                    <th className="px-4 py-3 font-medium">Prochaine échéance</th>
+                    <th className="px-3 py-3"></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {filtered.map((contrat) => (
+                    <tr
+                      key={contrat.id}
+                      className="border-b border-border last:border-0 hover-elevate"
+                      data-testid={`row-contrat-${contrat.id}`}
+                    >
+                      <td className="px-5 py-3 font-medium text-foreground">{contrat.label}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{contrat.clientName ?? '—'}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{cadenceLabel(contrat.cadence)}</td>
+                      <td className="px-4 py-3 text-right font-mono-nums tabular-nums">
+                        {contrat.amountCents != null ? fmtEUR(contrat.amountCents) : '—'}
+                      </td>
+                      <td className="px-4 py-3">
+                        <ContratStatusBadge status={contrat.status} />
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
+                        {fmtDate(contrat.nextOccurrenceDate)}
+                      </td>
+                      <td className="px-3 py-3 text-right">
+                        <ContratRowMenu
+                          contrat={contrat}
+                          onEdit={() => openEdit(contrat)}
+                          onDelete={() => deleteContrat(contrat.id)}
+                          onSetStatus={(status) => updateContrat(contrat.id, { status })}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </div>

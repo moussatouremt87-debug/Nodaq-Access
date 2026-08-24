@@ -271,7 +271,7 @@ function ChargeRecurrenteDialog({ open, onOpenChange, charge, onSaved }: {
           <DialogTitle>{charge ? 'Modifier la charge' : 'Nouvelle charge récurrente'}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label>Catégorie</Label>
               <Select value={category} onValueChange={setCategory}>
@@ -300,7 +300,7 @@ function ChargeRecurrenteDialog({ open, onOpenChange, charge, onSaved }: {
             <Input value={label} onChange={e => setLabel(e.target.value)}
               placeholder="Ex : Loyer atelier" />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label>Première échéance *</Label>
               <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />

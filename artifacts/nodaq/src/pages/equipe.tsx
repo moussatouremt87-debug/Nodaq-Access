@@ -457,7 +457,7 @@ function SimulateurBlock({ semaines, activeCount }: { semaines: SemaineData[]; a
       <div className="p-5 space-y-4">
         <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-4">
           <p className="font-serif text-[17px] text-foreground">{capitalize(words.indefinite)} de&nbsp;…</p>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label className="text-[11.5px] text-muted-foreground mb-1.5 block">Combien de jours</Label>
               <Input
@@ -1195,7 +1195,7 @@ function MemberDialog({ open, onOpenChange, member, affaires, clients, onSaved }
           <DialogTitle>{member ? `Modifier ${member.name}` : 'Nouveau membre'}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label>Nom *</Label>
               <Input value={name} onChange={e => setName(e.target.value)} placeholder="Prénom Nom" />
@@ -1205,7 +1205,7 @@ function MemberDialog({ open, onOpenChange, member, affaires, clients, onSaved }
               <Input value={role} onChange={e => setRole(e.target.value)} placeholder="Technicien..." />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label>Email</Label>
               <Input type="text" value={email} onChange={e => setEmail(e.target.value)} placeholder="prenom@example.com" />
@@ -1242,15 +1242,15 @@ function MemberDialog({ open, onOpenChange, member, affaires, clients, onSaved }
           </div>
           <div className="space-y-2">
             <Label>Planning hebdomadaire</Label>
-            <div className="rounded-lg border border-border overflow-hidden">
-              <div className="grid grid-cols-7 divide-x divide-border border-b border-border bg-muted/20">
+            <div className="rounded-lg border border-border overflow-x-auto">
+              <div className="grid grid-cols-7 min-w-[560px] divide-x divide-border border-b border-border bg-muted/20">
                 {DAYS.map(day => (
                   <div key={day} className="text-center py-2 text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
                     {DAY_LABELS[day]}
                   </div>
                 ))}
               </div>
-              <div className="grid grid-cols-7 divide-x divide-border">
+              <div className="grid grid-cols-7 min-w-[560px] divide-x divide-border">
                 {schedule.map(slot => {
                   const value = slot.affaireId ? `affaire:${slot.affaireId}`
                     : slot.clientId ? `client:${slot.clientId}`
