@@ -1,16 +1,22 @@
 User-agent: *
 Allow: /
 
-# Moteurs génératifs — autorisés volontairement : on veut être cité
 User-agent: GPTBot
 Allow: /
+
 User-agent: OAI-SearchBot
 Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
 User-agent: ClaudeBot
 Allow: /
-User-agent: PerplexityBot
+
+User-agent: Claude-SearchBot
 Allow: /
-User-agent: Google-Extended
+
+User-agent: PerplexityBot
 Allow: /
 
 Sitemap: https://nodaq.fr/sitemap.xml
