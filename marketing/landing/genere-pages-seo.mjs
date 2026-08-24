@@ -170,6 +170,301 @@ const PAGES = [
   },
 ];
 
+// ── Lot 2 (phase 2, suite) : 7 pages commerciales en VALIDATION (noindex
+// par page). Capacités citées = celles visibles dans le produit (captures
+// réelles : Chantiers, Devis, Factures, Avoirs, Heures, Marge, Rapports,
+// Échéancier fiscal, Charges récurrentes, seuil de rentabilité, taux de
+// recouvrement) + copy validée de la landing. Au go du fondateur : retirer
+// noindex, ajouter au sitemap + llms.txt + maillage d'accueil.
+const FAQ_COMMUNES = [
+  {
+    q: "Quand est-ce disponible ?",
+    a: "nodaq est en développement actif. Le programme fondateurs ouvre l'accès prioritaire dès le 1er octobre 2026, avant toute disponibilité publique.",
+  },
+  {
+    q: "Combien ça coûte ?",
+    a: "Le tarif Essentiel démarre à 49 € HT/mois + 9 € HT/mois par salarié. Les 50 premiers inscrits gardent ce tarif à vie.",
+  },
+  {
+    q: "Mes données sont-elles en sécurité ?",
+    a: "Les données sont hébergées en France, et aucun envoi (devis, relance) ne part sans votre validation explicite.",
+  },
+];
+
+PAGES.push(
+  {
+    slug: "logiciel-gestion-tpe",
+    noindex: true,
+    title: "Logiciel de gestion pour TPE : devis, factures, marge, trésorerie | nodaq",
+    description:
+      "nodaq réunit devis dictés, suivi de factures, marge par affaire, heures, trésorerie et relances d'impayés dans un seul copilote pour TPE. Hébergé en France.",
+    h1: "Le logiciel de gestion tout-en-un des TPE.",
+    reponse:
+      "nodaq réunit dans un seul outil ce qu'une TPE gère aujourd'hui entre un tableur, une bannette et la mémoire du dirigeant : devis dictés à la voix, factures suivies jusqu'au paiement, marge par affaire en temps réel, heures, trésorerie et relances d'impayés — chaque envoi validé par vous. Hébergé en France.",
+    sections: [
+      {
+        h2: "Comment ça fonctionne ?",
+        html: `<p>Trois gestes : <strong>dictez</strong> (un devis, une note), <strong>photographiez</strong> (une facture fournisseur, lue automatiquement), <strong>validez</strong> (tout envoi — devis, relance — part uniquement après votre accord). Le cockpit rassemble le reste : chiffre d'affaires du mois, factures en attente, trésorerie disponible, actions à valider.</p>`,
+      },
+      {
+        h2: "Les modules",
+        html: `<ul>
+          <li><strong>Devis</strong> — dictés à la voix, chiffrés avec vos tarifs. <a href="/devis-ia">Devis à la voix</a>.</li>
+          <li><strong>Factures et avoirs</strong> — suivis jusqu'au paiement, avec échéancier. <a href="/facturation-tpe">Facturation TPE</a>.</li>
+          <li><strong>Marge par affaire</strong> — recalculée dès qu'une facture ou une heure est enregistrée. <a href="/calcul-marge-chantier">Calcul de marge</a>.</li>
+          <li><strong>Trésorerie</strong> — disponible, échéancier fiscal, charges récurrentes. <a href="/suivi-tresorerie-tpe">Suivi de trésorerie</a>.</li>
+          <li><strong>Relances d'impayés</strong> — préparées automatiquement, envoyées avec votre accord. <a href="/relance-facture-impayee">Relance d'impayés</a>.</li>
+          <li><strong>Heures et chantiers</strong> — le réel de chaque affaire. <a href="/gestion-chantier">Gestion de chantier</a>.</li>
+        </ul>`,
+      },
+      {
+        h2: "Pour qui ?",
+        html: `<p>Pour les TPE de 3 à 15 salariés qui facturent à l'affaire. Le bâtiment est notre premier secteur équipé (<a href="/logiciel-batiment">logiciel bâtiment</a>) ; événementiel, beauté et création suivent la même logique.</p>`,
+      },
+    ],
+    faq: [
+      ...FAQ_COMMUNES,
+      {
+        q: "Faut-il tout ressaisir depuis mon ancien outil ?",
+        a: "Le programme fondateurs sert précisément à construire l'entrée en douceur avec les 50 premières entreprises. Inscrivez-vous et dites-nous d'où vous partez.",
+      },
+    ],
+    freres: [
+      { href: "/logiciel-batiment", label: "Logiciel bâtiment" },
+      { href: "/logiciel-artisan", label: "Logiciel artisan" },
+      { href: "/devis-ia", label: "Devis à la voix" },
+    ],
+  },
+  {
+    slug: "logiciel-artisan",
+    noindex: true,
+    title: "Logiciel de gestion pour artisan : dictez vos devis, suivez votre marge | nodaq",
+    description:
+      "Un logiciel pensé pour le quotidien d'artisan : devis dictés dans le fourgon, factures photographiées, marge par chantier, relances validées en un clic.",
+    h1: "Le logiciel de gestion qui suit le rythme d'un artisan.",
+    reponse:
+      "La gestion d'un artisan se fait dans les creux : le devis dicté dans le fourgon, la facture fournisseur photographiée sur le chantier, la relance validée entre deux rendez-vous. nodaq est construit pour ces gestes-là — l'IA prépare, vous validez, et la paperasse du soir cesse de manger vos soirées.",
+    sections: [
+      {
+        h2: "Comment ça fonctionne ?",
+        html: `<p>Vous <strong>dictez</strong> un devis comme vous l'expliqueriez à un collègue : nodaq le structure avec vos tarifs. Vous <strong>photographiez</strong> une facture : elle est lue, classée, comptée dans la marge du chantier. Vous <strong>validez</strong> les envois préparés — jamais d'envoi automatique.</p>`,
+      },
+      {
+        h2: "Pour qui ?",
+        html: `<p>Artisans et TPE qui facturent à l'affaire : le bâtiment d'abord — notre premier secteur équipé — et tout métier qui chiffre au chantier ou à la mission. Voir aussi la page <a href="/logiciel-batiment">logiciel bâtiment</a>.</p>`,
+      },
+      {
+        h2: "Ce que vous y gagnez",
+        html: `<ul>
+          <li>Le devis prêt avant de rentrer, plutôt que le soir à la table de la cuisine. <a href="/devis-ia">Voir les devis à la voix</a>.</li>
+          <li>La marge de chaque chantier connue pendant le chantier, pas après. <a href="/calcul-marge-chantier">Voir le calcul de marge</a>.</li>
+          <li>Les relances qui partent — parce qu'elles sont préparées et qu'il ne reste qu'un clic. <a href="/relance-facture-impayee">Voir les relances</a>.</li>
+        </ul>`,
+      },
+      {
+        h2: "Exemple concret (scénario illustratif)",
+        html: `<p>Une électricienne enchaîne deux chantiers. Entre les deux, elle dicte le devis du prochain, photographie la facture du grossiste, et valide la relance d'une facture échue. Trois minutes dans le fourgon — trois tâches qui attendaient d'habitude le vendredi soir.</p>`,
+      },
+    ],
+    faq: [
+      ...FAQ_COMMUNES,
+      {
+        q: "Est-ce fait pour mon métier ?",
+        a: "nodaq est pensé pour toute TPE qui facture à l'affaire — le bâtiment est notre premier secteur équipé, pas notre seul terrain.",
+      },
+    ],
+    freres: [
+      { href: "/logiciel-gestion-tpe", label: "Le logiciel de gestion TPE" },
+      { href: "/logiciel-batiment", label: "Logiciel bâtiment" },
+      { href: "/devis-ia", label: "Devis à la voix" },
+    ],
+  },
+  {
+    slug: "logiciel-devis-facture",
+    noindex: true,
+    title: "Logiciel devis et factures pour TPE : du devis dicté à la facture payée | nodaq",
+    description:
+      "Du devis dicté à la voix jusqu'à la facture suivie et relancée : nodaq couvre le cycle complet, avec validation humaine à chaque envoi. Pour TPE et artisans.",
+    h1: "Du devis dicté à la facture payée, sans rupture.",
+    reponse:
+      "Un devis accepté devient un chantier, un chantier devient des factures, des factures deviennent — parfois trop tard — des paiements. nodaq suit ce fil sans rupture : devis dicté à la voix, facture suivie jusqu'à l'échéance, relance préparée si le paiement tarde. À chaque envoi, c'est vous qui validez.",
+    sections: [
+      {
+        h2: "Le devis : dicté, chiffré avec vos tarifs",
+        html: `<p>Vous dictez, l'IA structure et met en page — et n'invente jamais un prix : les montants viennent de vos tarifs, par calcul déterministe. Détail complet sur la page <a href="/devis-ia">devis à la voix</a>.</p>`,
+      },
+      {
+        h2: "La facture : suivie jusqu'au paiement",
+        html: `<p>Factures et avoirs sont suivis avec leurs échéances. Le cockpit montre les factures émises, celles en attente et le taux de recouvrement — vous savez en un regard ce qui doit rentrer. Détail sur la page <a href="/facturation-tpe">facturation TPE</a>.</p>`,
+      },
+      {
+        h2: "Et si le paiement tarde",
+        html: `<p>nodaq prépare la relance au bon moment et vous la présente : un clic pour l'envoyer, un clic pour l'écarter. Détail sur la page <a href="/relance-facture-impayee">relance de factures impayées</a>.</p>`,
+      },
+    ],
+    faq: [
+      ...FAQ_COMMUNES,
+      {
+        q: "Les envois sont-ils automatiques ?",
+        a: "Jamais. Devis comme relances sont préparés par nodaq mais n'appartiennent qu'à vous : chaque envoi passe par votre validation en un clic.",
+      },
+    ],
+    freres: [
+      { href: "/devis-ia", label: "Devis à la voix" },
+      { href: "/facturation-tpe", label: "Facturation TPE" },
+      { href: "/relance-facture-impayee", label: "Relance d'impayés" },
+    ],
+  },
+  {
+    slug: "facturation-tpe",
+    noindex: true,
+    title: "Facturation pour TPE : factures suivies, échéances tenues, relances validées | nodaq",
+    description:
+      "nodaq suit vos factures et avoirs jusqu'au paiement : échéancier, taux de recouvrement, relances préparées automatiquement et envoyées avec votre accord.",
+    h1: "Une facturation qui ne perd rien en route.",
+    reponse:
+      "Émettre la facture n'est que la moitié du travail — l'autre moitié est de la voir payée. nodaq suit chaque facture et chaque avoir jusqu'au paiement : échéancier, taux de recouvrement visible au cockpit, et relances préparées dès qu'une échéance passe, envoyées seulement après votre validation.",
+    sections: [
+      {
+        h2: "Comment ça fonctionne ?",
+        html: `<p>Chaque facture émise entre dans l'échéancier avec sa date. Le cockpit affiche ce qui est émis, ce qui est en attente et le <strong>taux de recouvrement</strong>. À l'échéance dépassée, la relance est prête — <a href="/relance-facture-impayee">un clic pour l'envoyer</a>.</p>`,
+      },
+      {
+        h2: "Les factures fournisseurs aussi",
+        html: `<p>Une facture reçue se photographie : nodaq la lit, l'extrait et la compte — dans la trésorerie, et dans la <a href="/calcul-marge-chantier">marge du chantier</a> concerné. Fini la bannette qui attend la fin du mois.</p>`,
+      },
+      {
+        h2: "Pour qui ?",
+        html: `<p>Les TPE qui facturent à l'affaire et dont le dirigeant fait la facturation lui-même, souvent le soir. Voir aussi le <a href="/logiciel-gestion-tpe">logiciel de gestion TPE</a> complet.</p>`,
+      },
+    ],
+    faq: [
+      ...FAQ_COMMUNES,
+      {
+        q: "Que se passe-t-il quand une facture n'est pas payée ?",
+        a: "nodaq prépare la relance dès l'échéance dépassée et vous la présente. Elle n'est envoyée qu'après votre validation en un clic — jamais dans votre dos.",
+      },
+    ],
+    freres: [
+      { href: "/logiciel-devis-facture", label: "Du devis à la facture" },
+      { href: "/relance-facture-impayee", label: "Relance d'impayés" },
+      { href: "/suivi-tresorerie-tpe", label: "Suivi de trésorerie" },
+    ],
+  },
+  {
+    slug: "suivi-tresorerie-tpe",
+    noindex: true,
+    title: "Suivi de trésorerie pour TPE : ce qui rentre, ce qui sort, ce qui arrive | nodaq",
+    description:
+      "Le cockpit nodaq montre la trésorerie disponible, les factures en attente, l'échéancier fiscal et les charges récurrentes d'une TPE — en temps réel, sans tableur.",
+    h1: "Votre trésorerie, lisible en un regard.",
+    reponse:
+      "La trésorerie d'une TPE se pilote souvent de tête, avec un tableur en retard d'un mois. Le cockpit nodaq la rend lisible en continu : trésorerie disponible, chiffre d'affaires du mois, factures en attente, échéancier fiscal et charges récurrentes — alimenté automatiquement par vos factures et vos encaissements.",
+    sections: [
+      {
+        h2: "Comment ça fonctionne ?",
+        html: `<p>Chaque facture émise, chaque facture fournisseur photographiée et chaque paiement enregistré alimentent le cockpit. Vous y lisez ce qui est <strong>rentré</strong>, ce qui <strong>doit rentrer</strong> (avec le taux de recouvrement), et ce qui va <strong>sortir</strong> — échéances fiscales et charges récurrentes comprises.</p>`,
+      },
+      {
+        h2: "Pourquoi pas un tableur ?",
+        html: `<p>Parce qu'un tableur n'est juste que le jour où on le remplit. Ici la donnée vient du flux réel — <a href="/facturation-tpe">factures</a>, encaissements, <a href="/gestion-chantier">heures et chantiers</a> — sans ressaisie. Les chiffres sourcés de <a href="/">notre page d'accueil</a> montrent ce que coûte le pilotage à l'aveugle.</p>`,
+      },
+      {
+        h2: "Exemple concret (scénario illustratif)",
+        html: `<p>Mi-mois, une dirigeante regarde son cockpit : 7 440 € encaissés, trois factures en attente, l'échéance d'URSSAF dans douze jours. Elle sait qu'elle peut payer le fournisseur maintenant — ou qu'il faut d'abord relancer la facture échue. La décision prend trente secondes, pas une soirée de tableur.</p>`,
+      },
+    ],
+    faq: [
+      ...FAQ_COMMUNES,
+      {
+        q: "Dois-je ressaisir mes opérations ?",
+        a: "Non : le cockpit est alimenté par vos factures émises, les factures fournisseurs photographiées et les paiements enregistrés dans nodaq.",
+      },
+    ],
+    freres: [
+      { href: "/facturation-tpe", label: "Facturation TPE" },
+      { href: "/calcul-marge-chantier", label: "Calcul de marge" },
+      { href: "/logiciel-gestion-tpe", label: "Le logiciel de gestion TPE" },
+    ],
+  },
+  {
+    slug: "calcul-marge-chantier",
+    noindex: true,
+    title: "Calculer la marge d'un chantier en temps réel, pas après coup | nodaq",
+    description:
+      "nodaq recalcule la marge de chaque chantier dès qu'une facture ou une heure est enregistrée. Vous savez si un chantier est rentable pendant le chantier.",
+    h1: "La marge d'un chantier se découvre pendant, pas après.",
+    reponse:
+      "Trop de chantiers se révèlent non rentables une fois terminés — quand il est trop tard. nodaq recalcule la marge de chaque chantier en temps réel, dès qu'une facture fournisseur ou une heure est enregistrée, et la compare à votre seuil de rentabilité. Vous corrigez le tir pendant le chantier.",
+    sections: [
+      {
+        h2: "Comment ça fonctionne ?",
+        html: `<p>Le devis fixe le prix de vente. Ensuite, chaque <strong>facture fournisseur photographiée</strong> et chaque <strong>heure enregistrée</strong> viennent en face : la marge du chantier est recalculée à chaque événement, sans ressaisie. Le cockpit vous alerte quand elle décroche.</p>`,
+      },
+      {
+        h2: "Le seuil de rentabilité",
+        html: `<p>nodaq ne calcule pas votre seuil à votre place — il dépend de vos charges fixes et de votre marge, que vous seul connaissez. Vous le renseignez une fois ; chaque chantier s'y compare ensuite automatiquement.</p>`,
+      },
+      {
+        h2: "Pour qui ?",
+        html: `<p>Toute entreprise qui vend à l'affaire : <a href="/logiciel-batiment">bâtiment</a> d'abord, et tout métier où la rentabilité se joue chantier par chantier, mission par mission.</p>`,
+      },
+      {
+        h2: "Exemple concret (scénario illustratif)",
+        html: `<p>Chantier vendu 12 000 €. À mi-parcours, les factures photographiées et les heures saisies montrent une marge qui glisse sous le seuil : une commande fournisseur a dépassé le prévu. Le dirigeant le voit maintenant — il peut négocier un avenant ou resserrer la fin de chantier, au lieu de le découvrir au bilan.</p>`,
+      },
+    ],
+    faq: [
+      ...FAQ_COMMUNES,
+      {
+        q: "D'où viennent les chiffres de la marge ?",
+        a: "Du réel : le devis pour le prix de vente, les factures fournisseurs photographiées et les heures enregistrées pour les coûts. Jamais d'une estimation de l'IA — un chiffre affiché vient toujours d'un calcul déterministe.",
+      },
+    ],
+    freres: [
+      { href: "/gestion-chantier", label: "Gestion de chantier" },
+      { href: "/suivi-tresorerie-tpe", label: "Suivi de trésorerie" },
+      { href: "/logiciel-batiment", label: "Logiciel bâtiment" },
+    ],
+  },
+  {
+    slug: "gestion-chantier",
+    noindex: true,
+    title: "Gestion de chantier pour TPE : heures, dépenses, marge et facturation | nodaq",
+    description:
+      "Suivez chaque chantier dans nodaq : heures de l'équipe, factures fournisseurs photographiées, marge en temps réel et facturation — du devis à l'encaissement.",
+    h1: "Chaque chantier suivi, du devis à l'encaissement.",
+    reponse:
+      "Un chantier, c'est un devis, des heures, des achats, des factures — éparpillés entre des carnets, des photos et un tableur. nodaq les rassemble par chantier : les heures de l'équipe, les factures fournisseurs photographiées, la marge recalculée en temps réel et la facturation, jusqu'à l'encaissement.",
+    sections: [
+      {
+        h2: "Comment ça fonctionne ?",
+        html: `<p>Chaque chantier ouvert regroupe son devis, ses <strong>heures</strong> (rattachées au chantier ou au client), ses <strong>dépenses</strong> (factures photographiées) et ses <strong>factures client</strong>. Le cockpit affiche les chantiers en cours et leur état en un regard.</p>`,
+      },
+      {
+        h2: "La marge, pendant le chantier",
+        html: `<p>Heures et dépenses alimentent la <a href="/calcul-marge-chantier">marge en temps réel</a> : vous savez si le chantier tient son prix pendant qu'il est encore temps d'agir.</p>`,
+      },
+      {
+        h2: "Et à la fin",
+        html: `<p>La <a href="/facturation-tpe">facturation</a> part du réel du chantier, l'échéancier suit le paiement, et la <a href="/relance-facture-impayee">relance</a> est prête si le client tarde. Les <strong>rapports</strong> gardent la trace de ce que chaque chantier a vraiment rapporté.</p>`,
+      },
+    ],
+    faq: [
+      ...FAQ_COMMUNES,
+      {
+        q: "Mes salariés peuvent-ils saisir leurs heures ?",
+        a: "Les heures s'enregistrent par membre d'équipe et se rattachent à un chantier ou à un client — elles alimentent directement la marge du chantier.",
+      },
+    ],
+    freres: [
+      { href: "/calcul-marge-chantier", label: "Calcul de marge" },
+      { href: "/logiciel-batiment", label: "Logiciel bâtiment" },
+      { href: "/logiciel-gestion-tpe", label: "Le logiciel de gestion TPE" },
+    ],
+  }
+);
+
 const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const jsonld = (o) => JSON.stringify(o, null, 2).replace(/</g, "\\u003c");
 
@@ -210,7 +505,7 @@ function rendre(p) {
 <title>${esc(p.title)}</title>
 <meta name="description" content="${esc(p.description)}">
 <link rel="canonical" href="${url}">
-${EN_VALIDATION ? '<meta name="robots" content="noindex">\n' : ""}<meta property="og:type" content="website">
+${EN_VALIDATION || p.noindex ? '<meta name="robots" content="noindex">\n' : ""}<meta property="og:type" content="website">
 <meta property="og:url" content="${url}">
 <meta property="og:site_name" content="nodaq">
 <meta property="og:title" content="${esc(p.h1)}">
