@@ -286,7 +286,36 @@ export default function DevisPage() {
               </EmptyContent>
             </Empty>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            {/* Sous `md:`, des CARTES — mêmes composants qu'au tableau. */}
+            <div className="md:hidden divide-y divide-border">
+              {devisList.map(d => (
+                <div key={d.id} className="px-4 py-3 space-y-1.5" data-testid={`carte-devis-${d.id}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="font-mono-nums font-medium text-foreground truncate min-w-0">{d.reference}</span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <DevisStatusBadge status={d.status} />
+                      <DevisRowMenu devis={d}
+                        onEdit={() => openEdit(d)}
+                        onDelete={() => deleteMut.mutate(d.id)}
+                        onConvert={() => convertMut.mutate(d.id)}
+                        onSend={() => setSendDialogDevis(d)}
+                        onNouveauLien={() => setNouveauLienDevis(d)}
+                        convertPending={convertMut.isPending}
+                        sendPending={sendMut.isPending && sendMut.variables?.id === d.id} />
+                    </div>
+                  </div>
+                  <div className="text-muted-foreground truncate min-w-0">{d.clientName}</div>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="font-mono-nums tabular-nums font-semibold text-foreground">
+                      {fmtEUR(d.totalTTCCents)}
+                    </span>
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">{fmtDate(d.createdAt)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm min-w-[640px]">
                 <thead>
                   <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -334,6 +363,7 @@ export default function DevisPage() {
                 </AnimatePresence>
               </table>
             </div>
+            </>
           )}
         </div>
       </div>

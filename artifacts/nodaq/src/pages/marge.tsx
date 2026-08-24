@@ -202,7 +202,32 @@ export default function MargePage() {
               {words.noneLabel} avec données de marge pour ce filtre.
             </div>
           ) : (
-            <div className="overflow-x-auto">
+                        <>
+            {/* Sous `md:`, des CARTES. Un tableau qui défile est utilisable,
+                pas utilisable agréablement : atteindre la dernière colonne
+                fait perdre de vue la première. Les MÊMES composants qu'au
+                tableau — deux présentations, une seule source de vérité. */}
+            <div className="md:hidden divide-y divide-border">
+              {(data?.affaires ?? []).map(a => (
+                <div key={a.id} className="px-4 py-3 space-y-1.5">
+                  <div className="font-medium text-foreground truncate min-w-0">{a.label}</div>
+                  <div className="text-muted-foreground truncate min-w-0">{a.clientName ?? '—'}</div>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="text-xs text-muted-foreground">
+                      CA <span className="font-mono-nums tabular-nums text-foreground">{fmtEUR(a.invoicedAmountCents ?? 0)}</span>
+                    </span>
+                    <span className="font-mono-nums tabular-nums font-semibold text-foreground">
+                      {a.marginCents != null ? fmtEUR(a.marginCents) : '—'}
+                      {a.marginPct != null && (
+                        <span className="text-xs text-muted-foreground ml-1">({a.marginPct.toFixed(0)} %)</span>
+                      )}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm min-w-[640px]">
                 <thead>
                   <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -251,6 +276,7 @@ export default function MargePage() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
         </div>
       </div>

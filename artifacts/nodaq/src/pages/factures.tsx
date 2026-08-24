@@ -617,7 +617,59 @@ export default function FacturesPage() {
               )}
             </Empty>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            {/* ── Sous `md:`, des CARTES, pas un tableau ────────────────────
+                Un tableau de six colonnes qui défile est utilisable, pas
+                utilisable AGRÉABLEMENT : atteindre « Émettre » demande de
+                faire glisser la ligne, et on perd de vue le numéro de facture
+                en chemin. Sur un écran de téléphone, une facture est UN objet,
+                pas six cellules — d'où la carte.
+
+                Les mêmes composants qu'au-dessus (`StatutBadge`,
+                `FactureRowMenu`, `fmtEUR`) : deux présentations, une seule
+                source de vérité. Un badge qui changerait d'un côté seulement
+                serait pire que pas de carte du tout. */}
+            <div className="md:hidden divide-y divide-border">
+              {factures.map(f => (
+                <div key={f.id} className="px-4 py-3 space-y-1.5" data-testid={`carte-facture-${f.id}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="font-mono-nums font-medium text-foreground">
+                      {f.number || <span className="text-muted-foreground italic text-xs">Brouillon</span>}
+                    </span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <StatutBadge statut={f.statut} />
+                      <FactureRowMenu
+                        facture={f}
+                        onEmettre={() => { setSelectedFacture(f); setEmettreOpen(true); }}
+                        onPayer={() => payerMut.mutate(f.id)}
+                        onAnnulerPaiement={() => annulerPaiementMut.mutate(f.id)}
+                        onDelete={() => deleteMut.mutate(f.id)}
+                      />
+                    </div>
+                  </div>
+                  {/* `truncate` et `min-w-0` : un nom de société long pousserait
+                      sinon le montant hors de l'écran — le défaut même qu'on
+                      cherche à supprimer. */}
+                  <div className="text-muted-foreground truncate min-w-0">{f.customerName}</div>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="font-mono-nums tabular-nums font-semibold text-foreground">
+                      {fmtEUR(f.amountCents)}
+                    </span>
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">
+                      éch. {fmtDate(f.dueDate)}
+                    </span>
+                  </div>
+                  {f.pdfSha256 && (
+                    <a href={`${API}/factures/${f.id}/pdf`} target="_blank" rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                      <ExternalLink className="h-3.5 w-3.5" /> PDF
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm min-w-[640px]">
                 <thead>
                   <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -671,6 +723,7 @@ export default function FacturesPage() {
                 </AnimatePresence>
               </table>
             </div>
+            </>
           )}
         </div>
       </div>

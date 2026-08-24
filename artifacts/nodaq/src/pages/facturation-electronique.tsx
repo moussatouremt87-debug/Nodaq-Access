@@ -108,7 +108,25 @@ export default function FacturationElectroniquePage() {
           </Empty>
         ) : (
           <div className="rounded-xl border border-card-border bg-card shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
+            <>
+            {/* Sous `md:`, des CARTES — mêmes composants qu'au tableau. */}
+            <div className="md:hidden divide-y divide-border">
+              {documents.map((doc) => (
+                <div key={doc.id} className="px-4 py-3 space-y-1.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="font-mono-nums text-foreground truncate min-w-0">{doc.fournisseurSiren ?? '—'}</span>
+                    <span className="font-mono-nums tabular-nums font-semibold text-foreground shrink-0">
+                      {fmtMontant(doc.montantTtcCents)}
+                    </span>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-2 text-xs text-muted-foreground">
+                    <span>{doc.dateFacture ? fmtDate(doc.dateFacture) : '—'}</span>
+                    <span className="whitespace-nowrap">reçu le {fmtDate(doc.receivedAt)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm min-w-[640px]">
                 <thead>
                   <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -140,6 +158,7 @@ export default function FacturationElectroniquePage() {
                 </tbody>
               </table>
             </div>
+            </>
           </div>
         )}
       </div>

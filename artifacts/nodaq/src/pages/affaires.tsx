@@ -201,7 +201,41 @@ export default function Affaires() {
               </EmptyContent>
             </Empty>
           ) : (
-            <div className="overflow-x-auto">
+                        <>
+            {/* Sous `md:`, des CARTES. Un tableau qui défile est utilisable,
+                pas utilisable agréablement : atteindre la dernière colonne
+                fait perdre de vue la première. Les MÊMES composants qu'au
+                tableau — deux présentations, une seule source de vérité. */}
+            <div className="md:hidden divide-y divide-border">
+              {filtered.map((affaire) => (
+                <div
+                  key={affaire.id}
+                  className="px-4 py-3 space-y-1.5 cursor-pointer"
+                  data-testid={`carte-affaire-${affaire.id}`}
+                  onClick={() => navigate(`/affaires/${affaire.id}`)}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-medium text-foreground truncate">{affaire.label}</div>
+                      {affaire.reference && (
+                        <div className="text-xs text-muted-foreground font-mono-nums">{affaire.reference}</div>
+                      )}
+                    </div>
+                    <AffaireStatusBadge status={affaire.status} />
+                  </div>
+                  <div className="text-muted-foreground truncate min-w-0">{affaire.clientName ?? '—'}</div>
+                  <div className="font-mono-nums tabular-nums font-semibold text-foreground">
+                    {affaire.quotedAmountCents != null
+                      ? fmtEUR(affaire.quotedAmountCents)
+                      : affaire.montantVenduHt != null
+                        ? fmtEUR(affaire.montantVenduHt)
+                        : '—'}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm min-w-[640px]">
                 <thead>
                   <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -285,6 +319,7 @@ export default function Affaires() {
                 </motion.tbody>
               </table>
             </div>
+            </>
           )}
         </div>
       </div>
