@@ -64,6 +64,13 @@ const SortieModeleSchema = z.object({
  * (ce qui devient une ligne, ce qui n'en devient pas), pas un métier. Un
  * exemple par secteur ferait dix-sept textes à inventer puis à maintenir, pour
  * une leçon identique.
+ *
+ * Restait un biais que la première correction avait laissé passer, et c'est
+ * celui que le point d'attention d'US-A2.2 nomme : la liste d'unités données
+ * en exemple commençait par « m2, ml » — deux unités de chantier, sur chaque
+ * appel, quel que soit le métier. Elle vient désormais du pack sectoriel :
+ * « couvert » pour un restaurant, « séance » pour un kiné, « km » pour un
+ * transporteur. Une garde interdit son retour en dur.
  */
 function systemPrompt(vertical: Vertical): string {
   const words = affaireWords(vertical);
@@ -74,7 +81,7 @@ travail réalisé, un service rendu — rends :
 - "libelle" : la prestation, en quelques mots, telle qu'elle est nommée
 - "quantite" : le nombre dicté POUR CETTE PRESTATION (surface, longueur, nombre
   d'unités, durée facturée), ou null s'il n'en donne pas
-- "unite" : l'unité dictée (m2, ml, u, h, forfait…), ou null
+- "unite" : l'unité dictée (${verticalPack(vertical).unitesExemples.join(", ")}…), ou null
 
 CE QUI N'EST JAMAIS UNE LIGNE FACTURABLE, même accompagné d'un nombre — ignore
 ces éléments, ne les rends PAS comme intentions :
@@ -101,7 +108,7 @@ Réponse : {"intentions":[
 réponse — ce sont des informations de dossier, pas des prestations.)
 
 Réponds UNIQUEMENT par un objet JSON de la forme :
-{"intentions":[{"libelle":"...","quantite":12,"unite":"m2"}]}`;
+{"intentions":[{"libelle":"...","quantite":12,"unite":"${verticalPack(vertical).unitesExemples[0]}"}]}`;
 }
 
 /** Extrait le premier objet JSON d'une réponse, tolérant aux blocs ```json. */

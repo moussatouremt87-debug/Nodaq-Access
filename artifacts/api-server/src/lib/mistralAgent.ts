@@ -368,7 +368,11 @@ export const TOOLS: LlmTool[] = [
               properties: {
                 libelle: { type: "string", description: "Ce qui est à faire, tel que dit." },
                 quantite: { type: "number" },
-                unite: { type: "string", description: "m², ml, heure, forfait…" },
+                // Aucun exemple ici : ce tableau est partagé par TOUS les
+                // tenants, et une liste d'unités y devient le vocabulaire de
+                // départ de tous les métiers. Les unités du secteur sont
+                // données par `vocabulaireAssistant`, qui est par tenant.
+                unite: { type: "string", description: "L'unité telle que l'utilisateur l'a dictée." },
               },
               required: ["libelle"],
             },
@@ -481,7 +485,7 @@ export const TOOLS: LlmTool[] = [
         type: "object",
         properties: {
           libelle: { type: "string" },
-          unite: { type: "string", description: "ex : m², ml, heure, forfait." },
+          unite: { type: "string", description: "L'unité telle que l'utilisateur l'a dictée." },
           prixUnitaireHtEuros: { type: "number", description: "EN EUROS, et seulement si l'utilisateur l'a écrit. Sinon omets — l'écran le réclamera." },
         },
         required: ["libelle"],

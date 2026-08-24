@@ -152,6 +152,21 @@ export interface VerticalPack {
    * actuel n'a besoin d'article ni d'accord.
    */
   readonly externalWorkerWords: { readonly singular: string; readonly plural: string };
+  /**
+   * Les unités de facturation TYPIQUES du secteur (US-A2.2).
+   *
+   * Elles ne contraignent rien : l'utilisateur dicte l'unité qu'il veut, et
+   * le catalogue porte la sienne. Elles servent d'EXEMPLES au modèle, et
+   * c'est précisément là que le biais se logeait — la liste écrite en dur
+   * commençait par « m², ml », deux unités de chantier, sur chaque appel et
+   * quel que soit le métier. Une coiffeuse ou une infirmière voyait donc le
+   * modèle amorcé sur du gros œuvre avant d'avoir dit un mot.
+   *
+   * Le point d'attention d'US-A2.2 nomme exactement ce risque : « vérifier
+   * que le modèle n'a pas été implicitement biaisé (prompt, exemples
+   * few-shot) vers un vocabulaire de chantier ».
+   */
+  readonly unitesExemples: readonly string[];
 }
 
 const AFFAIRE: AffaireWords = {
@@ -247,6 +262,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     proposalWord: "Devis",
     delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
     externalWorkerWords: SOUS_TRAITANT_WORDS,
+    unitesExemples: ["m²", "ml", "u", "forfait"],
   },
   paysage: {
     id: "paysage",
@@ -258,6 +274,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     proposalWord: "Devis",
     delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
     externalWorkerWords: SOUS_TRAITANT_WORDS,
+    unitesExemples: ["m²", "ml", "u", "forfait"],
   },
   evenementiel: {
     id: "evenementiel",
@@ -269,6 +286,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     // prestation) — pas un cycle B2B à délai long.
     delaiPaiementUsuelJours: COMPTANT,
     externalWorkerWords: EXTRA_WORDS,
+    unitesExemples: ["u", "jour", "forfait"],
   },
   maintenance: {
     id: "maintenance",
@@ -278,6 +296,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     proposalWord: "Devis",
     delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
     externalWorkerWords: SOUS_TRAITANT_WORDS,
+    unitesExemples: ["u", "h", "forfait"],
   },
   services_projet: {
     id: "services_projet",
@@ -287,6 +306,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     proposalWord: "Proposition commerciale",
     delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
     externalWorkerWords: FREELANCE_WORDS,
+    unitesExemples: ["jour", "h", "forfait"],
   },
   industrie_btp: {
     id: "industrie_btp",
@@ -299,6 +319,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     proposalWord: "Devis",
     delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
     externalWorkerWords: SOUS_TRAITANT_WORDS,
+    unitesExemples: ["m²", "ml", "t", "u", "forfait"],
   },
   services: {
     id: "services",
@@ -308,6 +329,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     proposalWord: "Proposition commerciale",
     delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
     externalWorkerWords: INTERIMAIRE_WORDS,
+    unitesExemples: ["h", "jour", "forfait"],
   },
   negoce: {
     id: "negoce",
@@ -321,6 +343,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     // Vente comptant en majorité, comme le retail.
     delaiPaiementUsuelJours: COMPTANT,
     externalWorkerWords: INTERIMAIRE_WORDS,
+    unitesExemples: ["u", "lot", "palette", "forfait"],
   },
   retail: {
     id: "retail",
@@ -331,6 +354,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     // Le cas nommé explicitement par l'AC1 de US-A3.1.
     delaiPaiementUsuelJours: COMPTANT,
     externalWorkerWords: INTERIMAIRE_WORDS,
+    unitesExemples: ["u", "lot", "forfait"],
   },
   // ── Cible du pivot multi-secteur (US-A1.1) ──────────────────────────────
   restauration_chr: {
@@ -344,6 +368,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     // Paiement à table/caisse, immédiat.
     delaiPaiementUsuelJours: COMPTANT,
     externalWorkerWords: EXTRA_WORDS,
+    unitesExemples: ["couvert", "u", "h", "forfait"],
   },
   services_personne: {
     id: "services_personne",
@@ -356,6 +381,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     // masquerait un indicateur utile, l'erreur inverse est sans conséquence.
     delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
     externalWorkerWords: INTERIMAIRE_WORDS,
+    unitesExemples: ["h", "intervention", "forfait"],
   },
   professions_liberales: {
     id: "professions_liberales",
@@ -365,6 +391,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     proposalWord: "Proposition commerciale",
     delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
     externalWorkerWords: FREELANCE_WORDS,
+    unitesExemples: ["h", "jour", "forfait"],
   },
   artisanat_service: {
     id: "artisanat_service",
@@ -378,6 +405,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     // sous-catégorie que ce fichier ne porte pas.
     delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
     externalWorkerWords: INTERIMAIRE_WORDS,
+    unitesExemples: ["prestation", "u", "h", "forfait"],
   },
   services_entreprises: {
     id: "services_entreprises",
@@ -387,6 +415,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     proposalWord: "Proposition commerciale",
     delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
     externalWorkerWords: SOUS_TRAITANT_WORDS,
+    unitesExemples: ["h", "passage", "m²", "forfait"],
   },
   transport: {
     id: "transport",
@@ -398,6 +427,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     proposalWord: "Devis",
     delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
     externalWorkerWords: SOUS_TRAITANT_WORDS,
+    unitesExemples: ["km", "course", "h", "forfait"],
   },
   sante_liberale: {
     id: "sante_liberale",
@@ -409,6 +439,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     // classique — même côté de la frontière que le délai standard.
     delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
     externalWorkerWords: INTERIMAIRE_WORDS,
+    unitesExemples: ["séance", "consultation", "forfait"],
   },
   autre: {
     id: "autre",
@@ -422,6 +453,7 @@ export const VERTICAL_PACKS: Record<Vertical, VerticalPack> = {
     // `industrie_btp`, lui-même délai standard).
     delaiPaiementUsuelJours: DELAI_B2B_STANDARD,
     externalWorkerWords: INTERIMAIRE_WORDS,
+    unitesExemples: ["u", "h", "forfait"],
   },
 };
 
