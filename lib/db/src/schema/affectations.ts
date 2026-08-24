@@ -25,6 +25,8 @@ export const affectationsTable = pgTable(
      * L'un des deux est toujours renseigné, contrainte CHECK en migration 032.
      */
     affaireId: text("affaire_id"),
+    /** US-B7.1 — le site précis, quand le contrat en couvre plusieurs. */
+    siteId: text("site_id"),
     clientId: text("client_id").references(() => clientsTable.id, { onDelete: "cascade" }),
     membreId: text("membre_id").notNull(),
     /** Dates MÉTIER, en composantes locales. Jamais un instant. */

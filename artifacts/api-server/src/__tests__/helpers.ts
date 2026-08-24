@@ -52,7 +52,49 @@ export function serveurTest(app: object): http.Server {
   if (connu) return connu;
   // `listen(0)` rend `address()` disponible dans le même tick : supertest peut
   // lire le port tout de suite, donc aucun démarrage asynchrone n'est requis.
-  const serveur = http.createServer(app as unknown as http.RequestListener).listen(0);
+  // ── Ticket 4.41 — la sonde du 404, à demeure ───────────────────────────
+  // Un 404 sur une route de `/api/` que le test attendait vivante n'a été
+  // observé que QUATRE fois en une centaine d'exécutions complètes, et n'a
+  // jamais pu être reproduit à la demande. Chasser une occurrence coûte des
+  // heures ; la journaliser en coûte une fermeture par requête.
+  //
+  // La dernière occurrence — `POST /api/auth/register`, route PUBLIQUE, dans
+  // un `beforeAll` — a écarté les droits, la session et le tenant. Ce qu'il
+  // reste à trancher tient en deux nombres :
+  //
+  //   type=text/html  → c'est Express : AUCUNE route ne correspond ;
+  //   type=…/json     → c'est l'application, et le problème est ailleurs ;
+  //   api très bas ou ABSENT → le routeur `/api` est monté INCOMPLET.
+  //
+  // La valeur d'`api` grandit à chaque route ajoutée — 420 en août 2026, 491
+  // deux tickets plus tard. Ce qui compte n'est donc pas un nombre écrit ici,
+  // qui se périmerait, mais l'ÉCART avec les autres lignes de la même
+  // exécution : elles sont toutes identiques quand tout va bien.
+  //
+  // Ces lignes ne sortent que sur l'anomalie. Une exécution saine reste muette
+  // en dehors des 404 délibérés des tests de périmètre.
+  const brut = app as unknown as http.RequestListener & {
+    router?: { stack?: unknown[] }; _router?: { stack?: unknown[] };
+  };
+  const sonde: http.RequestListener = (req, res) => {
+    const fin = res.end.bind(res);
+    res.end = function (...args: Parameters<typeof fin>) {
+      if (res.statusCode === 404 && (req.url ?? "").startsWith("/api/")) {
+        const pile = (brut.router?.stack ?? brut._router?.stack ?? []) as {
+          handle?: { stack?: unknown[] };
+        }[];
+        const api = pile.find((c) => (c.handle?.stack?.length ?? 0) > 20);
+        console.error(
+          `[404-4.41] pid=${process.pid} ${req.method} ${req.url}` +
+          ` type=${res.getHeader("content-type")}` +
+          ` app=${pile.length} api=${api?.handle?.stack?.length ?? "ABSENT"}`,
+        );
+      }
+      return fin(...args);
+    } as typeof res.end;
+    brut(req, res);
+  };
+  const serveur = http.createServer(sonde).listen(0);
 
   // ── Ticket 4.41 — la course du keep-alive ───────────────────────────────
   // Depuis Node 19, `http.globalAgent.keepAlive` vaut TRUE par défaut, et
@@ -255,7 +297,7 @@ const BUSINESS_TABLES = [
   // classeur_document_bytes référence classeur_documents (document_id) : avant elle.
   "classeur_document_bytes", "classeur_documents",
   "connectors", "contrats", "cr_entries", "echeances",
-  "avoirs", "attestations_sap", "facture_sequences",
+  "avoirs", "attestations_sap", "sites", "facture_sequences",
   // incidents_facturation référence factures (facture_id) : avant elle.
   // Et depuis la migration 049, factures référence devis (devis_id) : les
   // factures partent donc AVANT les devis. Une facture est un document
@@ -365,6 +407,9 @@ export function tableInsertSql(table: string, tenantId: string, memberAId?: stri
     team_member_habilitations: memberAId
       ? [`INSERT INTO team_member_habilitations (id, membre_id, type, libelle, tenant_id) VALUES ($1, $2, 'rls_test', 'RLS Habilitation', $3) ON CONFLICT DO NOTHING`, [id, memberAId, tenantId]]
       : [`SELECT 1`, []], // skip if no member provided
+    // sites : id TEXT sans défaut, client_id NOT NULL sans clé étrangère —
+    // un identifiant arbitraire suffit pour éprouver la RLS.
+    sites: [`INSERT INTO sites (id, tenant_id, client_id, libelle) VALUES ($1, $2::uuid, 'rls-client', 'Agence RLS') ON CONFLICT DO NOTHING`, [id, tenantId]],
     // attestations_sap : id TEXT sans défaut, et `montant_eligible_cents` porte
     // un CHECK > 0 — une attestation à zéro n'ouvrant aucun droit.
     attestations_sap: [`INSERT INTO attestations_sap (id, tenant_id, client_id, annee, montant_eligible_cents) VALUES ($1, $2::uuid, 'rls-client', 2026, 1000) ON CONFLICT DO NOTHING`, [id, tenantId]],

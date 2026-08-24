@@ -11,6 +11,7 @@ export * from "./factures";
 export * from "./facture_sequences";
 export * from "./avoirs";
 export * from "./attestations_sap";
+export * from "./sites";
 export * from "./prospects";
 export * from "./pending_actions";
 export * from "./journal_decisions";

@@ -68,6 +68,68 @@ describe("ce qui est dû", () => {
   });
 });
 
+describe("la facturation CONSOLIDÉE — US-B7.1", () => {
+  const AGENCES = [
+    { id: "s1", libelle: "Agence Nord", montantCents: 25_000 },
+    { id: "s2", libelle: "Agence Sud", montantCents: 40_000 },
+    { id: "s3", libelle: "Siège", montantCents: 90_000 },
+  ];
+
+  test("une échéance, UNE facture, une ligne par site", () => {
+    // Le cœur de la story : avant, huit agences demandaient huit contrats,
+    // donc huit factures mensuelles à un client qui en attend une.
+    const { dues } = echeancesAFacturer(contrat({ sites: AGENCES }), "2026-01-15");
+    expect(dues).toHaveLength(1);
+    expect(dues[0]!.lignes).toHaveLength(3);
+    expect(dues[0]!.montantCents).toBe(155_000);
+  });
+
+  test("chaque ligne porte son site ET la période", () => {
+    // Un libellé de site seul ne dirait pas de quel mois il s'agit — sur une
+    // facture de huit agences, c'est illisible.
+    const { dues } = echeancesAFacturer(contrat({ sites: AGENCES }), "2026-01-15");
+    expect(dues[0]!.lignes[0]!.libelle).toBe("Agence Nord — janvier 2026");
+    expect(dues[0]!.lignes[0]!.siteId).toBe("s1");
+  });
+
+  test("les sites l'emportent sur le montant global du contrat", () => {
+    // Sinon la facture vaudrait 50 000 au lieu de 155 000, et l'écart ne se
+    // verrait qu'au relevé bancaire.
+    const { dues } = echeancesAFacturer(
+      contrat({ sites: AGENCES, amountCents: 50_000 }), "2026-01-15",
+    );
+    expect(dues[0]!.montantCents).toBe(155_000);
+  });
+
+  test("un site SANS montant est inclus dans le forfait, pas facturé à zéro", () => {
+    // L'inscrire à zéro sur la facture ferait croire à une prestation
+    // gratuite, et le client demanderait pourquoi il paie ailleurs.
+    const { dues } = echeancesAFacturer(contrat({
+      sites: [...AGENCES, { id: "s4", libelle: "Tournée incluse", montantCents: null }],
+    }), "2026-01-15");
+    expect(dues[0]!.lignes).toHaveLength(3);
+    expect(dues[0]!.montantCents).toBe(155_000);
+  });
+
+  test("un contrat SANS site garde son comportement d'avant", () => {
+    // La consolidation ne doit rien changer aux contrats mono-site : même
+    // chemin, une seule ligne, aucun cas particulier à maintenir.
+    const { dues } = echeancesAFacturer(contrat(), "2026-01-15");
+    expect(dues[0]!.lignes).toHaveLength(1);
+    expect(dues[0]!.lignes[0]!.siteId).toBeNull();
+    expect(dues[0]!.montantCents).toBe(50_000);
+  });
+
+  test("des sites TOUS sans montant et aucun montant global : écarté, avec un motif clair", () => {
+    const { dues, ecartes } = echeancesAFacturer(contrat({
+      amountCents: null,
+      sites: [{ id: "s1", libelle: "Agence", montantCents: null }],
+    }), "2026-01-15");
+    expect(dues).toHaveLength(0);
+    expect(ecartes[0]!.motif).toMatch(/aucun site facturé/);
+  });
+});
+
 describe("ce qui a déjà été facturé ne l'est pas deux fois", () => {
   test("le curseur repart de la DERNIÈRE échéance facturée", () => {
     const { dues } = echeancesAFacturer(

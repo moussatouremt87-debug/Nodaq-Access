@@ -20,7 +20,7 @@
 import { Router, type IRouter } from "express";
 import crypto from "node:crypto";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
-import { withTenant, contratsTable, facturesTable } from "@workspace/db";
+import { withTenant, contratsTable, facturesTable, sitesTable } from "@workspace/db";
 import { echeancesAFacturer, type Cadence, type EcheanceDue } from "@nodaq/shared";
 import { z } from "zod";
 import { indexerAuClasseur, nomAuClasseur } from "../lib/indexation-classeur.js";
@@ -100,6 +100,17 @@ router.post("/contrats/facturer-echeances", async (req, res): Promise<void> => {
       dejaParContrat.set(l.contratId, acc);
     }
 
+    // US-B7.1 — les sites ACTIFS, en UNE requête pour tout le lot. Un site
+    // désactivé sort de la facturation sans perdre son historique.
+    const sites = await tx.select().from(sitesTable).where(eq(sitesTable.actif, true));
+    const sitesParContrat = new Map<string, typeof sites>();
+    for (const s of sites) {
+      if (s.contratId === null) continue;
+      const acc = sitesParContrat.get(s.contratId) ?? [];
+      acc.push(s);
+      sitesParContrat.set(s.contratId, acc);
+    }
+
     const dues: (EcheanceDue & { clientName: string | null })[] = [];
     const ecartes: { contratId: string; motif: string }[] = [];
     for (const c of contrats) {
@@ -108,6 +119,9 @@ router.post("/contrats/facturer-echeances", async (req, res): Promise<void> => {
         startDate: c.startDate, endDate: c.endDate, status: c.status,
         amountCents: c.amountCents,
         dejaFacturees: dejaParContrat.get(c.id) ?? [],
+        sites: (sitesParContrat.get(c.id) ?? []).map((s) => ({
+          id: s.id, libelle: s.libelle, montantCents: s.montantCents,
+        })),
       }, aujourdhui);
       dues.push(...r.dues.map((d) => ({ ...d, clientName: c.clientName })));
       ecartes.push(...r.ecartes);
@@ -154,14 +168,22 @@ router.post("/contrats/facturer-echeances", async (req, res): Promise<void> => {
           residualCents: totalHTCents + totalTVACents,
           settled: false,
           statut: "BROUILLON",
-          lines: [{
+          // ── La facturation CONSOLIDÉE (US-B7.1) ──────────────────────
+          // UNE facture, une ligne PAR SITE. Le client reçoit un document
+          // qu'il peut vérifier agence par agence — ce qu'un total unique ne
+          // permet pas, et c'est justement ce qu'un responsable de site
+          // conteste quand il ne retrouve pas son montant.
+          //
+          // Un contrat mono-site rend une seule ligne : le même chemin, sans
+          // cas particulier à maintenir.
+          lines: due.lignes.map((l) => ({
             id: crypto.randomUUID(),
-            description: due.libelle,
+            description: l.libelle,
             quantity: 1,
-            unitPriceCents: totalHTCents,
+            unitPriceCents: l.montantCents,
             vatRate,
             vatCategory: "S" as const,
-          }],
+          })),
           totalHTCents,
           totalTVACents,
           autoliquidation: false,

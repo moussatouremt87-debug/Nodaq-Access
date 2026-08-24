@@ -65,6 +65,14 @@ export const ZONES_LIBRES_PATIENT: readonly { readonly chemin: string; readonly 
   { chemin: "/echeances", champs: ["notes"] },
   { chemin: "/pointages", champs: ["commentaire"] },
   { chemin: "/classeur", champs: ["notes"] },
+  // US-B7.1 — un site est rattaché à un CLIENT, et en santé le client est le
+  // patient. « Accès difficile, patient en fauteuil » est une donnée de santé
+  // autant qu'un diagnostic, et elle entrerait ici par la bande.
+  //
+  // Cette ligne a été ajoutée parce que la garde structurelle l'a EXIGÉE : la
+  // table `sites` est la première créée après elle, et elle a refusé de passer
+  // tant que `sites.notes` n'était ni bloquée ni exemptée.
+  { chemin: "/sites", champs: ["notes"] },
 ];
 
 /**

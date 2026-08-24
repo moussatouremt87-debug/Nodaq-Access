@@ -43,14 +43,48 @@ export interface ContratAFacturer {
   readonly amountCents: number | null;
   /** Les échéances DÉJÀ facturées, quelles qu'elles soient. */
   readonly dejaFacturees: readonly string[];
+  /**
+   * Les sites ACTIFS couverts par ce contrat (US-B7.1).
+   *
+   * Vide = contrat mono-site, le montant global fait foi. Non vide = une ligne
+   * PAR SITE sur une facture unique : c'est la « facturation consolidée » que
+   * la story demande, et c'est aussi ce qui lève la limite d'US-A2.3 — un
+   * contrat n'avait qu'un montant global et aucune ligne.
+   */
+  readonly sites?: readonly SiteFacturable[];
+}
+
+/** Un site couvert par le contrat, avec son montant propre. */
+export interface SiteFacturable {
+  readonly id: string;
+  readonly libelle: string;
+  /** `null` = inclus dans le forfait global, pas facturé à part. */
+  readonly montantCents: number | null;
+}
+
+/** Une ligne de la facture d'échéance — un site, ou le contrat entier. */
+export interface LigneEcheance {
+  readonly libelle: string;
+  readonly montantCents: number;
+  /** `null` pour la ligne d'un contrat mono-site. */
+  readonly siteId: string | null;
 }
 
 /** Une échéance à matérialiser. */
 export interface EcheanceDue {
   readonly contratId: string;
   readonly echeanceLe: string;
+  /** Le total de l'échéance — somme des lignes. */
   readonly montantCents: number;
   readonly libelle: string;
+  /**
+   * Le détail. UNE ligne pour un contrat mono-site, une PAR SITE sinon.
+   *
+   * Le client reçoit alors un document qu'il peut vérifier agence par agence,
+   * ce qu'un total unique ne permet pas — et c'est précisément ce qu'un
+   * responsable de site conteste quand il ne le retrouve pas.
+   */
+  readonly lignes: readonly LigneEcheance[];
 }
 
 /** Ce qui n'a PAS été facturé, et pourquoi. Jamais silencieux. */
@@ -106,9 +140,32 @@ export function echeancesAFacturer(
   // ce n'est pas un défaut à signaler, c'est la décision de l'utilisateur.
   if (contrat.status !== "ACTIF") return { dues: [], ecartes: [] };
 
-  if (contrat.amountCents === null || contrat.amountCents <= 0) {
-    return ecarte("aucun montant sur le contrat — rien à facturer");
+  // ── Ce que l'échéance facture : les sites, ou le contrat ────────────────
+  // Un site sans montant propre est INCLUS dans le forfait global : il se
+  // planifie, il ne se facture pas à part. L'inscrire à zéro sur la facture
+  // ferait croire à une prestation gratuite.
+  const sitesFactures = (contrat.sites ?? []).filter(
+    (s): s is SiteFacturable & { montantCents: number } =>
+      s.montantCents !== null && s.montantCents > 0,
+  );
+
+  const lignesModele: readonly LigneEcheance[] = sitesFactures.length > 0
+    ? sitesFactures.map((s) => ({
+        libelle: s.libelle, montantCents: s.montantCents, siteId: s.id,
+      }))
+    : contrat.amountCents !== null && contrat.amountCents > 0
+      ? [{ libelle: contrat.label, montantCents: contrat.amountCents, siteId: null }]
+      : [];
+
+  if (lignesModele.length === 0) {
+    return ecarte(
+      (contrat.sites ?? []).length > 0
+        ? "aucun site facturé et aucun montant sur le contrat — rien à facturer"
+        : "aucun montant sur le contrat — rien à facturer",
+    );
   }
+
+  const totalCents = lignesModele.reduce((s, l) => s + l.montantCents, 0);
 
   // Le plan repart de la DERNIÈRE échéance facturée. Un trou plus ancien ne se
   // rattrape donc pas ici : c'est le prix d'un curseur unique, et il est
@@ -137,8 +194,13 @@ export function echeancesAFacturer(
     dues: plan.due.map((echeanceLe) => ({
       contratId: contrat.id,
       echeanceLe,
-      montantCents: contrat.amountCents!,
+      montantCents: totalCents,
       libelle: `${contrat.label} — ${periodeFr(echeanceLe)}`,
+      // La période est portée par CHAQUE ligne : sur une facture de huit
+      // agences, un libellé de site seul ne dirait pas de quel mois il s'agit.
+      lignes: lignesModele.map((l) => ({
+        ...l, libelle: `${l.libelle} — ${periodeFr(echeanceLe)}`,
+      })),
     })),
     // Une troncature n'est pas un échec : ce qui tient est facturé, et ce qui
     // reste est ANNONCÉ, pour qu'un rattrapage de deux ans ne se termine pas
