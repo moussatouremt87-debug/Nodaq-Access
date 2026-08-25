@@ -12,10 +12,11 @@
 //
 // Limite connue : Cloudflare, devant FormSubmit, conteste parfois les
 // requêtes venues d'IP de datacenter (réponse 403 « Just a moment... »).
-// D'où : UA réaliste, deux réessais espacés, et côté page le chemin DIRECT
-// navigateur→FormSubmit reste tenté en premier — ce relais n'est que le
-// secours. La sortie durable est un fournisseur pensé pour les appels
-// serveur (clé Web3Forms demandée au fondateur).
+// D'où : fonction épinglée en région cdg1 (Paris — testé aussi bloqué
+// depuis iad1 ET cdg1 le 25/08), UA réaliste, réessais espacés, et côté
+// page le chemin DIRECT navigateur→FormSubmit reste tenté en premier — ce
+// relais n'est que le secours. La sortie durable est un fournisseur pensé
+// pour les appels serveur (clé Web3Forms demandée au fondateur).
 //
 // Aucune journalisation du contenu (email, verbatim) — règle du dépôt.
 
