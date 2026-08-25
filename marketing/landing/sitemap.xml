@@ -6,6 +6,11 @@
     <priority>1.0</priority>
   </url>
   <url>
+    <loc>https://nodaq.fr/tarifs</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://nodaq.fr/logiciel-batiment</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>

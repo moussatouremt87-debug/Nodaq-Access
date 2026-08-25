@@ -71,7 +71,7 @@ const PAGES = [
       },
       {
         q: "Combien ça coûte ?",
-        a: "Le tarif Essentiel démarre à 49 € HT/mois + 9 € HT/mois par salarié. Les 50 premiers inscrits gardent ce tarif à vie.",
+        a: "Trois formules : Solo à 49 € HT/mois, Équipe à 89 € HT/mois (5 utilisateurs inclus), et l'offre Fondateurs à 29 € HT/mois, garantie à vie pour les 50 premiers inscrits. Le détail est sur nodaq.fr/tarifs.",
       },
       {
         q: "Est-ce fait pour mon métier ?",
@@ -169,7 +169,7 @@ const PAGES = [
       },
       {
         q: "Combien ça coûte ?",
-        a: "Le tarif Essentiel démarre à 49 € HT/mois + 9 € HT/mois par salarié. Les 50 premiers inscrits gardent ce tarif à vie.",
+        a: "Trois formules : Solo à 49 € HT/mois, Équipe à 89 € HT/mois (5 utilisateurs inclus), et l'offre Fondateurs à 29 € HT/mois, garantie à vie pour les 50 premiers inscrits. Le détail est sur nodaq.fr/tarifs.",
       },
     ],
     freres: [
@@ -192,7 +192,7 @@ const FAQ_COMMUNES = [
   },
   {
     q: "Combien ça coûte ?",
-    a: "Le tarif Essentiel démarre à 49 € HT/mois + 9 € HT/mois par salarié. Les 50 premiers inscrits gardent ce tarif à vie.",
+    a: "Trois formules : Solo à 49 € HT/mois, Équipe à 89 € HT/mois (5 utilisateurs inclus), et l'offre Fondateurs à 29 € HT/mois, garantie à vie pour les 50 premiers inscrits. Le détail est sur nodaq.fr/tarifs.",
   },
   {
     q: "Mes données sont-elles en sécurité ?",
@@ -818,7 +818,7 @@ function construirePageMetier(m) {
       },
       {
         q: "Combien ça coûte ?",
-        a: "Le tarif Essentiel démarre à 49 € HT/mois + 9 € HT/mois par salarié. Les 50 premiers inscrits gardent ce tarif à vie.",
+        a: "Trois formules : Solo à 49 € HT/mois, Équipe à 89 € HT/mois (5 utilisateurs inclus), et l'offre Fondateurs à 29 € HT/mois, garantie à vie pour les 50 premiers inscrits. Le détail est sur nodaq.fr/tarifs.",
       },
     ],
     freres: [
@@ -1244,7 +1244,7 @@ const GUIDES_LOT2 = [
       },
       {
         h2: "Où se situe nodaq",
-        html: `<p>nodaq est construit sur ces critères : <a href="/devis-ia">devis dictés</a> en sortant de la visite, <a href="/facturation-tpe">factures suivies jusqu'au paiement</a> avec <a href="/relance-facture-impayee">campagnes de relance sur mandat</a>, <a href="/calcul-marge-chantier">marge honnête</a> réévaluée à chaque heure pointée, validation humaine sur chaque envoi, données hébergées en France — à partir de 49 € HT/mois. À vous de le confronter aux mêmes sept questions que les autres.</p>`,
+        html: `<p>nodaq est construit sur ces critères : <a href="/devis-ia">devis dictés</a> en sortant de la visite, <a href="/facturation-tpe">factures suivies jusqu'au paiement</a> avec <a href="/relance-facture-impayee">campagnes de relance sur mandat</a>, <a href="/calcul-marge-chantier">marge honnête</a> réévaluée à chaque heure pointée, validation humaine sur chaque envoi, données hébergées en France — à partir de 29 € HT/mois pour les 50 premiers inscrits (49 € ensuite, voir <a href="/tarifs">les tarifs</a>). À vous de le confronter aux mêmes sept questions que les autres.</p>`,
       },
     ],
     faq: [
@@ -1262,6 +1262,86 @@ const GUIDES_LOT2 = [
 ];
 
 PAGES.push(...GUIDES, ...GUIDES_LOT2);
+
+// ── Page tarifs — la grille officielle (décision fondateur, août 2026) ─────
+// Les prix affichés ici sont la COPIE marketing de la grille seedée par la
+// migration 065 (lib/db/migrations/065_tarification.sql), seule source côté
+// produit. Toute évolution de la grille met à jour LES DEUX, dans le même lot.
+const carteTarif = (nom, prix, sous, traits, misEnAvant) => `
+<div style="flex:1;min-width:230px;background:var(--panel);border:1px solid ${misEnAvant ? "rgba(163,230,53,.55)" : "var(--hair)"};border-radius:12px;padding:22px">
+  ${misEnAvant ? `<div style="font-family:'JetBrains Mono',monospace;font-size:.72rem;color:var(--lime);margin-bottom:6px">RÉSERVÉE AUX 50 PREMIERS</div>` : ""}
+  <div style="font-weight:700;color:var(--text)">${nom}</div>
+  <div style="font-size:1.7rem;font-weight:700;color:var(--text);margin:6px 0 2px">${prix}&nbsp;€ <span style="font-size:.85rem;font-weight:400;color:var(--muted)">HT/mois</span></div>
+  <div style="font-size:.82rem;color:var(--muted);margin-bottom:12px">${sous}</div>
+  <ul style="padding-left:18px;display:grid;gap:6px;font-size:.88rem">
+    ${traits.map((t) => `<li>${t}</li>`).join("\n    ")}
+  </ul>
+</div>`;
+
+PAGES.push({
+  slug: "tarifs",
+  title: "Tarifs nodaq — Fondateurs 29 €, Solo 49 €, Équipe 89 € HT/mois",
+  description:
+    "Les formules nodaq : Fondateurs à 29 € HT/mois garanti à vie (50 places), Solo à 49 €, Équipe à 89 € avec 5 utilisateurs inclus. Module relance vocale en option, annuel deux mois offerts, essai 14 jours sans carte.",
+  h1: "Des tarifs simples, sans surprise.",
+  reponse:
+    "Trois formules, tous les prix en HT, sans engagement caché : Solo à 49 € par mois pour le dirigeant seul, Équipe à 89 € pour jusqu'à 5 utilisateurs, et l'offre Fondateurs à 29 € par mois, garantie à vie, réservée aux 50 premiers inscrits. L'essai dure 14 jours, toutes fonctionnalités, sans carte bancaire.",
+  sections: [
+    {
+      h2: "Les trois formules",
+      html: `<div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:6px">
+${carteTarif("Fondateurs", "29", "Garanti à vie tant que vous restez abonné", [
+    "<strong>Tout le contenu d'Équipe</strong>, utilisateurs compris",
+    "Prix bloqué pour toujours — c'est écrit, et daté",
+    "Réservée aux 50 premiers inscrits",
+  ], true)}
+${carteTarif("Solo", "49", "Le dirigeant, seul aux commandes", [
+    "1 utilisateur",
+    "Devis, factures et avoirs (PDF + Factur-X), chantiers, cockpit complet",
+    "Dictée et lecture de documents, bibliothèque de prix",
+    "Relances par e-mail illimitées, WhatsApp en usage normal, lien de paiement",
+    "Une demi-heure de main-d'œuvre facturée par mois — c'est le coût réel",
+  ], false)}
+${carteTarif("Équipe", "89", "L'entreprise qui tourne à plusieurs", [
+    "Tout Solo, jusqu'à <strong>5 utilisateurs inclus</strong>",
+    "puis 15 € HT/mois par utilisateur supplémentaire",
+    "Marge par chantier — aussi pour qui travaille seul",
+    "Heures et plannings, accès dédié pour votre comptable",
+  ], false)}
+</div>`,
+    },
+    {
+      h2: "Le module Relance vocale, en option",
+      html: `<p>Sur n'importe quelle formule : <strong>+19 € HT/mois</strong>, avec <strong>10 dossiers de relance inclus</strong> chaque mois, puis 2 € HT par dossier supplémentaire. <strong>Un dossier, c'est un impayé relancé dans le mois</strong> — quel que soit le nombre d'appels : trois rappels au même client ne comptent qu'une fois. Le compteur est visible dans vos réglages, une alerte prévient à 80 % — et <strong>rien ne se coupe en plein mois</strong> : au-delà de 10, les dossiers sont comptés, jamais bloqués. Le module reste désactivé tant que vous ne l'activez pas ; chaque campagne d'appels part sur <a href="/relance-facture-impayee">votre mandat explicite</a>.</p>`,
+    },
+    {
+      h2: "L'annuel : deux mois offerts",
+      html: `<p>En réglant à l'année : Solo à <strong>490 € HT</strong>, Équipe à <strong>890 € HT</strong>, module vocal à <strong>190 € HT</strong> — soit dix mois payés sur douze.</p>`,
+    },
+    {
+      h2: "L'essai, et ce qui se passe après",
+      html: `<p><strong>14 jours d'essai</strong>, toutes fonctionnalités (aux limites d'Équipe), sans carte bancaire. À l'échéance, si vous ne souscrivez pas, votre espace passe en <strong>lecture seule</strong> : tout reste consultable, <strong>aucune donnée n'est supprimée</strong>, et vous reprenez la main le jour où vous choisissez une formule.</p>`,
+    },
+  ],
+  faq: [
+    {
+      q: "Le prix Fondateurs est-il vraiment garanti à vie ?",
+      a: "Oui : tant que votre abonnement reste actif, le prix ne change jamais — l'engagement est daté dans votre compte. Il est réservé aux 50 premiers inscrits ; une fois les places prises, l'offre ferme.",
+    },
+    {
+      q: "Que deviennent mes données si j'arrête à la fin de l'essai ?",
+      a: "Rien n'est supprimé : l'espace passe en lecture seule et tout reste consultable. Vous reprenez la main en choisissant une formule, quand vous voulez.",
+    },
+    {
+      q: "Y a-t-il des frais cachés ou une offre gratuite limitée ?",
+      a: "Non. Les prix sont en HT, affichés en entier ici : la seule gratuité est l'essai de 14 jours, et les seuls suppléments sont l'utilisateur au-delà de 5 (15 € HT/mois, en Équipe comme en Fondateurs) et le dossier de relance vocale au-delà de 10 (2 € HT).",
+    },
+  ],
+  freres: [
+    { href: "/logiciel-gestion-tpe", label: "Ce que contient nodaq" },
+    { href: "/relance-facture-impayee", label: "La relance d'impayés" },
+  ],
+});
 
 for (const p of PAGES) {
   const sortie = path.join(ici, `${p.slug}.html`);

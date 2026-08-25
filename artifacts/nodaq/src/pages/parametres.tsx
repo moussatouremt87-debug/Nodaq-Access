@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ObjectifsParametres } from '@/components/objectifs-parametres';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Building2, Bell, Puzzle, PhoneCall, Save, UserCog, Mail, Trash2, Clock, ShieldCheck } from 'lucide-react';
+import { Building2, Bell, Puzzle, PhoneCall, Save, UserCog, Mail, Trash2, Clock, ShieldCheck, CreditCard } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   useListMembres,
@@ -33,6 +33,7 @@ import { cn } from '@/lib/utils';
 
 import { apiFetch } from '@/lib/auth';
 import { useModules, useBasculerModule, type ModuleResolu } from '@/hooks/use-modules';
+import { AbonnementTab } from '@/components/abonnement-tab';
 import { useRegleRelance, useEnregistrerRegleRelance } from '@/hooks/use-regles-relance';
 import { BORNES_REGLE_RELANCE, formaterIban, normaliserIban, verifierIban, messageRefusIban, type RegleRelance, AVERTISSEMENT_RENVOI, type EtatInvitation } from '@nodaq/shared';
 const API = '/api';
@@ -44,6 +45,7 @@ const TABS = [
   { id: 'modules',       label: 'Modules',       icon: Puzzle },
   { id: 'relance',       label: 'Règles de relance', icon: PhoneCall },
   { id: 'membres',       label: 'Membres & accès', icon: UserCog },
+  { id: 'abonnement',    label: 'Abonnement',    icon: CreditCard },
 ];
 
 type RoleInvitable = 'OWNER' | 'MEMBER' | 'ACCOUNTANT' | 'VIEWER';
@@ -1137,6 +1139,8 @@ export default function ParametresPage() {
             {activeTab === 'relance' && <RelanceTab />}
 
             {activeTab === 'membres' && <MembresTab />}
+
+            {activeTab === 'abonnement' && <AbonnementTab />}
           </motion.div>
         )}
       </div>

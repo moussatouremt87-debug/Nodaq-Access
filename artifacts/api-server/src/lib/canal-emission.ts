@@ -55,7 +55,7 @@ import {
 
 export type CanalEmission = "EMAIL" | "PLATEFORME_AGREEE";
 
-export type TypeDocument = "DEVIS" | "FACTURE" | "AVOIR" | "INVITATION";
+export type TypeDocument = "DEVIS" | "FACTURE" | "AVOIR" | "INVITATION" | "ESSAI";
 
 export interface SendOptions {
   canal: CanalEmission;

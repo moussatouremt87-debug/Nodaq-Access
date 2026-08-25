@@ -13,7 +13,8 @@ import {
   type Session,
   type Membership,
 } from "@workspace/db";
-import { eq, and, gt } from "drizzle-orm";
+import { eq, and, gt, sql } from "drizzle-orm";
+import { creerAbonnementEssai } from "./abonnement.js";
 
 /** 7-day sliding window */
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -54,6 +55,14 @@ export async function createUserTenantOwner(
       tenantId: tenant!.id,
       role: "OWNER",
     });
+
+    // L'abonnement d'essai naît DANS la transaction de création : un tenant
+    // sans abonnement n'existe pas. `subscriptions` est sous FORCE RLS —
+    // le GUC de tenant est posé ici même, comme withTenant le ferait.
+    await tx.execute(
+      sql`select set_config('app.current_tenant_id', ${tenant!.id}, true)`,
+    );
+    await creerAbonnementEssai(tx, tenant!.id);
 
     return { userId: user!.id, tenantId: tenant!.id };
   });

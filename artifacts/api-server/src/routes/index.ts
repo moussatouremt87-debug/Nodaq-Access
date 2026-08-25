@@ -71,6 +71,8 @@ import relanceMandatRouter from "./relance-mandat";
 import { requireAppelVocal } from "../middleware/requireAppelVocal";
 import membresRouter, { membresPublicRouter } from "./membres";
 import mfaRouter from "./mfa";
+import { abonnementReadRouter, abonnementWriteRouter } from "./abonnement";
+import { abonnementLectureSeule } from "../middleware/abonnementLectureSeule";
 
 const router: IRouter = Router();
 
@@ -143,6 +145,11 @@ const biz: RequestHandler[] = [
   // posé routeur par routeur serait un « principe d'usage », ce que la story
   // refuse explicitement.
   perimetreSante,
+  // Grille tarifaire : un essai échu passe l'espace en lecture seule — les
+  // données restent, les écritures sont refusées. Même raisonnement qu'au
+  // dessus : une garde dans `biz` vaut pour toutes les routes, y compris
+  // celles qui n'existent pas encore. Voir middleware/abonnementLectureSeule.
+  abonnementLectureSeule,
 ];
 const ownerOnly: RequestHandler[] = [...biz, requireRole(["OWNER"])];
 // Routeurs EXCLUSIVEMENT financiers — bloqués en entier pour un MEMBER, pas
@@ -192,6 +199,10 @@ router.use(biz, modulesReadRouter);
 // Règle de relance : un MEMBER valide des campagnes DANS SON CADRE (4.18 US-9),
 // il doit donc pouvoir la lire. L'écriture est plus bas, au propriétaire.
 router.use(biz, reglesRelanceReadRouter);
+// Abonnement : la LECTURE est ouverte à tout membre — celui qui prépare une
+// campagne d'appels doit voir où en est le quota du mois. L'écriture est
+// plus bas, réservée au propriétaire : changer de formule engage le compte.
+router.use(biz, abonnementReadRouter);
 router.use(biz, campagnesRelanceReadRouter);
 // Les liens de paiement portent des montants dus : lecture réservée aux rôles
 // à accès financier, comme le reste de la relance.
@@ -249,6 +260,9 @@ router.use(ownerOnly, souveraineteRouter);
 // clique : c'est une décision de propriétaire.
 router.use(ownerOnly, modulesWriteRouter);
 router.use(ownerOnly, reglesRelanceWriteRouter);
+// Changer de formule ou activer le module vocal engage le compte et son
+// tarif : décision de propriétaire, comme les modules.
+router.use(ownerOnly, abonnementWriteRouter);
 // Proposer une relance commerciale engage le nom de l'entreprise : réservé à
 // qui décide, comme les règles de relance elles-mêmes.
 router.use(ownerOnly, relanceCommercialeRouter);

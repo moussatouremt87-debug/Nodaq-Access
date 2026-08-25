@@ -45,7 +45,9 @@ import { findUserByEmail, createSession, touchLastLogin } from "../lib/authServi
 import { sendDocument } from "../lib/canal-emission.js";
 import {
   etatInvitation, LIBELLE_ETAT, explicationEtat, actionsPossibles,
+  planPermetInvitation, ROLES_COMPTES_DANS_LA_LIMITE,
 } from "@nodaq/shared";
+import { etatAbonnement } from "../lib/abonnement.js";
 import { COOKIE_NAME, COOKIE_OPTS } from "./auth.js";
 import {
   InviterMembreBody,
@@ -182,6 +184,33 @@ router.post("/membres/inviter", async (req, res): Promise<void> => {
     return;
   }
 
+  // ── Grille tarifaire : inviter est une capacité d'Équipe ─────────────────
+  // Solo est « 1 utilisateur, le dirigeant » — aucune invitation, comptable
+  // compris (le rôle expert-comptable est listé dans le contenu d'Équipe).
+  // L'essai s'exerce aux limites d'Équipe (plan_id 'equipe' pendant TRIAL),
+  // et Fondateurs contient tout Équipe. Au-delà des utilisateurs inclus, on
+  // n'empêche RIEN : l'utilisateur supplémentaire est compté et facturé
+  // (15 € HT/mois), et la réponse le dit avant que l'invitation ne parte.
+  const abonnement = await etatAbonnement(tenantId);
+  if (!planPermetInvitation(abonnement.plan.id)) {
+    res.status(403).json({
+      error:
+        "La formule Solo est prévue pour une personne : passez à Équipe pour inviter votre équipe (jusqu'à 5 utilisateurs inclus). Le changement se fait dans Réglages → Abonnement.",
+      formule: abonnement.plan.id,
+    });
+    return;
+  }
+  let supplementInvitation: { prixMensuelCents: number } | null = null;
+  if (
+    (ROLES_COMPTES_DANS_LA_LIMITE as readonly string[]).includes(role) &&
+    abonnement.utilisateurs.actifs + 1 > abonnement.utilisateurs.inclus &&
+    abonnement.utilisateurs.prixSupplementaireCents !== null
+  ) {
+    supplementInvitation = {
+      prixMensuelCents: abonnement.utilisateurs.prixSupplementaireCents,
+    };
+  }
+
   const existingUser = await findUserByEmail(email);
   if (existingUser) {
     const [dejaMembre] = await db
@@ -252,6 +281,10 @@ router.post("/membres/inviter", async (req, res): Promise<void> => {
     // l'utilisateur n'a aucun moyen de distinguer « le courrier arrive » de
     // « rien ne partira jamais faute de SMTP configuré ».
     motifEchec: envoi.success ? null : (envoi.error ?? "envoi impossible"),
+    // Grille tarifaire : quand cette invitation dépasse les utilisateurs
+    // inclus dans la formule, l'écran doit le dire AVANT l'acceptation —
+    // un supplément découvert sur une facture n'est pas un supplément accepté.
+    supplementInvitation,
     // Le lien EN CLAIR, la seule fois où il est disponible : seul son condensat
     // SHA-256 est conservé en base. Le rendre ici n'ajoute aucun secret — c'est
     // exactement ce que l'e-mail transporte — et c'est ce qui permet d'inviter

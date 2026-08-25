@@ -27,6 +27,7 @@ import { declencherAppelVocal } from "../lib/agent-vocal.js";
 // depuis le 4.19 : elle protège les appels ET les SMS de lien de paiement.
 import { numeroAutoriseEnTest } from "../lib/numeros-test.js";
 import { empreinte } from "../lib/prospection.js";
+import { abonnementCourant, tousLesPlans } from "../lib/abonnement.js";
 
 export const campagnesRelanceReadRouter: IRouter = Router();
 export const campagnesRelanceWriteRouter: IRouter = Router();
@@ -330,6 +331,28 @@ campagnesRelanceWriteRouter.post(
     }
     const campagneId = String(req.params["id"] ?? "");
     const tenantId = req.tenantId!;
+
+    // ── Grille tarifaire : le module Relance vocale est un opt-in payant ──
+    // Sur un abonnement payant, activer le module = accepter son tarif : sans
+    // cette acceptation, aucun appel n'est planifié, et le refus dit
+    // exactement où l'activer — jamais un « je ne peux pas » sans chemin
+    // (règle 3 bis). L'ESSAI passe : « 14 jours toutes fonctionnalités », il
+    // n'y a pas encore de tarif à accepter — le garde-fou de fond reste le
+    // mandat de campagne validé (règle 4), qui s'applique essai ou pas.
+    // NB : la limite des appels INCLUS, elle, ne bloque jamais — au-delà,
+    // on compte et on facture. Tarif affiché depuis `plans`, seule source.
+    const abonnement = await abonnementCourant(tenantId);
+    if (abonnement.statut !== "TRIAL" && !abonnement.moduleVocal) {
+      const module = (await tousLesPlans()).find((p) => p.id === "module_vocal");
+      const tarif = module
+        ? ` (${(module.prixMensuelCents / 100).toLocaleString("fr-FR")} € HT/mois, ${module.dossiersInclus} dossiers de relance inclus)`
+        : "";
+      res.status(403).json({
+        error: `Le module Relance vocale n'est pas actif sur votre abonnement. Activez-le dans Réglages → Abonnement${tarif} pour lancer les appels de cette campagne.`,
+        module: "relance_vocale_inactif",
+      });
+      return;
+    }
 
     if (!numeroAutoriseEnTest(parsed.data.numero)) {
       // Tant que le numéro APPELANT est américain, seuls les numéros de

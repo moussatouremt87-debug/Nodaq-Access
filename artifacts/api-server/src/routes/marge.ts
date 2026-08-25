@@ -2,6 +2,8 @@ import { Router, type IRouter } from "express";
 import { withTenant, affairesTable } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import { GetMargeStatsQueryParams } from "@workspace/api-zod";
+import { planPermetMargeChantier, MESSAGE_MARGE_EQUIPE } from "@nodaq/shared";
+import { abonnementCourant } from "../lib/abonnement.js";
 
 const router: IRouter = Router();
 
@@ -10,6 +12,17 @@ router.get("/marge", async (req, res): Promise<void> => {
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
   const tenantId = req.tenantId!;
+
+  // Grille tarifaire (4.43 §3) : la marge par chantier est un contenu
+  // d'Équipe, même en usage mono-utilisateur — c'est le chemin d'upgrade des
+  // artisans qui grossissent sans embaucher. En Solo, l'écran affiche l'état
+  // verrouillé que ce refus transporte (jamais un bouton mort). L'essai
+  // (limites Équipe) passe : plan_id vaut 'equipe' pendant TRIAL.
+  const abonnement = await abonnementCourant(tenantId);
+  if (!planPermetMargeChantier(abonnement.planId)) {
+    res.status(403).json({ error: MESSAGE_MARGE_EQUIPE, formule: "equipe_requise" });
+    return;
+  }
 
   const { affaires, monthly } = await withTenant(tenantId, async (tx) => {
     let affaires = await tx.select().from(affairesTable);

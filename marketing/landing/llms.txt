@@ -11,14 +11,23 @@
 - Statut : en développement actif. Programme fondateurs (accès prioritaire)
   ouvert le 1er octobre 2026, limité à 50 inscrits, avant toute
   disponibilité publique.
-- Tarif : Essentiel à partir de 49 € HT/mois + 9 € HT/mois par salarié.
-  Les 50 premiers inscrits gardent ce tarif à vie.
+- Tarifs (HT/mois) : Solo 49 € (1 utilisateur) ; Équipe 89 € (5 utilisateurs
+  inclus, puis 15 €/utilisateur — la marge par chantier et l'accès comptable
+  sont des contenus d'Équipe) ; offre Fondateurs 29 €, tout Équipe, prix de
+  base garanti à vie, réservée aux 50 premiers inscrits. Module relance
+  vocale en option : +19 € (10 dossiers de relance inclus par mois — un
+  dossier = un impayé relancé, quel que soit le nombre d'appels — puis
+  2 €/dossier). Relances e-mail illimitées, WhatsApp en usage normal.
+  Annuel : deux mois offerts. Détail : https://nodaq.fr/tarifs
 - Inscription sans carte bancaire, désinscription en un clic.
 - Aucune action automatique vers l'extérieur : chaque envoi (devis, relance)
   est validé par le dirigeant avant de partir.
 
 ## Produit
 
+- [Tarifs](https://nodaq.fr/tarifs) : les trois formules (Fondateurs 29 €,
+  Solo 49 €, Équipe 89 € HT/mois), le module relance vocale en option,
+  l'essai 14 jours sans carte.
 - [Logiciel de gestion bâtiment](https://nodaq.fr/logiciel-batiment) :
   devis dictés, marge par chantier, trésorerie, relances — pour les TPE
   du bâtiment.
