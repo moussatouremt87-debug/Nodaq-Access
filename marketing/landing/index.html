@@ -16,28 +16,26 @@
                                  interne uniquement. S.05 = 2 colonnes.
     DATE_OUVERTURE_FONDATEURS    RENSEIGNÉ : « le 1er octobre 2026 »
                                  (Section 7, FAQ « Quand est-ce disponible ? »).
-    ENDPOINT_FORMULAIRE          BRANCHÉ : FormSubmit (mode /ajax) relaie
-                                 chaque soumission vers la boîte du
-                                 fondateur — inscription (champ « email »)
-                                 et verbatim (« email » + « irritant »),
-                                 sujets distincts. Constante UNIQUE en tête
-                                 du <script> : toute bascule d'adresse est
-                                 une modification d'une seule ligne.
-                                 À FAIRE (brief §3) : remplacer par l'alias
-                                 https://formsubmit.co/ajax/{hash} (hash
-                                 fourni par le fondateur depuis son email
-                                 d'activation FormSubmit) pour ne plus
-                                 exposer d'adresse en clair. Quand
-                                 contact@nodaq.fr sera actif : nouvel
-                                 alias + réactivation (première soumission
-                                 → email → « Activate ») + _autoresponse
-                                 (accusé de réception à l'inscrit) + test
-                                 de bout en bout avant de rebrancher les
-                                 campagnes. ACTIVATION : une fois par
-                                 domaine (faite pour nodaq.fr, www et
-                                 vercel.app). Une réponse success:"false"
-                                 est traitée comme un échec — pas de
-                                 fausse réussite.
+    ENDPOINT_DIRECT              BRANCHÉS : deux chemins pour chaque envoi
+    ENDPOINT_RELAIS              (inscription « email », verbatim « email »
+                                 + « irritant », sujets distincts). Direct =
+                                 FormSubmit /ajax depuis le navigateur ;
+                                 relais = /api/inscription (fonction Vercel,
+                                 api/inscription.js) tenté en secours quand
+                                 le direct échoue — navigateur qui supprime
+                                 le Referer ou défi anti-bot Cloudflare
+                                 devant FormSubmit (constaté en réel par le
+                                 fondateur le 25/08/2026). ATTENTION : le
+                                 relais lui-même peut être contesté par
+                                 Cloudflare (IP de datacenter) — la sortie
+                                 durable est un fournisseur pensé pour les
+                                 appels serveur (clé Web3Forms demandée au
+                                 fondateur). Quand contact@nodaq.fr sera
+                                 actif : changer l'adresse aux DEUX endroits
+                                 + réactivation + test de bout en bout avant
+                                 de rebrancher les campagnes. Une réponse
+                                 success:"false" est traitée comme un échec
+                                 — pas de fausse réussite.
     GOOGLE_ADS_ID                [À COMPLÉTER : AW-XXXXXXXXX] — constante
     GOOGLE_ADS_LABEL_CONVERSION  dans le <script> + [À COMPLÉTER : label].
                                  gtag.js n'est chargé que si l'ID est
@@ -1467,14 +1465,18 @@ button, input, textarea { font: inherit; color: inherit; }
 (function () {
   "use strict";
 
-  /* ── ENDPOINT DE COLLECTE — CONSTANTE UNIQUE (brief §3) ─────────────────
-     FormSubmit /ajax relaie chaque soumission vers la boîte du fondateur.
-     Toute bascule (alias {hash} pour masquer l'adresse, puis alias de
-     contact@nodaq.fr quand elle sera active) = modifier CETTE seule ligne.
-     L'adresse en clair ci-dessous doit être remplacée par l'alias
-     https://formsubmit.co/ajax/{hash} dès que le fondateur fournit le hash
-     (visible dans son tableau de bord / email d'activation FormSubmit). */
-  var ENDPOINT_FORMULAIRE = "https://formsubmit.co/ajax/moussatoure.mt.87@gmail.com";
+  /* ── ENDPOINTS DE COLLECTE — DEUX CHEMINS (brief §3, incident 25/08) ────
+     1. DIRECT : FormSubmit /ajax depuis le navigateur — fiable pour les
+        navigateurs normaux, mais échoue quand le navigateur supprime le
+        Referer ou quand Cloudflare (devant FormSubmit) conteste la requête
+        (constaté en réel par le fondateur le 25/08/2026).
+     2. RELAIS : /api/inscription (fonction Vercel same-origin,
+        api/inscription.js) tenté en secours — mêmes données, en-têtes
+        maîtrisés côté serveur. Les deux chemins échouent rarement ensemble.
+     Toute bascule d'adresse = changer les DEUX (ci-dessous et DESTINATAIRE
+     dans api/inscription.js). */
+  var ENDPOINT_DIRECT = "https://formsubmit.co/ajax/moussatoure.mt.87@gmail.com";
+  var ENDPOINT_RELAIS = "/api/inscription";
 
   /* Identifiants Google Ads (brief §2). Tant que les jetons subsistent,
      aucun script Google n'est chargé et mesure() est un no-op silencieux. */
@@ -1704,12 +1706,8 @@ button, input, textarea { font: inherit; color: inherit; }
     errorEl.classList.remove("is-visible");
   }
 
-  function post(payload) {
-    if (ENDPOINT_FORMULAIRE.charAt(0) === "[") {
-      // Endpoint pas encore branché : refus honnête, pas de fausse réussite.
-      return Promise.reject(new Error("endpoint non configuré"));
-    }
-    return fetch(ENDPOINT_FORMULAIRE, {
+  function posteVers(endpoint, payload) {
+    return fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Accept": "application/json" },
       body: JSON.stringify(payload),
@@ -1717,11 +1715,18 @@ button, input, textarea { font: inherit; color: inherit; }
       if (!r.ok) throw new Error("HTTP " + r.status);
       return r.json();
     }).then(function (j) {
-      // FormSubmit peut répondre 200 avec success:"false" (adresse pas encore
-      // activée) : ce serait une fausse réussite — on la traite comme un échec.
+      // Une réponse 200 avec success:"false" (adresse pas encore activée,
+      // Referer refusé…) serait une fausse réussite — traitée comme un échec.
       if (!(j.success === true || j.success === "true")) {
         throw new Error("refus du relais");
       }
+    });
+  }
+  function post(payload) {
+    // Chemin direct d'abord (navigateurs normaux), relais en secours (Referer
+    // supprimé, ou défi anti-bot côté FormSubmit sur la requête du visiteur).
+    return posteVers(ENDPOINT_DIRECT, payload).catch(function () {
+      return posteVers(ENDPOINT_RELAIS, payload);
     });
   }
 
