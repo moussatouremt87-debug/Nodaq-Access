@@ -237,7 +237,7 @@ body {
   overflow-x: hidden;
 }
 
-h1, h2, h3 { margin: 0; font-weight: 700; letter-spacing: -0.028em; line-height: 1.12; }
+h1, h2, h3 { margin: 0; font-weight: 700; letter-spacing: -0.028em; line-height: 1.12; text-wrap: balance; }
 p { margin: 0; }
 a { color: inherit; text-decoration: none; }
 img, svg { display: block; max-width: 100%; }
@@ -811,6 +811,33 @@ button, input, textarea { font: inherit; color: inherit; }
 }
 .form-error.is-visible { display: block; }
 
+/* ── CTA collant mobile (ticket 4.44) ────────────────────────────────────
+   Le SEUL élément fixe de la page — jamais de popup. Apparaît après le
+   premier scroll, disparaît quand la section d'inscription est visible
+   (deux CTA identiques à l'écran seraient du bruit). Cible tactile ≥ 44 px,
+   pleine largeur, safe-area pour les écrans à encoche. */
+.cta-collant {
+  position: fixed;
+  left: 12px; right: 12px;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  z-index: 50;
+  display: block;
+  padding: 14px 18px;
+  min-height: 44px;
+  border-radius: 12px;
+  background: var(--lime);
+  color: #0a0b0f;
+  font-weight: 700;
+  font-size: 16px;
+  text-align: center;
+  text-decoration: none;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+  transform: translateY(calc(100% + 24px));
+  transition: transform 0.25s ease;
+}
+.cta-collant.is-visible { transform: translateY(0); }
+@media (min-width: 1024px) { .cta-collant { display: none; } }
+
 /* État de confirmation (remplace le formulaire après succès) */
 .confirm { display: none; max-width: 460px; margin: 32px auto 0; text-align: left; }
 .confirm.is-visible { display: block; }
@@ -862,7 +889,11 @@ button, input, textarea { font: inherit; color: inherit; }
   padding: 40px 0 48px;
   text-align: center;
 }
-.footer__legal-links { margin-top: 18px; display: flex; justify-content: center; gap: 22px; }
+/* flex-wrap : dix liens produit tiennent sur une ligne d'ordinateur, jamais
+   sur un téléphone — sans repli, la rangée débordait de ~240 px et rendait
+   les derniers liens inatteignables (audit 4.44, cause unique du scroll
+   horizontal de la page). */
+.footer__legal-links { margin-top: 18px; display: flex; flex-wrap: wrap; justify-content: center; gap: 12px 22px; }
 .footer__legal-links a {
   font-size: 12.5px;
   color: var(--text-mute);
@@ -1398,6 +1429,10 @@ button, input, textarea { font: inherit; color: inherit; }
   </div>
 </footer>
 
+<!-- CTA collant (4.44) : rendu visible par le script après le premier
+     scroll, masqué quand la section d'inscription est à l'écran. -->
+<a class="cta-collant" id="cta-collant" href="#inscription" hidden>Essai gratuit 14 jours</a>
+
 <!-- ═══ BANDEAU DE CONSENTEMENT (Consent Mode v2) ═══════════════════════
      Masqué tant que la mesure Google Ads n'est pas configurée : sans
      traceur, il n'y a rien à consentir (position CNIL) et le bandeau ne
@@ -1547,6 +1582,33 @@ button, input, textarea { font: inherit; color: inherit; }
       try { localStorage.setItem(CLE, "refuse"); } catch (e) { /* privé */ }
       bandeau.hidden = true;
     });
+  })();
+
+  /* ── CTA collant mobile (4.44) ───────────────────────────────────────────
+     Visible après le premier scroll (un écran), masqué quand la section
+     d'inscription est visible — deux CTA identiques à l'écran seraient du
+     bruit. `hidden` retiré au premier scroll seulement : sans JavaScript,
+     l'élément n'apparaît jamais et rien n'est cassé. */
+  (function () {
+    var cta = document.getElementById("cta-collant");
+    var inscription = document.getElementById("inscription");
+    if (!cta) return;
+    var inscriptionVisible = false;
+    if (inscription && "IntersectionObserver" in window) {
+      new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          inscriptionVisible = entry.isIntersecting;
+          rafraichir();
+        });
+      }, { threshold: 0.05 }).observe(inscription);
+    }
+    function rafraichir() {
+      var apresPremierScroll = window.scrollY > window.innerHeight * 0.8;
+      cta.hidden = false;
+      cta.classList.toggle("is-visible", apresPremierScroll && !inscriptionVisible);
+    }
+    window.addEventListener("scroll", rafraichir, { passive: true });
+    rafraichir();
   })();
 
   /* ── Révélation au scroll (sobre) ───────────────────────────────────── */
