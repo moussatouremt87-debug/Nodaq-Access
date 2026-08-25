@@ -1299,20 +1299,20 @@ ${carteTarif("Solo", "49", "Le dirigeant, seul aux commandes", [
     "1 utilisateur",
     "Devis, factures et avoirs (PDF + Factur-X), chantiers, cockpit complet",
     "Dictée et lecture de documents, bibliothèque de prix",
-    "Relances par e-mail et WhatsApp sans limite, lien de paiement",
+    "Relances par e-mail illimitées, WhatsApp en usage normal, lien de paiement",
     "Une demi-heure de main-d'œuvre facturée par mois — c'est le coût réel",
   ], false)}
 ${carteTarif("Équipe", "89", "L'entreprise qui tourne à plusieurs", [
     "Tout Solo, jusqu'à <strong>5 utilisateurs inclus</strong>",
     "puis 15 € HT/mois par utilisateur supplémentaire",
-    "Heures et plannings, marge par chantier multi-équipes",
-    "Accès dédié pour votre comptable",
+    "Marge par chantier — aussi pour qui travaille seul",
+    "Heures et plannings, accès dédié pour votre comptable",
   ], false)}
 </div>`,
     },
     {
       h2: "Le module Relance vocale, en option",
-      html: `<p>Sur n'importe quelle formule : <strong>+19 € HT/mois</strong>, avec <strong>30 appels de relance inclus</strong> chaque mois, puis 0,60 € HT par appel supplémentaire. Le compteur est visible dans vos réglages, une alerte prévient à 80 % — et <strong>rien ne se coupe en plein mois</strong> : au-delà de 30, les appels sont comptés, jamais bloqués. Le module reste désactivé tant que vous ne l'activez pas ; chaque campagne d'appels part sur <a href="/relance-facture-impayee">votre mandat explicite</a>.</p>`,
+      html: `<p>Sur n'importe quelle formule : <strong>+19 € HT/mois</strong>, avec <strong>10 dossiers de relance inclus</strong> chaque mois, puis 2 € HT par dossier supplémentaire. <strong>Un dossier, c'est un impayé relancé dans le mois</strong> — quel que soit le nombre d'appels : trois rappels au même client ne comptent qu'une fois. Le compteur est visible dans vos réglages, une alerte prévient à 80 % — et <strong>rien ne se coupe en plein mois</strong> : au-delà de 10, les dossiers sont comptés, jamais bloqués. Le module reste désactivé tant que vous ne l'activez pas ; chaque campagne d'appels part sur <a href="/relance-facture-impayee">votre mandat explicite</a>.</p>`,
     },
     {
       h2: "L'annuel : deux mois offerts",
@@ -1334,7 +1334,7 @@ ${carteTarif("Équipe", "89", "L'entreprise qui tourne à plusieurs", [
     },
     {
       q: "Y a-t-il des frais cachés ou une offre gratuite limitée ?",
-      a: "Non. Les prix sont en HT, affichés en entier ici : la seule gratuité est l'essai de 14 jours, et les seuls suppléments sont l'utilisateur au-delà de 5 en Équipe (15 € HT/mois) et l'appel vocal au-delà de 30 (0,60 € HT).",
+      a: "Non. Les prix sont en HT, affichés en entier ici : la seule gratuité est l'essai de 14 jours, et les seuls suppléments sont l'utilisateur au-delà de 5 (15 € HT/mois, en Équipe comme en Fondateurs) et le dossier de relance vocale au-delà de 10 (2 € HT).",
     },
   ],
   freres: [

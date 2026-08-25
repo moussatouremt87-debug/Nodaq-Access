@@ -20,7 +20,7 @@
  * TRIAL → READONLY est constatée par `abonnementCourant`, paresseusement.
  */
 import type { Request, Response, NextFunction } from "express";
-import { abonnementCourant } from "../lib/abonnement.js";
+import { abonnementCourant, constaterJalonsEssai } from "../lib/abonnement.js";
 
 export async function abonnementLectureSeule(
   req: Request,
@@ -37,6 +37,9 @@ export async function abonnementLectureSeule(
   }
   const sub = await abonnementCourant(req.tenantId!);
   if (sub.statut !== "READONLY") {
+    // Jalons d'essai (4.43 §5) : une requête mutante est le signe d'un tenant
+    // actif — l'occasion de constater J7/J10, sans retarder la requête.
+    if (sub.statut === "TRIAL") void constaterJalonsEssai(req.tenantId!).catch(() => {});
     next();
     return;
   }

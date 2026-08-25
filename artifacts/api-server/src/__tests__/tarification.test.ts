@@ -2,11 +2,13 @@
  * Grille tarifaire (migration 065) — les promesses de la grille, prouvées.
  *
  * Tout tourne sur une vraie base : les limites d'utilisateurs, la bascule
- * essai → lecture seule (sans perte de données), le compteur vocal (30
- * inclus, le 31e compté jamais coupé, reset au mois calendaire de Paris,
- * alerte à 80 % une seule fois), le verrou de prix Fondateurs et la jauge
- * des 50 places. L'isolation RLS des nouvelles tables est éprouvée par
- * rls.test.ts, qui les a dans sa liste.
+ * essai → lecture seule (sans perte de données), le compteur vocal en
+ * DOSSIERS (un impayé relancé = un dossier quel que soit le nombre de
+ * tentatives, le 11e compté jamais coupé, reset au mois calendaire de
+ * Paris, alerte à 80 % une seule fois — 4.43), le verrou de prix
+ * Fondateurs (base seule, sièges facturés), la marge réservée à Équipe,
+ * et les jalons d'essai (carte à J10 jamais avant, activation à J7).
+ * L'isolation RLS des nouvelles tables est éprouvée par rls.test.ts.
  */
 import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
@@ -26,6 +28,7 @@ import {
   etatAbonnement,
   abonnementCourant,
   constaterUsageVocal,
+  constaterJalonsEssai,
 } from "../lib/abonnement.js";
 
 let tenantId: string;
@@ -44,17 +47,19 @@ async function poserAbonnement(
   );
 }
 
-/** Une campagne + un appel démarré à la date donnée, via le superutilisateur. */
-async function insererAppelDemarre(quand: Date): Promise<void> {
+/** Une TENTATIVE d'appel démarrée sur un impayé donné, via le superutilisateur.
+ *  La facture est la clé du DOSSIER : plusieurs tentatives sur la même
+ *  facture ne doivent compter qu'un dossier (4.43 §1). */
+async function insererTentative(quand: Date, factureId: string): Promise<void> {
   await adminPool.query(
     `WITH c AS (
        INSERT INTO campagnes_relance (id, tenant_id, pending_action_id, mandat)
        VALUES (gen_random_uuid()::text, $1, 'pa-tarif-test', '{}'::jsonb)
        RETURNING id
      )
-     INSERT INTO appels_relance (id, tenant_id, campagne_id, empreinte_numero, statut, started_at)
-     SELECT gen_random_uuid()::text, $1, c.id, 'tarif-test', 'TERMINE', $2 FROM c`,
-    [tenantId, quand],
+     INSERT INTO appels_relance (id, tenant_id, campagne_id, facture_id, empreinte_numero, statut, started_at)
+     SELECT gen_random_uuid()::text, $1, c.id, $3, 'tarif-test', 'TERMINE', $2 FROM c`,
+    [tenantId, quand, factureId],
   );
 }
 
@@ -189,41 +194,54 @@ describe("essai échu → lecture seule, sans perte de données", () => {
   });
 });
 
-describe("compteur vocal — 30 inclus, le 31e compté, jamais coupé", () => {
-  test("le dépassement se compte, le mois précédent ne compte pas", async () => {
+describe("compteur vocal — 10 dossiers inclus, le 11e compté, jamais coupé", () => {
+  test("un dossier par impayé : trois tentatives sur la même facture font UN dossier", async () => {
     await poserAbonnement({
       statut: "ACTIVE",
       module_vocal: true,
       module_vocal_depuis: new Date(),
     });
 
-    // 31 appels démarrés ce mois-ci, 3 le mois dernier.
     const maintenant = new Date();
-    for (let i = 0; i < 31; i++) await insererAppelDemarre(maintenant);
+    // Trois tentatives sur le MÊME impayé (injoignable, répondeur, rappel)…
+    for (let i = 0; i < 3; i++) await insererTentative(maintenant, "facture-relancee-1");
+
+    const etat = await etatAbonnement(tenantId);
+    expect(etat.dossiers).not.toBeNull();
+    expect(etat.dossiers!.utilises).toBe(1);
+    expect(etat.dossiers!.inclus).toBe(10);
+    expect(etat.dossiers!.depassement).toBe(0);
+  });
+
+  test("le 11e dossier est compté en dépassement (2 €), le mois précédent ne compte pas", async () => {
+    // 10 impayés SUPPLÉMENTAIRES ce mois-ci (le 1er existe déjà) = 11 dossiers…
+    const maintenant = new Date();
+    for (let i = 2; i <= 11; i++) await insererTentative(maintenant, `facture-relancee-${i}`);
+    // …et 3 dossiers le mois dernier, qui ne comptent pas : reset mensuel.
     const moisDernier = new Date(maintenant);
     moisDernier.setDate(1);
     moisDernier.setDate(0); // dernier jour du mois précédent
     moisDernier.setHours(10, 0, 0, 0);
-    for (let i = 0; i < 3; i++) await insererAppelDemarre(moisDernier);
+    for (let i = 0; i < 3; i++) await insererTentative(moisDernier, `facture-vieille-${i}`);
 
     const etat = await etatAbonnement(tenantId);
-    expect(etat.appels).not.toBeNull();
-    expect(etat.appels!.utilises).toBe(31);
-    expect(etat.appels!.inclus).toBe(30);
-    expect(etat.appels!.depassement).toBe(1);
-    expect(etat.appels!.prixDepassementCents).toBe(60);
+    expect(etat.dossiers!.utilises).toBe(11);
+    expect(etat.dossiers!.inclus).toBe(10);
+    expect(etat.dossiers!.depassement).toBe(1);
+    expect(etat.dossiers!.prixDepassementCents).toBe(200);
   });
 
   test("l'alerte des 80 % ne part qu'UNE fois, même constatée deux fois", async () => {
-    // 31 ≥ 80 % de 30 : le franchissement est constatable. Deux constats…
+    // 11 ≥ 80 % de 10 : le franchissement est constatable. Deux constats…
     await constaterUsageVocal(tenantId);
     await constaterUsageVocal(tenantId);
 
     const { rows: franchissements } = await adminPool.query(
-      `SELECT seuil_pct FROM usage_franchissements WHERE tenant_id = $1`,
+      `SELECT usage, seuil_pct FROM usage_franchissements WHERE tenant_id = $1`,
       [tenantId],
     );
     expect(franchissements).toHaveLength(1);
+    expect(franchissements[0]!.usage).toBe("vocal");
     expect(franchissements[0]!.seuil_pct).toBe(80);
 
     const { rows: annonces } = await adminPool.query(
@@ -331,5 +349,104 @@ describe("retour de formule à l'échéance", () => {
     const sub = await abonnementCourant(tenantId);
     expect(sub.planId).toBe("solo");
     expect(sub.planSuivant).toBeNull();
+  });
+});
+
+describe("4.43 §3 — la marge par chantier est un contenu d'Équipe", () => {
+  test("en Solo : verrouillée avec un état explicite, jamais un écran mort", async () => {
+    // Le tenant est en Solo ACTIVE depuis le test précédent.
+    const res = await request(serveurTest(app))
+      .get("/api/marge")
+      .set("Cookie", cookie)
+      .expect(403);
+    expect(res.body.formule).toBe("equipe_requise");
+    expect(res.body.error).toContain("Équipe");
+    expect(res.body.error).toContain("Abonnement");
+  });
+
+  test("en Équipe (et donc en essai, qui en a les limites) : ouverte", async () => {
+    await poserAbonnement({ plan_id: "equipe" });
+    await request(serveurTest(app)).get("/api/marge").set("Cookie", cookie).expect(200);
+  });
+});
+
+describe("4.43 §4 — Fondateurs : seul le prix de BASE est verrouillé", () => {
+  test("le 6e siège est annoncé et facturé, même en Fondateurs", async () => {
+    // Le tenant compte déjà 6 actifs (owner + 4 membres + le 6e invité
+    // n'ayant pas accepté, 5 actifs) — on force Fondateurs et on invite.
+    await poserAbonnement({
+      plan_id: "fondateurs",
+      statut: "ACTIVE",
+      price_locked_at: new Date(),
+    });
+    const res = await request(serveurTest(app))
+      .post("/api/membres/inviter")
+      .set("Cookie", cookie)
+      .send({ email: `invite-fond-6e-${Date.now()}@test.nodaq`, role: "MEMBER" })
+      .expect(201);
+    expect(res.body.supplementInvitation).toEqual({ prixMensuelCents: 1500 });
+
+    // Le verrou du prix de base n'a pas bougé.
+    const etat = await etatAbonnement(tenantId);
+    expect(etat.plan.prixMensuelCents).toBe(2900);
+    expect(etat.subscription.priceLockedAt).toBeTruthy();
+  });
+});
+
+describe("4.43 §5 — jalons d'essai : carte à J10, activation à J7, une seule fois", () => {
+  test("J10 : le jalon carte se pose une fois, l'annonce est un message de continuité", async () => {
+    // Jour 10 de l'essai = 4 jours restants.
+    await poserAbonnement({
+      plan_id: "equipe",
+      statut: "TRIAL",
+      trial_ends_at: new Date(Date.now() + 4 * 86_400_000),
+    });
+    await constaterJalonsEssai(tenantId);
+    await constaterJalonsEssai(tenantId);
+
+    const { rows: jalons } = await adminPool.query(
+      `SELECT jalon FROM essai_jalons WHERE tenant_id = $1`,
+      [tenantId],
+    );
+    expect(jalons.map((j) => j.jalon)).toEqual(["J10_CARTE"]);
+
+    const { rows: annonces } = await adminPool.query(
+      `SELECT count(*)::int AS n FROM activity WHERE tenant_id = $1 AND type = 'abonnement.essai_carte'`,
+      [tenantId],
+    );
+    expect(annonces[0]!.n).toBe(1);
+  });
+
+  test("avant J10, la carte n'est jamais demandée ; à J7 sans action validée, l'activation part", async () => {
+    // Remise à zéro des jalons (adminPool : la table est append-only pour
+    // app_user seulement) et jour 7 de l'essai = 7 jours restants.
+    await adminPool.query(`DELETE FROM essai_jalons WHERE tenant_id = $1`, [tenantId]);
+    await poserAbonnement({ trial_ends_at: new Date(Date.now() + 7 * 86_400_000) });
+
+    await constaterJalonsEssai(tenantId);
+    const { rows: jalons } = await adminPool.query(
+      `SELECT jalon FROM essai_jalons WHERE tenant_id = $1`,
+      [tenantId],
+    );
+    // J7 posé, et surtout PAS de J10 : la carte ne se demande pas avant.
+    expect(jalons.map((j) => j.jalon)).toEqual(["J7_ACTIVATION"]);
+  });
+
+  test("à J7 avec une action déjà validée, aucun e-mail d'activation", async () => {
+    await adminPool.query(`DELETE FROM essai_jalons WHERE tenant_id = $1`, [tenantId]);
+    // Une décision APPROUVEE dans le journal : ce tenant relance déjà.
+    await adminPool.query(
+      `INSERT INTO journal_decisions (id, tenant_id, action_id, action_type, action_label, decision)
+       VALUES (gen_random_uuid()::text, $1, 'act-jalon-test', 'PLAN_VOCAL', 'test', 'APPROUVEE')`,
+      [tenantId],
+    );
+    await constaterJalonsEssai(tenantId);
+    const { rows: jalons } = await adminPool.query(
+      `SELECT count(*)::int AS n FROM essai_jalons WHERE tenant_id = $1`,
+      [tenantId],
+    );
+    expect(jalons[0]!.n).toBe(0);
+    // L'abonnement retrouve son état actif pour ne rien laisser derrière.
+    await poserAbonnement({ statut: "ACTIVE", trial_ends_at: null });
   });
 });

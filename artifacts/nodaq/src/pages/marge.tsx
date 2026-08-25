@@ -33,13 +33,24 @@ type MargeStats = {
   affaires: MargeAffaire[]; mensuelle: MargeMensuelle[];
 };
 
+/** L'état verrouillé (4.43 §3) : la marge par chantier est un contenu
+ *  d'Équipe. Le serveur transporte le message ; l'écran l'affiche comme un
+ *  état explicite avec le chemin d'upgrade — jamais un bouton mort. */
+type MargeVerrouillee = { verrouillee: true; message: string };
+
 function useMargeStats(statut?: string) {
-  return useQuery({
+  return useQuery<MargeStats | MargeVerrouillee>({
     queryKey: ['marge', statut],
     queryFn: async () => {
       const sp = new URLSearchParams();
       if (statut) sp.set('statut', statut);
       const res = await fetch(`${API}/marge?${sp}`);
+      if (res.status === 403) {
+        const corps = (await res.json().catch(() => ({}))) as { formule?: string; error?: string };
+        if (corps.formule === 'equipe_requise') {
+          return { verrouillee: true, message: corps.error ?? '' };
+        }
+      }
       if (!res.ok) throw new Error('Fetch failed');
       return res.json() as Promise<MargeStats>;
     },
@@ -71,7 +82,35 @@ export default function MargePage() {
   const { words } = useVertical();
   const feminin = words.indefinite.startsWith('une ');
   const [statusFilter, setStatusFilter] = useState('ALL');
-  const { data, isLoading, isError } = useMargeStats(statusFilter !== 'ALL' ? statusFilter : undefined);
+  const { data: reponse, isLoading, isError } = useMargeStats(statusFilter !== 'ALL' ? statusFilter : undefined);
+
+  // État verrouillé (4.43 §3) : en Solo, l'écran dit ce qui existe et où
+  // l'obtenir — il ne disparaît pas, et aucun bouton n'est mort.
+  const verrouillee: MargeVerrouillee | null =
+    reponse && 'verrouillee' in reponse ? reponse : null;
+  const data: MargeStats | undefined =
+    reponse && !('verrouillee' in reponse) ? reponse : undefined;
+  if (verrouillee) {
+    return (
+      <div className="pb-16">
+        <PageHeader eyebrow="Finance" title="Marge" description="La rentabilité, chantier par chantier." />
+        <div className="px-5 md:px-8 pt-6">
+          <div className="max-w-xl rounded-xl border border-card-border bg-card p-6">
+            <h3 className="text-sm font-semibold text-foreground mb-2">
+              Disponible dans l'offre Équipe
+            </h3>
+            <p className="text-sm text-muted-foreground mb-4">{verrouillee.message}</p>
+            <a
+              href="/parametres"
+              className="inline-flex items-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+            >
+              Voir les formules dans Réglages → Abonnement
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const chartData = (data?.mensuelle ?? []).map(m => ({
     month: m.month.replace(/^(\d{4})-(\d{2})$/, (_, y, mo) => {

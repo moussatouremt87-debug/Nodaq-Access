@@ -345,7 +345,7 @@ campagnesRelanceWriteRouter.post(
     if (abonnement.statut !== "TRIAL" && !abonnement.moduleVocal) {
       const module = (await tousLesPlans()).find((p) => p.id === "module_vocal");
       const tarif = module
-        ? ` (${(module.prixMensuelCents / 100).toLocaleString("fr-FR")} € HT/mois, ${module.appelsInclus} appels inclus)`
+        ? ` (${(module.prixMensuelCents / 100).toLocaleString("fr-FR")} € HT/mois, ${module.dossiersInclus} dossiers de relance inclus)`
         : "";
       res.status(403).json({
         error: `Le module Relance vocale n'est pas actif sur votre abonnement. Activez-le dans Réglages → Abonnement${tarif} pour lancer les appels de cette campagne.`,

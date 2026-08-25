@@ -26,6 +26,7 @@ import { withTenant, subscriptionsTable, activityTable } from "@workspace/db";
 import { PLAN_IDS, PERIODICITES } from "@nodaq/shared";
 import {
   abonnementCourant,
+  constaterJalonsEssai,
   etatAbonnement,
   placesFondateurs,
   reclamerPlaceFondateurs,
@@ -36,7 +37,11 @@ export const abonnementReadRouter: IRouter = Router();
 export const abonnementWriteRouter: IRouter = Router();
 
 abonnementReadRouter.get("/abonnement", async (req, res): Promise<void> => {
-  const etat = await etatAbonnement(req.tenantId!);
+  const tenantId = req.tenantId!;
+  // Jalons d'essai (4.43 §5) : constatés à l'occasion de la lecture, sans
+  // retarder la réponse — l'unicité en base rend le tir concurrent inoffensif.
+  void constaterJalonsEssai(tenantId).catch(() => {});
+  const etat = await etatAbonnement(tenantId);
   const fondateurs = await placesFondateurs();
   const plans = await tousLesPlans();
   res.json({ ...etat, fondateurs, plans });
@@ -205,8 +210,8 @@ abonnementWriteRouter.post("/abonnement/module-vocal", async (req, res): Promise
       tenantId,
       type: parsed.data.actif ? "abonnement.module_vocal_active" : "abonnement.module_vocal_coupe",
       label: parsed.data.actif
-        ? `Module Relance vocale activé : ${(module.prixMensuelCents / 100).toLocaleString("fr-FR")} € HT/mois, ${module.appelsInclus} appels inclus, puis ${((module.prixAppelSuppCents ?? 0) / 100).toLocaleString("fr-FR")} € HT par appel. Activer le module vaut acceptation de ce tarif.`
-        : "Module Relance vocale désactivé. Les appels du mois déjà passés restent comptés.",
+        ? `Module Relance vocale activé : ${(module.prixMensuelCents / 100).toLocaleString("fr-FR")} € HT/mois, ${module.dossiersInclus} dossiers de relance inclus par mois, puis ${((module.prixDossierSuppCents ?? 0) / 100).toLocaleString("fr-FR")} € HT par dossier — un dossier est un impayé relancé dans le mois, quel que soit le nombre d'appels. Activer le module vaut acceptation de ce tarif.`
+        : "Module Relance vocale désactivé. Les dossiers du mois déjà ouverts restent comptés.",
       meta: JSON.stringify({ par: email }),
     });
   });

@@ -16,8 +16,11 @@ export interface PlanTarif {
   prixAnnuelCents: number | null;
   utilisateursInclus: number;
   prixUtilisateurSuppCents: number | null;
-  appelsInclus: number;
-  prixAppelSuppCents: number | null;
+  /** Module vocal : dossiers de relance inclus — un dossier = un impayé
+   *  relancé dans le mois, jamais une tentative d'appel (4.43). */
+  dossiersInclus: number;
+  prixDossierSuppCents: number | null;
+  whatsappConversationsIncluses: number;
 }
 
 export interface EtatAbonnement {
@@ -39,13 +42,14 @@ export interface EtatAbonnement {
     supplementaires: number;
     prixSupplementaireCents: number | null;
   };
-  appels: {
+  dossiers: {
     utilises: number;
     inclus: number;
     depassement: number;
     prixDepassementCents: number;
     mois: string;
   } | null;
+  essai: { joursRestants: number; demanderCarte: boolean } | null;
   fondateurs: { totales: number; prises: number; ouverte: boolean };
   plans: PlanTarif[];
 }

@@ -1,16 +1,23 @@
--- Migration 065 — grille tarifaire (décision fondateur, août 2026)
+-- Migration 065 — grille tarifaire (décision fondateur, août 2026,
+-- corrigée par le ticket 4.43 avant toute livraison)
 --
 -- Pose le MODÈLE de l'abonnement nodaq : les plans, l'abonnement de chaque
--- tenant, la jauge globale de l'offre Fondateurs et les franchissements de
--- seuil d'usage vocal. L'encaissement (Stripe Billing) est un ticket séparé —
--- rien ici ne parle à un prestataire de paiement.
+-- tenant, la jauge globale de l'offre Fondateurs, les franchissements de
+-- seuil d'usage et les jalons d'essai. L'encaissement (Stripe Billing) est
+-- un ticket séparé — rien ici ne parle à un prestataire de paiement.
 --
 -- ── Les prix vivent ICI et nulle part ailleurs ─────────────────────────────
 -- La grille interdit de coder un prix hors du seed des plans. Les montants
 -- sont en centimes INTEGER (migration 056 : jamais de flottant, jamais de
--- bigint — node-postgres rend int8 en chaîne). Le dépassement d'appel vocal
--- est à 60 centimes : le millicentime d'`appels_relance.cout_millicents`
--- reste le COÛT fournisseur, pas le prix facturé.
+-- bigint — node-postgres rend int8 en chaîne).
+--
+-- ── L'usage vocal se compte en DOSSIERS, jamais en tentatives (4.43) ──────
+-- Un dossier = un impayé relancé dans le mois calendaire, quel que soit le
+-- nombre de tentatives d'appel (injoignable, répondeur, rappels). Un artisan
+-- pense en clients à relancer, pas en appels téléphoniques — et compter les
+-- tentatives punirait précisément les débiteurs injoignables. Le millicentime
+-- d'`appels_relance.cout_millicents` reste le COÛT fournisseur par tentative,
+-- pas le prix facturé.
 --
 -- ── Pourquoi `fondateurs_compteur` est GLOBALE (sans tenant_id) ───────────
 -- L'offre Fondateurs est limitée à 50 tenants. Sous FORCE RLS, un tenant ne
@@ -30,23 +37,33 @@ CREATE TABLE IF NOT EXISTS plans (
   utilisateurs_inclus         INTEGER     NOT NULL DEFAULT 1,
   -- NULL = pas d'utilisateur supplémentaire possible (Solo).
   prix_utilisateur_supp_cents INTEGER              CHECK (prix_utilisateur_supp_cents >= 0),
-  -- Module vocal uniquement : appels inclus par mois calendaire, puis prix
-  -- unitaire du dépassement. 0/NULL pour les plans de base.
-  appels_inclus               INTEGER     NOT NULL DEFAULT 0,
-  prix_appel_supp_cents       INTEGER              CHECK (prix_appel_supp_cents >= 0)
+  -- Module vocal uniquement : dossiers de relance inclus par mois calendaire
+  -- (un dossier = un impayé relancé, pas une tentative), puis prix unitaire
+  -- du dossier supplémentaire. 0/NULL pour les plans de base.
+  dossiers_inclus             INTEGER     NOT NULL DEFAULT 0,
+  prix_dossier_supp_cents     INTEGER              CHECK (prix_dossier_supp_cents >= 0),
+  -- Plafond souple WhatsApp (4.43) : conversations de relance incluses par
+  -- mois. Au-delà : alerte, JAMAIS de blocage en v1 — le plafond protège de
+  -- l'abus (l'API WhatsApp Business est facturée à la conversation), aucun
+  -- client honnête ne l'atteindra. L'e-mail, à coût marginal nul, reste le
+  -- seul canal réellement illimité.
+  whatsapp_conversations_incluses INTEGER NOT NULL DEFAULT 0
 );
 
 -- Seed : LA source des prix. Une évolution de grille = une nouvelle migration.
 INSERT INTO plans (id, libelle, prix_mensuel_cents, prix_annuel_cents,
                    utilisateurs_inclus, prix_utilisateur_supp_cents,
-                   appels_inclus, prix_appel_supp_cents)
+                   dossiers_inclus, prix_dossier_supp_cents,
+                   whatsapp_conversations_incluses)
 VALUES
-  -- Fondateurs : tout Équipe, 29 €/mois garanti à vie, réservé aux 50 premiers.
-  ('fondateurs',   'Fondateurs',            2900,  NULL, 5, 1500, 0, NULL),
-  ('solo',         'Solo',                  4900,  49000, 1, NULL, 0, NULL),
-  ('equipe',       'Équipe',                8900,  89000, 5, 1500, 0, NULL),
+  -- Fondateurs : tout Équipe, 29 €/mois garanti à vie, réservé aux 50
+  -- premiers. Seul le prix de BASE est verrouillé : les sièges au-delà de 5
+  -- (15 €) et le module vocal restent facturés comme partout (4.43 §4).
+  ('fondateurs',   'Fondateurs',     2900,  NULL, 5, 1500, 0, NULL, 200),
+  ('solo',         'Solo',           4900,  49000, 1, NULL, 0, NULL, 200),
+  ('equipe',       'Équipe',         8900,  89000, 5, 1500, 0, NULL, 200),
   -- Module optionnel, cumulable avec n'importe quel plan de base.
-  ('module_vocal', 'Relance vocale',        1900,  19000, 0, NULL, 30, 60)
+  ('module_vocal', 'Relance vocale', 1900,  19000, 0, NULL, 10, 200, 0)
 ON CONFLICT (id) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS subscriptions (
@@ -54,7 +71,8 @@ CREATE TABLE IF NOT EXISTS subscriptions (
   tenant_id                UUID        NOT NULL REFERENCES tenants(id),
   plan_id                  TEXT        NOT NULL REFERENCES plans(id),
 
-  -- TRIAL : essai 14 jours, toutes fonctionnalités, limites Équipe.
+  -- TRIAL : essai 14 jours, toutes fonctionnalités, limites Équipe, sans
+  -- carte bancaire (elle n'est demandée qu'au jour 10 — voir essai_jalons).
   -- READONLY : essai échu sans souscription — lecture seule, JAMAIS de
   -- suppression de données. La bascule est paresseuse (constatée à la
   -- lecture), il n'y a pas de tâche planifiée à entretenir.
@@ -65,7 +83,7 @@ CREATE TABLE IF NOT EXISTS subscriptions (
 
   trial_ends_at            TIMESTAMPTZ,
   -- « Garanti à vie » matérialisé : posé à la souscription Fondateurs, jamais
-  -- effacé tant que l'abonnement reste actif.
+  -- effacé tant que l'abonnement reste actif. Ne couvre QUE le prix de base.
   price_locked_at          TIMESTAMPTZ,
 
   -- Retour vers une formule moindre : il prend effet à l'échéance, jamais en
@@ -111,26 +129,51 @@ INSERT INTO fondateurs_compteur (id, places_totales, places_prises)
 VALUES ('global', 50, 0)
 ON CONFLICT (id) DO NOTHING;
 
--- Franchissements de seuil d'usage vocal (« 80 % des appels inclus ») :
--- append-only, une ligne par (tenant, mois, seuil) — c'est ce qui garantit
--- qu'une alerte ne part qu'UNE fois par mois, même relue en concurrence.
--- Même motif que objectifs_franchissements (migration 011). Le compteur
--- lui-même n'a pas de table : il se DÉRIVE d'appels_relance (started_at,
--- mois calendaire Europe/Paris) — un compteur redondant finirait par mentir.
+-- Franchissements de seuil d'usage (« 80 % des dossiers inclus », « plafond
+-- WhatsApp atteint ») : append-only, une ligne par (tenant, usage, mois,
+-- seuil) — c'est ce qui garantit qu'une alerte ne part qu'UNE fois par mois,
+-- même relue en concurrence. Même motif que objectifs_franchissements
+-- (migration 011). Les compteurs eux-mêmes n'ont pas de table : ils se
+-- DÉRIVENT des tables qui font foi (appels_relance pour le vocal — dossiers
+-- distincts par mois calendaire Europe/Paris) — un compteur redondant
+-- finirait par mentir.
 CREATE TABLE IF NOT EXISTS usage_franchissements (
   id         TEXT        PRIMARY KEY,
   tenant_id  UUID        NOT NULL REFERENCES tenants(id),
+  usage      TEXT        NOT NULL DEFAULT 'vocal'
+               CHECK (usage IN ('vocal','whatsapp')),
   -- 'YYYY-MM' en heure de Paris : le mois COMMERCIAL d'un produit français.
   mois       TEXT        NOT NULL,
   seuil_pct  INTEGER     NOT NULL CHECK (seuil_pct > 0 AND seuil_pct <= 100),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  CONSTRAINT usage_franchissements_unique UNIQUE (tenant_id, mois, seuil_pct)
+  CONSTRAINT usage_franchissements_unique UNIQUE (tenant_id, usage, mois, seuil_pct)
 );
 
 ALTER TABLE usage_franchissements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE usage_franchissements FORCE  ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS tenant_isolation ON usage_franchissements;
 CREATE POLICY tenant_isolation ON usage_franchissements
+  USING      (tenant_id = nullif(current_setting('app.current_tenant_id', true), '')::uuid)
+  WITH CHECK (tenant_id = nullif(current_setting('app.current_tenant_id', true), '')::uuid);
+
+-- Jalons d'essai (4.43 §5) : J7 = e-mail d'activation si aucune action
+-- validée, J10 = demande de carte (bandeau + e-mail, message de continuité).
+-- Append-only et UNIQUE (tenant, jalon) : chaque jalon ne se constate et ne
+-- s'annonce qu'UNE fois, même relu en concurrence — la même mécanique que
+-- les franchissements d'usage. Interdit structurel : pas de jalon carte
+-- avant J10 (la garde vit dans le code qui constate, testée).
+CREATE TABLE IF NOT EXISTS essai_jalons (
+  id         TEXT        PRIMARY KEY,
+  tenant_id  UUID        NOT NULL REFERENCES tenants(id),
+  jalon      TEXT        NOT NULL CHECK (jalon IN ('J7_ACTIVATION','J10_CARTE')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT essai_jalons_unique UNIQUE (tenant_id, jalon)
+);
+
+ALTER TABLE essai_jalons ENABLE ROW LEVEL SECURITY;
+ALTER TABLE essai_jalons FORCE  ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation ON essai_jalons;
+CREATE POLICY tenant_isolation ON essai_jalons
   USING      (tenant_id = nullif(current_setting('app.current_tenant_id', true), '')::uuid)
   WITH CHECK (tenant_id = nullif(current_setting('app.current_tenant_id', true), '')::uuid);
 

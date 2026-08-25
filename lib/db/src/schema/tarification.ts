@@ -2,7 +2,8 @@ import { pgTable, text, timestamp, uuid, boolean, integer, unique } from "drizzl
 import { tenantsTable } from "./tenants";
 
 /**
- * Grille tarifaire (décision fondateur, août 2026) — migration 065.
+ * Grille tarifaire (décision fondateur, août 2026, corrigée 4.43) —
+ * migration 065.
  *
  * `plans` et `fondateurs_compteur` sont GLOBALES (pas de tenant_id, pas de
  * RLS) : un référentiel de prix et une jauge de 50 places ne portent la
@@ -21,8 +22,12 @@ export const plansTable = pgTable("plans", {
   utilisateursInclus: integer("utilisateurs_inclus").notNull().default(1),
   /** NULL = pas d'utilisateur supplémentaire possible (Solo). */
   prixUtilisateurSuppCents: integer("prix_utilisateur_supp_cents"),
-  appelsInclus: integer("appels_inclus").notNull().default(0),
-  prixAppelSuppCents: integer("prix_appel_supp_cents"),
+  /** Module vocal : DOSSIERS de relance inclus par mois — un dossier = un
+   *  impayé relancé, jamais une tentative d'appel (4.43 §1). */
+  dossiersInclus: integer("dossiers_inclus").notNull().default(0),
+  prixDossierSuppCents: integer("prix_dossier_supp_cents"),
+  /** Plafond souple : au-delà on alerte, on ne bloque jamais (4.43 §2). */
+  whatsappConversationsIncluses: integer("whatsapp_conversations_incluses").notNull().default(0),
 });
 
 /**
@@ -47,7 +52,9 @@ export const subscriptionsTable = pgTable(
       .default("MENSUEL"),
 
     trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
-    /** « Garanti à vie » matérialisé — posé à la souscription Fondateurs. */
+    /** « Garanti à vie » matérialisé — posé à la souscription Fondateurs.
+     *  Ne couvre QUE le prix de base : les sièges au-delà de 5 et le module
+     *  vocal restent facturés comme partout (4.43 §4). */
     priceLockedAt: timestamp("price_locked_at", { withTimezone: true }),
 
     /** Retour vers une formule moindre : cible et date d'effet (l'échéance). */
@@ -76,24 +83,44 @@ export const fondateursCompteurTable = pgTable("fondateurs_compteur", {
 });
 
 /**
- * Franchissements de seuil d'usage vocal — append-only, UNIQUE
- * (tenant, mois, seuil) : l'alerte « 80 % des appels inclus » ne part qu'une
- * fois par mois, même constatée en concurrence. Le compteur lui-même se
- * dérive d'`appels_relance` (started_at, mois calendaire Europe/Paris).
+ * Franchissements de seuil d'usage — append-only, UNIQUE (tenant, usage,
+ * mois, seuil) : chaque alerte (« 80 % des dossiers », « plafond WhatsApp »)
+ * ne part qu'une fois par mois, même constatée en concurrence. Les compteurs
+ * se DÉRIVENT des tables qui font foi (appels_relance : dossiers distincts
+ * par mois calendaire Europe/Paris).
  */
 export const usageFranchissementsTable = pgTable(
   "usage_franchissements",
   {
     id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
     tenantId: uuid("tenant_id").notNull().references(() => tenantsTable.id),
+    usage: text("usage", { enum: ["vocal", "whatsapp"] }).notNull().default("vocal"),
     /** 'YYYY-MM' en heure de Paris — le mois commercial d'un produit français. */
     mois: text("mois").notNull(),
     seuilPct: integer("seuil_pct").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [unique("usage_franchissements_unique").on(t.tenantId, t.mois, t.seuilPct)],
+  (t) => [unique("usage_franchissements_unique").on(t.tenantId, t.usage, t.mois, t.seuilPct)],
+);
+
+/**
+ * Jalons d'essai (4.43 §5) — append-only, UNIQUE (tenant, jalon) : le
+ * bandeau carte de J10 et l'e-mail d'activation de J7 ne se constatent et
+ * ne partent qu'une fois. Le J10 est un message de continuité, jamais une
+ * menace ; avant J10, il est interdit de demander la carte.
+ */
+export const essaiJalonsTable = pgTable(
+  "essai_jalons",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    tenantId: uuid("tenant_id").notNull().references(() => tenantsTable.id),
+    jalon: text("jalon", { enum: ["J7_ACTIVATION", "J10_CARTE"] }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [unique("essai_jalons_unique").on(t.tenantId, t.jalon)],
 );
 
 export type Plan = typeof plansTable.$inferSelect;
 export type Subscription = typeof subscriptionsTable.$inferSelect;
 export type UsageFranchissement = typeof usageFranchissementsTable.$inferSelect;
+export type EssaiJalon = typeof essaiJalonsTable.$inferSelect;

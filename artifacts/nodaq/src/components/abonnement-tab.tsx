@@ -72,19 +72,20 @@ function CarteFormule({
   const traits: string[] = [];
   if (plan.id === 'solo') {
     traits.push('1 utilisateur — le dirigeant', 'Devis, factures, chantiers, cockpit complet',
-      'Relances par e-mail et WhatsApp sans limite', 'Une demi-heure de main-d’œuvre facturée par mois');
+      'Relances par e-mail illimitées, WhatsApp en usage normal',
+      'Une demi-heure de main-d’œuvre facturée par mois');
   } else {
     traits.push(
       `Jusqu'à ${plan.utilisateursInclus} utilisateurs inclus`,
       plan.prixUtilisateurSuppCents !== null
         ? `puis ${euros(plan.prixUtilisateurSuppCents)} € HT/mois par utilisateur en plus`
         : '',
-      'Heures et plannings, marge par chantier multi-équipes',
-      'Accès comptable (invitation dédiée)',
+      'Marge par chantier — aussi pour qui travaille seul',
+      'Heures et plannings, accès dédié pour votre comptable',
     );
   }
   if (plan.id === 'fondateurs') {
-    traits.unshift('Tout Équipe, prix garanti à vie');
+    traits.unshift('Tout Équipe, prix de base garanti à vie');
     traits.push(`Réservée aux ${etat.fondateurs.totales} premiers — ${Math.max(0, etat.fondateurs.totales - etat.fondateurs.prises)} places restantes`);
   }
 
@@ -165,12 +166,23 @@ export function AbonnementTab() {
     );
   };
 
-  const appels = etat.appels;
-  const alerte = appels && appels.inclus > 0 && appels.utilises * 100 >= 80 * appels.inclus;
+  const dossiers = etat.dossiers;
+  const alerte = dossiers && dossiers.inclus > 0 && dossiers.utilises * 100 >= 80 * dossiers.inclus;
   const module = etat.plans.find((p) => p.id === 'module_vocal');
 
   return (
     <div className="max-w-4xl space-y-6">
+      {/* Demande de carte — à partir du jour 10 de l'essai, jamais avant
+          (4.43 §5). Un message de continuité, pas une menace : le formulaire
+          de carte arrivera avec l'encaissement (ticket Stripe séparé). */}
+      {etat.essai?.demanderCarte && (
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-foreground">
+          Votre essai se termine dans {etat.essai.joursRestants} jour{etat.essai.joursRestants > 1 ? 's' : ''}.
+          Ajoutez votre carte pour que vos relances en cours continuent de tourner — et si vous ne
+          faites rien, votre espace passera simplement en lecture seule, sans aucune perte de données.
+        </div>
+      )}
+
       {/* Formule courante */}
       <div className="rounded-xl border border-card-border bg-card p-5">
         <div className="flex flex-wrap items-center gap-3">
@@ -224,27 +236,28 @@ export function AbonnementTab() {
             >
               {etat.subscription.moduleVocal
                 ? 'Désactiver le module'
-                : `Activer — ${euros(module.prixMensuelCents)} € HT/mois, ${module.appelsInclus} appels inclus`}
+                : `Activer — ${euros(module.prixMensuelCents)} € HT/mois, ${module.dossiersInclus} dossiers inclus`}
             </Button>
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
-            {module.appelsInclus} appels de relance inclus par mois, puis{' '}
-            {euros(module.prixAppelSuppCents ?? 0)} € HT par appel. Jamais de coupure en cours de
-            mois : au-delà, les appels sont comptés, pas bloqués. Activer le module vaut
-            acceptation de ce tarif.
+            {module.dossiersInclus} dossiers de relance inclus par mois, puis{' '}
+            {euros(module.prixDossierSuppCents ?? 0)} € HT par dossier. Un dossier, c'est un impayé
+            relancé dans le mois — trois rappels sur la même facture ne comptent qu'une fois.
+            Jamais de coupure en cours de mois : au-delà, les dossiers sont comptés, pas bloqués.
+            Activer le module vaut acceptation de ce tarif.
           </p>
-          {etat.subscription.moduleVocal && appels && (
+          {etat.subscription.moduleVocal && dossiers && (
             <div className="mt-3">
               <div className={cn('text-sm font-medium', alerte ? 'text-amber-600' : 'text-foreground')}>
-                {appels.utilises}/{appels.inclus} appels utilisés ce mois-ci
-                {appels.depassement > 0 && (
-                  <> — {appels.depassement} en dépassement ({euros(appels.depassement * appels.prixDepassementCents)} € HT)</>
+                {dossiers.utilises}/{dossiers.inclus} dossiers ce mois-ci
+                {dossiers.depassement > 0 && (
+                  <> — {dossiers.depassement} en dépassement ({euros(dossiers.depassement * dossiers.prixDepassementCents)} € HT)</>
                 )}
               </div>
               <div className="mt-1.5 h-2 w-full max-w-sm overflow-hidden rounded-full bg-muted">
                 <div
                   className={cn('h-full rounded-full', alerte ? 'bg-amber-500' : 'bg-primary')}
-                  style={{ width: `${Math.min(100, (appels.utilises / Math.max(1, appels.inclus)) * 100)}%` }}
+                  style={{ width: `${Math.min(100, (dossiers.utilises / Math.max(1, dossiers.inclus)) * 100)}%` }}
                 />
               </div>
             </div>

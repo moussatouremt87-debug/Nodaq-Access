@@ -3,8 +3,8 @@
  *
  * Les PRIX ne vivent pas ici : ils sont seedés par la migration 065 dans la
  * table `plans`, seule source autorisée. Ce module ne porte que ce qui doit
- * être identique des deux côtés du fil : identifiants, statuts, seuil
- * d'alerte, et la clé de mois calendaire.
+ * être identique des deux côtés du fil : identifiants, statuts, seuils,
+ * jalons d'essai, et la clé de mois calendaire.
  */
 
 export const PLAN_IDS = ["fondateurs", "solo", "equipe"] as const;
@@ -21,8 +21,23 @@ export type Periodicite = (typeof PERIODICITES)[number];
 /** Durée de l'essai, toutes fonctionnalités, limites Équipe, sans carte. */
 export const ESSAI_JOURS = 14;
 
-/** L'alerte d'usage vocal part à ce pourcentage des appels inclus — une fois. */
+/**
+ * Jalons d'essai (4.43 §5). La carte n'est JAMAIS demandée avant le jour 10
+ * (friction fatale pour la cible) ; le message de J10 est une continuité,
+ * pas une menace. Le jour 7, si aucune action proposée par l'assistant n'a
+ * été validée, un e-mail d'activation part — signé du fondateur.
+ */
+export const ESSAI_JOUR_DEMANDE_CARTE = 10;
+export const ESSAI_JOUR_ACTIVATION = 7;
+
+/** L'alerte d'usage part à ce pourcentage de l'inclus — une fois par mois. */
 export const SEUIL_ALERTE_USAGE_PCT = 80;
+
+/** Les usages comptés. Le vocal se compte en DOSSIERS (un impayé relancé
+ *  dans le mois, jamais une tentative d'appel — 4.43 §1) ; WhatsApp en
+ *  conversations (plafond souple : alerte, jamais de blocage — 4.43 §2). */
+export const USAGES = ["vocal", "whatsapp"] as const;
+export type Usage = (typeof USAGES)[number];
 
 /**
  * Mois calendaire commercial d'un produit français : l'heure de PARIS, pas
@@ -52,9 +67,24 @@ export const ROLES_COMPTES_DANS_LA_LIMITE = ["OWNER", "MEMBER"] as const;
 
 /**
  * Inviter (qui que ce soit, comptable compris) est une capacité d'Équipe —
- * Solo est « 1 utilisateur, le dirigeant ». Fondateurs contient tout Équipe,
- * et l'essai s'exerce aux limites d'Équipe.
+ * Solo est « 1 utilisateur, le dirigeant », et le rôle expert-comptable est
+ * un contenu d'Équipe (4.43 §3). Fondateurs contient tout Équipe, et
+ * l'essai s'exerce aux limites d'Équipe.
  */
 export function planPermetInvitation(planId: string): boolean {
   return planId !== "solo";
 }
+
+/**
+ * La marge par chantier est un contenu d'Équipe (4.43 §3), y compris en
+ * usage mono-utilisateur : c'est le chemin d'upgrade des artisans qui
+ * grossissent sans embaucher. En Solo elle est VERROUILLÉE avec un état
+ * explicite — jamais un bouton mort. L'essai (limites Équipe) y a accès.
+ */
+export function planPermetMargeChantier(planId: string): boolean {
+  return planId !== "solo";
+}
+
+/** Le message de l'état verrouillé — le même à l'API et à l'écran. */
+export const MESSAGE_MARGE_EQUIPE =
+  "La marge par chantier fait partie de l'offre Équipe — voyez votre marge chantier par chantier. Le changement se fait dans Réglages → Abonnement.";
