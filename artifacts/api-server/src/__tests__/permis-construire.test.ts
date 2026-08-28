@@ -25,6 +25,7 @@ import app from "../app";
 import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner, serveurTest } from "./helpers";
 import { creerRoutePermis } from "../routes/prospection";
 import type { TransportPermis } from "../lib/permis-construire";
+import { departementDepuisCodePostal } from "../lib/permis-construire";
 
 interface Locataire { cookie: string; tenantId: string }
 
@@ -212,5 +213,221 @@ describe("le registre des traitements est à jour dans cette PR", () => {
     expect(entree!.purpose).toMatch(/PARTICULIER/);
     expect(entree!.source.url).toMatch(/^https?:\/\//);
     expect(RGPD_REGISTER_VERSION >= "2026-08-12").toBe(true);
+  });
+});
+
+// ── La source RÉELLE ─────────────────────────────────────────────────────────
+//
+// Ajouté après confrontation au service le 28/08/2026. Le module composait
+// `?commune=` ; la source filtre par DÉPARTEMENT (`?dep_code=`). Et tous les
+// champs qu'elle rend portent des noms de colonnes Sitadel — `num_pa`,
+// `localite`, `date_reelle_autorisation`, `permit_type` — là où le module
+// attendait `numero`, `commune`, `date_octroi`, `nature`.
+describe("le département déduit du code postal", () => {
+  test("métropole : les deux premiers chiffres", () => {
+    expect(departementDepuisCodePostal("02120")).toBe("02");
+    expect(departementDepuisCodePostal("44300")).toBe("44");
+    expect(departementDepuisCodePostal("75011")).toBe("75");
+  });
+
+  test("outre-mer : TROIS chiffres", () => {
+    // Coupés à deux, la Guadeloupe et Mayotte donneraient le même « 97 ».
+    expect(departementDepuisCodePostal("97110")).toBe("971");
+    expect(departementDepuisCodePostal("97600")).toBe("976");
+  });
+
+  test("Corse : REFUSÉ plutôt que deviné", () => {
+    // `20xxx` couvre 2A et 2B, et la limite administrative ne suit pas les
+    // tranches postales partout. Envoyer un artisan d'Ajaccio démarcher en
+    // Haute-Corse serait une erreur silencieuse qu'il ne pourrait pas
+    // comprendre.
+    expect(departementDepuisCodePostal("20000")).toBeNull();
+    expect(departementDepuisCodePostal("20600")).toBeNull();
+  });
+
+  test("ce qui n'est pas un code postal ne donne rien", () => {
+    expect(departementDepuisCodePostal(null)).toBeNull();
+    expect(departementDepuisCodePostal("")).toBeNull();
+    expect(departementDepuisCodePostal("4430")).toBeNull();
+    expect(departementDepuisCodePostal("Nantes")).toBeNull();
+  });
+});
+
+describe("la requête envoyée à la source", () => {
+  test("filtre par dep_code, pas par commune", async () => {
+    configurerSource();
+    const urls: string[] = [];
+    const t: TransportPermis = async (url) => {
+      urls.push(url);
+      return { status: 200, texte: JSON.stringify({ permits: [] }) };
+    };
+    await request(appAvec(t, a.tenantId)).get("/permis").expect(200);
+
+    expect(urls).toHaveLength(1);
+    // Le tenant a le code postal 02120.
+    expect(urls[0]).toContain("dep_code=02");
+    expect(urls[0]).not.toContain("commune=");
+  });
+});
+
+describe("les noms de champs de la source", () => {
+  /** Un permis tel que la source le rend réellement. */
+  const permisSitadel = () => ({
+    num_pa: "0440872600041",
+    permit_type: "PC",
+    localite: "MACHECOUL-SAINT-MEME",
+    date_reelle_autorisation: "2026-08-05",
+    denom_dem: "SCI DU PONT NEUF",
+    cj_dem: "6540",
+  });
+
+  test("les colonnes Sitadel sont reconnues", async () => {
+    configurerSource();
+    process.env["PERMIS_AFFICHER_PISTES_PRO"] = "true";
+    const t: TransportPermis = async () => ({
+      status: 200,
+      texte: JSON.stringify({ permits: [permisSitadel()] }),
+    });
+    const { body } = await request(appAvec(t, a.tenantId)).get("/permis").expect(200);
+
+    expect(body.pistesProfessionnelles).toHaveLength(1);
+    const p = body.pistesProfessionnelles[0];
+    expect(p.numero).toBe("0440872600041");
+    expect(p.nature).toBe("PC");
+    expect(p.commune).toBe("MACHECOUL-SAINT-MEME");
+    expect(p.dateOctroi).toBe("2026-08-05");
+    expect(p.nomDemandeur).toBe("SCI DU PONT NEUF");
+    delete process.env["PERMIS_AFFICHER_PISTES_PRO"];
+  });
+
+  test("la catégorie juridique suffit à établir la personne morale", async () => {
+    configurerSource();
+    process.env["PERMIS_AFFICHER_PISTES_PRO"] = "true";
+    // AUCUN marqueur textuel — seulement `cj_dem`. C'est le cas réel : la
+    // source ne rend pas de champ « type de demandeur » en toutes lettres.
+    const t: TransportPermis = async () => ({
+      status: 200,
+      texte: JSON.stringify({
+        permits: [{ num_pa: "X1", denom_dem: "MAIRIE DE MACHECOUL", cj_dem: "7210" }],
+      }),
+    });
+    const { body } = await request(appAvec(t, a.tenantId)).get("/permis").expect(200);
+
+    expect(body.pistesProfessionnelles).toHaveLength(1);
+    delete process.env["PERMIS_AFFICHER_PISTES_PRO"];
+  });
+
+  test("sans catégorie juridique, le demandeur reste un particulier", async () => {
+    configurerSource();
+    process.env["PERMIS_AFFICHER_PISTES_PRO"] = "true";
+    // Mesuré sur la base ouverte : un particulier ne porte NI dénomination NI
+    // catégorie juridique. Il ne doit jamais devenir une piste, même le
+    // réglage activé.
+    const t: TransportPermis = async () => ({
+      status: 200,
+      texte: JSON.stringify({
+        permits: [{ num_pa: "X2", localite: "MACHECOUL-SAINT-MEME", permit_type: "DP_LOGEMENT" }],
+      }),
+    });
+    const { body } = await request(appAvec(t, a.tenantId)).get("/permis").expect(200);
+
+    expect(body.pistesProfessionnelles).toHaveLength(0);
+    delete process.env["PERMIS_AFFICHER_PISTES_PRO"];
+  });
+});
+
+// ── La réponse RÉELLE du service ─────────────────────────────────────────────
+//
+// Relevée avec une vraie clé le 28/08/2026, département 75. Elle contredit
+// l'essai public sur DEUX points, et c'est pourquoi ces tests existent :
+// l'essai rendait `localite` et l'enveloppe `permits`, le service réel rend
+// `adr_localite_ter` et `data`. Sans vérification, la commune serait restée
+// vide sans qu'aucune erreur ne le dise.
+describe("la réponse réelle du service", () => {
+  /** Un permis tel que le service le rend, champs verbatim. */
+  const permisReel = () => ({
+    id: 10374327,
+    num_pa: "07510826V0325",
+    dep_code: "75",
+    comm_code: "75056",
+    adr_localite_ter: "PARIS 08",
+    full_address: "1 RUE D'ARGENSON 75008 PARIS 08",
+    date_reelle_autorisation: "2026-08-05",
+    permit_type: "DP_LOCAUX",
+    superficie_terrain: 394,
+    denom_dem: "WELLBAW",
+    siren_dem: "844587063",
+  });
+
+  test("l'enveloppe `data` et les champs réels sont lus", async () => {
+    configurerSource();
+    process.env["PERMIS_AFFICHER_PISTES_PRO"] = "true";
+    const t: TransportPermis = async () => ({
+      status: 200,
+      texte: JSON.stringify({ data: [permisReel()] }),
+    });
+    const { body } = await request(appAvec(t, a.tenantId)).get("/permis").expect(200);
+
+    expect(body.pistesProfessionnelles).toHaveLength(1);
+    const p = body.pistesProfessionnelles[0];
+    expect(p.numero).toBe("07510826V0325");
+    expect(p.nature).toBe("DP_LOCAUX");
+    expect(p.nomDemandeur).toBe("WELLBAW");
+    // Le piège : `adr_localite_ter`, pas `localite`.
+    expect(p.commune).toBe("PARIS 08");
+    expect(p.adresse).toBe("1 RUE D'ARGENSON 75008 PARIS 08");
+    expect(p.dateOctroi).toBe("2026-08-05");
+    delete process.env["PERMIS_AFFICHER_PISTES_PRO"];
+  });
+
+  test("le SIREN suffit à établir la personne morale", async () => {
+    configurerSource();
+    process.env["PERMIS_AFFICHER_PISTES_PRO"] = "true";
+    // Le service ne rend NI catégorie juridique NI type de demandeur en
+    // toutes lettres — vérifié sur la liste complète de ses champs. Le SIREN
+    // est le seul marqueur disponible, et il suffit : un particulier n'en a
+    // pas.
+    const t: TransportPermis = async () => ({
+      status: 200,
+      texte: JSON.stringify({
+        data: [{ num_pa: "X1", denom_dem: "WELLBAW", siren_dem: "844587063" }],
+      }),
+    });
+    const { body } = await request(appAvec(t, a.tenantId)).get("/permis").expect(200);
+
+    expect(body.pistesProfessionnelles).toHaveLength(1);
+    delete process.env["PERMIS_AFFICHER_PISTES_PRO"];
+  });
+
+  test("un SIREN sérialisé en nombre est accepté", async () => {
+    configurerSource();
+    process.env["PERMIS_AFFICHER_PISTES_PRO"] = "true";
+    // Refuser sur ce détail de sérialisation ferait perdre TOUTES les pistes,
+    // et l'erreur parlerait de « forme inattendue » sans dire laquelle.
+    const t: TransportPermis = async () => ({
+      status: 200,
+      texte: JSON.stringify({
+        data: [{ num_pa: "X2", denom_dem: "WELLBAW", siren_dem: 844587063 }],
+      }),
+    });
+    const { body } = await request(appAvec(t, a.tenantId)).get("/permis").expect(200);
+
+    expect(body.pistesProfessionnelles).toHaveLength(1);
+    delete process.env["PERMIS_AFFICHER_PISTES_PRO"];
+  });
+
+  test("sans SIREN ni nom, le demandeur reste un particulier", async () => {
+    configurerSource();
+    process.env["PERMIS_AFFICHER_PISTES_PRO"] = "true";
+    const t: TransportPermis = async () => ({
+      status: 200,
+      texte: JSON.stringify({
+        data: [{ num_pa: "X3", adr_localite_ter: "PARIS 08", permit_type: "DP_LOGEMENT" }],
+      }),
+    });
+    const { body } = await request(appAvec(t, a.tenantId)).get("/permis").expect(200);
+
+    expect(body.pistesProfessionnelles).toHaveLength(0);
+    delete process.env["PERMIS_AFFICHER_PISTES_PRO"];
   });
 });
