@@ -133,6 +133,33 @@ describe("Accepter un devis prévient l'artisan", () => {
     expect(await annonces()).toHaveLength(1);
   });
 
+  test("deux acceptations simultanées ne produisent qu'UNE annonce", async () => {
+    await viderAnnonces();
+    const { token } = await devisEnvoye();
+
+    // Le cas que le test précédent NE couvre PAS, et je l'ai découvert en
+    // éprouvant la garde : sur une seconde tentative séquentielle, la route
+    // rend 409 AVANT d'entrer dans la transaction — le garde `lignes[0]` n'y
+    // est jamais sollicité.
+    //
+    // En concurrence, les deux requêtes passent le pré-contrôle et entrent
+    // toutes deux dans la transaction ; seule celle dont l'UPDATE trouve
+    // encore `acceptedAt IS NULL` met une ligne à jour. La perdante ne doit
+    // rien annoncer — sinon l'artisan lit deux signatures pour un seul
+    // engagement.
+    const [un, deux] = await Promise.all([
+      publicPost(`/api/public/devis/${token}/accept`).send({ signataire: "A" }),
+      publicPost(`/api/public/devis/${token}/accept`).send({ signataire: "B" }),
+    ]);
+    expect([un.status, deux.status].sort()).toEqual([200, 409]);
+
+    const lignes = await annonces();
+    expect(lignes).toHaveLength(1);
+    // Et c'est le gagnant qui est annoncé, pas l'autre.
+    const gagnant = un.status === 200 ? "A" : "B";
+    expect(lignes[0]!.label).toContain(gagnant);
+  });
+
   test("l'acceptation réussit même si l'annonce ne peut pas partir", async () => {
     await viderAnnonces();
     const { token } = await devisEnvoye();
