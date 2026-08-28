@@ -108,6 +108,34 @@ CREATE TABLE IF NOT EXISTS subscriptions (
   CONSTRAINT subscriptions_un_par_tenant UNIQUE (tenant_id)
 );
 
+-- Backfill : les tenants existants entrent en essai 14 jours (limites
+-- Équipe), comme un tenant neuf. Aucun n'a jamais souscrit : leur donner
+-- ACTIVE inventerait un consentement tarifaire que personne n'a donné.
+--
+-- IL DOIT PRÉCÉDER `FORCE ROW LEVEL SECURITY`, et c'est tout l'objet de sa
+-- place ici. `FORCE` soumet le PROPRIÉTAIRE lui-même aux policies — c'est sa
+-- raison d'être. Or une migration tourne sans `app.current_tenant_id` : la
+-- policy compare alors `tenant_id` à NULL, le `WITH CHECK` n'est jamais vrai,
+-- et l'insertion est refusée par
+--   « new row violates row-level security policy for table "subscriptions" ».
+--
+-- POURQUOI LA CI NE POUVAIT PAS LE VOIR, et c'est le vrai enseignement : les
+-- migrations tournent en local et en intégration sous `postgres`, un rôle
+-- SUPERUTILISATEUR (`rolsuper`, `rolbypassrls`) qui contourne la RLS, `FORCE`
+-- compris. En production elles tournent sous `nodaq_owner`, propriétaire mais
+-- NON superutilisateur — la policy s'y applique donc pleinement.
+--
+-- Aucune exécution de la suite, dans aucun fuseau, ne pouvait révéler ce
+-- défaut. Mesuré : même en insérant un tenant préexistant dans une base
+-- locale, l'ordre fautif passait. Seule la production l'a refusé.
+--
+-- La garde qui protège cette règle lit donc le SQL comme du TEXTE
+-- (`migrations-ordre-rls.test.ts`), au lieu de compter sur son exécution.
+INSERT INTO subscriptions (id, tenant_id, plan_id, statut, trial_ends_at)
+SELECT gen_random_uuid()::text, t.id, 'equipe', 'TRIAL', NOW() + INTERVAL '14 days'
+FROM tenants t
+WHERE NOT EXISTS (SELECT 1 FROM subscriptions s WHERE s.tenant_id = t.id);
+
 ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE subscriptions FORCE  ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS tenant_isolation ON subscriptions;
@@ -177,10 +205,5 @@ CREATE POLICY tenant_isolation ON essai_jalons
   USING      (tenant_id = nullif(current_setting('app.current_tenant_id', true), '')::uuid)
   WITH CHECK (tenant_id = nullif(current_setting('app.current_tenant_id', true), '')::uuid);
 
--- Backfill : les tenants existants entrent en essai 14 jours (limites
--- Équipe), comme un tenant neuf. Aucun n'a jamais souscrit : leur donner
--- ACTIVE inventerait un consentement tarifaire que personne n'a donné.
-INSERT INTO subscriptions (id, tenant_id, plan_id, statut, trial_ends_at)
-SELECT gen_random_uuid()::text, t.id, 'equipe', 'TRIAL', NOW() + INTERVAL '14 days'
-FROM tenants t
-WHERE NOT EXISTS (SELECT 1 FROM subscriptions s WHERE s.tenant_id = t.id);
+-- (Le remplissage des abonnements existants a été remonté plus haut, avant
+--  `FORCE ROW LEVEL SECURITY` — voir le commentaire qui l'accompagne.)
