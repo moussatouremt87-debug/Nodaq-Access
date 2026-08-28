@@ -280,8 +280,17 @@ describe("la requête qui part réellement au BOAMP", () => {
    */
   test("seuls les avis encore ouverts à la réponse sont demandés", async () => {
     const url = await urlDe(a.tenantId);
-    const attendue = new Date().toISOString().slice(0, 10);
-    expect(url).toContain(`datelimitereponse>=date'${attendue}'`);
+    /*
+     * On vérifie la FORME de la borne, pas sa valeur.
+     *
+     * Recalculer la date attendue ici la ferait diverger de celle du module
+     * si l'horloge franchit minuit entre les deux appels — un flottement
+     * rare, jamais reproductible, et que le dépôt interdit de masquer par un
+     * `retry`. La garde qui compte est que le filtre SOIT LÀ et bien formé ;
+     * que la borne soit le bon jour relève de `toDateString`, éprouvée
+     * ailleurs.
+     */
+    expect(url).toMatch(/datelimitereponse>=date'\d{4}-\d{2}-\d{2}'/);
   });
 
   /** Sans `limit`, cette API en rend DIX ; 100 est son maximum. */

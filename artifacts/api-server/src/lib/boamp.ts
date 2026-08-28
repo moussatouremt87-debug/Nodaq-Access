@@ -26,6 +26,7 @@
  */
 import { z } from "zod";
 import type { SourcePublique } from "@nodaq/shared";
+import { toDateString } from "@nodaq/shared";
 
 export class BoampConfigError extends Error {
   constructor(
@@ -162,18 +163,6 @@ export function departementBoamp(codePostal: string | null): string | null {
 }
 
 /**
- * Le jour même, en UTC.
- *
- * `toISOString()` et non une date locale : la CI exécute la suite sous UTC,
- * Europe/Paris ET Pacific/Auckland, et une date locale ferait basculer la
- * borne d'un jour selon le fuseau — le genre de rouge qui n'apparaît qu'à
- * midi et qu'on met des heures à ne pas reproduire.
- */
-function aujourdhuiUtc(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-/**
  * Combien d'avis on demande.
  *
  * Sans `limit`, cette API en rend DIX. Avec `order_by` désormais posé, ces dix
@@ -236,6 +225,13 @@ export async function chercherMarches(
    * Un avis dont la date limite est passée n'est pas « moins intéressant » :
    * il est INEXPLOITABLE. L'écran en affichait de 2017, 2019 et 2020.
    *
+   * La borne passe par `toDateString()`, pas par `toISOString().slice(0, 10)` :
+   * c'est une DATE MÉTIER — le jour où se trouve l'artisan — et une garde du
+   * dépôt (`period-bounds-timezone-guard`) l'impose. Elle s'est d'ailleurs
+   * déclenchée sur la première version de cette ligne, qui découpait un
+   * instant UTC. Le test correspondant vérifie la FORME de la borne et non sa
+   * valeur, pour ne pas se retourner contre nous au passage de minuit.
+   *
    * Ce filtre écarte aussi les enregistrements SANS date limite. Mesuré sur
    * les 100 derniers avis du département 35 : 33 n'en portent pas, dont 27
    * « Résultat de marché » et 4 « Rectificatif » — des marchés déjà attribués
@@ -243,7 +239,7 @@ export async function chercherMarches(
    * marché » sont perdus, et un avis sans échéance n'est de toute façon pas
    * actionnable.
    */
-  where += `%20AND%20datelimitereponse%3E%3Ddate%27${aujourdhuiUtc()}%27`;
+  where += `%20AND%20datelimitereponse%3E%3Ddate%27${toDateString(new Date())}%27`;
 
   if (motsCles && motsCles.length > 0) {
     const clause = motsCles
