@@ -82,6 +82,14 @@ export function configRnic(): ConfigRnic {
 const Coproprietaire = z.object({
   commune: z.string().nullish(),
   code_postal: z.string().nullish(),
+  /**
+   * Le nom du syndic. `raison_sociale_representant` est celui que porte
+   * RÉELLEMENT le registre — confronté à la source le 28/08/2026. Les trois
+   * autres étaient des candidats plausibles, écrits avant tout accès réel ;
+   * ils sont CONSERVÉS, parce qu'un portail qui republierait le registre
+   * sous un autre nom de colonne resterait lisible sans retoucher ce fichier.
+   */
+  raison_sociale_representant: z.string().min(1).nullish(),
   nom_syndic: z.string().min(1).nullish(),
   syndic_nom: z.string().min(1).nullish(),
   denomination_syndic: z.string().min(1).nullish(),
@@ -114,13 +122,35 @@ export interface SyndicPublique {
 export function estSyndicProfessionnel(c: z.infer<typeof Coproprietaire>): boolean {
   const marqueur = (c.type_syndic ?? c.syndic_type ?? c.nature_syndic ?? "").trim().toLowerCase();
   if (marqueur.length === 0) return false;
-  const nom = c.denomination_syndic ?? c.nom_syndic ?? c.syndic_nom;
+  const nom = nomSyndicDe(c);
   return marqueur.includes("professionnel") && Boolean(nom);
 }
 
 function nomSyndicDe(c: z.infer<typeof Coproprietaire>): string | null {
-  return c.denomination_syndic ?? c.nom_syndic ?? c.syndic_nom ?? null;
+  return (
+    c.raison_sociale_representant ??
+    c.denomination_syndic ??
+    c.nom_syndic ??
+    c.syndic_nom ??
+    null
+  );
 }
+
+/**
+ * Combien de copropriétés on demande en une fois.
+ *
+ * CE N'EST PAS UN CONFORT : sans ce paramètre, l'API rend **12 lignes** par
+ * défaut — mesuré. Nantes en compte 1 413. On aurait donc agrégé un
+ * échantillon d'un pour cent en le présentant comme le total de la commune,
+ * sans qu'aucune erreur ne le dise.
+ *
+ * 10 000 est le plus grand que l'API accepte (20 000 échoue). Une seule
+ * commune de France le dépasse — PARIS, 10 713 copropriétés au 28/08/2026 —
+ * et y sera donc tronquée d'environ 7 %. Un artisan parisien qui veut une
+ * liste exacte doit filtrer par code postal, ce que cette fonction fait déjà
+ * quand la commune n'est pas renseignée.
+ */
+const TAILLE_PAGE = 10_000;
 
 function formeRecue(brut: unknown): string {
   if (brut === null || typeof brut !== "object") return typeof brut;
@@ -137,7 +167,11 @@ export async function chercherSyndics(
 ): Promise<SyndicPublique[]> {
   const config = configRnic();
   const zone = requete.commune ?? requete.codePostal ?? "";
-  const url = `${config.baseUrl}/records?where=commune%3D%22${encodeURIComponent(zone)}%22`;
+  const champ = requete.commune ? "commune_in" : "code_postal_in";
+  const url =
+    `${config.baseUrl}/lines?${champ}=${encodeURIComponent(zone)}` +
+    `&size=${TAILLE_PAGE}` +
+    `&select=commune,code_postal,type_syndic,raison_sociale_representant`;
 
   let reponse: { status: number; texte: string };
   try {
