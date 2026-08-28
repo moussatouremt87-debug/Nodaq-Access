@@ -5,6 +5,7 @@ import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { entetesSecurite } from "./lib/entetes-securite";
 import { pool } from "@workspace/db";
 
 const app: Express = express();
@@ -27,6 +28,15 @@ if (trustProxy) {
   const sauts = Number(trustProxy);
   app.set("trust proxy", Number.isInteger(sauts) && sauts > 0 ? sauts : trustProxy);
 }
+
+// ── En-têtes de sécurité ─────────────────────────────────────────────────────
+// Posés AVANT tout le reste : une réponse d'erreur émise par un middleware
+// suivant doit les porter aussi. Un en-tête qui ne protège que le chemin
+// nominal ne protège rien.
+//
+// Le chemin est le MÊME que celui du SPA plus bas (`__dirname/../public`) :
+// c'est de cet index que sortent les empreintes des scripts en ligne.
+app.use(entetesSecurite(path.resolve(__dirname, "..", "public", "index.html")));
 
 // ── CORS ─────────────────────────────────────────────────────────────────────
 // Allowed origins, in priority order:
