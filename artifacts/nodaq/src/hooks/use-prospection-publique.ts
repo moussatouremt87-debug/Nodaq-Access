@@ -20,6 +20,14 @@ interface Marche {
   departements: string[];
   adresse: string | null;
   dateLimiteReponse: string | null;
+  /**
+   * Quand l'avis a été publié.
+   *
+   * Affichée parce que c'est LA question que l'artisan se pose devant cette
+   * liste — « est-ce récent ? ». Elle l'était d'autant plus que la requête ne
+   * triait pas : l'écran rendait des avis de 2017, 2019 et 2020.
+   */
+  dateParution: string | null;
   natureProcedure: string | null;
   source: SourcePublique;
 }

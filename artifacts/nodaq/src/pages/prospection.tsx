@@ -148,6 +148,7 @@ export default function Prospection() {
                     champs: [
                       { libelle: 'Acheteur', valeur: m.acheteur },
                       { libelle: 'Procédure', valeur: m.natureProcedure },
+                      { libelle: 'Publié le', valeur: m.dateParution ? fmtDate(m.dateParution) : null },
                       { libelle: 'Réponse avant', valeur: m.dateLimiteReponse ? fmtDate(m.dateLimiteReponse) : null },
                       { libelle: 'Adresse', valeur: m.adresse },
                       { libelle: 'Départements', valeur: m.departements.join(', ') },
@@ -162,7 +163,10 @@ export default function Prospection() {
                   <div className="text-sm">
                     <div className="font-medium text-foreground">{m.objet ?? 'Marché public'}</div>
                     <div className="text-xs text-muted-foreground mt-0.5">
-                      {m.acheteur} {m.dateLimiteReponse ? `· réponse avant le ${fmtDate(m.dateLimiteReponse)}` : ''}
+                      {[m.acheteur,
+                        m.dateParution ? `publié le ${fmtDate(m.dateParution)}` : null,
+                        m.dateLimiteReponse ? `réponse avant le ${fmtDate(m.dateLimiteReponse)}` : null,
+                      ].filter(Boolean).join(' · ')}
                     </div>
                   </div>
                 </LignePiste>
