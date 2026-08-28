@@ -4,10 +4,18 @@
 # Uses node:20-slim (Debian Bookworm, glibc) — NOT Alpine — because several
 # native optional packages (@rollup/rollup-linux-x64-musl, @tailwindcss/oxide
 # musl variant) are explicitly excluded from the pnpm workspace overrides.
-# The -gnu variants are NOT excluded and install correctly on Debian.
+# La variante x64-gnu, elle, n'est pas exclue et s'installe correctement.
 #
-# Build:
-#   docker build -t nodaq:latest .
+# ATTENTION : `rollup-linux-ARM64-gnu` EST exclu (pnpm-workspace.yaml). Une
+# construction arm64 — le défaut sur un Mac Apple Silicon — échoue donc. D'où
+# le `--platform linux/amd64` ci-dessus.
+#
+# Build (--platform OBLIGATOIRE depuis un Mac Apple Silicon) :
+#   docker build --platform linux/amd64 -t nodaq:latest .
+#
+#   `pnpm-workspace.yaml` exclut `@rollup/rollup-linux-arm64-gnu`, si bien
+#   qu'une image arm64 échoue à compiler le front. Scaleway Containers tourne
+#   en x86_64 de toute façon : c'est l'architecture qu'il faut construire.
 #
 # Migrate (one-off, owner creds, before first start):
 #   docker run --rm \
@@ -21,7 +29,9 @@
 #     -e PUBLIC_URL="https://app.nodaq.fr" \
 #     -e PORT=8080 \
 #     -e NODE_ENV=production \
-#     -e LITELLM_API_KEY="…" \
+#     -e ENCRYPTION_KEY="$(openssl rand -base64 32)" \
+#     -e APP_URL="https://app.nodaq.fr" \
+#     -e LLM_BASE_URL="…" -e LLM_API_KEY="…" -e LLM_MODEL_CHAT="…" \
 #     nodaq:latest
 #
 # ─────────────────────────────────────────────────────────────────────────────
@@ -53,7 +63,14 @@ RUN pnpm install --frozen-lockfile
 # PORT is consumed by vite.config.ts at import time; unused during a build-only run.
 ENV NODE_ENV=production \
     BASE_PATH=/ \
-    PORT=8080
+    PORT=8080 \
+    # FRONTEND_PORT DOIT différer de PORT, même pour une construction seule.
+    # `vite.config.ts` refuse de se charger si les deux sont égaux — le proxy
+    # /api se renverrait la requête à lui-même. Le fichier retombe sur PORT
+    # quand FRONTEND_PORT est absent, donc ne rien poser ici les rend égaux et
+    # casse la construction. La valeur n'a aucun effet : en production l'API
+    # sert elle-même le SPA bâti, il n'y a pas de proxy.
+    FRONTEND_PORT=5173
 
 RUN pnpm --filter @workspace/nodaq run build
 
