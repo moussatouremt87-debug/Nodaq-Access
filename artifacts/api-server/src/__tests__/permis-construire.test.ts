@@ -17,7 +17,7 @@
  *
  * Aucun test n'atteint le réseau : le transport est injecté.
  */
-import { describe, test, expect, beforeAll, afterAll } from "vitest";
+import { describe, test, expect, beforeAll, beforeEach, afterAll } from "vitest";
 import request from "supertest";
 import express from "express";
 import crypto from "node:crypto";
@@ -26,6 +26,7 @@ import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner,
 import { creerRoutePermis } from "../routes/prospection";
 import type { TransportPermis } from "../lib/permis-construire";
 import { departementDepuisCodePostal } from "../lib/permis-construire";
+import { ecrireCachePermis, TTL_CACHE_PERMIS_MS } from "../lib/cache-permis";
 
 interface Locataire { cookie: string; tenantId: string }
 
@@ -120,7 +121,18 @@ beforeAll(async () => {
   await reglage(a.tenantId, "company.code_postal", "02120");
 }, 90_000);
 
+/*
+ * Le cache est PARTAGÉ entre tous les locataires et survit d'un test à
+ * l'autre : sans cette purge, la première requête d'un fichier remplirait
+ * l'entrée du département 02 et tous les transports suivants ne seraient
+ * jamais appelés. Les tests verdiraient en n'exerçant plus rien.
+ */
+beforeEach(async () => {
+  await adminPool.query("TRUNCATE cache_permis");
+});
+
 afterAll(async () => {
+  await adminPool.query("TRUNCATE cache_permis");
   retirerSource();
   await cleanupTenants(...cleanupTenantIds);
   await cleanupUsers(...cleanupEmails);
@@ -507,5 +519,144 @@ describe("la réponse réelle du service", () => {
 
     expect(body.pistesProfessionnelles).toHaveLength(0);
     delete process.env["PERMIS_AFFICHER_PISTES_PRO"];
+  });
+});
+
+
+// ── Le cache, né du quota ────────────────────────────────────────────────────
+//
+// PermisAPI plafonne le plan gratuit à 500 requêtes par mois. Chaque ouverture
+// de l'écran Prospection en consommait une : le quota s'est épuisé en quelques
+// jours de test, et la section s'est mise à répondre 429 — que l'écran
+// affichait « Impossible de charger les permis », comme une panne du produit.
+describe("le cache des permis", () => {
+  beforeAll(configurerSource);
+
+  function transportComptant(reponse: () => { status: number; texte: string }) {
+    const etat = { appels: 0 };
+    const t: TransportPermis = async () => {
+      etat.appels++;
+      return reponse();
+    };
+    return { t, etat };
+  }
+
+  const ok = () => ({ status: 200, texte: JSON.stringify({ results: [permisParticulier()] }) });
+
+  test("une entrée fraîche évite un second appel à la source", async () => {
+    const { t, etat } = transportComptant(ok);
+
+    await request(appAvec(t, a.tenantId)).get("/permis").expect(200);
+    const { body } = await request(appAvec(t, a.tenantId)).get("/permis").expect(200);
+
+    // LA garde : sans cache, ce serait 2. C'est tout l'objet du ticket.
+    expect(etat.appels).toBe(1);
+    expect(body.informationsParticuliers).toHaveLength(1);
+    // Rien n'est périmé : l'écran ne doit afficher aucune mention de date.
+    expect(body.donneesDu).toBeNull();
+  });
+
+  /*
+   * Le point qui justifie l'absence de `tenant_id` sur cette table. Deux
+   * artisans du même département lisent la MÊME entrée : c'est ce qui divise
+   * les appels au lieu de les multiplier. Un cache par locataire aurait
+   * consommé le quota d'autant plus vite qu'il y a de clients.
+   */
+  test("deux locataires du même département partagent l'entrée", async () => {
+    await reglage(b.tenantId, "company.commune", "Laon");
+    await reglage(b.tenantId, "company.code_postal", "02000");   // même département
+    const { t, etat } = transportComptant(ok);
+
+    await request(appAvec(t, a.tenantId)).get("/permis").expect(200);
+    const { body } = await request(appAvec(t, b.tenantId)).get("/permis").expect(200);
+
+    expect(etat.appels).toBe(1);
+    expect(body.informationsParticuliers).toHaveLength(1);
+  });
+
+  test("une entrée périmée fait rappeler la source", async () => {
+    const vieux = new Date(Date.now() - TTL_CACHE_PERMIS_MS - 60_000);
+    await ecrireCachePermis("02", [], vieux);
+    const { t, etat } = transportComptant(ok);
+
+    const { body } = await request(appAvec(t, a.tenantId)).get("/permis").expect(200);
+
+    expect(etat.appels).toBe(1);
+    expect(body.informationsParticuliers).toHaveLength(1);   // la donnée fraîche
+    expect(body.donneesDu).toBeNull();
+  });
+
+  /*
+   * Une entrée d'hier vaut infiniment mieux qu'un écran rouge : les
+   * autorisations d'urbanisme sont publiées au mois, un chantier d'hier est
+   * toujours un chantier. Mais on le DIT — servir du périmé en silence serait
+   * mentir sur la fraîcheur.
+   */
+  test("quota atteint AVEC cache : on sert le périmé, et on le dit", async () => {
+    const vieux = new Date(Date.now() - TTL_CACHE_PERMIS_MS - 60_000);
+    await ecrireCachePermis("02", [], vieux);
+    const { t } = transportComptant(() => ({ status: 429, texte: "" }));
+
+    const { body } = await request(appAvec(t, a.tenantId)).get("/permis").expect(200);
+
+    expect(body.donneesDu).toBe(vieux.toISOString());
+    expect(body.informationsParticuliers).toHaveLength(0);
+  });
+
+  /*
+   * Sans rien en cache, il faut parler — et bien parler. Un 429 est un
+   * plafond de la SOURCE, qui se lève tout seul ; ce n'est pas une panne de
+   * nodaq. La règle 3 bis interdit un message qui laisse croire à une impasse.
+   */
+  test("quota atteint SANS cache : un message qui dit le vrai", async () => {
+    const { t } = transportComptant(() => ({ status: 429, texte: "" }));
+
+    const { body } = await request(appAvec(t, a.tenantId)).get("/permis").expect(503);
+
+    expect(body.quotaSourceAtteint).toBe(true);
+    expect(body.error).toMatch(/plafond/i);
+    expect(body.error).toMatch(/réessayez/i);
+    // Le mot qui a fait croire à une panne pendant des jours.
+    expect(body.error).not.toMatch(/impossible/i);
+  });
+
+  test("une VRAIE panne de la source reste une panne, pas un quota", async () => {
+    const { t } = transportComptant(() => ({ status: 500, texte: "" }));
+
+    const { body } = await request(appAvec(t, a.tenantId)).get("/permis").expect(502);
+
+    expect(body.quotaSourceAtteint).toBe(false);
+    expect(body.error).toMatch(/500/);
+  });
+
+  test("une réponse en échec n'écrase JAMAIS le cache", async () => {
+    const recent = new Date(Date.now() - TTL_CACHE_PERMIS_MS - 60_000);
+    await ecrireCachePermis("02", [], recent);
+    const { t } = transportComptant(() => ({ status: 429, texte: "" }));
+    await request(appAvec(t, a.tenantId)).get("/permis").expect(200);
+
+    const { rows } = await adminPool.query("SELECT charge_le FROM cache_permis WHERE departement = $1", ["02"]);
+    expect(new Date(rows[0].charge_le).toISOString()).toBe(recent.toISOString());
+  });
+});
+
+describe("la table de cache ne porte aucune donnée de locataire", () => {
+  /*
+   * `cache_permis` est la SEULE table du schéma sans `tenant_id`, et c'est
+   * délibéré : elle ne contient que de l'open data publique, partagée. Cette
+   * garde fige la décision. Si quelqu'un y ajoutait un jour une colonne
+   * `tenant_id` sans y mettre de RLS, la garde `pg_class` de la CI le
+   * rattraperait ; si quelqu'un y ajoutait de la donnée de locataire SOUS un
+   * autre nom, ce test-ci le rattrape.
+   */
+  test("aucune colonne ne désigne un locataire", async () => {
+    const { rows } = await adminPool.query<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'cache_permis'`,
+    );
+    const colonnes = rows.map((r) => r.column_name).sort();
+
+    expect(colonnes).toEqual(["charge_le", "departement", "donnees"]);
+    expect(colonnes.some((c) => /tenant|user|client|membre/i.test(c))).toBe(false);
   });
 });

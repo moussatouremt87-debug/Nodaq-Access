@@ -168,6 +168,12 @@ interface InformationParticulier {
 export interface ReponsePermis {
   pistesProfessionnelles: PisteProfessionnelle[];
   informationsParticuliers: InformationParticulier[];
+  /**
+   * Renseigné UNIQUEMENT quand la liste vient d'un cache PÉRIMÉ, la source
+   * n'ayant pas pu être jointe. `null` veut dire « à jour » : l'écran ne doit
+   * alors rien afficher, sous peine de bruit permanent.
+   */
+  donneesDu: string | null;
   avertissement: string;
   raisonSilence: 'aucune_source' | 'zone_absente' | null;
   messageSilence: string | null;

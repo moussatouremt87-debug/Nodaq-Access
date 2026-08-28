@@ -53,3 +53,4 @@ export * from "./agent_feedback";
 export * from "./onboarding_qualification";
 export * from "./taux_horaires";
 export * from "./tarification";
+export * from "./cache_permis";

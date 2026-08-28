@@ -36,10 +36,26 @@ export class PermisConfigError extends Error {
 }
 
 export class PermisError extends Error {
-  constructor(message: string) {
+  /**
+   * Le code HTTP de la source, quand elle en a rendu un.
+   *
+   * Il existe pour qu'un 429 — quota atteint — puisse être distingué d'une
+   * panne. Les deux méritent des mots différents à l'écran : l'un se résout
+   * en attendant, l'autre non. Sans ce champ, l'appelant devrait relire le
+   * message en clair pour deviner, ce qui casse à la première reformulation.
+   */
+  readonly statutSource?: number;
+
+  constructor(message: string, statutSource?: number) {
     super(message);
     this.name = "PermisError";
+    if (statutSource !== undefined) this.statutSource = statutSource;
   }
+}
+
+/** Le quota de la source est atteint — transitoire, pas une panne. */
+export function estQuotaAtteint(err: unknown): boolean {
+  return err instanceof PermisError && err.statutSource === 429;
 }
 
 /** Le transport HTTP, injectable — la clé passe en en-tête, comme `TransportTem`. */
@@ -327,7 +343,10 @@ export async function chercherPermis(
   }
 
   if (reponse.status < 200 || reponse.status >= 300) {
-    throw new PermisError(`La source des permis a répondu ${reponse.status}.`);
+    throw new PermisError(
+      `La source des permis a répondu ${reponse.status}.`,
+      reponse.status,
+    );
   }
 
   let brut: unknown;
