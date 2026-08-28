@@ -94,6 +94,29 @@ function fmtSuperficie(m2: number | null): string | null {
   return m2 !== null && m2 > 0 ? `${m2.toLocaleString('fr-FR')} m² de terrain` : null;
 }
 
+/**
+ * Ce que l'écran dit quand les permis ne se chargent pas.
+ *
+ * `apiFetch` rejette avec le CORPS de la réponse en message (voir les hooks) :
+ * quand le serveur a rédigé une explication — quota de la source atteint — il
+ * faut la relayer telle quelle plutôt que d'y substituer un « impossible »
+ * générique. Le repli ne sert que si le corps n'est pas exploitable, par
+ * exemple quand c'est le réseau qui a lâché.
+ */
+function messageErreurPermis(err: unknown): string {
+  const brut = err instanceof Error ? err.message : "";
+  try {
+    const corps = JSON.parse(brut) as { error?: unknown };
+    if (typeof corps.error === "string" && corps.error.trim().length > 0) return corps.error;
+  } catch {
+    // Pas du JSON : ce n'est pas le serveur qui a parlé.
+  }
+  return (
+    "Les permis n'ont pas pu être récupérés pour le moment. Ce n'est pas une " +
+    "perte : réessayez dans quelques minutes."
+  );
+}
+
 export default function Prospection() {
   const appelsOffres = useAppelsOffres();
   const sousTraitance = useSousTraitance();
@@ -314,9 +337,16 @@ export default function Prospection() {
           {permis.isLoading ? (
             <Skeleton className="h-32 w-full rounded-xl" />
           ) : permis.isError ? (
-            <div className="p-4 text-sm text-destructive rounded-xl border border-card-border bg-card">
-              Impossible de charger les permis.
-            </div>
+            /*
+             * Le message vient du SERVEUR quand il en donne un.
+             *
+             * « Impossible de charger les permis » a été affiché pendant des
+             * jours alors que la source répondait simplement 429 : son quota
+             * mensuel était atteint. Un plafond qui se lève tout seul n'est
+             * pas une panne, et le dire ainsi faisait croire que nodaq était
+             * cassé — exactement ce que la règle 3 bis interdit.
+             */
+            <BandeauSilence message={messageErreurPermis(permis.error)} />
           ) : permis.data?.raisonSilence ? (
             <BandeauSilence message={permis.data.messageSilence ?? ''} />
           ) : permis.data && permis.data.pistesProfessionnelles.length === 0 && permis.data.informationsParticuliers.length === 0 ? (
@@ -331,6 +361,16 @@ export default function Prospection() {
             </Empty>
           ) : (
             <div className="space-y-3">
+              {permis.data?.donneesDu && (
+                <p
+                  className="rounded-xl border border-card-border bg-muted/30 p-3 text-[11px] text-muted-foreground"
+                  data-testid="permis-donnees-datees"
+                >
+                  La source n'a pas répondu à l'instant : voici les permis tels qu'ils
+                  étaient le {fmtDate(permis.data.donneesDu)}. Ils restent valables — les
+                  autorisations d'urbanisme sont publiées au mois.
+                </p>
+              )}
               {permis.data && permis.data.pistesProfessionnelles.length > 0 && (
                 <div className="rounded-xl border border-card-border bg-card divide-y divide-border">
                   {permis.data.pistesProfessionnelles.map((p, i) => (

@@ -81,10 +81,13 @@ import {
 import {
   chercherPermis,
   configPermis,
+  departementDepuisCodePostal,
+  estQuotaAtteint,
   PermisConfigError,
   PermisError,
   type TransportPermis,
 } from "../lib/permis-construire.js";
+import { lireCachePermis, ecrireCachePermis } from "../lib/cache-permis.js";
 import { VERTICAL_SETTING_KEY } from "../lib/vertical-tenant.js";
 
 const router: IRouter = Router();
@@ -947,20 +950,66 @@ export function creerRoutePermis(transport?: TransportPermis): RequestHandler {
     superficieTerrain: number | null;
     source: SourcePublique;
   }> = [];
+  /*
+   * ── LE CACHE, ET POURQUOI IL EST ICI ET PAS DANS LE MODULE ───────────────
+   * `chercherPermis` reste PUR : transport injecté, aucune base. C'est ce qui
+   * permet à ses tests de ne jamais toucher au réseau ni à Postgres. Le cache
+   * est un choix de la route, pas une propriété de la source.
+   *
+   * La source est plafonnée à 500 requêtes par mois (plan gratuit), et chaque
+   * ouverture d'écran en consommait une : le quota s'est épuisé en quelques
+   * jours et la section répondait 429.
+   */
+  let donneesDu: string | null = null;
   if (!raison) {
+    const departement = departementDepuisCodePostal(codePostal);
+    const cache = departement ? await lireCachePermis(departement) : null;
+
     let permis: Awaited<ReturnType<typeof chercherPermis>>;
-    try {
-      permis = await chercherPermis({ commune: ville, codePostal }, transport);
-    } catch (err) {
-      if (err instanceof PermisConfigError) {
-        res.status(503).json({ error: err.message, variableManquante: err.variableManquante });
-        return;
+    if (cache?.frais) {
+      permis = [...cache.permis];
+    } else {
+      try {
+        permis = await chercherPermis({ commune: ville, codePostal }, transport);
+        if (departement) await ecrireCachePermis(departement, permis);
+      } catch (err) {
+        if (err instanceof PermisConfigError) {
+          res.status(503).json({ error: err.message, variableManquante: err.variableManquante });
+          return;
+        }
+        if (err instanceof PermisError) {
+          /*
+           * ── SERVIR DU PÉRIMÉ PLUTÔT QU'UNE ERREUR ────────────────────────
+           * Une entrée d'hier vaut infiniment mieux qu'un écran rouge : les
+           * autorisations d'urbanisme sont publiées au mois, un chantier
+           * d'hier est toujours un chantier. On le DIT (`donneesDu`) — servir
+           * du périmé sans le dire serait mentir sur la fraîcheur.
+           */
+          if (cache) {
+            permis = [...cache.permis];
+            donneesDu = cache.chargeLe.toISOString();
+          } else {
+            /*
+             * Rien en cache : il faut parler. Un 429 n'est PAS une panne du
+             * produit — c'est le plafond de la source, et il se lève tout
+             * seul. Le dire ainsi évite l'« Impossible de charger » qui fait
+             * croire que nodaq est cassé (règle 3 bis : jamais un message qui
+             * laisse croire à une impasse).
+             */
+            res.status(estQuotaAtteint(err) ? 503 : 502).json({
+              error: estQuotaAtteint(err)
+                ? "La source des permis limite le nombre de consultations et a atteint " +
+                  "son plafond. Les permis reviendront d'eux-mêmes — réessayez un peu " +
+                  "plus tard."
+                : err.message,
+              quotaSourceAtteint: estQuotaAtteint(err),
+            });
+            return;
+          }
+        } else {
+          throw err;
+        }
       }
-      if (err instanceof PermisError) {
-        res.status(502).json({ error: err.message });
-        return;
-      }
-      throw err;
     }
     if (process.env["PERMIS_AFFICHER_PISTES_PRO"] === "true") {
       pistesProfessionnelles = permis.filter((p) => p.demandeurPersonneMorale);
@@ -999,6 +1048,13 @@ export function creerRoutePermis(transport?: TransportPermis): RequestHandler {
       "téléphone, aucun e-mail, aucune action d'envoi n'est proposée pour eux. " +
       "La source les publie d'ailleurs ANONYMISÉS : le nom du demandeur particulier " +
       "n'y figure pas.",
+    /**
+     * Renseigné UNIQUEMENT quand on sert une entrée périmée faute de source
+     * joignable. `null` veut dire « à jour » — l'écran ne doit donc rien
+     * afficher dans ce cas, et surtout pas « données du jour », qui serait
+     * du bruit permanent.
+     */
+    donneesDu,
     raisonSilence: raison,
     messageSilence: raison ? MESSAGES_SILENCE_ZONE[raison] : null,
   });
