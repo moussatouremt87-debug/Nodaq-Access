@@ -28,6 +28,7 @@ import { db, devisTable, withTenant, contactsProspectionTable } from "@workspace
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { journaliserAcceptation, previenirAcceptation } from "../lib/acceptation-devis.js";
 import { toDateString } from "@nodaq/shared";
 import { genererPdfDevis, chargerEmetteur, nomFichierDevis } from "../lib/pdf-devis.js";
 import { loadCompanySettings } from "../lib/seller-info.js";
@@ -316,8 +317,8 @@ router.post("/public/devis/:token/accept", limiterDebit, async (req, res): Promi
   // pré-contrôle ci-dessus, mais une seule trouve une ligne non acceptée dans
   // l'UPDATE. C'est une preuve d'engagement — le nom et l'heure du premier ne
   // se réécrivent pas.
-  const [updated] = await withTenant(devis.tenantId, (tx) =>
-    tx
+  const [updated] = await withTenant(devis.tenantId, async (tx) => {
+    const lignes = await tx
       .update(devisTable)
       .set({
         status: "ACCEPTE",
@@ -326,8 +327,26 @@ router.post("/public/devis/:token/accept", limiterDebit, async (req, res): Promi
         acceptedIp: ip,
       })
       .where(and(eq(devisTable.acceptTokenSha256, condensat(token)), isNull(devisTable.acceptedAt)))
-      .returning(),
-  );
+      .returning();
+
+    // La trace est écrite DANS la même transaction que l'acceptation. Un
+    // devis signé sans trace est précisément le défaut qu'on corrige : si
+    // l'écriture échoue, l'acceptation échoue avec elle et le client la
+    // refait — préférable à une signature silencieuse.
+    //
+    // Conditionnée à `lignes[0]` : la course concurrente ci-dessous n'a rien
+    // mis à jour, il n'y a donc rien à annoncer.
+    if (lignes[0]) {
+      await journaliserAcceptation(tx, devis.tenantId, {
+        id: lignes[0].id,
+        reference: lignes[0].reference,
+        clientName: lignes[0].clientName,
+        totalTTCCents: lignes[0].totalTTCCents,
+        signataire: parsed.data.signataire,
+      });
+    }
+    return lignes;
+  });
 
   if (!updated) {
     res.status(409).json({
@@ -336,6 +355,35 @@ router.post("/public/devis/:token/accept", limiterDebit, async (req, res): Promi
     });
     return;
   }
+
+  // L'annonce part APRÈS la transaction — un appel réseau au fournisseur
+  // tiendrait sinon les verrous de la ligne pendant toute sa latence.
+  //
+  // ELLE EST ATTENDUE, et cette ligne a d'abord été écrite `void`.
+  //
+  // Ce qui l'a fait changer : `sendDocument` écrit dans `envois_journal`, et
+  // une écriture non attendue atterrit QUAND ELLE VEUT — parfois après que le
+  // nettoyage des tests a purgé cette table, juste avant le `DELETE FROM
+  // tenants` qui échoue alors sur la clé étrangère. Vert en local, rouge en
+  // CI, sans changement de code : le flottement classique.
+  //
+  // Le dépôt interdit de masquer un flottement par un `retry`. On traite donc
+  // la cause : l'écriture devient déterministe. Le prix est réel et assumé —
+  // le signataire attend la tentative d'envoi avant sa confirmation. Il est
+  // borné : `previenirAcceptation` ne lève jamais et journalise ses propres
+  // échecs, donc au pire le client attend le délai d'expiration du serveur de
+  // messagerie, jamais une erreur.
+  await previenirAcceptation(
+    devis.tenantId,
+    {
+      id: updated.id,
+      reference: updated.reference,
+      clientName: updated.clientName,
+      totalTTCCents: updated.totalTTCCents,
+      signataire: parsed.data.signataire,
+    },
+    `${process.env["APP_URL"] ?? "https://nodaq.fr"}/devis`,
+  );
 
   res.json({
     accepted: true,
