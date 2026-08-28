@@ -203,3 +203,100 @@ describe("le registre des traitements est à jour dans cette PR", () => {
     expect(RGPD_REGISTER_VERSION >= "2026-08-12").toBe(true);
   });
 });
+
+// ── La requête réellement composée ───────────────────────────────────────────
+//
+// Ajouté après avoir confronté le module à la source RÉELLE (28/08/2026). Le
+// registre n'est pas exposé par une API Opendatasoft : la forme `/records?where=`
+// écrite à l'origine ne correspondait à rien d'existant.
+//
+// Ces gardes portent sur l'URL COMPOSÉE, et pas sur le résultat, parce que le
+// défaut le plus coûteux ici ne produit aucune erreur : sans `size`, l'API rend
+// DOUZE lignes par défaut. On aurait agrégé un échantillon de 1 % en le
+// présentant comme le total de la commune, et tous les tests seraient restés
+// verts — le transport simulé, lui, rend ce qu'on lui dit de rendre.
+describe("la requête envoyée au registre", () => {
+  /** Capture l'URL composée sans jamais atteindre le réseau. */
+  function capturer(): { urls: string[]; transport: TransportRnic } {
+    const urls: string[] = [];
+    return {
+      urls,
+      transport: async (url: string) => {
+        urls.push(url);
+        return { status: 200, texte: JSON.stringify({ results: [] }) };
+      },
+    };
+  }
+
+  test("demande explicitement une grande page — sinon l'API en rend douze", async () => {
+    configurerSource();
+    const { urls, transport } = capturer();
+    await request(appAvec(transport, a.tenantId)).get("/syndics").expect(200);
+
+    expect(urls).toHaveLength(1);
+    expect(urls[0]).toContain("size=10000");
+  });
+
+  test("interroge /lines, pas /records", async () => {
+    configurerSource();
+    const { urls, transport } = capturer();
+    await request(appAvec(transport, a.tenantId)).get("/syndics").expect(200);
+
+    expect(urls[0]).toContain("/lines?");
+    // La forme d'origine, écrite sans accès réel, ne correspond à aucun
+    // portail qui publie ce registre.
+    expect(urls[0]).not.toContain("/records");
+  });
+
+  test("filtre par commune quand elle est connue", async () => {
+    configurerSource();
+    const { urls, transport } = capturer();
+    await request(appAvec(transport, a.tenantId)).get("/syndics").expect(200);
+
+    expect(urls[0]).toContain("commune_in=Marly-Gomont");
+  });
+});
+
+// ── Le nom réellement porté par le registre ──────────────────────────────────
+describe("le nom du syndic vient de raison_sociale_representant", () => {
+  test("un syndic professionnel nommé par ce champ est reconnu", async () => {
+    configurerSource();
+    process.env["RNIC_AFFICHER_SYNDICS_PRO"] = "true";
+    const t: TransportRnic = async () => ({
+      status: 200,
+      texte: JSON.stringify({
+        results: [{
+          commune: "Marly-Gomont",
+          code_postal: "02120",
+          type_syndic: "professionnel",
+          // Le nom que porte VRAIMENT la source — les trois autres
+          // orthographes étaient des suppositions.
+          raison_sociale_representant: "CABINET LAMBERT",
+        }],
+      }),
+    });
+    const { body } = await request(appAvec(t, a.tenantId)).get("/syndics").expect(200);
+
+    expect(body.syndicsProfessionnels).toHaveLength(1);
+    expect(body.syndicsProfessionnels[0].nomSyndic).toBe("CABINET LAMBERT");
+    delete process.env["RNIC_AFFICHER_SYNDICS_PRO"];
+  });
+
+  test("sans aucun nom, il n'est jamais tenu pour professionnel", async () => {
+    configurerSource();
+    process.env["RNIC_AFFICHER_SYNDICS_PRO"] = "true";
+    // Un tiers des enregistrements réels n'ont pas de nom — mesuré sur la
+    // source. Ils doivent retomber en « non professionnel », jamais être
+    // nommés « (inconnu) » ni comptés comme une piste.
+    const t: TransportRnic = async () => ({
+      status: 200,
+      texte: JSON.stringify({
+        results: [{ commune: "Marly-Gomont", code_postal: "02120", type_syndic: "professionnel" }],
+      }),
+    });
+    const { body } = await request(appAvec(t, a.tenantId)).get("/syndics").expect(200);
+
+    expect(body.syndicsProfessionnels).toHaveLength(0);
+    delete process.env["RNIC_AFFICHER_SYNDICS_PRO"];
+  });
+});
