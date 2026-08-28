@@ -7,6 +7,7 @@ import {
   RejectPendingActionParams,
 } from "@workspace/api-zod";
 import { executerPlan, TYPE_PLAN } from "../lib/plan-vocal.js";
+import { executerRelanceDevis, TYPE_RELANCE_DEVIS } from "../lib/executer-relance-devis.js";
 import { logger } from "../lib/logger.js";
 
 const router: IRouter = Router();
@@ -75,10 +76,36 @@ router.post("/pending-actions/:id/approve", async (req, res): Promise<void> => {
     return;
   }
 
-  // Chemin conservé pour tout type de pending_action qui ne s'exécute pas via
-  // executerPlan — aucun n'existe aujourd'hui (TYPE_PLAN est le seul type
-  // jamais inséré dans pending_actions), gardé pour ne pas casser un futur
-  // type qui n'aurait besoin que d'un changement de statut.
+  // Une relance de devis S'ENVOIE — elle ne change pas de statut en silence.
+  //
+  // C'était le défaut : la campagne rédigeait objet, corps et lien WhatsApp,
+  // créait l'action, l'humain approuvait, et rien ne partait. `relance_devis`
+  // n'était lu par personne dans tout le dépôt.
+  //
+  // L'envoi se fait AVANT l'écriture du statut et hors de sa transaction : un
+  // appel réseau à l'opérateur ne doit pas tenir les verrous de la ligne.
+  if (avant.type === TYPE_RELANCE_DEVIS) {
+    const resultat = await executerRelanceDevis(tenantId, params.data.id);
+    if (resultat.kind === "introuvable") {
+      res.status(404).json({ error: "Action not found" });
+      return;
+    }
+    if (resultat.kind === "deja_execute") {
+      // 409 et non 200 : rejouer une approbation n'est pas anodin ici, même
+      // si rien n'est renvoyé une seconde fois. L'appelant doit le savoir.
+      res.status(409).json({ error: "Cette relance a déjà été envoyée." });
+      return;
+    }
+  }
+
+  // Chemin commun : écriture du statut, du journal et des effets propres à
+  // certains types. Il suit l'envoi ci-dessus plutôt que de le remplacer —
+  // une relance envoyée doit aussi être tracée comme approuvée.
+  //
+  // (Ce commentaire affirmait autrefois que `TYPE_PLAN` était « le seul type
+  // jamais inséré dans pending_actions ». C'était faux : `relance_devis` et
+  // `campagne_relance` le sont aussi, le second étant traité dix lignes plus
+  // bas dans cette même fonction.)
   const action = await withTenant(tenantId, async (tx) => {
     const [action] = await tx
       .update(pendingActionsTable)
