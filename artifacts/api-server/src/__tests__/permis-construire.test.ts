@@ -335,3 +335,99 @@ describe("les noms de champs de la source", () => {
     delete process.env["PERMIS_AFFICHER_PISTES_PRO"];
   });
 });
+
+// ── La réponse RÉELLE du service ─────────────────────────────────────────────
+//
+// Relevée avec une vraie clé le 28/08/2026, département 75. Elle contredit
+// l'essai public sur DEUX points, et c'est pourquoi ces tests existent :
+// l'essai rendait `localite` et l'enveloppe `permits`, le service réel rend
+// `adr_localite_ter` et `data`. Sans vérification, la commune serait restée
+// vide sans qu'aucune erreur ne le dise.
+describe("la réponse réelle du service", () => {
+  /** Un permis tel que le service le rend, champs verbatim. */
+  const permisReel = () => ({
+    id: 10374327,
+    num_pa: "07510826V0325",
+    dep_code: "75",
+    comm_code: "75056",
+    adr_localite_ter: "PARIS 08",
+    full_address: "1 RUE D'ARGENSON 75008 PARIS 08",
+    date_reelle_autorisation: "2026-08-05",
+    permit_type: "DP_LOCAUX",
+    superficie_terrain: 394,
+    denom_dem: "WELLBAW",
+    siren_dem: "844587063",
+  });
+
+  test("l'enveloppe `data` et les champs réels sont lus", async () => {
+    configurerSource();
+    process.env["PERMIS_AFFICHER_PISTES_PRO"] = "true";
+    const t: TransportPermis = async () => ({
+      status: 200,
+      texte: JSON.stringify({ data: [permisReel()] }),
+    });
+    const { body } = await request(appAvec(t, a.tenantId)).get("/permis").expect(200);
+
+    expect(body.pistesProfessionnelles).toHaveLength(1);
+    const p = body.pistesProfessionnelles[0];
+    expect(p.numero).toBe("07510826V0325");
+    expect(p.nature).toBe("DP_LOCAUX");
+    expect(p.nomDemandeur).toBe("WELLBAW");
+    // Le piège : `adr_localite_ter`, pas `localite`.
+    expect(p.commune).toBe("PARIS 08");
+    expect(p.adresse).toBe("1 RUE D'ARGENSON 75008 PARIS 08");
+    expect(p.dateOctroi).toBe("2026-08-05");
+    delete process.env["PERMIS_AFFICHER_PISTES_PRO"];
+  });
+
+  test("le SIREN suffit à établir la personne morale", async () => {
+    configurerSource();
+    process.env["PERMIS_AFFICHER_PISTES_PRO"] = "true";
+    // Le service ne rend NI catégorie juridique NI type de demandeur en
+    // toutes lettres — vérifié sur la liste complète de ses champs. Le SIREN
+    // est le seul marqueur disponible, et il suffit : un particulier n'en a
+    // pas.
+    const t: TransportPermis = async () => ({
+      status: 200,
+      texte: JSON.stringify({
+        data: [{ num_pa: "X1", denom_dem: "WELLBAW", siren_dem: "844587063" }],
+      }),
+    });
+    const { body } = await request(appAvec(t, a.tenantId)).get("/permis").expect(200);
+
+    expect(body.pistesProfessionnelles).toHaveLength(1);
+    delete process.env["PERMIS_AFFICHER_PISTES_PRO"];
+  });
+
+  test("un SIREN sérialisé en nombre est accepté", async () => {
+    configurerSource();
+    process.env["PERMIS_AFFICHER_PISTES_PRO"] = "true";
+    // Refuser sur ce détail de sérialisation ferait perdre TOUTES les pistes,
+    // et l'erreur parlerait de « forme inattendue » sans dire laquelle.
+    const t: TransportPermis = async () => ({
+      status: 200,
+      texte: JSON.stringify({
+        data: [{ num_pa: "X2", denom_dem: "WELLBAW", siren_dem: 844587063 }],
+      }),
+    });
+    const { body } = await request(appAvec(t, a.tenantId)).get("/permis").expect(200);
+
+    expect(body.pistesProfessionnelles).toHaveLength(1);
+    delete process.env["PERMIS_AFFICHER_PISTES_PRO"];
+  });
+
+  test("sans SIREN ni nom, le demandeur reste un particulier", async () => {
+    configurerSource();
+    process.env["PERMIS_AFFICHER_PISTES_PRO"] = "true";
+    const t: TransportPermis = async () => ({
+      status: 200,
+      texte: JSON.stringify({
+        data: [{ num_pa: "X3", adr_localite_ter: "PARIS 08", permit_type: "DP_LOGEMENT" }],
+      }),
+    });
+    const { body } = await request(appAvec(t, a.tenantId)).get("/permis").expect(200);
+
+    expect(body.pistesProfessionnelles).toHaveLength(0);
+    delete process.env["PERMIS_AFFICHER_PISTES_PRO"];
+  });
+});

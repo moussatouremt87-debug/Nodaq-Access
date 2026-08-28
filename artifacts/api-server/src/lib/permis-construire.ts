@@ -131,10 +131,21 @@ const Permis = z.object({
   /** Sitadel : dénomination du demandeur. VIDE pour un particulier. */
   denom_dem: z.string().min(1).nullish(),
   /**
-   * Sitadel : catégorie juridique INSEE du demandeur. Sa PRÉSENCE est le
-   * marqueur de personne morale — mesuré sur la base ouverte : les
-   * particuliers n'en portent aucune, les sociétés, communes et associations
-   * en portent toujours une (`5710` SAS, `6540` SCI, `7210` commune…).
+   * Le SIREN du demandeur — LE marqueur de personne morale de ce service.
+   *
+   * Sa présence tranche sans interprétation : un particulier n'a pas de
+   * SIREN. C'est plus sûr que la catégorie juridique, et bien plus sûr
+   * qu'une liste de mots à faire correspondre.
+   *
+   * Le type est permissif à dessein : l'échantillon rend une chaîne, mais un
+   * SIREN reste une suite de chiffres qu'un service pourrait sérialiser en
+   * nombre. Refuser sur ce détail ferait perdre toutes les pistes.
+   */
+  siren_dem: z.union([z.string().min(1), z.number()]).nullish(),
+  /**
+   * Catégorie juridique INSEE. ABSENTE de ce service — vérifié le 28/08/2026,
+   * la réponse réelle ne la porte pas. Conservée parce que la base ouverte
+   * Sitadel, elle, l'expose : un autre republieur pourrait la rendre.
    */
   cj_dem: z.string().min(1).nullish(),
   /** Marqueurs candidats pour la nature du demandeur — noms non confirmés. */
@@ -142,9 +153,17 @@ const Permis = z.object({
   nature_demandeur: z.string().nullish(),
   demandeur_type: z.string().nullish(),
   adresse: z.string().nullish(),
+  /** L'adresse complète du terrain — « 1 RUE D'ARGENSON 75008 PARIS 08 ». */
+  full_address: z.string().min(1).nullish(),
   code_postal: z.string().nullish(),
   commune: z.string().nullish(),
-  /** Sitadel : nom de la commune. Vérifié sur l'essai public. */
+  /**
+   * La commune du TERRAIN. C'est ce nom-là que rend le service, et pas
+   * `localite` : l'essai public utilisait `localite`, la réponse réelle
+   * `adr_localite_ter`. Les deux sont acceptés — c'est précisément le genre
+   * d'écart qui aurait vidé le champ sans qu'aucune erreur ne le dise.
+   */
+  adr_localite_ter: z.string().nullish(),
   localite: z.string().nullish(),
   date_octroi: z.string().nullish(),
   /** Sitadel : date d'autorisation réelle. Vérifiée sur l'essai public. */
@@ -181,11 +200,12 @@ export function estDemandeurPersonneMorale(p: z.infer<typeof Permis>): boolean {
   const nom = nomDemandeurDe(p);
   if (!nom) return false;
 
-  // La CATÉGORIE JURIDIQUE d'abord : c'est le marqueur de la source réelle,
-  // et il ne se prête à aucune interprétation. Mesuré sur la base ouverte :
-  // un particulier n'en porte jamais, une personne morale en porte toujours
-  // une. Pas de liste de mots à faire correspondre, donc pas de dérive le
-  // jour où le libellé change.
+  // LE SIREN d'abord : c'est le marqueur que rend réellement le service, et
+  // il ne se prête à aucune interprétation — un particulier n'en a pas.
+  if (String(p.siren_dem ?? "").trim().length > 0) return true;
+
+  // La catégorie juridique ensuite : absente de ce service, présente dans la
+  // base ouverte Sitadel. Même propriété — un particulier n'en porte jamais.
   if ((p.cj_dem ?? "").trim().length > 0) return true;
 
   // À défaut, les marqueurs textuels supposés. Conservés pour un republieur
@@ -303,9 +323,13 @@ export async function chercherPermis(
     nature: p.nature ?? p.permit_type ?? null,
     nomDemandeur: nomDemandeurDe(p),
     demandeurPersonneMorale: estDemandeurPersonneMorale(p),
-    adresse: p.adresse ?? null,
+    adresse: p.adresse ?? p.full_address ?? null,
+    // Le service ne rend PAS de code postal séparé — il est dans l'adresse
+    // complète. On ne l'en extrait pas : découper une adresse en texte libre
+    // pour en tirer cinq chiffres est une supposition, et l'adresse entière
+    // est déjà affichée. Un champ vide est plus honnête qu'un champ deviné.
     codePostal: p.code_postal ?? null,
-    commune: p.commune ?? p.localite ?? null,
+    commune: p.commune ?? p.adr_localite_ter ?? p.localite ?? null,
     dateOctroi: p.date_octroi ?? p.date_reelle_autorisation ?? null,
     source: config.source,
   }));
