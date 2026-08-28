@@ -37,7 +37,11 @@ import { desc } from "drizzle-orm";
 const router: IRouter = Router();
 
 /** Le type d'action posé dans la file. Groupe `relances` du catalogue. */
-export const TYPE_RELANCE_DEVIS = "relance_devis";
+// Déclaré dans `lib/executer-relance-devis.ts` — la route d'approbation en a
+// besoin aussi, et deux routes qui s'importent l'une l'autre font un cycle.
+// Ré-exporté ici : c'est le nom que les tests existants connaissent.
+export { TYPE_RELANCE_DEVIS } from "../lib/executer-relance-devis.js";
+import { TYPE_RELANCE_DEVIS } from "../lib/executer-relance-devis.js";
 
 router.post("/relance/devis/proposer", async (req, res): Promise<void> => {
   const tenantId = req.tenantId!;
@@ -69,9 +73,21 @@ router.post("/relance/devis/proposer", async (req, res): Promise<void> => {
       .where(and(eq(devisTable.status, "ENVOYE"), isNotNull(devisTable.dateEnvoi)));
 
     const clients = await tx
-      .select({ id: clientsTable.id, telephone: clientsTable.telephone })
+      .select({
+        id: clientsTable.id,
+        telephone: clientsTable.telephone,
+        email: clientsTable.email,
+      })
       .from(clientsTable);
     const telephones = new Map(clients.map((c) => [c.id, c.telephone]));
+    // L'adresse est FIGÉE dans la charge utile au même titre que le message.
+    // La relire à la validation ferait approuver « écrire à Untel » et écrire
+    // à quelqu'un d'autre si la fiche client a changé entre-temps — la même
+    // classe de défaut que recalculer le texte.
+    const courrielsParClient = new Map(clients.map((c) => [c.id, c.email]));
+    const courrielParDevis = new Map(
+      lignes.map((d) => [d.id, d.clientId ? (courrielsParClient.get(d.clientId) ?? null) : null]),
+    );
 
     const candidats: DevisRelancable[] = lignes.map((d) => ({
       id: d.id,
@@ -111,6 +127,11 @@ router.post("/relance/devis/proposer", async (req, res): Promise<void> => {
           objet: message.objet,
           corps: message.corps,
           lienWhatsApp: message.lienWhatsApp,
+          // Les trois champs que l'exécution consomme. Figés ici avec le
+          // texte : approuver, c'est approuver un message ET un destinataire.
+          destinataireEmail: courrielParDevis.get(d.devis.id) ?? null,
+          numeroWhatsApp: message.numeroWhatsApp,
+          texteWhatsApp: message.texteWhatsApp,
           joursSansReponse: d.joursSansReponse,
         },
       });

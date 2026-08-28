@@ -99,6 +99,21 @@ export interface MessageRelance {
   readonly corps: string;
   /** `https://wa.me/…` prérempli, ou `null` faute de numéro exploitable. */
   readonly lienWhatsApp: string | null;
+  /**
+   * Le numéro au format international sans `+`, et le texte court — les deux
+   * ingrédients du lien ci-dessus, rendus SÉPARÉMENT.
+   *
+   * Le serveur sait désormais envoyer lui-même (`lib/whatsapp.ts`) : il lui
+   * faut le numéro et le texte, pas une URL. Les redéduire en désassemblant
+   * `lienWhatsApp` marcherait aujourd'hui et casserait le jour où le format
+   * du lien change — un décodage d'URL n'est pas un contrat.
+   *
+   * `lienWhatsApp` est CONSERVÉ : c'est le chemin où l'artisan envoie
+   * lui-même depuis son propre compte, qui reste légitime et n'exige aucune
+   * configuration d'opérateur.
+   */
+  readonly numeroWhatsApp: string | null;
+  readonly texteWhatsApp: string | null;
 }
 
 /**
@@ -158,5 +173,10 @@ export function redigerRelance(
     objet,
     corps,
     lienWhatsApp: numero ? `https://wa.me/${numero}?text=${encodeURIComponent(texteCourt)}` : null,
+    numeroWhatsApp: numero,
+    // Rendu `null` avec le numéro, pas indépendamment : un texte sans
+    // destinataire n'a pas d'usage, et deux champs qui peuvent se contredire
+    // finissent par se contredire.
+    texteWhatsApp: numero ? texteCourt : null,
   };
 }
