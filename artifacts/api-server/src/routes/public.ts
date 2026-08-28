@@ -356,14 +356,24 @@ router.post("/public/devis/:token/accept", limiterDebit, async (req, res): Promi
     return;
   }
 
-  // L'annonce part APRÈS la transaction et n'est pas attendue par le client.
-  // Un appel réseau au fournisseur tiendrait sinon les verrous de la ligne
-  // pendant sa latence, et le signataire attend sa confirmation à l'écran.
+  // L'annonce part APRÈS la transaction — un appel réseau au fournisseur
+  // tiendrait sinon les verrous de la ligne pendant toute sa latence.
   //
-  // `void` assumé : `previenirAcceptation` ne lève jamais et journalise ses
-  // propres échecs. L'acceptation est l'acte du client — elle est écrite et
-  // ne se rejoue pas ; un e-mail manqué ne doit pas la faire échouer.
-  void previenirAcceptation(
+  // ELLE EST ATTENDUE, et cette ligne a d'abord été écrite `void`.
+  //
+  // Ce qui l'a fait changer : `sendDocument` écrit dans `envois_journal`, et
+  // une écriture non attendue atterrit QUAND ELLE VEUT — parfois après que le
+  // nettoyage des tests a purgé cette table, juste avant le `DELETE FROM
+  // tenants` qui échoue alors sur la clé étrangère. Vert en local, rouge en
+  // CI, sans changement de code : le flottement classique.
+  //
+  // Le dépôt interdit de masquer un flottement par un `retry`. On traite donc
+  // la cause : l'écriture devient déterministe. Le prix est réel et assumé —
+  // le signataire attend la tentative d'envoi avant sa confirmation. Il est
+  // borné : `previenirAcceptation` ne lève jamais et journalise ses propres
+  // échecs, donc au pire le client attend le délai d'expiration du serveur de
+  // messagerie, jamais une erreur.
+  await previenirAcceptation(
     devis.tenantId,
     {
       id: updated.id,
