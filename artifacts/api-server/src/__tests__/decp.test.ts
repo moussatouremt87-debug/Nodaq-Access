@@ -228,3 +228,47 @@ describe("le registre des traitements est à jour dans cette PR", () => {
     expect(RGPD_REGISTER_VERSION >= "2026-08-12").toBe(true);
   });
 });
+
+
+/*
+ * Même famille de défaut que côté BOAMP, relevée en corrigeant celui-ci :
+ * sans `order_by`, cette API rendait sa page dans l'ordre naturel du jeu.
+ * Mesuré sur le département 35 le 28/08/2026 : 2019, 2022, 2019, 2021, 2019.
+ *
+ * Pas de filtre de fraîcheur ici, contrairement au BOAMP, et c'est délibéré :
+ * une attribution est un fait acquis, pas une échéance. Une borne viderait la
+ * section dès que la source prend du retard — et elle en prend : la
+ * notification la plus récente du 35 datait alors du 16/10/2023.
+ */
+describe("la requête qui part réellement aux DECP", () => {
+  beforeAll(configurerSource);
+
+  async function urlDe(tenantId: string): Promise<string> {
+    let urlAppelee = "";
+    const t: TransportDecp = async (url) => {
+      urlAppelee = url;
+      return { status: 200, texte: JSON.stringify({ results: [] }) };
+    };
+    await request(appAvec(t, tenantId)).get("/sous-traitance").expect(200);
+    return decodeURIComponent(urlAppelee);
+  }
+
+  test("les attributions sont triées de la plus récente à la plus ancienne", async () => {
+    expect(await urlDe(a.tenantId)).toContain("order_by=datenotification DESC");
+  });
+
+  test("la page demandée est explicite", async () => {
+    expect(await urlDe(a.tenantId)).toContain("limit=100");
+  });
+
+  /*
+   * Le DECP fait L'INVERSE du BOAMP : mesuré le même jour, il stocke « 02 »
+   * AVEC son zéro (7 769 attributions) et ne connaît pas « 2 » (0). Une
+   * normalisation partagée entre les deux sources casserait celle-ci — d'où
+   * cette garde, qui fige la différence plutôt que de la laisser se perdre.
+   */
+  test("le département part AVEC son zéro initial, contrairement au BOAMP", async () => {
+    const url = await urlDe(a.tenantId);
+    expect(url).toContain('codedepartementexecution="02"');
+  });
+});

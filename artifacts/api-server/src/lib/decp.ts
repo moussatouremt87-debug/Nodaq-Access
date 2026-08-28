@@ -125,6 +125,12 @@ function formeRecue(brut: unknown): string {
 }
 
 /**
+ * Combien d'attributions on demande. Voir `chercherAttributions` : la valeur
+ * par défaut de cette API est de dix, et 100 est son maximum.
+ */
+const TAILLE_PAGE = 100;
+
+/**
  * Cherche des attributions dans un département, filtrées par pertinence
  * métier si `divisionsCpv` est fourni. Rend une liste, éventuellement vide.
  * Chaque ligne porte un titulaire nommé — c'est `agregerParSecteurEtZone`
@@ -148,6 +154,24 @@ export async function chercherAttributions(
       .join("%20OR%20");
     url += `&where=(${clause})`;
   }
+
+  /*
+   * ── LE MÊME DÉSORDRE QUE CÔTÉ BOAMP ─────────────────────────────────────
+   * Sans `order_by`, cette API rendait sa page dans l'ordre naturel du jeu —
+   * mesuré sur le département 35 : 2019, 2022, 2019, 2021, 2019. L'artisan
+   * voyait des attributions au hasard plutôt que les dernières.
+   *
+   * Pas de filtre de date ici, contrairement au BOAMP, et c'est délibéré :
+   * une attribution est un FAIT ACQUIS, pas une échéance à ne pas manquer.
+   * Une borne de fraîcheur viderait la section dès que la source prend du
+   * retard — et elle en prend : au 28/08/2026, la notification la plus
+   * récente du département 35 datait du 16/10/2023. Ce retard est celui de la
+   * source, pas le nôtre ; le tri suffit à mettre le plus récent devant.
+   *
+   * `limit` pour la même raison que partout ailleurs : la valeur par défaut
+   * est de dix, et 100 est le maximum accepté (`limit=101` est refusé).
+   */
+  url += `&order_by=datenotification%20DESC&limit=${TAILLE_PAGE}`;
 
   let reponse: { status: number; texte: string };
   try {
