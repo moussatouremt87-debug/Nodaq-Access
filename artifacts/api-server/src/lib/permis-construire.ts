@@ -168,6 +168,14 @@ const Permis = z.object({
   date_octroi: z.string().nullish(),
   /** Sitadel : date d'autorisation réelle. Vérifiée sur l'essai public. */
   date_reelle_autorisation: z.string().nullish(),
+  /**
+   * Superficie du terrain, en m². Vérifiée sur la réponse réelle (394).
+   *
+   * Permissif sur le type : la source rend un nombre, mais un republieur
+   * pourrait le sérialiser en chaîne — et refuser sur ce détail ferait
+   * perdre tout le permis, pas seulement ce champ.
+   */
+  superficie_terrain: z.union([z.number(), z.string()]).nullish(),
 });
 
 const ReponsePermis = z.union([
@@ -185,6 +193,15 @@ export interface PermisPublic {
   readonly codePostal: string | null;
   readonly commune: string | null;
   readonly dateOctroi: string | null;
+  /**
+   * Superficie du terrain en m².
+   *
+   * C'est le seul indicateur d'AMPLEUR que la source publie. Sur un permis
+   * de particulier — anonymisé, donc sans nom — c'est lui, avec l'adresse et
+   * la nature, qui distingue une véranda d'une maison entière. Sans lui, la
+   * liste ne dit que « des travaux, quelque part ».
+   */
+  readonly superficieTerrain: number | null;
   readonly source: SourcePublique;
 }
 
@@ -220,6 +237,19 @@ export function estDemandeurPersonneMorale(p: z.infer<typeof Permis>): boolean {
     marqueur.includes("societe") ||
     marqueur.includes("société")
   );
+}
+
+/**
+ * La superficie, ramenée à un nombre exploitable — ou `null`.
+ *
+ * `0` est traité comme absent : une superficie nulle n'existe pas sur un
+ * terrain, c'est une donnée non renseignée que la source a remplie par
+ * défaut. L'afficher « 0 m² » ferait passer une absence pour une mesure.
+ */
+function superficieDe(brut: number | string | null | undefined): number | null {
+  if (brut === null || brut === undefined) return null;
+  const n = typeof brut === "number" ? brut : Number(String(brut).trim());
+  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 function nomDemandeurDe(p: z.infer<typeof Permis>): string | null {
@@ -331,6 +361,7 @@ export async function chercherPermis(
     codePostal: p.code_postal ?? null,
     commune: p.commune ?? p.adr_localite_ter ?? p.localite ?? null,
     dateOctroi: p.date_octroi ?? p.date_reelle_autorisation ?? null,
+    superficieTerrain: superficieDe(p.superficie_terrain),
     source: config.source,
   }));
 }

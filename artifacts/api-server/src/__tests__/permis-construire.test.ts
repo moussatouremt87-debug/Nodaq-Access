@@ -87,6 +87,21 @@ const permisParticulier = () => ({
   date_octroi: "2026-07-10",
 });
 
+/**
+ * Le cas RÉEL et majoritaire : Sitadel anonymise les personnes physiques.
+ * Mesuré sur un échantillon de la base ouverte, 44 permis sur 100 ne portent
+ * ni dénomination ni catégorie juridique. `permisParticulier()` ci-dessus,
+ * avec son « Mme Bernard », est en fait le cas EXCEPTIONNEL.
+ */
+const permisParticulierAnonyme = () => ({
+  num_pa: "PC-002-003",
+  permit_type: "Construction maison individuelle",
+  full_address: "12 chemin du Moulin",
+  commune: "Marly-Gomont",
+  date_reelle_autorisation: "2026-07-18",
+  superficie_terrain: 394,
+});
+
 const permisProfessionnel = () => ({
   numero: "PC-002-002",
   nature: "Extension commerciale",
@@ -151,7 +166,11 @@ describe("un particulier est une information, jamais une piste", () => {
     expect(body.informationsParticuliers[0].adresse).toBe("5 rue des Ardoises");
     expect(JSON.stringify(body.informationsParticuliers)).not.toMatch(/telephone|email/i);
     expect(body.pistesProfessionnelles).toHaveLength(0);
-    expect(body.avertissement).toMatch(/INFORMATION/);
+    expect(body.avertissement).toMatch(/SIGNAL DE CHANTIER/);
+    // Le cadrage a changé de mot, jamais de fond : ce qui est interdit ici
+    // doit rester écrit noir sur blanc dans la réponse elle-même.
+    expect(body.avertissement).toMatch(/jamais une piste à contacter/i);
+    expect(body.avertissement).toMatch(/ANONYMIS/i);
   });
 
   test("un particulier reste affiché MÊME quand PERMIS_AFFICHER_PISTES_PRO est activé", async () => {
@@ -162,6 +181,65 @@ describe("un particulier est une information, jamais une piste", () => {
     expect(body.informationsParticuliers).toHaveLength(1);
     expect(body.pistesProfessionnelles).toHaveLength(0);
     delete process.env["PERMIS_AFFICHER_PISTES_PRO"];
+  });
+
+  /**
+   * Ce que la source publie VRAIMENT sur un particulier : le chantier, pas la
+   * personne. Sans ces trois champs, la ligne ne dit que « des travaux, quelque
+   * part » — et l'écran affichait au-dessus d'elle un nom vide.
+   */
+  test("un permis ANONYMISÉ porte quand même son chantier : adresse, nature, date, superficie", async () => {
+    const t: TransportPermis = async () => ({
+      status: 200,
+      texte: JSON.stringify({ results: [permisParticulierAnonyme()] }),
+    });
+    const { body } = await request(appAvec(t, a.tenantId)).get("/permis").expect(200);
+
+    expect(body.informationsParticuliers).toHaveLength(1);
+    const p = body.informationsParticuliers[0];
+    expect(p.nomDemandeur).toBeNull();          // la source ne le publie pas
+    expect(p.adresse).toBe("12 chemin du Moulin");
+    expect(p.commune).toBe("Marly-Gomont");
+    expect(p.nature).toBe("Construction maison individuelle");
+    expect(p.dateOctroi).toBe("2026-07-18");
+    expect(p.superficieTerrain).toBe(394);
+  });
+
+  /**
+   * LA RÉGRESSION que ce ticket corrige.
+   *
+   * La source voyageait avec la piste PROFESSIONNELLE seulement ; l'écran se
+   * rabattait sur celle de la première d'entre elles. Or ces pistes sont
+   * derrière `PERMIS_AFFICHER_PISTES_PRO`, désactivé en production : le repli
+   * rendait une URL vide, et le panneau affichait un lien vers nulle part.
+   * Un signal qu'on ne peut pas vérifier ne vaut rien.
+   */
+  test("la source voyage avec CHAQUE particulier, sans dépendre des pistes pro", async () => {
+    delete process.env["PERMIS_AFFICHER_PISTES_PRO"];
+    const t: TransportPermis = async () => ({
+      status: 200,
+      texte: JSON.stringify({ results: [permisParticulierAnonyme(), permisProfessionnel()] }),
+    });
+    const { body } = await request(appAvec(t, a.tenantId)).get("/permis").expect(200);
+
+    expect(body.pistesProfessionnelles).toHaveLength(0);   // le cas de production
+    expect(body.informationsParticuliers[0].source.label).toBe("Sitadel");
+    expect(body.informationsParticuliers[0].source.url).toMatch(/^https?:\/\//);
+  });
+
+  test("une superficie absente ou nulle vaut null, jamais « 0 m² »", async () => {
+    const sansTerrain = { ...permisParticulierAnonyme(), superficie_terrain: 0 };
+    const t: TransportPermis = async () => ({
+      status: 200,
+      texte: JSON.stringify({ results: [sansTerrain, permisParticulier()] }),
+    });
+    const { body } = await request(appAvec(t, a.tenantId)).get("/permis").expect(200);
+
+    // `0` est une case non renseignée, pas une mesure : l'afficher ferait
+    // passer une absence pour un terrain de zéro mètre carré.
+    expect(body.informationsParticuliers[0].superficieTerrain).toBeNull();
+    // Et un permis dont la source ne dit rien du terrain non plus.
+    expect(body.informationsParticuliers[1].superficieTerrain).toBeNull();
   });
 });
 

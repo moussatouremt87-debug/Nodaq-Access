@@ -37,6 +37,7 @@ import {
   toDateString,
   type TypeContact,
   type BaseLegale,
+  type SourcePublique,
 } from "@nodaq/shared";
 import {
   verifierEnvoi,
@@ -903,15 +904,22 @@ router.get("/prospection/syndics", creerRouteSyndics());
  * `PERMIS_AFFICHER_PISTES_PRO` — traité comme n'importe quelle autre source
  * professionnelle du lot.
  *
- * `informationsParticuliers` : un demandeur personne PHYSIQUE. Nom et adresse
- * SEULEMENT — déjà publics sur le permis lui-même — affichés comme
- * INFORMATION, jamais comme piste à contacter : ni téléphone, ni e-mail, ni
- * action d'envoi dans cette réponse. Le démarchage électronique à froid d'un
- * particulier sans consentement préalable est interdit (art. L34-5 CPCE) ;
- * cette liste n'est pas soumise au seuil d'anonymat des autres sources
- * (DECP/RNIC) parce qu'elle ne fait qu'afficher une donnée qui est DÉJÀ
- * nominative sur le document public — l'agréger ne la rendrait pas moins
- * identifiable, contrairement à un agrégat de compteurs.
+ * `informationsParticuliers` : un demandeur personne PHYSIQUE. Ce que la source
+ * publie de LUI, en pratique : rien. Mesuré sur un échantillon réel, 44
+ * enregistrements sur 100 ne portent ni `denom_dem` ni `cj_dem` — Sitadel
+ * ANONYMISE les personnes physiques. Aucune source publique française ne
+ * publie leur téléphone ni leur e-mail, et le démarchage électronique à froid
+ * d'un particulier sans consentement préalable est de toute façon interdit
+ * (art. L34-5 CPCE).
+ *
+ * Ce que la source publie, en revanche, c'est le CHANTIER : une adresse, une
+ * nature de travaux, une date d'autorisation, une superficie de terrain.
+ * C'est un signal de terrain — il s'y passera quelque chose, là, bientôt — et
+ * c'est à ce titre qu'il vaut d'être affiché. D'où le nom du champ dans
+ * l'écran : « signal de chantier », pas « piste ».
+ *
+ * `nomDemandeur` reste transmis parce qu'un republieur pourrait le fournir,
+ * mais RIEN ne doit en dépendre : l'écran nomme la ligne par son adresse.
  */
 export function creerRoutePermis(transport?: TransportPermis): RequestHandler {
   return async (req: Request, res: Response): Promise<void> => {
@@ -936,6 +944,8 @@ export function creerRoutePermis(transport?: TransportPermis): RequestHandler {
     commune: string | null;
     dateOctroi: string | null;
     nature: string | null;
+    superficieTerrain: number | null;
+    source: SourcePublique;
   }> = [];
   if (!raison) {
     let permis: Awaited<ReturnType<typeof chercherPermis>>;
@@ -964,6 +974,19 @@ export function creerRoutePermis(transport?: TransportPermis): RequestHandler {
         commune: p.commune,
         dateOctroi: p.dateOctroi,
         nature: p.nature,
+        // L'ampleur des travaux. Sur un permis anonymisé, c'est ce qui
+        // distingue une véranda d'une maison entière — donc ce qui décide
+        // si le déplacement vaut la peine.
+        superficieTerrain: p.superficieTerrain,
+        // La source, PAR LIGNE.
+        //
+        // L'écran se rabattait jusqu'ici sur celle de la première piste
+        // professionnelle — or ces pistes sont derrière
+        // `PERMIS_AFFICHER_PISTES_PRO`, désactivé en production. Le repli
+        // rendait donc une URL VIDE, et le panneau affichait un lien vers
+        // nulle part sous le mot « Source ». Citer sa source est la seule
+        // chose qui rend ce signal vérifiable : elle voyage avec la ligne.
+        source: p.source,
       }));
   }
 
@@ -971,8 +994,11 @@ export function creerRoutePermis(transport?: TransportPermis): RequestHandler {
     pistesProfessionnelles,
     informationsParticuliers,
     avertissement:
-      "Les particuliers listés ici sont une INFORMATION, jamais une piste à contacter : " +
-      "aucun téléphone, aucun e-mail, aucune action d'envoi n'est proposée pour eux.",
+      "Les permis de particuliers sont un SIGNAL DE CHANTIER — une adresse où des " +
+      "travaux sont autorisés — jamais une piste à contacter à distance : aucun " +
+      "téléphone, aucun e-mail, aucune action d'envoi n'est proposée pour eux. " +
+      "La source les publie d'ailleurs ANONYMISÉS : le nom du demandeur particulier " +
+      "n'y figure pas.",
     raisonSilence: raison,
     messageSilence: raison ? MESSAGES_SILENCE_ZONE[raison] : null,
   });
