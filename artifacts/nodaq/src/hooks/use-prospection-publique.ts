@@ -126,9 +126,19 @@ interface PisteProfessionnelle {
   codePostal: string | null;
   commune: string | null;
   dateOctroi: string | null;
+  superficieTerrain: number | null;
   source: SourcePublique;
 }
 
+/**
+ * Un permis dont le demandeur est un PARTICULIER.
+ *
+ * `nomDemandeur` est presque toujours `null` : la base Sitadel anonymise les
+ * personnes physiques — mesuré, 44 enregistrements sur 100 n'en portent
+ * aucun. Le champ reste déclaré parce qu'un republieur pourrait en fournir
+ * un, mais l'écran ne doit JAMAIS s'appuyer dessus pour identifier la ligne :
+ * c'est l'ADRESSE des travaux qui la nomme.
+ */
 interface InformationParticulier {
   nomDemandeur: string | null;
   adresse: string | null;
@@ -136,6 +146,15 @@ interface InformationParticulier {
   commune: string | null;
   dateOctroi: string | null;
   nature: string | null;
+  superficieTerrain: number | null;
+  /**
+   * La source, PAR LIGNE.
+   *
+   * Elle se déduisait auparavant de la première piste professionnelle — or
+   * ces pistes sont derrière `PERMIS_AFFICHER_PISTES_PRO`, désactivé en
+   * production : le panneau affichait alors un lien vide sous « Source ».
+   */
+  source: SourcePublique;
 }
 
 export interface ReponsePermis {

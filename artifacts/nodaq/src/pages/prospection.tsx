@@ -64,6 +64,36 @@ function SourceFooter({ label, url }: { label: string; url: string }) {
   );
 }
 
+/**
+ * Le nom d'un signal de chantier : son ADRESSE.
+ *
+ * Sitadel anonymise les personnes physiques — sur un échantillon réel, 44
+ * permis de particuliers sur 100 ne portent aucun nom de demandeur. Nommer la
+ * ligne par `nomDemandeur` produisait donc, le plus souvent, une ligne vide au
+ * dessus du détail : une liste de rien.
+ *
+ * L'adresse, elle, est publiée. C'est aussi ce dont l'artisan a besoin : il ne
+ * peut pas appeler ce particulier, mais il passe devant le chantier.
+ *
+ * Le repli descend jusqu'à la commune seule, puis à une mention explicite —
+ * jamais une chaîne vide, qui rendrait la ligne incliquable à l'œil.
+ */
+function adresseChantier(p: {
+  adresse: string | null;
+  codePostal: string | null;
+  commune: string | null;
+}): string {
+  const localite = [p.codePostal, p.commune].filter(Boolean).join(' ').trim();
+  const rue = (p.adresse ?? '').trim();
+  if (rue && localite && !rue.includes(localite)) return `${rue}, ${localite}`;
+  return rue || localite || 'Adresse non publiée';
+}
+
+/** La superficie du terrain, ou `null` — jamais « 0 m² ». */
+function fmtSuperficie(m2: number | null): string | null {
+  return m2 !== null && m2 > 0 ? `${m2.toLocaleString('fr-FR')} m² de terrain` : null;
+}
+
 export default function Prospection() {
   const appelsOffres = useAppelsOffres();
   const sousTraitance = useSousTraitance();
@@ -329,21 +359,27 @@ export default function Prospection() {
               {permis.data && permis.data.informationsParticuliers.length > 0 && (
                 <div className="rounded-xl border border-card-border bg-muted/30 divide-y divide-border">
                   <p className="p-3 text-[11px] text-muted-foreground">
-                    Ces particuliers sont une information — pas une piste à contacter. Aucun numéro,
-                    aucun e-mail, et aucune action de contact n'est proposée ici.
+                    Des chantiers autorisés chez des particuliers, près de chez vous. C'est un
+                    repère de terrain, pas une liste à démarcher : la source ne publie ni nom,
+                    ni numéro, ni e-mail, et aucune action de contact n'est proposée ici.
                   </p>
                   {permis.data.informationsParticuliers.map((p, i) => (
                     <LignePiste
                       key={i}
                       testId={`permis-particulier-${i}`}
                       onClick={() => setPiste({
-                        titre: p.nomDemandeur ?? 'Demandeur particulier',
+                        titre: adresseChantier(p),
                         sousTitre: p.nature,
                         champs: [
                           { libelle: 'Nature', valeur: p.nature },
                           { libelle: 'Adresse', valeur: p.adresse },
                           { libelle: 'Commune', valeur: [p.codePostal, p.commune].filter(Boolean).join(' ') },
+                          { libelle: 'Terrain', valeur: fmtSuperficie(p.superficieTerrain) },
                           { libelle: 'Accordé le', valeur: p.dateOctroi ? fmtDate(p.dateOctroi) : null },
+                          // Affiché SEULEMENT s'il existe — la source anonymise
+                          // les particuliers, donc c'est presque toujours vide,
+                          // et `PanneauPiste` n'affiche pas les champs vides.
+                          { libelle: 'Demandeur', valeur: p.nomDemandeur },
                         ],
                         // Une information publique portée par le permis, pas
                         // une cible. Le panneau n'offre aucun moyen de
@@ -351,18 +387,24 @@ export default function Prospection() {
                         // qui gate `PERMIS_AFFICHER_PISTES_PRO`, tenu jusque
                         // dans le détail.
                         mention:
-                          "Information publique portée par le permis — ce n'est PAS une piste à "
-                          + "démarcher. Aucun contact n'est proposé, et aucun ne le sera.",
-                        // Les informations particuliers ne portent pas de
-                        // source individuelle : c'est celle de la section.
-                        source: permis.data!.pistesProfessionnelles[0]?.source
-                          ?? { label: 'Permis de construire', url: '' },
+                          "Signal de chantier : des travaux sont autorisés à cette adresse. Ce "
+                          + "n'est PAS une piste à démarcher — un particulier ne se contacte pas "
+                          + "à froid par e-mail ou par téléphone. Aucun contact n'est proposé, "
+                          + "et aucun ne le sera.",
+                        source: p.source,
                       })}
                     >
                       <div className="text-sm">
-                        <div className="text-foreground">{p.nomDemandeur}</div>
+                        {/*
+                          L'ADRESSE nomme la ligne, jamais `nomDemandeur` : la
+                          source anonymise les particuliers, et cette ligne
+                          rendait donc un titre VIDE au-dessus du détail.
+                        */}
+                        <div className="font-medium text-foreground">{adresseChantier(p)}</div>
                         <div className="text-xs text-muted-foreground mt-0.5">
-                          {p.adresse} · {p.nature}
+                          {[p.nature, fmtSuperficie(p.superficieTerrain),
+                            p.dateOctroi ? fmtDate(p.dateOctroi) : null]
+                            .filter(Boolean).join(' · ')}
                         </div>
                       </div>
                     </LignePiste>
