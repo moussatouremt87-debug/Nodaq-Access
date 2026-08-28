@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/auth';
 
 /**
@@ -65,4 +65,38 @@ export function useHasFinancialAccess() {
 export function useLectureSeule() {
   const { data } = useAuth();
   return data?.authenticated === true && 'role' in data && data.role === 'VIEWER';
+}
+
+/**
+ * Sortir de sa session.
+ *
+ * `POST /api/auth/logout` (`routes/auth.ts`) existait depuis le premier lot :
+ * il supprime la session en base ET efface le cookie signé. Ce qui manquait
+ * était le chemin pour l'appeler — l'interface n'offrait aucune sortie.
+ *
+ * `queryClient.clear()` et pas `invalidateQueries` : invalider REFAIT les
+ * requêtes, donc rejoue tout le tableau de bord du compte qu'on vient de
+ * quitter et laisse ses montants à l'écran le temps des 401. Vider jette les
+ * données du cache sur-le-champ. Sur un téléphone prêté ou un poste d'atelier
+ * partagé, c'est la différence entre une déconnexion et une apparence de
+ * déconnexion.
+ *
+ * La navigation reste au composant appelant : ce hook ne sait pas d'où il est
+ * invoqué, et un `window.location` ici rendrait le comportement intestable.
+ */
+export function useDeconnexion() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await apiFetch('/api/auth/logout', { method: 'POST' });
+      // Le serveur répond `{ ok: true }` même quand la session avait déjà
+      // expiré : il n'y a donc pas de cas « déjà déconnecté » à traiter à
+      // part. Un échec ici est un vrai échec (réseau, 5xx).
+      if (!res.ok) throw new Error('Déconnexion impossible');
+      return res.json() as Promise<{ ok: true }>;
+    },
+    onSuccess: () => {
+      queryClient.clear();
+    },
+  });
 }

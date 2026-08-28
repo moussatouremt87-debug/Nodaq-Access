@@ -17,6 +17,7 @@ import {
 import type { AffaireWords, Vertical } from '@nodaq/shared';
 import type { NavItem } from '@/lib/nav';
 import { MicroFlottant } from '@/components/micro-flottant';
+import { MenuUtilisateur } from '@/components/menu-utilisateur';
 import { BanniereSiren } from '@/components/banniere-siren';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 
@@ -185,6 +186,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             Sécurité du compte
           </Link>
         </div>
+        <MenuUtilisateur variante="barre" />
       </aside>
 
       {/* ── Right column: ribbon + main content ──────────────────── */}
@@ -341,7 +343,10 @@ function MobileNav({
           </div>
           <span className="text-sm font-semibold tracking-tight">NODAQ</span>
         </div>
-        <ThemeToggle />
+        <div className="flex items-center gap-1">
+          <ThemeToggle />
+          <MenuUtilisateur variante="entete" />
+        </div>
       </div>
 
       {/* La barre du pouce. `fixed` et non `sticky` : elle doit rester
