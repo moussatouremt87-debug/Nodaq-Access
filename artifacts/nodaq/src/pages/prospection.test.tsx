@@ -56,18 +56,32 @@ vi.mock('@/hooks/use-toast', () => ({
  * jamais montée. Ce n'est pas un défaut du produit, c'est la forme la plus
  * creuse qui permet à l'écran d'arriver au bout de son rendu.
  */
+/**
+ * Ce que le serveur répond pour les permis. MUTABLE : certains tests ont
+ * besoin d'un échec, et `vi.mock` est hissé en tête de fichier — on ne peut
+ * pas le reconfigurer par test autrement qu'en lisant une variable.
+ */
+let reponsePermis: { statut: number; corps: unknown } = {
+  statut: 200,
+  corps: { pistesProfessionnelles: [], informationsParticuliers: [PERMIS_ANONYME], donneesDu: null },
+};
+
 const REPONSES: readonly (readonly [string, unknown])[] = [
   ['prospection/appels-offres', { marches: [] }],
   ['prospection/sous-traitance', { agregats: [], titulairesProfessionnels: [] }],
   ['prospection/syndics', { agregats: [], syndicsProfessionnels: [] }],
-  ['prospection/permis', { pistesProfessionnelles: [], informationsParticuliers: [PERMIS_ANONYME] }],
 ];
 
 vi.mock('@/lib/auth', () => ({
   apiFetch: vi.fn(async (url: string) => {
+    if (url.includes('prospection/permis')) {
+      return new Response(JSON.stringify(reponsePermis.corps), {
+        status: reponsePermis.statut,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
     const trouve = REPONSES.find(([fragment]) => url.includes(fragment));
-    const corps = trouve ? trouve[1] : {};
-    return new Response(JSON.stringify(corps), {
+    return new Response(JSON.stringify(trouve ? trouve[1] : {}), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -76,6 +90,10 @@ vi.mock('@/lib/auth', () => ({
 }));
 
 beforeEach(() => {
+  reponsePermis = {
+    statut: 200,
+    corps: { pistesProfessionnelles: [], informationsParticuliers: [PERMIS_ANONYME], donneesDu: null },
+  };
   Element.prototype.scrollTo ??= () => {};
   Element.prototype.scrollIntoView ??= () => {};
   cleanup();
@@ -179,5 +197,89 @@ describe('un permis de particulier est un signal de chantier', () => {
       expect(v).not.toMatch(/(?:\+33|0)[\s.-]?[1-9](?:[\s.-]?\d{2}){4}/);
     }
     expect(document.body.innerHTML).not.toMatch(/mailto:|tel:\+/);
+  });
+});
+
+
+/*
+ * ── LE MESSAGE QUI A FAIT CROIRE À UNE PANNE ──────────────────────────────
+ * Pendant plusieurs jours, l'écran a affiché « Impossible de charger les
+ * permis » alors que la source répondait simplement 429 : son quota mensuel
+ * était atteint, et il se serait levé tout seul. Un plafond de la source
+ * n'est pas une panne du produit, et le dire ainsi laissait croire que nodaq
+ * était cassé — ce que la règle 3 bis interdit explicitement.
+ */
+describe("ce que l'écran dit quand les permis ne se chargent pas", () => {
+  async function afficherEchec(statut: number, corps: unknown) {
+    reponsePermis = { statut, corps };
+    const { default: Prospection } = await import('./prospection');
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+    render(
+      <QueryClientProvider client={client}>
+        <Prospection />
+      </QueryClientProvider>,
+    );
+    return waitFor(() => screen.getByTestId('bandeau-silence'));
+  }
+
+  test("quota de la source : le message du serveur est relayé tel quel", async () => {
+    const bandeau = await afficherEchec(503, {
+      error:
+        "La source des permis limite le nombre de consultations et a atteint son " +
+        "plafond. Les permis reviendront d'eux-mêmes — réessayez un peu plus tard.",
+      quotaSourceAtteint: true,
+    });
+
+    expect(bandeau).toHaveTextContent(/plafond/i);
+    expect(bandeau).toHaveTextContent(/réessayez/i);
+    // LA garde : le mot qui faisait croire à une panne du produit.
+    expect(bandeau.textContent ?? '').not.toMatch(/impossible/i);
+  });
+
+  test("sans message exploitable, le repli ne dramatise pas non plus", async () => {
+    const bandeau = await afficherEchec(500, 'pas du json');
+
+    expect(bandeau).toHaveTextContent(/réessayez/i);
+    expect(bandeau.textContent ?? '').not.toMatch(/impossible/i);
+  });
+});
+
+/*
+ * Servir une liste d'hier vaut infiniment mieux qu'un écran rouge — mais le
+ * taire serait mentir sur la fraîcheur. Le bandeau n'apparaît QUE dans ce cas.
+ */
+describe("des permis servis depuis un cache périmé", () => {
+  test("la date est annoncée quand la source n'a pas répondu", async () => {
+    reponsePermis = {
+      statut: 200,
+      corps: {
+        pistesProfessionnelles: [],
+        informationsParticuliers: [PERMIS_ANONYME],
+        donneesDu: '2026-08-27T10:00:00.000Z',
+      },
+    };
+    const { default: Prospection } = await import('./prospection');
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+    render(
+      <QueryClientProvider client={client}>
+        <Prospection />
+      </QueryClientProvider>,
+    );
+
+    const bandeau = await waitFor(() => screen.getByTestId('permis-donnees-datees'));
+    /*
+     * 10 h UTC, et non minuit : la CI exécute cette suite sous UTC,
+     * Europe/Paris et Pacific/Auckland. À minuit UTC, Auckland (UTC+12)
+     * afficherait le 27 quand Paris afficherait le 26 — le test virerait au
+     * rouge l'après-midi sans qu'une ligne de code ait bougé. À 10 h, les
+     * trois fuseaux tombent sur le même jour.
+     */
+    expect(bandeau).toHaveTextContent('27 août 2026');
+  });
+
+  test("rien n'est annoncé quand les données sont à jour", async () => {
+    const ligne = await afficher();          // `donneesDu: null`
+    expect(ligne).toBeInTheDocument();       // signe POSITIF d'abord
+    expect(screen.queryByTestId('permis-donnees-datees')).toBeNull();
   });
 });
