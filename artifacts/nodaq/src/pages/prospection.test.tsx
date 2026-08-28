@@ -149,7 +149,35 @@ describe('un permis de particulier est un signal de chantier', () => {
 
     expect(screen.queryByRole('button', { name: /appeler|contacter|e-mail|envoyer/i })).toBeNull();
     expect(screen.queryByRole('link', { name: /^mailto:|^tel:/i })).toBeNull();
-    // Et rien dans l'écran ne ressemble à une coordonnée.
+
+    /*
+     * Et AUCUNE coordonnée affichée, actionnable ou non.
+     *
+     * Cette assertion a d'abord été écrite sur `mailto:` et `tel:` seulement.
+     * Éprouvée par injection (règle 7), elle a laissé passer une ligne
+     * « Contact — contact@exemple.test » ajoutée exprès dans le panneau : un
+     * texte brut n'est pas un lien. La garde se lisait plus forte qu'elle
+     * n'était. Elle porte désormais sur la FORME de la donnée, pas sur son
+     * caractère cliquable — c'est afficher la coordonnée qui est refusé.
+     */
+    const valeurs = Array.from(
+      screen.getByTestId('champs-piste').querySelectorAll('dd'),
+    ).map((dd) => dd.textContent ?? '');
+
+    /*
+     * On lit les VALEURS, une par une — pas le `textContent` du panneau.
+     *
+     * Première version : la concaténation. `textContent` colle l'étiquette à
+     * la valeur (« Téléphone06 12 34 56 78 »), et il n'y a alors AUCUNE
+     * frontière de mot entre le « e » et le « 0 » : le motif ne se
+     * déclenchait pas. Éprouvée par injection, la garde laissait passer un
+     * numéro affiché en clair. Le défaut était dans l'assertion, pas dans
+     * l'écran — mais une garde qui ne se déclenche pas ne protège rien.
+     */
+    for (const v of valeurs) {
+      expect(v).not.toMatch(/[\w.+-]+@[\w-]+\.[a-z]{2,}/i);
+      expect(v).not.toMatch(/(?:\+33|0)[\s.-]?[1-9](?:[\s.-]?\d{2}){4}/);
+    }
     expect(document.body.innerHTML).not.toMatch(/mailto:|tel:\+/);
   });
 });
