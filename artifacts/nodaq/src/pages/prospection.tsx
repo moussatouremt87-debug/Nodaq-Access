@@ -7,8 +7,10 @@
  * ailleurs. Aucun fournisseur n'est visé par défaut sur ce déploiement —
  * chaque section affiche honnêtement pourquoi elle est silencieuse.
  */
+import { useState } from 'react';
 import { AlertTriangle, Gavel, Hammer, Building2, FileSignature } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
+import { PanneauPiste, LignePiste, type PisteDetail } from '@/components/piste-detail';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from '@/components/ui/empty';
 import { fmtDate, fmtEUR } from '@/lib/format';
@@ -68,6 +70,10 @@ export default function Prospection() {
   const syndics = useSyndics();
   const permis = usePermisConstruire();
 
+  // Une seule piste ouverte à la fois, et un seul panneau pour les quatre
+  // sources — voir `piste-detail.tsx` pour pourquoi.
+  const [piste, setPiste] = useState<PisteDetail | null>(null);
+
   return (
     <div className="pb-16">
       <PageHeader
@@ -103,12 +109,33 @@ export default function Prospection() {
           ) : (
             <div className="rounded-xl border border-card-border bg-card divide-y divide-border">
               {appelsOffres.data?.marches.map((m, i) => (
-                <div key={i} className="p-3 text-sm" data-testid={`marche-${i}`}>
-                  <div className="font-medium text-foreground">{m.objet ?? 'Marché public'}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">
-                    {m.acheteur} {m.dateLimiteReponse ? `· réponse avant le ${fmtDate(m.dateLimiteReponse)}` : ''}
+                <LignePiste
+                  key={i}
+                  testId={`marche-${i}`}
+                  onClick={() => setPiste({
+                    titre: m.objet ?? 'Marché public',
+                    sousTitre: m.acheteur,
+                    champs: [
+                      { libelle: 'Acheteur', valeur: m.acheteur },
+                      { libelle: 'Procédure', valeur: m.natureProcedure },
+                      { libelle: 'Réponse avant', valeur: m.dateLimiteReponse ? fmtDate(m.dateLimiteReponse) : null },
+                      { libelle: 'Adresse', valeur: m.adresse },
+                      { libelle: 'Départements', valeur: m.departements.join(', ') },
+                      // Les codes CPV sont ce qui a fait retenir ce marché
+                      // pour ce métier : les montrer, c'est rendre le filtre
+                      // vérifiable plutôt qu'opaque.
+                      { libelle: 'Codes CPV', valeur: m.cpv.join(', ') },
+                    ],
+                    source: m.source,
+                  })}
+                >
+                  <div className="text-sm">
+                    <div className="font-medium text-foreground">{m.objet ?? 'Marché public'}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      {m.acheteur} {m.dateLimiteReponse ? `· réponse avant le ${fmtDate(m.dateLimiteReponse)}` : ''}
+                    </div>
                   </div>
-                </div>
+                </LignePiste>
               ))}
               {appelsOffres.data && appelsOffres.data.marches.length > 0 && (
                 <div className="p-3">
@@ -154,12 +181,30 @@ export default function Prospection() {
                 </div>
               ))}
               {sousTraitance.data?.titulairesProfessionnels.map((t, i) => (
-                <div key={`pro-${i}`} className="p-3 text-sm" data-testid={`titulaire-${i}`}>
-                  <div className="font-medium text-foreground">{t.titulaireNom}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">
-                    {t.objet} {t.montant ? `· ${fmtEUR(t.montant * 100)}` : ''}
+                <LignePiste
+                  key={`pro-${i}`}
+                  testId={`titulaire-${i}`}
+                  onClick={() => setPiste({
+                    titre: t.titulaireNom ?? 'Titulaire',
+                    sousTitre: t.objet,
+                    champs: [
+                      { libelle: 'SIREN', valeur: t.titulaireSiren },
+                      { libelle: 'Objet', valeur: t.objet },
+                      { libelle: 'Montant', valeur: t.montant ? fmtEUR(t.montant * 100) : null },
+                      { libelle: 'Notifié le', valeur: t.dateNotification ? fmtDate(t.dateNotification) : null },
+                      { libelle: 'Secteur', valeur: t.secteur },
+                      { libelle: 'Zone', valeur: t.zone },
+                    ],
+                    source: t.source,
+                  })}
+                >
+                  <div className="text-sm">
+                    <div className="font-medium text-foreground">{t.titulaireNom}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      {t.objet} {t.montant ? `· ${fmtEUR(t.montant * 100)}` : ''}
+                    </div>
                   </div>
-                </div>
+                </LignePiste>
               ))}
             </div>
           )}
@@ -191,10 +236,31 @@ export default function Prospection() {
           ) : (
             <div className="rounded-xl border border-card-border bg-card divide-y divide-border">
               {syndics.data?.syndicsProfessionnels.map((s, i) => (
-                <div key={i} className="p-3 text-sm" data-testid={`syndic-${i}`}>
-                  <div className="font-medium text-foreground">{s.nomSyndic}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">{s.commune}</div>
-                </div>
+                <LignePiste
+                  key={i}
+                  testId={`syndic-${i}`}
+                  onClick={() => setPiste({
+                    titre: s.nomSyndic ?? 'Syndic',
+                    sousTitre: s.commune,
+                    champs: [
+                      { libelle: 'Commune', valeur: s.commune },
+                      { libelle: 'Code postal', valeur: s.codePostal },
+                    ],
+                    source: s.source,
+                    // Le registre est DÉCLARATIF, sans contrôle a posteriori,
+                    // et sa couverture est estimée aux deux tiers. Le dire
+                    // ici, au moment où l'artisan décide d'appeler — pas
+                    // seulement dans une note de bas de page.
+                    mention:
+                      "Registre déclaratif, rempli par les syndics eux-mêmes et sans contrôle. "
+                      + "Vérifiez que le mandat est toujours en cours avant d'appeler.",
+                  })}
+                >
+                  <div className="text-sm">
+                    <div className="font-medium text-foreground">{s.nomSyndic}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">{s.commune}</div>
+                  </div>
+                </LignePiste>
               ))}
               {syndics.data?.agregats.map((a, i) => (
                 <div key={`agr-${i}`} className="p-3 text-sm flex items-center justify-between" data-testid={`agregat-syndic-${i}`}>
@@ -234,12 +300,29 @@ export default function Prospection() {
               {permis.data && permis.data.pistesProfessionnelles.length > 0 && (
                 <div className="rounded-xl border border-card-border bg-card divide-y divide-border">
                   {permis.data.pistesProfessionnelles.map((p, i) => (
-                    <div key={i} className="p-3 text-sm" data-testid={`permis-pro-${i}`}>
-                      <div className="font-medium text-foreground">{p.nomDemandeur}</div>
-                      <div className="text-xs text-muted-foreground mt-0.5">
-                        {p.nature} · {p.commune} {p.dateOctroi ? `· ${fmtDate(p.dateOctroi)}` : ''}
+                    <LignePiste
+                      key={i}
+                      testId={`permis-pro-${i}`}
+                      onClick={() => setPiste({
+                        titre: p.nomDemandeur ?? 'Demandeur',
+                        sousTitre: p.nature,
+                        champs: [
+                          { libelle: 'Nature', valeur: p.nature },
+                          { libelle: 'Numéro', valeur: p.numero },
+                          { libelle: 'Adresse', valeur: p.adresse },
+                          { libelle: 'Commune', valeur: [p.codePostal, p.commune].filter(Boolean).join(' ') },
+                          { libelle: 'Accordé le', valeur: p.dateOctroi ? fmtDate(p.dateOctroi) : null },
+                        ],
+                        source: p.source,
+                      })}
+                    >
+                      <div className="text-sm">
+                        <div className="font-medium text-foreground">{p.nomDemandeur}</div>
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                          {p.nature} · {p.commune} {p.dateOctroi ? `· ${fmtDate(p.dateOctroi)}` : ''}
+                        </div>
                       </div>
-                    </div>
+                    </LignePiste>
                   ))}
                 </div>
               )}
@@ -250,12 +333,39 @@ export default function Prospection() {
                     aucun e-mail, et aucune action de contact n'est proposée ici.
                   </p>
                   {permis.data.informationsParticuliers.map((p, i) => (
-                    <div key={i} className="p-3 text-sm" data-testid={`permis-particulier-${i}`}>
-                      <div className="text-foreground">{p.nomDemandeur}</div>
-                      <div className="text-xs text-muted-foreground mt-0.5">
-                        {p.adresse} · {p.nature}
+                    <LignePiste
+                      key={i}
+                      testId={`permis-particulier-${i}`}
+                      onClick={() => setPiste({
+                        titre: p.nomDemandeur ?? 'Demandeur particulier',
+                        sousTitre: p.nature,
+                        champs: [
+                          { libelle: 'Nature', valeur: p.nature },
+                          { libelle: 'Adresse', valeur: p.adresse },
+                          { libelle: 'Commune', valeur: [p.codePostal, p.commune].filter(Boolean).join(' ') },
+                          { libelle: 'Accordé le', valeur: p.dateOctroi ? fmtDate(p.dateOctroi) : null },
+                        ],
+                        // Une information publique portée par le permis, pas
+                        // une cible. Le panneau n'offre aucun moyen de
+                        // contact, et le dit — c'est le même refus que celui
+                        // qui gate `PERMIS_AFFICHER_PISTES_PRO`, tenu jusque
+                        // dans le détail.
+                        mention:
+                          "Information publique portée par le permis — ce n'est PAS une piste à "
+                          + "démarcher. Aucun contact n'est proposé, et aucun ne le sera.",
+                        // Les informations particuliers ne portent pas de
+                        // source individuelle : c'est celle de la section.
+                        source: permis.data!.pistesProfessionnelles[0]?.source
+                          ?? { label: 'Permis de construire', url: '' },
+                      })}
+                    >
+                      <div className="text-sm">
+                        <div className="text-foreground">{p.nomDemandeur}</div>
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                          {p.adresse} · {p.nature}
+                        </div>
                       </div>
-                    </div>
+                    </LignePiste>
                   ))}
                 </div>
               )}
@@ -263,6 +373,8 @@ export default function Prospection() {
           )}
         </Section>
       </div>
+
+      <PanneauPiste piste={piste} onClose={() => setPiste(null)} />
     </div>
   );
 }
