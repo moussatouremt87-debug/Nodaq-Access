@@ -361,6 +361,16 @@ router.post("/devis/:id/envoyer", async (req, res): Promise<void> => {
     // L'écran doit pouvoir dire à l'artisan que son devis est parti en repli.
     modeEnvoi: envoi.mode,
     avertissementDelivrabilite: envoi.avertissementDelivrabilite ?? false,
+    /**
+     * Le devis est-il VRAIMENT parti ?
+     *
+     * Le mode et l'avertissement de délivrabilité étaient rendus, mais pas le
+     * succès — si bien qu'un envoi qui n'était jamais parti (aucun SMTP
+     * configuré : `sendDocument` REND `success: false`, il ne lève pas)
+     * s'affichait comme réussi. Le même défaut que sur l'émission de facture.
+     */
+    envoye: envoi.success,
+    motifEchec: envoi.success ? null : (envoi.error ?? "envoi impossible"),
   });
 });
 

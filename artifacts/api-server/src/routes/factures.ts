@@ -593,9 +593,25 @@ router.post("/factures/:id/emettre", async (req, res): Promise<void> => {
   }
 
   // 8. Send email if requested (non-blocking — emission already succeeded)
+  //
+  // LE RÉSULTAT EST CONSERVÉ, et c'était le défaut : il était jeté. Or
+  // `sendDocument` ne LÈVE PAS quand aucun SMTP n'est configuré — il REND
+  // `success: false`. Le `try/catch` ci-dessous n'attrapait donc rien, la
+  // réponse ne portait aucune trace de l'échec, et l'écran annonçait
+  // « Envoyée par e-mail » d'après la case cochée par l'utilisateur.
+  // L'artisan croyait avoir facturé son client.
+  let envoiEmail: {
+    demande: boolean;
+    envoye: boolean;
+    motifEchec: string | null;
+    mode?: string;
+    avertissementDelivrabilite: boolean;
+  } = { demande: false, envoye: false, motifEchec: null, avertissementDelivrabilite: false };
+
   if (opts.sendEmail && opts.emailTo) {
+    envoiEmail = { demande: true, envoye: false, motifEchec: null, avertissementDelivrabilite: false };
     try {
-      await sendDocument({
+      const envoi = await sendDocument({
         canal: "EMAIL",
         tenantId,
         documentType: "FACTURE",
@@ -606,8 +622,23 @@ router.post("/factures/:id/emettre", async (req, res): Promise<void> => {
         attachments: [{ filename: `${numero}.pdf`, content: pdfBytes }],
         fromName: seller.nom,
       });
+      envoiEmail = {
+        demande: true,
+        envoye: envoi.success,
+        motifEchec: envoi.success ? null : (envoi.error ?? "envoi impossible"),
+        ...(envoi.mode ? { mode: envoi.mode } : {}),
+        avertissementDelivrabilite: envoi.avertissementDelivrabilite ?? false,
+      };
     } catch (err) {
       console.warn("[factures/emettre] email send failed (non-fatal):", err);
+      // L'exception est un second chemin d'échec, distinct du `success: false`
+      // ci-dessus. Les deux doivent aboutir au même aveu : rien n'est parti.
+      envoiEmail = {
+        demande: true,
+        envoye: false,
+        motifEchec: "envoi impossible",
+        avertissementDelivrabilite: false,
+      };
     }
   }
 
@@ -637,6 +668,16 @@ router.post("/factures/:id/emettre", async (req, res): Promise<void> => {
     avertissementsMentions: mentionIssues
       .filter((i) => !i.bloquant)
       .map((i) => ({ code: i.code, message: i.message })),
+    /**
+     * Le sort de l'e-mail. Champ ADDITIF, comme `avertissementsMentions` :
+     * aucun appelant existant n'en dépend.
+     *
+     * L'ÉMISSION A RÉUSSI même quand `envoye` est faux — la facture est
+     * numérotée, archivée, immuable. Seul le courrier n'est pas parti.
+     * L'écran doit dire les deux, et ne pas laisser croire que l'émission a
+     * échoué : elle ne se rejoue pas.
+     */
+    envoiEmail,
     /** Objectifs franchis PAR CETTE ÉMISSION. Vide le reste du temps. */
     objectifsFranchis: franchis.map((f) => ({
       objectif: f.objectif,
