@@ -101,12 +101,42 @@ export function configPermis(): ConfigPermis {
 // (BOAMP, DECP, RNIC — même famille OpenDataSoft) rendent `null` pour un
 // champ absent, jamais une clé omise, et un accès réel à celle-ci n'a pas pu
 // être confronté ce soir. Même précaution ici par cohérence.
+/**
+ * ── LES NOMS DE CHAMPS DE LA SOURCE ───────────────────────────────────────
+ * Confronté au service réel le 28/08/2026 (point d'accès d'essai public).
+ * TOUS les champs qu'il rend portent des noms de colonnes Sitadel verbatim —
+ * `num_pa`, `comm_code`, `date_reelle_autorisation`, `superficie_terrain`.
+ * Le service republie donc la base Sitadel sans renommer, ce qui rend les
+ * noms de demandeur (`denom_dem`, `cj_dem`, `siret_dem`) hautement probables :
+ * ce sont ceux de la base ouverte, vérifiés le même jour.
+ *
+ * « Hautement probable » n'est pas « vérifié » : l'essai public ne rend AUCUN
+ * champ sur le demandeur. Ils sont donc ajoutés en candidats, et le schéma
+ * continue de REFUSER bruyamment ce qu'il ne reconnaît pas — au premier appel
+ * avec une vraie clé, le message d'erreur nommera les champs reçus.
+ *
+ * Les noms supposés d'origine sont CONSERVÉS : ils ne coûtent rien et
+ * couvrent un autre republieur.
+ */
 const Permis = z.object({
   numero: z.string().min(1).nullish(),
+  /** Sitadel : identifiant du dossier. Vérifié sur l'essai public. */
+  num_pa: z.string().min(1).nullish(),
   nature: z.string().nullish(),
+  /** Sitadel : `PC`, `DP_LOGEMENT`… Vérifié sur l'essai public. */
+  permit_type: z.string().nullish(),
   demandeur_nom: z.string().min(1).nullish(),
   nom_demandeur: z.string().min(1).nullish(),
   raison_sociale: z.string().min(1).nullish(),
+  /** Sitadel : dénomination du demandeur. VIDE pour un particulier. */
+  denom_dem: z.string().min(1).nullish(),
+  /**
+   * Sitadel : catégorie juridique INSEE du demandeur. Sa PRÉSENCE est le
+   * marqueur de personne morale — mesuré sur la base ouverte : les
+   * particuliers n'en portent aucune, les sociétés, communes et associations
+   * en portent toujours une (`5710` SAS, `6540` SCI, `7210` commune…).
+   */
+  cj_dem: z.string().min(1).nullish(),
   /** Marqueurs candidats pour la nature du demandeur — noms non confirmés. */
   type_demandeur: z.string().nullish(),
   nature_demandeur: z.string().nullish(),
@@ -114,7 +144,11 @@ const Permis = z.object({
   adresse: z.string().nullish(),
   code_postal: z.string().nullish(),
   commune: z.string().nullish(),
+  /** Sitadel : nom de la commune. Vérifié sur l'essai public. */
+  localite: z.string().nullish(),
   date_octroi: z.string().nullish(),
+  /** Sitadel : date d'autorisation réelle. Vérifiée sur l'essai public. */
+  date_reelle_autorisation: z.string().nullish(),
 });
 
 const ReponsePermis = z.union([
@@ -144,22 +178,65 @@ export interface PermisPublic {
  * piste que présenter un particulier comme cible de démarchage.
  */
 export function estDemandeurPersonneMorale(p: z.infer<typeof Permis>): boolean {
+  const nom = nomDemandeurDe(p);
+  if (!nom) return false;
+
+  // La CATÉGORIE JURIDIQUE d'abord : c'est le marqueur de la source réelle,
+  // et il ne se prête à aucune interprétation. Mesuré sur la base ouverte :
+  // un particulier n'en porte jamais, une personne morale en porte toujours
+  // une. Pas de liste de mots à faire correspondre, donc pas de dérive le
+  // jour où le libellé change.
+  if ((p.cj_dem ?? "").trim().length > 0) return true;
+
+  // À défaut, les marqueurs textuels supposés. Conservés pour un republieur
+  // qui n'exposerait pas la catégorie juridique.
   const marqueur = (p.type_demandeur ?? p.nature_demandeur ?? p.demandeur_type ?? "")
     .trim()
     .toLowerCase();
   if (marqueur.length === 0) return false;
-  const morale = marqueur.includes("morale") || marqueur.includes("entreprise") || marqueur.includes("societe") || marqueur.includes("société");
-  const nom = p.raison_sociale ?? p.demandeur_nom ?? p.nom_demandeur;
-  return morale && Boolean(nom);
+  return (
+    marqueur.includes("morale") ||
+    marqueur.includes("entreprise") ||
+    marqueur.includes("societe") ||
+    marqueur.includes("société")
+  );
 }
 
 function nomDemandeurDe(p: z.infer<typeof Permis>): string | null {
-  return p.raison_sociale ?? p.demandeur_nom ?? p.nom_demandeur ?? null;
+  return p.denom_dem ?? p.raison_sociale ?? p.demandeur_nom ?? p.nom_demandeur ?? null;
 }
 
 function formeRecue(brut: unknown): string {
   if (brut === null || typeof brut !== "object") return typeof brut;
   return Object.keys(brut as Record<string, unknown>).sort().join(", ") || "(objet vide)";
+}
+
+/**
+ * Le département, déduit du code postal.
+ *
+ * La source filtre par DÉPARTEMENT (`dep_code`), pas par commune — confronté
+ * au service réel le 28/08/2026. C'est plus large que la zone de l'artisan,
+ * et c'est assumé : un permis à trente kilomètres reste une piste, là où un
+ * marché public à trente kilomètres n'en est pas une.
+ *
+ * Trois cas, et le troisième n'a pas de bonne réponse :
+ *
+ * - OUTRE-MER : `971`…`988` tiennent sur TROIS chiffres. Les couper à deux
+ *   donnerait `97` pour la Guadeloupe comme pour Mayotte.
+ * - MÉTROPOLE : les deux premiers chiffres.
+ * - CORSE : `20xxx` couvre `2A` ET `2B`, et le code postal seul ne permet pas
+ *   de trancher — la limite administrative ne suit pas les tranches postales
+ *   partout. On REFUSE plutôt que de deviner : envoyer un artisan d'Ajaccio
+ *   démarcher en Haute-Corse serait une erreur silencieuse, et il n'aurait
+ *   aucun moyen de comprendre pourquoi ses pistes sont à deux heures de
+ *   route.
+ */
+export function departementDepuisCodePostal(codePostal: string | null): string | null {
+  const cp = (codePostal ?? "").trim();
+  if (!/^\d{5}$/.test(cp)) return null;
+  if (cp.startsWith("97") || cp.startsWith("98")) return cp.slice(0, 3);
+  if (cp.startsWith("20")) return null;
+  return cp.slice(0, 2);
 }
 
 /**
@@ -173,8 +250,22 @@ export async function chercherPermis(
   transport: TransportPermis = transportParDefaut,
 ): Promise<PermisPublic[]> {
   const config = configPermis();
-  const zone = requete.commune ?? requete.codePostal ?? "";
-  const url = `${config.baseUrl}/v1/permits?commune=${encodeURIComponent(zone)}`;
+
+  // La source filtre par département. Le code postal est donc la SEULE entrée
+  // exploitable : la commune, elle, ne s'y traduit pas.
+  const departement = departementDepuisCodePostal(requete.codePostal);
+  if (departement === null) {
+    throw new PermisError(
+      "Les permis de construire se cherchent par département, déduit du code " +
+        "postal. Renseignez un code postal à cinq chiffres dans le profil de " +
+        "l'entreprise. (La Corse n'est pas encore couverte : le code postal n'y " +
+        "permet pas de distinguer la Corse-du-Sud de la Haute-Corse, et nous " +
+        "préférons ne rien proposer plutôt que de vous envoyer dans le mauvais " +
+        "département.)",
+    );
+  }
+
+  const url = `${config.baseUrl}/v1/permits?dep_code=${encodeURIComponent(departement)}`;
 
   let reponse: { status: number; texte: string };
   try {
@@ -208,14 +299,14 @@ export async function chercherPermis(
   const lignes = "results" in d ? d.results : "permits" in d ? d.permits : d.data;
 
   return lignes.map((p) => ({
-    numero: p.numero ?? null,
-    nature: p.nature ?? null,
+    numero: p.numero ?? p.num_pa ?? null,
+    nature: p.nature ?? p.permit_type ?? null,
     nomDemandeur: nomDemandeurDe(p),
     demandeurPersonneMorale: estDemandeurPersonneMorale(p),
     adresse: p.adresse ?? null,
     codePostal: p.code_postal ?? null,
-    commune: p.commune ?? null,
-    dateOctroi: p.date_octroi ?? null,
+    commune: p.commune ?? p.localite ?? null,
+    dateOctroi: p.date_octroi ?? p.date_reelle_autorisation ?? null,
     source: config.source,
   }));
 }
