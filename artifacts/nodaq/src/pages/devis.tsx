@@ -140,11 +140,31 @@ export default function DevisPage() {
         body: JSON.stringify({ emailTo, message }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'Envoi impossible');
-      return res.json() as Promise<Devis & { acceptUrl: string; lienReutilise: boolean }>;
+      return res.json() as Promise<
+        Devis & {
+          acceptUrl: string;
+          lienReutilise: boolean;
+          envoye: boolean;
+          motifEchec: string | null;
+        }
+      >;
     },
     onSuccess: (updated) => {
       qc.invalidateQueries({ queryKey: ['devis'] });
       setSendDialogDevis(null);
+      // Un HTTP 200 ne veut pas dire que le courrier est parti : sans SMTP
+      // configuré, `sendDocument` rend `success: false` sans lever. L'écran
+      // annonçait donc un envoi réussi qui n'avait pas eu lieu.
+      if (!updated.envoye) {
+        toast({
+          title: "Le devis n'est pas parti",
+          description:
+            "Il est enregistré et son lien d'acceptation reste valide. "
+            + "Vérifiez la configuration d'envoi, puis renvoyez-le.",
+          variant: 'destructive',
+        });
+        return;
+      }
       if (updated.lienReutilise) {
         // Renvoi : le MÊME lien est reparti, l'ancien e-mail reste valide. Rien
         // de neuf à montrer, et surtout rien à faire croire qu'on a remplacé.

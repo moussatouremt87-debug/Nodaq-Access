@@ -395,7 +395,32 @@ function EmettreDialog({ open, onOpenChange, facture, onEmit }: {
         toast({ title: 'Émission bloquée', description: msg, variant: 'destructive' });
         return;
       }
-      toast({ title: `Facture ${json.number} émise`, description: sendEmail ? 'Envoyée par e-mail.' : undefined });
+      // Le sort de l'e-mail vient du SERVEUR, plus de la case cochée.
+      //
+      // C'était le défaut : `sendEmail` est ce que l'utilisateur a DEMANDÉ,
+      // pas ce qui s'est passé. Sans SMTP configuré, l'écran affichait
+      // « Envoyée par e-mail » alors que rien n'était parti — et l'artisan
+      // croyait avoir facturé son client.
+      const envoi = json.envoiEmail as
+        | { demande: boolean; envoye: boolean; motifEchec: string | null }
+        | undefined;
+
+      if (envoi?.demande && !envoi.envoye) {
+        // La facture EST émise — numérotée, archivée, immuable. On ne la
+        // rejoue pas. Seul le courrier a échoué, et il se renvoie.
+        toast({
+          title: `Facture ${json.number} émise, mais l'e-mail n'est pas parti`,
+          description:
+            "La facture est enregistrée et son numéro est définitif. "
+            + "Vérifiez la configuration d'envoi, puis renvoyez-la depuis la liste.",
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: `Facture ${json.number} émise`,
+          description: envoi?.envoye ? 'Envoyée par e-mail.' : undefined,
+        });
+      }
       qc.invalidateQueries({ queryKey: ['factures'] });
       onOpenChange(false);
       onEmit();
