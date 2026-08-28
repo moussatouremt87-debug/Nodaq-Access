@@ -143,4 +143,15 @@ describe("La politique de contenu autorise le script en ligne par son empreinte"
     // celle sur les scripts ne l'est pas, et ce test l'interdit.
     expect(csp).not.toMatch(/script-src[^;]*unsafe-inline/);
   });
+
+  test("AUCUNE origine tierce n'est autorisée", () => {
+    // La garde de l'hébergement des polices. Une origine ouverte ici, c'est
+    // l'adresse IP de chaque visiteur envoyée à un tiers à chaque chargement
+    // de page — ce que `src/index.css` faisait vers Google.
+    //
+    // Volontairement formulée sur la politique ENTIÈRE et pas sur une
+    // directive : le prochain domaine tiers n'arrivera pas forcément par
+    // `font-src`.
+    expect(politiqueContenu(["'sha256-abc='"])).not.toMatch(/https?:\/\//);
+  });
 });

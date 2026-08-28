@@ -72,17 +72,19 @@ export function empreintesScriptsEnLigne(cheminIndex: string): string[] {
  * sans commune mesure avec celui d'une injection de SCRIPT, que
  * `script-src` bloque, lui, sans concession.
  *
- * Les domaines de Google Fonts y figurent parce que `src/index.css` les
- * importe. Les héberger nous-mêmes resserrerait cette politique ET cesserait
- * d'envoyer l'adresse IP de chaque visiteur à un tiers hors d'Europe — c'est
- * une décision produit, notée pour un ticket à part.
+ * AUCUN domaine tiers n'y figure, et c'est le point. Les polices sont
+ * hébergées dans `public/fonts/` : rien, dans cette application, ne va
+ * chercher une ressource ailleurs. Toute future entrée ici doit se justifier
+ * autrement que par « la bibliothèque le demande » — une origine ouverte dans
+ * `script-src` ou `font-src` est une adresse IP d'utilisateur envoyée à un
+ * tiers à chaque chargement de page.
  */
 export function politiqueContenu(empreintes: string[]): string {
   return [
     "default-src 'self'",
     `script-src 'self' ${empreintes.join(" ")}`.trim(),
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "font-src 'self' https://fonts.gstatic.com",
+    "style-src 'self' 'unsafe-inline'",
+    "font-src 'self'",
     // `data:` pour les logos encodés dans les PDF et les aperçus ; `blob:`
     // pour les documents engendrés côté navigateur avant téléchargement.
     "img-src 'self' data: blob:",
