@@ -19,8 +19,10 @@
     <meta name="twitter:title" content="NODAQ" />
     <meta name="twitter:description" content="Le cockpit de pilotage pour dirigeants de TPE/PME." />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- PAS de `preconnect` vers Google : les polices sont hébergées ici, dans
+         `public/fonts/`. Les laisser ouvrirait une connexion vers un tiers à
+         chaque chargement — donc y enverrait l'adresse IP du visiteur — pour
+         des fichiers qu'on ne lui demande plus. Voir `src/index.css`. -->
     <!--
       Flash-prevention: apply theme before first paint.
 
