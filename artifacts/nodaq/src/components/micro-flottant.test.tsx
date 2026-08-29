@@ -358,3 +358,82 @@ describe('dicter un devis', () => {
     expect((exec.corps as { planId: string }).planId).toBe('plan-devis');
   });
 });
+
+
+/*
+ * ── ON VALIDE CE QU'ON VOIT ──────────────────────────────────────────────
+ *
+ * Constaté sur le déploiement le 29/08/2026 : dicter « un chantier de toiture
+ * à 3000 euros » proposait « Créer un devis de 1 ligne(s) ». Sans montant,
+ * sans détail. L'artisan cliquait sur un document destiné à son client sans
+ * en connaître le total.
+ *
+ * La règle 4 ne dit pas « il faut cliquer » : elle dit qu'on valide ce qu'on
+ * a lu. Un total invisible vide la validation de son sens.
+ */
+describe('un devis proposé montre ce qui va être écrit', () => {
+  const DEVIS = {
+    conversationId: 'conv-1',
+    message: { content: 'Voici le devis.' },
+    planId: 'plan-devis',
+    operations: [{
+      type: 'creer_devis',
+      libelle: 'Créer un devis de 2 ligne(s) — 3 000,00 € HT',
+      certitude: 'aucune_resolution',
+      champs: {
+        clientName: 'Sadio Ducouré',
+        lignesDicteesJson: JSON.stringify([
+          { libelle: 'Toiture à refaire', quantite: 1, unite: null, prixUnitaireHtCents: 300000 },
+          { libelle: 'Évacuation gravats', quantite: 2, unite: 'm3' },
+        ]),
+      },
+    }],
+  };
+
+  test('le montant figure dans ce qui est soumis à validation', async () => {
+    reponseChat = { statut: 200, corps: DEVIS };
+    await ouvrirLePlan();
+
+    expect(screen.getByTestId('liste-operations')).toHaveTextContent('3 000,00 € HT');
+  });
+
+  test('chaque ligne est détaillée, avec sa quantité', async () => {
+    reponseChat = { statut: 200, corps: DEVIS };
+    await ouvrirLePlan();
+
+    const lignes = screen.getByTestId('lignes-dictees-0');
+    expect(lignes).toHaveTextContent('Toiture à refaire');
+    expect(lignes).toHaveTextContent('3 000,00 € HT');
+    const items = Array.from(lignes.querySelectorAll('li'));
+    expect(items).toHaveLength(2);
+    expect(items[1]).toHaveTextContent('Évacuation gravats × 2 m3');
+  });
+
+  /*
+   * LA garde. Une ligne sans prix dicté sera chiffrée au catalogue à la
+   * validation. Afficher « 0 € » ferait passer une absence pour une gratuité
+   * — et un devis annoncé moins cher que la réalité est l'erreur qu'on ne
+   * peut pas se permettre sur un document qui part chez un client.
+   */
+  test('une ligne sans prix dicté le DIT, elle n’affiche pas 0 €', async () => {
+    reponseChat = { statut: 200, corps: DEVIS };
+    await ouvrirLePlan();
+
+    /*
+     * On lit chaque LIGNE, pas le texte concaténé du bloc : « 3 000,00 € HT »
+     * contient « 0,00 € HT » en sous-chaîne, et une assertion posée sur
+     * l'ensemble se déclencherait sur un prix parfaitement valide. Première
+     * version de ce test, corrigée — l'erreur était dans l'assertion.
+     */
+    const items = Array.from(screen.getByTestId('lignes-dictees-0').querySelectorAll('li'));
+    const sansPrix = items[1]!;
+
+    expect(sansPrix).toHaveTextContent('prix au catalogue');
+    expect(sansPrix.textContent ?? '').not.toMatch(/€ HT/);
+  });
+
+  test('une opération sans lignes ne rend aucun détail', async () => {
+    await ouvrirLePlan();          // PLAN_CATALOGUE, sans lignesDicteesJson
+    expect(screen.queryByTestId('lignes-dictees-0')).toBeNull();
+  });
+});

@@ -48,6 +48,18 @@ import { CHAMPS_CORRIGEABLES } from '@nodaq/shared';
 
 const API = '/api';
 
+/** Une ligne dictée, telle que le serveur la propose. */
+interface LigneDictee {
+  libelle: string;
+  quantite: number | null;
+  unite: string | null;
+  /**
+   * Prix DICTÉ, déjà vérifié dans la transcription par le serveur. Absent le
+   * plus souvent : le prix vient alors du catalogue, au moment de valider.
+   */
+  prixUnitaireHtCents?: number | null;
+}
+
 interface Operation {
   type: string;
   libelle: string;
@@ -78,6 +90,23 @@ interface Plan {
    */
   questions: unknown[];
   nonCompris: string[];
+}
+
+/**
+ * Les lignes dictées d'une opération, ou une liste vide.
+ *
+ * Elles voyagent sérialisées dans `champs.lignesDicteesJson` — le plan attend
+ * en base, et c'est cette chaîne qui sera reprise à l'identique à la
+ * validation. Un JSON illisible ne fait pas tomber l'écran : on rend une
+ * liste vide, et le libellé porte déjà le total.
+ */
+function lignesDe(o: Operation): LigneDictee[] {
+  try {
+    const brut = JSON.parse(o.champs?.['lignesDicteesJson'] ?? '[]');
+    return Array.isArray(brut) ? (brut as LigneDictee[]) : [];
+  } catch {
+    return [];
+  }
 }
 
 export function MicroFlottant() {
@@ -293,6 +322,36 @@ export function MicroFlottant() {
                       {o.libelle}
                       {o.certitude === 'partielle' && (
                         <span className="ml-2 text-xs text-muted-foreground">(rapprochement approximatif)</span>
+                      )}
+
+                      {/*
+                        LE DÉTAIL DES LIGNES, pour un devis ou une facture.
+
+                        Le libellé annonce un total ; le total seul ne se
+                        vérifie pas. « 3 000 € HT » peut recouvrir la bonne
+                        ligne au mauvais prix, ou l'inverse — et ce document
+                        part chez un client. On valide ce qu'on VOIT, donc on
+                        montre ce qui sera écrit, ligne par ligne.
+                      */}
+                      {lignesDe(o).length > 0 && (
+                        <ul className="mt-2 space-y-1" data-testid={`lignes-dictees-${i}`}>
+                          {lignesDe(o).map((l, j) => (
+                            <li key={j} className="flex justify-between gap-3 text-xs text-muted-foreground">
+                              <span className="min-w-0 break-words">
+                                {l.libelle}
+                                {l.quantite !== null ? ` × ${l.quantite}` : ''}
+                                {l.unite ? ` ${l.unite}` : ''}
+                              </span>
+                              <span className="shrink-0 tabular-nums">
+                                {/* Une ligne sans prix le DIT. Afficher « 0 € »
+                                    ferait passer une absence pour une gratuité. */}
+                                {typeof l.prixUnitaireHtCents === 'number' && l.prixUnitaireHtCents > 0
+                                  ? `${(l.prixUnitaireHtCents / 100).toLocaleString('fr-FR', { minimumFractionDigits: 2 })} € HT`
+                                  : 'prix au catalogue'}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
                       )}
                       {/* Les champs DICTÉS se relisent et se corrigent ici.
                           Jamais les identifiants résolus : les modifier ne
