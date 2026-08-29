@@ -1,6 +1,7 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import * as schema from "./schema";
+import { optionsTls } from "./tls";
 
 const { Pool } = pg;
 
@@ -26,8 +27,25 @@ if (!process.env.DATABASE_URL_APP) {
  * Owner credentials (DATABASE_URL) are only consumed by standalone migration
  * scripts (migrate-platform.cjs, etc.) that run outside the application process.
  */
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL_APP });
+/*
+ * Le TLS est décidé ICI, pas dans la chaîne de connexion.
+ *
+ * Mesuré le 29/08/2026 : le serveur de production accepte le clair, et rien
+ * n'obligeait l'application à chiffrer. Une propriété de sécurité qui dépend
+ * de ce qu'on a tapé dans un secret n'est pas une propriété : personne ne la
+ * relit, et une omission ne se voit jamais. Voir `tls.ts`.
+ *
+ * En production sans `DATABASE_CA_PEM`, `optionsTls` LÈVE : l'application ne
+ * démarre pas. C'est voulu — tomber est bruyant, fuir ne l'est pas.
+ */
+const ssl = optionsTls(process.env.DATABASE_URL_APP);
+
+export const pool = new Pool({
+  connectionString: process.env.DATABASE_URL_APP,
+  ...(ssl ? { ssl } : {}),
+});
 export const db = drizzle(pool, { schema });
 
 export * from "./schema";
+export { optionsTls, DbTlsError, hoteDe, type OptionsTls } from "./tls";
 export { withTenant, type DrizzleTx } from "./withTenant";
