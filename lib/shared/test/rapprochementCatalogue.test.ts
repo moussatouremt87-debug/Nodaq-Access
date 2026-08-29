@@ -180,3 +180,94 @@ describe("total de la proposition", () => {
     expect(totalProposition(lignes).totalHtCents).toBe(245_000);
   });
 });
+
+
+/*
+ * ── LE PRIX DICTÉ ────────────────────────────────────────────────────────
+ *
+ * « Pour le même client, Madame Touré, pour la réfection du mur pour 1200
+ * euros » : rien de tel dans un catalogue. Le devis restait donc à zéro, et
+ * le fondateur voyait sa phrase se perdre.
+ *
+ * La règle 3 autorise exactement ce cas — l'humain est la seule source du
+ * chiffre pour un ouvrage neuf. Mais elle pose une priorité : là où le tarif
+ * existe, c'est LUI qui fait foi, sans quoi le même article vaudrait deux
+ * prix selon qu'on l'a dicté ou non.
+ */
+describe('un prix dicté, quand le catalogue ne sait pas', () => {
+  const CATALOGUE = [
+    {
+      id: 'cat-1',
+      libelle: 'Pose de placo',
+      unite: 'm2',
+      prixUnitaireHtCents: 4500,
+      tauxTva: 20,
+      motsCles: ['placo'],
+    },
+  ];
+
+  test('une ligne inconnue prend le prix dicté, et le dit', () => {
+    const [l] = rapprocherDictee(
+      [{ libelle: 'Réfection du mur', quantite: null, unite: null, prixUnitaireHtCents: 120000 }],
+      CATALOGUE,
+    );
+
+    expect(l!.prixUnitaireHtCents).toBe(120000);
+    // La provenance est affichée à l'artisan : ce montant vient de sa bouche,
+    // pas de son tarif. Les confondre serait lui mentir sur l'origine.
+    expect(l!.provenance).toBe('dicte');
+    expect(l!.catalogueLigneId).toBeNull();
+  });
+
+  /*
+   * LA garde de priorité. Sans elle, dicter « pose de placo à 60 euros »
+   * écraserait le tarif du catalogue sans que personne ne le voie.
+   */
+  test('le CATALOGUE reste prioritaire quand il connaît la ligne', () => {
+    const [l] = rapprocherDictee(
+      [{ libelle: 'Pose de placo', quantite: 10, unite: 'm2', prixUnitaireHtCents: 6000 }],
+      CATALOGUE,
+    );
+
+    expect(l!.prixUnitaireHtCents).toBe(4500);   // le tarif, pas la dictée
+    expect(l!.provenance).toBe('catalogue');
+  });
+
+  test('sans prix dicté ni catalogue, la ligne reste à compléter', () => {
+    const [l] = rapprocherDictee(
+      [{ libelle: 'Réfection du mur', quantite: null, unite: null }],
+      CATALOGUE,
+    );
+
+    expect(l!.prixUnitaireHtCents).toBeNull();
+    expect(l!.provenance).toBe('a_completer');
+  });
+
+  /*
+   * Zéro n'est pas un prix dicté : c'est ce que rend `centimesDepuisDictee`
+   * quand le montant n'a pas été retrouvé dans la phrase. Le traiter comme
+   * une valeur ferait entrer un devis à 0 € sans que rien ne l'annonce.
+   */
+  test('un prix nul ou négatif ne vaut pas prix', () => {
+    for (const p of [0, -100]) {
+      const [l] = rapprocherDictee(
+        [{ libelle: 'Réfection du mur', quantite: null, unite: null, prixUnitaireHtCents: p }],
+        CATALOGUE,
+      );
+      expect(l!.prixUnitaireHtCents, `prix ${p}`).toBeNull();
+      expect(l!.provenance, `prix ${p}`).toBe('a_completer');
+    }
+  });
+
+  test('une ligne au prix dicté COMPTE dans le total', () => {
+    const lignes = rapprocherDictee(
+      [{ libelle: 'Réfection du mur', quantite: 1, unite: null, prixUnitaireHtCents: 120000 }],
+      CATALOGUE,
+    );
+    const { totalHtCents, lignesChiffrees, lignesACompleter } = totalProposition(lignes);
+
+    expect(totalHtCents).toBe(120000);
+    expect(lignesChiffrees).toBe(1);
+    expect(lignesACompleter).toBe(0);
+  });
+});

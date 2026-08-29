@@ -35,10 +35,30 @@ export interface IntentionDictee {
   readonly libelle: string;
   readonly quantite: number | null;
   readonly unite: string | null;
+  /**
+   * Prix unitaire HT en centimes, quand l'utilisateur l'a DICTÉ.
+   *
+   * Il n'arrive jamais du modèle directement : l'appelant l'a d'abord passé
+   * par `centimesDepuisDictee`, qui le refuse s'il ne figure pas dans la
+   * transcription. Un chiffre halluciné n'atteint pas ce champ — il vaut
+   * `null`, et la ligne redevient « à compléter ».
+   *
+   * Le CATALOGUE reste prioritaire : ce prix ne sert que là où le catalogue
+   * n'a rien à dire. Sans cette priorité, un article tarifé prendrait deux
+   * valeurs différentes selon qu'on l'a dicté ou non.
+   */
+  readonly prixUnitaireHtCents?: number | null;
 }
 
-/** D'où vient le prix d'une ligne — affiché à l'utilisateur, jamais masqué. */
-export type ProvenancePrix = "catalogue" | "alias" | "a_completer";
+/**
+ * D'où vient le prix d'une ligne — affiché à l'utilisateur, jamais masqué.
+ *
+ * `dicte` : l'utilisateur l'a prononcé et le chiffre a été retrouvé dans sa
+ * phrase. C'est le seul cas où un prix n'est pas issu du catalogue, et il
+ * s'affiche comme tel : l'artisan doit voir que ce montant vient de sa bouche
+ * et non de son tarif.
+ */
+export type ProvenancePrix = "catalogue" | "alias" | "a_completer" | "dicte";
 
 export interface LigneProposee {
   readonly libelle: string;
@@ -97,15 +117,30 @@ export function rapprocher(
 ): LigneProposee {
   const cible = normaliser(intention.libelle);
 
-  const sansPrix = (): LigneProposee => ({
-    libelle: intention.libelle,
-    quantite: intention.quantite,
-    unite: intention.unite,
-    prixUnitaireHtCents: null,
-    tauxTva: null,
-    provenance: "a_completer",
-    catalogueLigneId: null,
-  });
+  /**
+   * Aucun prix venu du catalogue.
+   *
+   * On se rabat alors sur le prix DICTÉ s'il y en a un — « la réfection du
+   * mur pour 1200 euros » n'est dans aucun catalogue, et c'est précisément le
+   * cas où l'humain est la seule source recevable du chiffre. À défaut, la
+   * ligne reste à compléter : on ne devine pas un prix.
+   */
+  const sansPrix = (): LigneProposee => {
+    const dicte = intention.prixUnitaireHtCents;
+    const aUnPrixDicte = typeof dicte === "number" && Number.isFinite(dicte) && dicte > 0;
+    return {
+      libelle: intention.libelle,
+      quantite: intention.quantite,
+      unite: intention.unite,
+      prixUnitaireHtCents: aUnPrixDicte ? dicte : null,
+      // Aucun taux de TVA n'est deviné : il n'a pas été dicté et le catalogue
+      // n'a rien dit. `executerPlan` applique le taux par défaut, comme pour
+      // toute ligne sans tarif connu.
+      tauxTva: null,
+      provenance: aUnPrixDicte ? "dicte" : "a_completer",
+      catalogueLigneId: null,
+    };
+  };
 
   if (cible.length === 0) return sansPrix();
 

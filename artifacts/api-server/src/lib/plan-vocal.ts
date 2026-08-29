@@ -1148,6 +1148,8 @@ async function executerOperation(
       // modèle, et pas un instantané pris une heure plus tôt.
       const dictees = JSON.parse(op.champs["lignesDicteesJson"] ?? "[]") as {
         libelle: string; quantite: number | null; unite: string | null;
+        /** Prix dicté, déjà vérifié dans la transcription. Absent le plus souvent. */
+        prixUnitaireHtCents?: number | null;
       }[];
       const catalogueCourant = await tx
         .select()
@@ -1155,6 +1157,9 @@ async function executerOperation(
         .where(eq(catalogueLignesTable.actif, true));
       const aliasCourants = await tx.select().from(catalogueAliasTable);
       const proposees: LigneProposee[] = rapprocherDictee(
+        // `dictees` porte déjà `prixUnitaireHtCents` quand l'utilisateur a
+        // prononcé un montant. `rapprocher` ne s'en sert QUE si le catalogue
+        // ne connaît pas la ligne — la priorité du tarif est tenue là-bas.
         dictees,
         catalogueCourant.map((c) => ({
           id: c.id, libelle: c.libelle, unite: c.unite,

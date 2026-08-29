@@ -112,6 +112,17 @@ router.post("/chat/messages", async (req, res): Promise<void> => {
     actions_proposees: agentResult.actions,
     /** Plan à valider, quand l'agent a proposé des écritures. */
     planId,
+    /**
+     * Le DÉTAIL des écritures proposées, pas seulement leur étiquette.
+     *
+     * `actions_proposees` ne porte qu'un libellé d'affichage. Le micro, lui,
+     * doit montrer les CHAMPS avant d'écrire — un nom propre mal entendu se
+     * corrige là, et la règle 4 veut qu'on voie ce qu'on valide. C'est la même
+     * structure que celle qu'affichait déjà l'écran de validation vocale, et
+     * le même magasin de plans : `/voix/executer` applique ce `planId` sans
+     * savoir ni se soucier de quel chemin l'a produit.
+     */
+    operations: agentResult.operations,
   });
 });
 

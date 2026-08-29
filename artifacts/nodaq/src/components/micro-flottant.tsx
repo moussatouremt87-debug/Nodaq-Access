@@ -4,12 +4,28 @@
  * « Vous ne tapez plus jamais rien. » La voix pour dire et pour commander ;
  * l'ÉCRAN pour confirmer. Appui long pour parler, relâché pour envoyer.
  *
- * RIEN NE S'ÉCRIT AVANT « Valider ». La feuille montre les opérations, les
- * questions restées ouvertes, et ce qui n'a pas été compris — un plan qui fait
- * silence sur ce qu'il a raté est un plan qui ment.
+ * RIEN NE S'ÉCRIT AVANT « Valider ». La feuille montre ce que l'assistant a
+ * répondu, puis les écritures qu'il propose, champ par champ.
  *
  * Pas de synthèse vocale : la confirmation est visuelle, c'est la promesse
  * qu'on tient.
+ *
+ * ── UN SEUL AGENT, PAS DEUX ─────────────────────────────────────────────
+ * Le micro a longtemps tapé sur `/voix/interpreter`, un extracteur
+ * d'intentions écrit à côté de l'agent de discussion : sans mémoire, sans
+ * outils, incapable de résoudre « pour le même client » puisqu'il ne recevait
+ * qu'une phrase isolée. Deux implémentations du même métier, dont une infirme.
+ *
+ * Le 29/08/2026, « Pour le même client, Madame Touré, pour la réfection du mur
+ * pour 1200 euros » n'a rien produit — une phrase de suite, adressée à un
+ * système sans passé.
+ *
+ * Le micro envoie donc à `/chat/messages`, l'agent RÉEL : il a l'historique de
+ * la conversation et les outils (`create_devis`, `create_facture`,
+ * `create_client`, …). Ce qu'il propose revient en `operations` + `planId`,
+ * dans le MÊME magasin de plans qu'avant — `/voix/executer` les applique sans
+ * savoir quel chemin les a produits. La règle 4 est donc intacte : rien ne
+ * s'écrit avant « Valider ».
  *
  * ── PAS EN `position: fixed` ─────────────────────────────────────────────
  * Un bouton flottant, agrandi et centré, recouvrait le contenu de chaque
@@ -19,7 +35,7 @@
  * avec elle, ne recouvre jamais rien.
  */
 import { useCallback, useState } from 'react';
-import { Mic, Loader2, Check, X, HelpCircle, AlertTriangle } from 'lucide-react';
+import { Mic, Loader2, Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useToast } from '@/hooks/use-toast';
@@ -47,18 +63,20 @@ interface Operation {
   aCompleter?: string[];
 }
 
-interface Question {
-  question: string;
-  mention: string;
-  candidats: Array<{ id: string; libelle: string }>;
-}
 
 interface Plan {
   // `null` quand rien n'a produit d'opération : rien n'est enregistré côté
   // serveur dans ce cas, donc rien à valider — voir routes/voix.ts.
   planId: string | null;
   operations: Operation[];
-  questions: Question[];
+  /**
+   * Toujours vides depuis que le micro passe par l'agent : celui-ci tranche
+   * ses ambiguïtés en PARLANT, il n'a pas besoin du mécanisme de
+   * désambiguïsation de l'ancien extracteur, qui ne pouvait pas poser de
+   * question. Conservés parce que le magasin de plans les porte encore côté
+   * serveur — les retirer ferait diverger le client du contrat.
+   */
+  questions: unknown[];
   nonCompris: string[];
 }
 
@@ -72,33 +90,12 @@ export function MicroFlottant() {
   const [dictee, setDictee] = useState('');
   /** La réponse de l'assistant, quand la phrase n'était pas une commande. */
   const [reponseAgent, setReponseAgent] = useState<string | null>(null);
-  const [demandeAgent, setDemandeAgent] = useState(false);
 
-  /*
-   * ── UNE PHRASE QUI N'EST PAS UNE COMMANDE N'EST PAS UNE PHRASE INCOMPRISE ──
-   *
-   * La dictée n'avait qu'une destination : l'extracteur d'opérations. Tout ce
-   * qui n'en produisait aucune retombait dans `nonCompris`, affiché « Je n'ai
-   * pas compris ».
-   *
-   * Constaté le 29/08/2026 : à « Est-ce que l'outil fonctionne pour envoyer
-   * des factures ? » — transcrite PARFAITEMENT — nodaq répondait qu'il n'avait
-   * pas compris. Facturer est sa raison d'être, et l'assistant sait répondre.
-   * Même famille que l'incident du 22/08 qui a fait écrire la règle 3 bis :
-   * un garde-fou écrit pour un extracteur d'opérations finit par attraper le
-   * cœur du métier dès qu'on parle normalement au produit.
-   *
-   * La question part donc dans la MÊME conversation que ce qu'on tape à
-   * l'écran (`CLE_CONVERSATION`) : elle apparaît dans le fil, l'assistant
-   * répond, rien ne se perd.
-   *
-   * La règle 4 n'est pas entamée : l'assistant ne fait qu'ici que RÉPONDRE.
-   * S'il propose une écriture, elle arrive en `planId` et passe par la même
-   * validation que tout le reste.
-   */
-  const demanderAgent = useCallback(
+
+  const interpreter = useCallback(
     async (texte: string) => {
-      setDemandeAgent(true);
+      setInterprete(true);
+      setDictee(texte);
       setReponseAgent(null);
       try {
         const res = await apiFetch(`${API}/chat/messages`, {
@@ -106,6 +103,8 @@ export function MicroFlottant() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             content: texte,
+            // La MÊME conversation que l'écran de discussion : c'est ce qui
+            // permet à « pour le même client » de désigner quelqu'un.
             conversationId: localStorage.getItem(CLE_CONVERSATION),
           }),
         });
@@ -116,58 +115,32 @@ export function MicroFlottant() {
         const j = (await res.json()) as {
           conversationId?: string;
           message?: { content?: string };
+          planId?: string | null;
+          operations?: Operation[];
         };
         if (j.conversationId) localStorage.setItem(CLE_CONVERSATION, j.conversationId);
         setReponseAgent(j.message?.content ?? null);
+        setPlan({
+          planId: j.planId ?? null,
+          operations: j.operations ?? [],
+          // L'agent tranche ses ambiguïtés dans la conversation, en posant la
+          // question — il n'a pas besoin du mécanisme de désambiguïsation de
+          // l'ancien extracteur, qui ne pouvait pas parler.
+          questions: [],
+          nonCompris: [],
+        });
       } catch (err) {
-        // On le DIT plutôt que de retomber silencieusement sur « je n'ai pas
-        // compris » : c'est l'assistant qui n'a pas répondu, pas la phrase
-        // qui était mauvaise.
         setReponseAgent(
           err instanceof Error
             ? `L'assistant n'a pas pu répondre : ${err.message}`
             : "L'assistant n'a pas pu répondre.",
         );
-      } finally {
-        setDemandeAgent(false);
-      }
-    },
-    [],
-  );
-
-  const interpreter = useCallback(
-    async (texte: string) => {
-      setInterprete(true);
-      try {
-        const res = await apiFetch(`${API}/voix/interpreter`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ texte }),
-        });
-        if (!res.ok) {
-          const j = (await res.json().catch(() => ({}))) as { error?: string };
-          throw new Error(j.error ?? "Interprétation impossible");
-        }
-        const recu = (await res.json()) as Plan;
-        setPlan(recu);
-        setDictee(texte);
-        setReponseAgent(null);
-        // Rien à appliquer ET rien à trancher : ce n'était pas une commande.
-        // On répond au lieu de se taire.
-        if (recu.operations.length === 0 && recu.questions.length === 0) {
-          void demanderAgent(texte);
-        }
-      } catch (err) {
-        toast({
-          title: 'Je n’ai pas pu traiter votre phrase',
-          description: err instanceof Error ? err.message : 'Erreur inconnue',
-          variant: 'destructive',
-        });
+        setPlan({ planId: null, operations: [], questions: [], nonCompris: [] });
       } finally {
         setInterprete(false);
       }
     },
-    [toast, demanderAgent],
+    [],
   );
 
   const { enregistre, transcrit, erreur, demarrer, arreter } = useDictee(interpreter);
@@ -272,10 +245,37 @@ export function MicroFlottant() {
       <Sheet open={plan !== null} onOpenChange={(o) => { if (!o) setPlan(null); }}>
         <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto">
           <SheetHeader>
-            <SheetTitle>Ce que j’ai compris</SheetTitle>
+            <SheetTitle>{plan?.operations.length ? 'À valider' : 'Réponse'}</SheetTitle>
           </SheetHeader>
 
           <div className="space-y-4 py-4">
+            {/*
+                L'agent PARLE, toujours — puis propose s'il y a lieu.
+                L'ancien panneau n'affichait qu'un verdict d'extracteur ;
+                celui-ci rend une conversation, comme l'écran de discussion.
+            */}
+            <div className="space-y-3" data-testid="reponse-agent-bloc">
+              <div className="rounded-lg border border-card-border bg-muted/40 p-3">
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                  Vous avez dit
+                </p>
+                <p className="mt-1 text-sm text-foreground">{dictee}</p>
+              </div>
+
+              {interprete ? (
+                <p className="flex items-center gap-2 text-sm text-muted-foreground" data-testid="agent-en-cours">
+                  <Loader2 className="h-4 w-4 animate-spin" /> L’assistant réfléchit…
+                </p>
+              ) : reponseAgent ? (
+                <div className="rounded-lg border border-primary/30 bg-primary/5 p-3" data-testid="reponse-agent">
+                  <p className="whitespace-pre-wrap text-sm text-foreground">{reponseAgent}</p>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Cet échange est dans votre discussion : vous pouvez le reprendre là-bas.
+                  </p>
+                </div>
+              ) : null}
+            </div>
+
             {plan?.operations.length ? (
               <ul className="space-y-2" data-testid="liste-operations">
                 {plan.operations.map((o, i) => {
@@ -326,49 +326,8 @@ export function MicroFlottant() {
                   );
                 })}
               </ul>
-            ) : (
-              /*
-                 Pas d'opération : ce n'était pas une commande. On ne dit plus
-                 « aucune opération à appliquer » — c'est le vocabulaire du
-                 moteur, pas celui de l'artisan — on montre ce qu'on a entendu
-                 et ce que l'assistant répond.
-              */
-              <div className="space-y-3" data-testid="reponse-agent-bloc">
-                <div className="rounded-lg border border-card-border bg-muted/40 p-3">
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    Vous avez dit
-                  </p>
-                  <p className="mt-1 text-sm text-foreground">{dictee}</p>
-                </div>
+            ) : null}
 
-                {demandeAgent ? (
-                  <p className="flex items-center gap-2 text-sm text-muted-foreground" data-testid="agent-en-cours">
-                    <Loader2 className="h-4 w-4 animate-spin" /> L’assistant réfléchit…
-                  </p>
-                ) : reponseAgent ? (
-                  <div className="rounded-lg border border-primary/30 bg-primary/5 p-3" data-testid="reponse-agent">
-                    <p className="whitespace-pre-wrap text-sm text-foreground">{reponseAgent}</p>
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Cet échange est dans votre discussion : vous pouvez le reprendre là-bas.
-                    </p>
-                  </div>
-                ) : null}
-              </div>
-            )}
-
-            {plan?.questions.map((q, i) => (
-              <div key={i} className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3" data-testid="question-plan">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <HelpCircle className="h-4 w-4" /> {q.question}
-                </div>
-                <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
-                  {q.candidats.map((c) => <li key={c.id}>• {c.libelle}</li>)}
-                </ul>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Redictez en précisant lequel : je ne choisis pas à votre place.
-                </p>
-              </div>
-            ))}
 
             {/* Un bouton grisé sans motif est une impasse : on dit pourquoi,
                 et ce que la voix ne peut légitimement pas fournir. */}
@@ -379,41 +338,6 @@ export function MicroFlottant() {
               </p>
             )}
 
-            {/*
-                Un RESTE, pas un échec.
-                Ce bloc ne paraît plus que lorsqu'une partie de la phrase a
-                produit des opérations et qu'une autre non — le cas mixte.
-                Quand RIEN n'a produit d'opération, la phrase part à
-                l'assistant (bloc ci-dessus) et ce cadre n'a pas lieu d'être :
-                il affichait « Je n'ai pas compris » sur des phrases
-                parfaitement claires, ce que la règle 3 bis interdit.
-            */}
-            {plan?.operations.length && plan.nonCompris.length ? (
-              <div className="rounded-lg border border-card-border bg-muted/40 p-3" data-testid="non-compris">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <AlertTriangle className="h-4 w-4" /> Je n’ai rien tiré de ce passage
-                </div>
-                <ul className="mt-1 space-y-1 text-sm text-muted-foreground">
-                  {plan.nonCompris.map((n, i) => <li key={i}>• {n}</li>)}
-                </ul>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="mt-2"
-                  disabled={demandeAgent}
-                  onClick={() => void demanderAgent(plan.nonCompris.join(' '))}
-                  data-testid="demander-assistant"
-                >
-                  {demandeAgent ? 'L’assistant réfléchit…' : 'Demander à l’assistant'}
-                </Button>
-                {reponseAgent && (
-                  <p className="mt-2 whitespace-pre-wrap text-sm text-foreground" data-testid="reponse-agent">
-                    {reponseAgent}
-                  </p>
-                )}
-              </div>
-            ) : null}
 
             {/* Ticket 4.36 lot C — le jugement se recueille ICI, pendant que la
                 feuille est lue, pas après la validation : c'est le plan qu'on

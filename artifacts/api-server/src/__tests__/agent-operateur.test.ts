@@ -116,3 +116,98 @@ describe("c — aucun montant ne vient du modèle", () => {
     expect(/[a-zA-Z]Cents"\s*:/.test(json), "un paramètre d'outil est en centimes").toBe(false);
   });
 });
+
+
+/*
+ * ── UN PRIX DICTÉ SUR UN DEVIS ───────────────────────────────────────────
+ *
+ * Ouvert le 29/08/2026, après que « Pour le même client, Madame Touré, pour
+ * la réfection du mur pour 1200 euros » se soit perdu : les lignes de devis
+ * ne pouvaient porter AUCUN prix, et « la réfection du mur » n'est dans aucun
+ * catalogue. Le devis restait vide.
+ *
+ * La règle 3 autorise ce cas — l'humain est la seule source du chiffre pour un
+ * ouvrage neuf — MAIS sous condition : le montant doit se retrouver dans la
+ * transcription. Ces gardes tiennent cette condition.
+ */
+describe("le prix dicté d'une ligne de devis", () => {
+  const lignes = (prix?: number) => ({
+    lignes: [{ libelle: "Réfection du mur", ...(prix !== undefined ? { prixUnitaireEuros: prix } : {}) }],
+  });
+  const lignesDe = (op: { champs: Record<string, string | null> }) =>
+    JSON.parse(op.champs["lignesDicteesJson"] ?? "[]") as Array<Record<string, unknown>>;
+
+  test("un montant PRONONCÉ est retenu, en centimes", () => {
+    const op = proposerEcriture(
+      "create_devis",
+      lignes(1200),
+      "Pour Madame Touré, la réfection du mur pour 1200 euros",
+    );
+
+    expect(lignesDe(op)[0]!["prixUnitaireHtCents"]).toBe(120000);
+  });
+
+  /*
+   * LA garde. Un modèle qui invente un chiffre absent de la phrase est arrêté
+   * ici : le champ retombe vide et se réclame à l'écran. Le repli est l'état
+   * sûr — c'est la condition 2 de la règle 3, mot pour mot.
+   */
+  test("un montant ABSENT de la phrase est écarté, jamais nettoyé", () => {
+    const op = proposerEcriture(
+      "create_devis",
+      lignes(1200),
+      "Pour Madame Touré, la réfection du mur",   // aucun chiffre
+    );
+
+    expect(lignesDe(op)[0]!["prixUnitaireHtCents"]).toBeUndefined();
+  });
+
+  test("un montant DIFFÉRENT de celui prononcé est écarté", () => {
+    const op = proposerEcriture(
+      "create_devis",
+      lignes(9900),
+      "Pour Madame Touré, la réfection du mur pour 1200 euros",
+    );
+
+    expect(lignesDe(op)[0]!["prixUnitaireHtCents"]).toBeUndefined();
+  });
+
+  /*
+   * Un forfait n'a pas de quantité. Sans ce défaut à 1, `totalProposition`
+   * compterait la ligne « à compléter » alors qu'elle porte un prix, et
+   * annoncerait un devis moins cher que la réalité — l'erreur qu'on ne peut
+   * pas se permettre sur un prix envoyé à un client.
+   */
+  test("un forfait dicté vaut une unité", () => {
+    const op = proposerEcriture(
+      "create_devis",
+      lignes(1200),
+      "la réfection du mur pour 1200 euros",
+    );
+
+    expect(lignesDe(op)[0]!["quantite"]).toBe(1);
+  });
+
+  test("sans prix dicté, aucune quantité n'est inventée", () => {
+    const op = proposerEcriture("create_devis", lignes(), "la réfection du mur");
+
+    expect(lignesDe(op)[0]!["quantite"]).toBeNull();
+    expect(lignesDe(op)[0]!["prixUnitaireHtCents"]).toBeUndefined();
+  });
+
+  /*
+   * `facturer_devis` reste FERMÉ, et doit le rester : les montants viennent
+   * du devis signé. Facturer autre chose que ce qui a été accepté ne se
+   * rattrape pas.
+   */
+  test("facturer_devis ne porte toujours aucun montant", () => {
+    const op = proposerEcriture(
+      "facturer_devis",
+      { devisId: "dev-1", prixUnitaireEuros: 9900, montantEuros: 9900 },
+      "facture le devis pour 9900 euros",
+    );
+
+    expect(JSON.stringify(op.champs)).not.toMatch(/9900|990000/);
+    expect(Object.keys(op.champs)).toEqual(["devisId"]);
+  });
+});
