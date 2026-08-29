@@ -1,5 +1,7 @@
 import { Router, type IRouter } from "express";
-import { withTenant, affairesTable, facturesTable, prospectsTable } from "@workspace/db";
+import { withTenant, affairesTable, facturesTable, prospectsTable, avoirsTable } from "@workspace/db";
+import { productionVendue } from "@nodaq/shared";
+import { chargerReprise } from "../lib/reprise-ca.js";
 import { GetRapportMensuelQueryParams } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -16,16 +18,36 @@ router.get("/rapports/mensuel", async (req, res): Promise<void> => {
 
   const tenantId = req.tenantId!;
 
-  const { allAffaires, allFactures, allProspects } = await withTenant(tenantId, async (tx) => {
+  const { allAffaires, allFactures, allProspects, allAvoirs, reprise } = await withTenant(tenantId, async (tx) => {
     const allAffaires  = await tx.select().from(affairesTable);
     const allFactures  = await tx.select().from(facturesTable);
     const allProspects = await tx.select().from(prospectsTable);
-    return { allAffaires, allFactures, allProspects };
+    const allAvoirs    = await tx.select().from(avoirsTable);
+    return { allAffaires, allFactures, allProspects, allAvoirs, reprise: await chargerReprise(tx) };
   });
 
   const moisAffaires  = allAffaires.filter(a => { const d = new Date(a.createdAt); return d >= monthStart && d < monthEnd; });
   const facturesMois  = allFactures.filter(f => { const d = new Date(f.issuedDate); return d >= monthStart && d < monthEnd; });
-  const caMois        = facturesMois.reduce((acc, f) => acc + f.amountCents, 0);
+  /*
+   * ── LE CA VIENT DE LA DÉFINITION CANONIQUE, PLUS D'UNE ADDITION LOCALE ────
+   *
+   * Cette ligne additionnait `amountCents` — le TTC — sur TOUTES les factures
+   * du mois, brouillons compris, sans jamais déduire un avoir. Le 29/08/2026,
+   * elle annonçait 22 976,80 € là où le chiffre d'affaires du mois valait
+   * 20 888,00 € : la TVA collectée présentée comme un produit.
+   *
+   * `productionVendue` porte la règle entière — base HT avec repli sur les
+   * lignes reprises, liste blanche de statuts, avoirs déduits en HT, reprise
+   * rattachée au seul exercice qui la contient. Elle est pure et éprouvée.
+   * Le compte de résultat s'en sert déjà ; les deux écrans diront désormais
+   * la même chose, parce qu'ils font le même calcul.
+   */
+  const dernierJour = new Date(year, month, 0).getDate();
+  const caMois = productionVendue(
+    allFactures, allAvoirs, reprise,
+    `${mois}-01`,
+    `${mois}-${String(dernierJour).padStart(2, "0")}`,
+  ).totalCents;
   const facturesEncaissees = facturesMois.filter(f => f.settled).length;
   const nouvellesAffaires  = moisAffaires.length;
 

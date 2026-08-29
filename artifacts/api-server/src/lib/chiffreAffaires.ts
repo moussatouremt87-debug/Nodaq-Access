@@ -60,6 +60,25 @@ export const statutsCaSql: SQL = sql.join(
   sql`, `,
 );
 
+/**
+ * La base HT d'une facture — LA grandeur du chiffre d'affaires.
+ *
+ * Constaté le 29/08/2026 : le Cockpit annonçait 159 822,40 € là où le compte
+ * de résultat, sur exactement les mêmes factures, affichait 136 526,00 €.
+ * L'écart valait 23 296,40 € — la TVA collectée, au centime.
+ *
+ * `amount_cents` est le TTC. La TVA n'est pas un produit : elle est encaissée
+ * pour l'État et reversée. L'inclure gonfle la jauge sur laquelle un patron
+ * décide d'embaucher — et cette jauge s'affiche en gros sur la page d'accueil.
+ *
+ * Le repli sur `amount_cents` quand la base HT vaut 0 reprend `htCents()` de
+ * `productionVendue.ts`, mot pour mot : les factures REPRISES d'un ancien
+ * logiciel n'ont aucune ventilation, et les compter pour zéro effacerait le
+ * passé de l'entreprise. Les deux définitions disent désormais la même chose ;
+ * c'est tout l'objet du correctif.
+ */
+const htFactureSql: SQL = sql`CASE WHEN total_ht_cents > 0 THEN total_ht_cents ELSE amount_cents END`;
+
 function bornes(colonne: SQL, p: PeriodeCa): SQL {
   const haute =
     p.finExclue != null ? sql` AND ${colonne} < ${p.finExclue}::date` : sql``;
@@ -79,9 +98,9 @@ export function conditionFactureCa(p: PeriodeCa): SQL {
  */
 export function caNetCentsSql(p: PeriodeCa): SQL<number> {
   return sql<number>`(
-    (SELECT coalesce(sum(amount_cents), 0) FROM factures WHERE ${conditionFactureCa(p)})
+    (SELECT coalesce(sum(${htFactureSql}), 0) FROM factures WHERE ${conditionFactureCa(p)})
     -
-    (SELECT coalesce(sum(montant_ht_cents + montant_tva_cents), 0) FROM avoirs
+    (SELECT coalesce(sum(montant_ht_cents), 0) FROM avoirs
       WHERE ${bornes(sql`issued_date`, p)})
   )::float`;
 }
