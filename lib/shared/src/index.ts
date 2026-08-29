@@ -190,6 +190,7 @@ export * from "./perimetreSante.js";
 export * from "./attestationSap.js";
 export * from "./glossaire.js";
 export * from "./relanceCommerciale.js";
+export * from "./relanceFacture.js";
 export * from "./intentionVocale.js";
 export * from "./montantDicte.js";
 export * from "./tempsGagne.js";
