@@ -18,13 +18,18 @@
  *
  * La règle correcte, uniforme sur les avoirs partiels comme totaux :
  *
- *   CA d'une période = somme des `amount_cents` des factures dont le statut est
+ *   CA d'une période = somme des bases HT des factures dont le statut est
  *   EMISE, PAYEE ou ANNULEE_PAR_AVOIR et dont la date d'émission tombe dans la
- *   période, MOINS la somme des avoirs (HT + TVA) émis sur la même période.
+ *   période, MOINS la somme des montants HT des avoirs émis sur la même période.
  *
  * Une facture totalement annulée est donc INCLUSE, puis annulée par son avoir :
- * solde nul, sans double comptage. Un avoir partiel diminue le CA du montant de
- * l'avoir, ce qui est exact puisque `amount_cents` n'est pas retouché.
+ * solde nul, sans double comptage. Un avoir partiel diminue le CA de son montant
+ * HT, ce qui est exact puisque la facture n'est pas retouchée.
+ *
+ * HT DES DEUX CÔTÉS, et c'est le correctif du 29/08/2026. Ce paragraphe disait
+ * `amount_cents` — le TTC — et « avoirs (HT + TVA) ». C'était cohérent avec
+ * lui-même, mais le compte de résultat, lui, sommait le HT : le Cockpit
+ * annonçait 159 822,40 € contre 136 526,00 €, soit la TVA collectée en trop.
  * ─────────────────────────────────────────────────────────────────────────────
  *
  * POURQUOI UNE LISTE BLANCHE et non une exclusion de `BROUILLON` : un statut
