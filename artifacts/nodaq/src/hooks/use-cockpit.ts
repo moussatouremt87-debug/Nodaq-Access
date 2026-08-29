@@ -86,15 +86,43 @@ export function useApproveAction() {
               ...(gagne ? { description: `≈ ${gagne} de saisie évitée` } : {}),
             });
           },
-          onError: () => {
+          /*
+             Le serveur DIT pourquoi. On le relayait pas : ce `onError`
+             ignorait sa réponse et affichait une phrase creuse, alors que le
+             motif — « ce plan a expiré », « aucune facture en retard à
+             relancer » — arrivait dans le corps. Deux occasions manquées de
+             renseigner l'utilisateur, l'une côté serveur (corrigée), l'autre
+             ici.
+          */
+          onError: (err: unknown) => {
             toast({
               title: "Impossible d'approuver cette action",
+              description: motifServeur(err),
               variant: 'destructive',
             });
           },
         },
       ),
   };
+}
+
+/**
+ * Le motif rédigé par le serveur, ou rien.
+ *
+ * `apiFetch` rejette avec le CORPS de la réponse en message. Quand le serveur
+ * a pris la peine d'expliquer, c'est cette phrase qu'il faut montrer — pas un
+ * repli générique qui la recouvrirait. Un corps illisible (réseau coupé) rend
+ * `undefined` : le titre seul s'affiche alors, ce qui reste honnête.
+ */
+function motifServeur(err: unknown): string | undefined {
+  const brut = err instanceof Error ? err.message : '';
+  try {
+    const corps = JSON.parse(brut) as { error?: unknown };
+    if (typeof corps.error === 'string' && corps.error.trim().length > 0) return corps.error;
+  } catch {
+    // Pas du JSON : ce n'est pas le serveur qui a parlé.
+  }
+  return undefined;
 }
 
 export function useRejectAction() {

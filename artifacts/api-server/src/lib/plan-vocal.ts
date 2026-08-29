@@ -857,6 +857,70 @@ export function appliquerCorrections(
   return { operations: sortie, refuses };
 }
 
+/**
+ * Levée à la toute fin d'une SIMULATION, pour annuler la transaction.
+ *
+ * Ce n'est pas une erreur : c'est le signal que tout a fonctionné. Le nom le
+ * dit, parce qu'un `catch` qui la traiterait comme un échec inverserait le
+ * sens du résultat.
+ */
+export class SimulationReussie extends Error {
+  constructor(readonly nbOperations: number) {
+    super("simulation réussie");
+    this.name = "SimulationReussie";
+  }
+}
+
+/**
+ * Ce plan s'appliquerait-il, MAINTENANT ?
+ *
+ * ── POURQUOI PASSER PAR `executerPlan` PLUTÔT QUE DE REFAIRE LES TESTS ──────
+ * Le Cockpit proposait « Approuver » sur des plans devenus inapplicables, et
+ * l'échec ne se découvrait qu'au clic — sur un message qui ne disait rien.
+ * La tentation est d'écrire ici une seconde série de vérifications.
+ *
+ * Ce serait la quatrième fois dans ce projet qu'un même métier est écrit deux
+ * fois : deux agents, deux calculs de date, deux notions de « facturé ». À
+ * chaque fois, les deux implémentations ont divergé et l'une a menti. Ici, le
+ * mensonge serait un bouton « Approuver » sur un plan que la validation
+ * refuse — soit exactement le défaut qu'on prétend corriger.
+ *
+ * On exécute donc le VRAI chemin, et l'on annule. PostgreSQL défait tout : la
+ * réservation du plan, le journal des décisions, chaque écriture. Ce qui
+ * revient est la réponse exacte de la validation, à la seconde près.
+ */
+export async function planApplicable(
+  tenantId: string,
+  planId: string,
+): Promise<{ applicable: true } | { applicable: false; motif: string }> {
+  try {
+    const r = await executerPlan(tenantId, planId, undefined, undefined, { simulation: true });
+    // Un `kind` non-`ok` est un refus MOTIVÉ : il ne lève pas, il se rend.
+    return { applicable: false, motif: motifRefus(r) };
+  } catch (err) {
+    if (err instanceof SimulationReussie) return { applicable: true };
+    // Une écriture a refusé. Son message est rédigé pour être lu — c'est la
+    // même phrase que verrait l'utilisateur en cliquant.
+    return {
+      applicable: false,
+      motif: err instanceof Error ? err.message : "Cette action ne peut pas être appliquée.",
+    };
+  }
+}
+
+/** Le refus, en français, pour chaque `kind` que `executerPlan` sait rendre. */
+function motifRefus(r: ResultatExecution): string {
+  switch (r.kind) {
+    case "introuvable": return "Ce plan n'existe plus.";
+    case "deja_applique": return "Ce plan a déjà été appliqué.";
+    case "expire": return "Ce plan a expiré. Redictez votre phrase — vos données ont pu changer entre-temps.";
+    case "correction_refusee": return `Correction non autorisée sur : ${r.champs.join(", ")}.`;
+    case "champ_manquant": return `Il manque : ${r.champs.join(", ")}.`;
+    // `ok` ne peut pas arriver en simulation : `SimulationReussie` a levé.
+    default: return "Cette action ne peut pas être appliquée.";
+  }
+}
+
 export async function executerPlan(
   tenantId: string,
   planId: string,
@@ -866,6 +930,11 @@ export async function executerPlan(
   decideur?: { userId: string; email: string },
   /** Corrections saisies à l'écran de validation, déjà filtrées ou non. */
   corrections?: CorrectionsPlan,
+  /**
+   * `simulation` : tout est exécuté, puis ANNULÉ. Sert à savoir si le plan
+   * s'appliquerait sans rien écrire — voir `planApplicable`.
+   */
+  options?: { readonly simulation?: boolean },
 ): Promise<ResultatExecution> {
   return withTenant(tenantId, async (tx) => {
     const [ligne] = await tx
@@ -928,6 +997,17 @@ export async function executerPlan(
     for (const op of operations) {
       await executerOperation(tx, tenantId, op, decideur?.email);
     }
+
+    /*
+     * En simulation, on lève ICI — après que TOUT a réussi. La transaction
+     * est annulée : réservation du plan, journal des décisions, écritures.
+     * Rien ne subsiste, et l'appelant sait que le plan s'appliquerait.
+     *
+     * Lever est le seul moyen d'annuler une transaction Drizzle depuis
+     * l'intérieur. Le nom de l'exception dit qu'il s'agit d'un SUCCÈS, pour
+     * qu'aucun `catch` ne l'interprète à l'envers.
+     */
+    if (options?.simulation) throw new SimulationReussie(operations.length);
 
     return { kind: "ok" as const, nbOperations: operations.length };
   });

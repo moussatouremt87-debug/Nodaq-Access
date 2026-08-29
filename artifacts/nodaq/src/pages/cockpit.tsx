@@ -596,13 +596,35 @@ export default function Cockpit() {
                         {action.type === 'call_dunning' && (
                           <PanneauMandat pendingActionId={action.id} />
                         )}
+                        {/*
+                            UN PLAN DEVENU INAPPLICABLE LE DIT, AVANT LE CLIC.
+
+                            Le serveur simule l'exécution en la annulant, et
+                            rend le motif exact : plan expiré, cible disparue,
+                            campagne sans personne à appeler. On l'affiche, et
+                            on grise « Approuver » — un bouton actif qui échoue
+                            systématiquement est une impasse (règle 3 bis).
+
+                            « Rejeter » reste ACTIF : c'est justement ce qu'il
+                            faut pouvoir faire d'une action qui ne passera
+                            jamais, sinon elle encombre la file jusqu'à son
+                            expiration.
+                        */}
+                        {action.applicable === false && (
+                          <p
+                            className="rounded-md border border-amber-500/40 bg-amber-500/5 px-2 py-1.5 text-xs text-muted-foreground"
+                            data-testid={`non-applicable-${action.id}`}
+                          >
+                            {action.motifNonApplicable ?? "Cette action ne peut plus être appliquée."}
+                          </p>
+                        )}
                         <div className="flex items-center gap-2 pt-1">
                           <motion.div whileTap={{ scale: 0.94 }}>
                             <Button
                               size="sm"
                               variant="default"
                               className="h-7 px-2.5 text-xs gap-1 bg-primary"
-                              disabled={approving || rejecting}
+                              disabled={approving || rejecting || action.applicable === false}
                               onClick={() => approve(action.id)}
                               data-testid={`button-approve-${action.id}`}
                             >

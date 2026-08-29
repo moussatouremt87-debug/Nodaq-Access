@@ -6,7 +6,7 @@ import {
   ApprovePendingActionParams,
   RejectPendingActionParams,
 } from "@workspace/api-zod";
-import { executerPlan, TYPE_PLAN } from "../lib/plan-vocal.js";
+import { executerPlan, planApplicable, TYPE_PLAN } from "../lib/plan-vocal.js";
 import { executerRelanceDevis, TYPE_RELANCE_DEVIS } from "../lib/executer-relance-devis.js";
 import { logger } from "../lib/logger.js";
 
@@ -17,7 +17,38 @@ router.get("/pending-actions", async (req, res): Promise<void> => {
   const actions = await withTenant(tenantId, async (tx) =>
     tx.select().from(pendingActionsTable).orderBy(desc(pendingActionsTable.createdAt))
   );
-  res.json(actions);
+  /*
+   * ── NE PAS PROPOSER UN BOUTON QUI VA ÉCHOUER ────────────────────────────
+   * Le Cockpit affichait « Approuver » sur tout plan en attente. Un plan
+   * devenu inapplicable — expiré, cible disparue, facture entre-temps payée,
+   * campagne de relance sans personne à appeler — ne se révélait qu'AU CLIC,
+   * derrière « Impossible d'approuver cette action ».
+   *
+   * L'applicabilité est donc calculée par une SIMULATION : le vrai chemin
+   * d'exécution, joué puis annulé (voir `planApplicable`). Pas une seconde
+   * série de vérifications, qui finirait par diverger et annoncerait
+   * « approuvable » ce que la validation refuse.
+   *
+   * Le coût est une transaction annulée par action affichée. Il est assumé :
+   * la file d'attente d'un artisan compte quelques lignes, et un bouton qui
+   * ment coûte plus cher qu'une transaction.
+   *
+   * Seuls les PLANS sont simulés. Les autres actions en attente suivent leur
+   * propre chemin d'approbation, que cette route ne connaît pas.
+   */
+  const enrichies = await Promise.all(
+    actions.map(async (a) => {
+      if (a.type !== TYPE_PLAN) return { ...a, applicable: true, motifNonApplicable: null };
+      const r = await planApplicable(tenantId, a.id);
+      return {
+        ...a,
+        applicable: r.applicable,
+        motifNonApplicable: r.applicable ? null : r.motif,
+      };
+    }),
+  );
+
+  res.json(enrichies);
 });
 
 router.post("/pending-actions/:id/approve", async (req, res): Promise<void> => {
@@ -50,7 +81,14 @@ router.post("/pending-actions/:id/approve", async (req, res): Promise<void> => {
         "[pending-actions] exécution impossible",
       );
       res.status(409).json({
-        error: "Une des opérations n'a pas pu être appliquée. Rien n'a été enregistré.",
+        // Même correction que sur `/voix/executer` : la cause était connue au
+        // mot près et jetée ici. Les refus levés par `executerPlan` sont
+        // rédigés pour être lus ; une erreur inattendue ne l'est pas et reste
+        // au journal.
+        error:
+          err instanceof Error && err.name === "Error"
+            ? `${err.message}. Rien n'a été enregistré.`
+            : "Une des opérations n'a pas pu être appliquée. Rien n'a été enregistré.",
       });
       return;
     }

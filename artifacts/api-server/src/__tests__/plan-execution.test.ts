@@ -345,3 +345,83 @@ describe("f — la relance téléphonique passe par l'agent", () => {
     expect(body.message.content).toMatch(/1 facture/);
   });
 });
+
+
+/*
+ * ── NE PAS PROPOSER UN BOUTON QUI VA ÉCHOUER ─────────────────────────────
+ *
+ * Constaté le 29/08/2026 : le Cockpit affichait « Approuver » sur un plan de
+ * relance sans appel. Le clic rendait « Impossible d'approuver cette action »
+ * — la cause exacte étant jetée deux fois, côté serveur puis côté écran.
+ *
+ * L'applicabilité est calculée par SIMULATION : le vrai chemin d'exécution,
+ * joué puis annulé. Pas une seconde série de vérifications — ce serait la
+ * quatrième fois dans ce projet qu'un même métier est écrit deux fois, et à
+ * chaque fois les deux implémentations ont divergé.
+ */
+describe("h — l'applicabilité d'un plan, sans rien écrire", () => {
+  const lister = (l: Locataire) =>
+    request(serveurTest(app)).get("/api/pending-actions").set("Cookie", l.cookie).expect(200);
+
+  test("un plan sain est applicable, ET n'a rien écrit pour le dire", async () => {
+    const planId = await poser(a, [creerAffaire("Simulation Dupont")]);
+
+    const { body } = await lister(a);
+    const action = body.find((x: { id: string }) => x.id === planId);
+    expect(action.applicable).toBe(true);
+    expect(action.motifNonApplicable).toBeNull();
+
+    // LA garde de la simulation : la transaction a été ANNULÉE. Sans le
+    // rollback, l'affaire existerait et le plan serait marqué appliqué.
+    expect(await compterAffaires(a, "Simulation Dupont")).toBe(0);
+    const { rows } = await adminPool.query(
+      "SELECT execute_le FROM pending_actions WHERE id = $1", [planId],
+    );
+    expect(rows[0].execute_le).toBeNull();
+  });
+
+  test("un plan expiré n'est pas applicable, et le motif le dit", async () => {
+    const planId = await poser(a, [creerAffaire("Simulation périmée")]);
+    await adminPool.query(
+      `UPDATE pending_actions SET expire_le = NOW() - interval '1 minute' WHERE id = $1`, [planId],
+    );
+
+    const { body } = await lister(a);
+    const action = body.find((x: { id: string }) => x.id === planId);
+    expect(action.applicable).toBe(false);
+    expect(action.motifNonApplicable).toMatch(/expir/i);
+  });
+
+  /*
+   * Le cas RÉEL qui a déclenché ce lot : une cible disparue entre la
+   * proposition et la validation. Le Cockpit ne doit plus offrir le bouton.
+   */
+  test("une cible disparue rend le plan inapplicable, avec sa raison", async () => {
+    const planId = await poser(a, [{
+      type: "creer_echeance",
+      libelle: "Échéance sur une affaire disparue",
+      champs: { label: "Fantôme simulé", affaireId: crypto.randomUUID(), dueDate: "2026-12-01" },
+      certitude: "aucune_resolution",
+      aCompleter: [],
+    }]);
+
+    const { body } = await lister(a);
+    const action = body.find((x: { id: string }) => x.id === planId);
+    expect(action.applicable).toBe(false);
+    expect(typeof action.motifNonApplicable).toBe("string");
+    expect(action.motifNonApplicable.length).toBeGreaterThan(0);
+  });
+
+  /*
+   * Une simulation ne doit pas empêcher la VRAIE exécution ensuite : si le
+   * rollback laissait le plan marqué, l'artisan verrait « déjà appliqué »
+   * sur un plan qu'il n'a jamais validé.
+   */
+  test("après une simulation, le plan s'applique toujours pour de vrai", async () => {
+    const planId = await poser(a, [creerAffaire("Après simulation")]);
+    await lister(a);                              // simule
+    await executer(a, planId).expect(200);        // puis applique
+
+    expect(await compterAffaires(a, "Après simulation")).toBe(1);
+  });
+});

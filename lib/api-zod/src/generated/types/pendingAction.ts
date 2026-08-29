@@ -23,4 +23,11 @@ export interface PendingAction {
   createdAt: Date;
   /** @nullable */
   decidedAt?: Date | null;
+  /** Ce plan s'appliquerait-il maintenant ? Calculé par une SIMULATION — le vrai chemin d'exécution, joué puis annulé — et non par une seconde série de vérifications qui finirait par diverger. Faux quand le plan a expiré, que sa cible a disparu, ou qu'il n'a plus d'objet. L'écran grise alors « Approuver » : un bouton actif qui échoue systématiquement est une impasse. */
+  applicable?: boolean;
+  /**
+     * La raison, rédigée pour être lue. Renseignée uniquement quand `applicable` est faux.
+     * @nullable
+     */
+  motifNonApplicable?: string | null;
 }
