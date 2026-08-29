@@ -20,24 +20,16 @@ import { MicroFlottant } from './micro-flottant';
 
 const executions: Array<{ url: string; corps: unknown }> = [];
 
-/** Le plan que le serveur renverra au prochain appel. Modifiable par test. */
-let planCourant: unknown;
-
 /** Ce que l'utilisateur dicte. Modifiable par test. */
 let phraseDictee = 'ajoute au catalogue la pose de placo';
 
 /** Ce que l'assistant répondra sur /chat/messages. Modifiable par test. */
-let reponseChat: { statut: number; corps: unknown } = {
-  statut: 200,
-  corps: {
-    conversationId: 'conv-1',
-    message: { content: 'Oui — nodaq établit et envoie vos factures.' },
-    actions_proposees: [],
-  },
-};
+let reponseChat: { statut: number; corps: unknown };
 
-/** Le plan que le serveur renvoie pour « ajoute au catalogue la pose de placo ». */
+/** Ce que l'AGENT répond pour « ajoute au catalogue la pose de placo ». */
 const PLAN_CATALOGUE = {
+  conversationId: 'conv-1',
+  message: { content: 'Je vous propose d’ajouter cet article. Le prix reste à saisir.' },
   planId: 'plan-1',
   operations: [
     {
@@ -48,25 +40,21 @@ const PLAN_CATALOGUE = {
       aCompleter: ['prixUnitaireHtCents'],
     },
   ],
-  questions: [],
-  nonCompris: [],
 };
 
 vi.mock('@/lib/auth', () => ({
   apiFetch: vi.fn(async (url: string, init?: RequestInit) => {
     const corps = init?.body ? JSON.parse(init.body as string) : null;
     executions.push({ url, corps });
-    if (url.includes('/chat/messages')) {
-      return new Response(JSON.stringify(reponseChat.corps), {
-        status: reponseChat.statut,
+    if (url.includes('/voix/executer')) {
+      return new Response(JSON.stringify({ applique: true, nbOperations: 1 }), {
+        status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
     }
-    const charge = url.includes('/voix/executer')
-      ? { applique: true, nbOperations: 1 }
-      : planCourant;
-    return new Response(JSON.stringify(charge), {
-      status: 200,
+    // Tout le reste passe par l'agent : c'est désormais le SEUL chemin.
+    return new Response(JSON.stringify(reponseChat.corps), {
+      status: reponseChat.statut,
       headers: { 'Content-Type': 'application/json' },
     });
   }),
@@ -91,17 +79,9 @@ vi.mock('@/hooks/use-dictee', () => ({
 // `window.location.reload` est appelé après une validation réussie.
 beforeEach(() => {
   executions.length = 0;
-  planCourant = PLAN_CATALOGUE;
   phraseDictee = 'ajoute au catalogue la pose de placo';
   localStorage.clear();
-  reponseChat = {
-    statut: 200,
-    corps: {
-      conversationId: 'conv-1',
-      message: { content: 'Oui — nodaq établit et envoie vos factures.' },
-      actions_proposees: [],
-    },
-  };
+  reponseChat = { statut: 200, corps: PLAN_CATALOGUE };
   Object.defineProperty(window, 'location', {
     configurable: true,
     value: { ...window.location, reload: vi.fn() },
@@ -182,18 +162,21 @@ describe('d — un plan d’avant le lot 4 continue de fonctionner', () => {
     // Les plans vivent une heure en base : un plan construit AVANT ce lot est
     // relu après son déploiement. L'absence du champ ne doit pas bloquer sa
     // validation — sans quoi la mise en production gèlerait les plans en vol.
-    planCourant = {
-      planId: 'plan-ancien',
-      operations: [
-        {
-          type: 'creer_affaire',
-          libelle: "Créer l'affaire « Carrelage Dupont »",
-          certitude: 'aucune_resolution',
-          champs: { label: 'Carrelage Dupont', ville: 'Rouen' },
-        },
-      ],
-      questions: [],
-      nonCompris: [],
+    reponseChat = {
+      statut: 200,
+      corps: {
+        conversationId: 'conv-1',
+        message: { content: "Je crée l'affaire « Carrelage Dupont »." },
+        planId: 'plan-ancien',
+        operations: [
+          {
+            type: 'creer_affaire',
+            libelle: "Créer l'affaire « Carrelage Dupont »",
+            certitude: 'aucune_resolution',
+            champs: { label: 'Carrelage Dupont', ville: 'Rouen' },
+          },
+        ],
+      },
     };
 
     await ouvrirLePlan();
@@ -218,11 +201,16 @@ describe('d — un plan d’avant le lot 4 continue de fonctionner', () => {
  * règle 3 bis : un garde-fou écrit pour un extracteur finit par attraper le
  * cœur du métier dès qu'on parle normalement.
  */
-const PLAN_SANS_OPERATION = { planId: null, operations: [], questions: [], nonCompris: ["Est-ce que l'outil fonctionne pour envoyer des factures ?"] };
+const REPONSE_SANS_OPERATION = {
+  conversationId: 'conv-1',
+  message: { content: 'Oui — nodaq établit et envoie vos factures.' },
+  planId: null,
+  operations: [],
+};
 
 describe('une question dictée reçoit une RÉPONSE, pas un constat d’échec', () => {
   async function dicterUneQuestion() {
-    planCourant = PLAN_SANS_OPERATION;
+    reponseChat = { statut: 200, corps: REPONSE_SANS_OPERATION };
     phraseDictee = "Est-ce que l'outil fonctionne pour envoyer des factures ?";
     render(<MicroFlottant />);
     fireEvent.pointerDown(screen.getByTestId('bouton-micro-flottant'));
@@ -277,7 +265,6 @@ describe('une question dictée reçoit une RÉPONSE, pas un constat d’échec',
    */
   test('un assistant indisponible est annoncé comme tel', async () => {
     reponseChat = { statut: 503, corps: { error: "L'assistant n'est pas configuré sur ce déploiement." } };
-    planCourant = PLAN_SANS_OPERATION;
     phraseDictee = "Est-ce que l'outil fonctionne pour envoyer des factures ?";
     render(<MicroFlottant />);
     fireEvent.pointerDown(screen.getByTestId('bouton-micro-flottant'));
@@ -288,32 +275,86 @@ describe('une question dictée reçoit une RÉPONSE, pas un constat d’échec',
   });
 });
 
-describe('le cas MIXTE — une action et un reste', () => {
-  const PLAN_MIXTE = {
-    ...PLAN_CATALOGUE,
-    nonCompris: ['et est-ce que je peux envoyer une facture ensuite ?'],
+
+
+/*
+ * ── UN SEUL AGENT ────────────────────────────────────────────────────────
+ *
+ * Le micro tapait sur `/voix/interpreter`, un extracteur d'intentions écrit à
+ * côté de l'agent de discussion : sans mémoire, sans outils. Le 29/08/2026,
+ * « Pour le même client, Madame Touré, pour la réfection du mur pour 1200
+ * euros » n'a rien produit — une phrase de SUITE, adressée à un système qui
+ * n'avait aucun passé.
+ *
+ * Ces gardes empêchent de revenir à deux implémentations du même métier.
+ */
+describe('le micro parle à l’agent, pas à un extracteur', () => {
+  test('la dictée part sur /chat/messages, jamais sur /voix/interpreter', async () => {
+    await ouvrirLePlan();
+
+    expect(executions.some((e) => e.url.includes('/chat/messages'))).toBe(true);
+    // LA garde : le retour à l'extracteur sans mémoire.
+    expect(executions.some((e) => e.url.includes('/voix/interpreter'))).toBe(false);
+  });
+
+  /*
+   * « Pour le même client » ne veut rien dire sans le tour précédent. C'est
+   * la conversation partagée qui donne un sens à une phrase elliptique.
+   */
+  test('la conversation en cours est transmise, pour que « le même client » désigne quelqu’un', async () => {
+    localStorage.setItem('nodaq.chat.conversationId', 'conv-en-cours');
+    phraseDictee = 'Pour le même client, Madame Touré, pour la réfection du mur pour 1200 euros';
+    await ouvrirLePlan();
+
+    const versAgent = executions.find((e) => e.url.includes('/chat/messages'))!;
+    const corps = versAgent.corps as { content: string; conversationId: string };
+    expect(corps.conversationId).toBe('conv-en-cours');
+    expect(corps.content).toBe(
+      'Pour le même client, Madame Touré, pour la réfection du mur pour 1200 euros',
+    );
+  });
+
+  test('la réponse de l’agent s’affiche MÊME quand il propose des écritures', async () => {
+    await ouvrirLePlan();
+
+    // L'ancien panneau ne rendait qu'un verdict d'extracteur : soit des
+    // opérations, soit un aveu d'échec. Jamais une phrase.
+    expect(screen.getByTestId('reponse-agent')).toHaveTextContent(/Je vous propose/);
+    expect(screen.getByTestId('liste-operations')).toBeInTheDocument();
+  });
+});
+
+/*
+ * Ce que le fondateur a demandé, mot pour mot : que l'agent vocal fasse des
+ * devis et des factures. L'outil existait côté agent (`create_devis`,
+ * `create_facture`) — c'est le micro qui ne lui parlait pas.
+ */
+describe('dicter un devis', () => {
+  const DEVIS = {
+    conversationId: 'conv-1',
+    message: { content: 'Je prépare le devis pour Madame Touré : réfection du mur, 1 200 € HT.' },
+    planId: 'plan-devis',
+    operations: [
+      {
+        type: 'creer_devis',
+        libelle: 'Devis « Réfection du mur » — Madame Touré — 1 200 € HT',
+        certitude: 'resolu',
+        champs: { client: 'Madame Touré', objet: 'Réfection du mur', totalHtCents: '120000' },
+      },
+    ],
   };
 
-  test('l’action reste à valider, et le reste peut être posé à l’assistant', async () => {
-    planCourant = PLAN_MIXTE;
-    render(<MicroFlottant />);
-    fireEvent.pointerDown(screen.getByTestId('bouton-micro-flottant'));
+  test('le devis proposé est montré, puis appliqué par le magasin de plans commun', async () => {
+    reponseChat = { statut: 200, corps: DEVIS };
+    phraseDictee = 'Pour le même client, Madame Touré, pour la réfection du mur pour 1200 euros';
+    await ouvrirLePlan();
 
-    await waitFor(() => expect(screen.getByTestId('liste-operations')).toBeInTheDocument());
-    const reste = screen.getByTestId('non-compris');
-    // Le mot « incompris » a disparu : c'est un RESTE, pas un échec.
-    expect(reste.textContent ?? '').not.toMatch(/Je n.ai pas compris/);
+    expect(screen.getByTestId('liste-operations')).toHaveTextContent(/Réfection du mur/);
+    await userEvent.click(screen.getByTestId('bouton-valider-plan'));
 
-    // Rien n'est parti tout seul : une phrase qui porte une action reste
-    // sous contrôle de l'utilisateur.
-    expect(executions.some((e) => e.url.includes('/chat/messages'))).toBe(false);
-
-    await userEvent.click(screen.getByTestId('demander-assistant'));
-    await waitFor(() => expect(screen.getByTestId('reponse-agent')).toBeInTheDocument());
-
-    const versChat = executions.find((e) => e.url.includes('/chat/messages'))!;
-    expect((versChat.corps as { content: string }).content).toBe(
-      'et est-ce que je peux envoyer une facture ensuite ?',
-    );
+    // `/voix/executer` applique le plan SANS savoir quel chemin l'a produit :
+    // c'est le même magasin, donc la règle 4 tient sans rien réécrire.
+    const exec = executions.find((e) => e.url.includes('/voix/executer'))!;
+    expect((exec.corps as { planId: string }).planId).toBe('plan-devis');
   });
 });
