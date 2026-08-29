@@ -244,7 +244,12 @@ async function calcHorizonTravail(
   const [carnet] = execRows<{ nb_affaires: number; total_carnet_ht: number }>(await tx.execute(sql`
     SELECT
       count(*)::int                              AS nb_affaires,
-      coalesce(sum(montant_vendu_ht), 0)::float  AS total_carnet_ht
+      -- montant_vendu_ht est en CENTIMES, malgre son nom. C'est la seule
+      -- colonne monetaire du schema dont le nom ne le dit pas : partout
+      -- ailleurs le suffixe _cents l'annonce. Elle a ete lue comme des euros
+      -- a CINQ endroits de ce fichier, dont un qui annoncait un carnet de
+      -- commandes cent fois trop eleve. On convertit ici, explicitement.
+      coalesce(sum(montant_vendu_ht), 0)::float / 100  AS total_carnet_ht
     FROM affaires
     WHERE status NOT IN ('TERMINE', 'ANNULE', 'PERDU')
       AND montant_vendu_ht IS NOT NULL
@@ -387,7 +392,9 @@ async function calcMargePour100(
   }>(await tx.execute(sql`
     SELECT
       id,
-      coalesce(montant_vendu_ht * 100, quoted_amount_cents) AS quoted_cents,
+      -- PAS de multiplication par 100 : la colonne est DEJA en centimes.
+      -- Le facteur rendait cet ecart cent fois trop grand.
+      coalesce(montant_vendu_ht, quoted_amount_cents)        AS quoted_cents,
       invoiced_amount_cents                                 AS invoiced_cents
     FROM affaires
     WHERE completed_at IS NOT NULL
@@ -645,7 +652,12 @@ async function calcCarnetCommandes(
   const [res] = execRows<{ nb_affaires: number; carnet_ht: number; deja_facture_ht: number }>(await tx.execute(sql`
     SELECT
       count(*)::int                               AS nb_affaires,
-      coalesce(sum(a.montant_vendu_ht), 0)::float AS carnet_ht,
+      -- montant_vendu_ht est en CENTIMES, malgre son nom. C'est la seule
+      -- colonne monetaire du schema dont le nom ne le dit pas : partout
+      -- ailleurs le suffixe _cents l'annonce. Elle a ete lue comme des euros
+      -- a CINQ endroits de ce fichier, dont un qui annoncait un carnet de
+      -- commandes cent fois trop eleve. On convertit ici, explicitement.
+      coalesce(sum(a.montant_vendu_ht), 0)::float / 100 AS carnet_ht,
       coalesce(
         (
           SELECT sum(f2.total_ht_cents)::float / 100
@@ -757,7 +769,8 @@ async function calcMontantMoyenAffaire(
   const [res] = execRows<{ nb_affaires: number; moyen_cents: number }>(await tx.execute(sql`
     SELECT
       count(*)::int                                     AS nb_affaires,
-      round(avg(montant_vendu_ht) * 100)::int           AS moyen_cents
+      -- PAS de multiplication par 100 : la colonne est deja en centimes.
+      round(avg(montant_vendu_ht))::int                 AS moyen_cents
     FROM affaires
     WHERE created_at BETWEEN ${periode.debut.toISOString()}::timestamptz
                          AND ${periode.fin.toISOString()}::timestamptz
@@ -872,7 +885,7 @@ async function calcEcartDeviseRealise(
     SELECT
       date_fin_prevue::date                                    AS prevue,
       completed_at::date                                       AS realisee,
-      coalesce(montant_vendu_ht, 0)                            AS devis_ht,
+      coalesce(montant_vendu_ht, 0) / 100.0                    AS devis_ht,
       coalesce(invoiced_amount_cents, 0) / 100.0               AS realise_ht
     FROM affaires
     WHERE completed_at IS NOT NULL
