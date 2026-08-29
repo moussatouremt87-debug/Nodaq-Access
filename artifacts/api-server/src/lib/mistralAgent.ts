@@ -28,6 +28,7 @@ import {
   facturesTable,
   clientsTable,
   catalogueLignesTable,
+  catalogueAliasTable,
 } from "@workspace/db";
 import { eq, desc, asc, sql, and, lte } from "drizzle-orm";
 import {
@@ -43,6 +44,7 @@ import { affaireWords, estSecretProfessionnel, inactiveModuleTools, champsManqua
 import { modulesDuTenant } from "./modules-tenant.js";
 import { verticalDepuisTx, verticalDuTenant, vocabulaireAssistant } from "./vertical-tenant.js";
 import { conditionFactureEnRetardSql } from "./facturesEnRetard.js";
+import { rapprocherDictee, totalProposition } from "@nodaq/shared";
 import { montantsNonSources, MESSAGE_REFUS_CHIFFRAGE } from "./garde-montants.js";
 import { logger } from "./logger.js";
 
@@ -1196,6 +1198,42 @@ async function impayesJoignables(tenantId: string): Promise<{
   });
 }
 
+/**
+ * Chiffre des lignes dictées comme le fera l'exécution — pour l'ANNONCER.
+ *
+ * ── POURQUOI CE CALCUL A LIEU DEUX FOIS ─────────────────────────────────────
+ * Le panneau de validation annonçait « Créer un devis de 1 ligne(s) ». Sans
+ * montant. L'artisan validait à l'aveugle un document qui part chez son
+ * client — alors que toute la doctrine du dépôt tient dans « on valide ce
+ * qu'on voit » (règle 4).
+ *
+ * Le chiffrage définitif reste celui d'`executerPlan`, qui relit le catalogue
+ * DANS la transaction : c'est lui qui fait foi, et lui seul écrit. Ce
+ * calcul-ci ne sert qu'à dire, avant d'écrire, ce qui va être écrit. Les deux
+ * passent par le MÊME `rapprocherDictee` : un second algorithme de prix
+ * finirait par diverger, et le panneau annoncerait alors autre chose que le
+ * document produit.
+ */
+async function chiffrerLignesDictees(
+  tenantId: string,
+  dictees: readonly { libelle: string; quantite: number | null; unite: string | null; prixUnitaireHtCents?: number | null }[],
+): Promise<{ totalHtCents: number; lignesChiffrees: number; lignesACompleter: number }> {
+  return withTenant(tenantId, async (tx) => {
+    const catalogue = await tx.select().from(catalogueLignesTable).where(eq(catalogueLignesTable.actif, true));
+    const alias = await tx.select().from(catalogueAliasTable);
+    const proposees = rapprocherDictee(
+      dictees,
+      catalogue.map((c) => ({
+        id: c.id, libelle: c.libelle, unite: c.unite,
+        prixUnitaireHtCents: c.prixUnitaireHtCents, tauxTva: c.tauxTva,
+        motsCles: c.motsCles ?? [],
+      })),
+      new Map(alias.map((a) => [a.aliasNormalise, a.catalogueLigneId])),
+    );
+    return totalProposition(proposees);
+  });
+}
+
 async function executeTool(
   tenantId: string,
   name: string,
@@ -1250,6 +1288,41 @@ async function executeTool(
         certitude: "aucune_resolution",
         aCompleter: [],
       },
+    };
+  }
+
+  /*
+   * ── UN DEVIS QU'ON VALIDE SANS VOIR SON MONTANT N'EST PAS VALIDÉ ─────────
+   * Le panneau annonçait « Créer un devis de 1 ligne(s) ». L'artisan cliquait
+   * sur un document destiné à son client sans en connaître le total.
+   *
+   * Le chiffrage a lieu ici, avec le MÊME `rapprocherDictee` que l'exécution :
+   * le libellé annonce donc ce qui sera réellement écrit. Les lignes non
+   * chiffrées — ni catalogue, ni prix dicté — sont comptées à part et dites,
+   * jamais additionnées à zéro : un devis annoncé moins cher que la réalité
+   * est l'erreur qu'on ne peut pas se permettre sur un document qui part.
+   */
+  if (name === "create_devis" || name === "create_facture") {
+    const op = proposerEcriture(name, args, dernierMessageUtilisateur, await verticalDuTenant(tenantId));
+    const dictees = JSON.parse(op.champs["lignesDicteesJson"] ?? "[]") as Array<{
+      libelle: string; quantite: number | null; unite: string | null; prixUnitaireHtCents?: number | null;
+    }>;
+    const { totalHtCents, lignesACompleter } = await chiffrerLignesDictees(tenantId, dictees);
+    const mot = name === "create_devis" ? "devis" : "facture";
+    const montant = (totalHtCents / 100).toLocaleString("fr-FR", { minimumFractionDigits: 2 });
+    const enrichie: OperationPlanifiee = {
+      ...op,
+      libelle:
+        `Créer un ${mot} de ${dictees.length} ligne(s) — ${montant} € HT` +
+        (lignesACompleter > 0
+          ? ` (${lignesACompleter} ligne(s) sans prix : ni au catalogue, ni dictée)`
+          : ""),
+    };
+    return {
+      result:
+        `${mot === "devis" ? "Devis" : "Facture"} PROPOSÉ, pas encore appliqué : ${enrichie.libelle}. ` +
+        "Il attend la validation de l'utilisateur.",
+      operation: enrichie,
     };
   }
 
