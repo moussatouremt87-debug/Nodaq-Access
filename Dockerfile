@@ -18,9 +18,29 @@
 #   en x86_64 de toute façon : c'est l'architecture qu'il faut construire.
 #
 # Migrate (one-off, owner creds, before first start):
+#
+#   ── CONTRE UN POSTGRES GÉRÉ (Scaleway RDB), DEUX PIÈGES ────────────────────
+#   Les deux ont coûté trois tentatives le 29/08/2026, et l'exemple qui figurait
+#   ici y menait tout droit — il ne portait ni TLS ni le bon port.
+#
+#   1. `sslmode=require` NE SUFFIT PAS. `pg-connection-string` le traite comme
+#      `verify-full`, qui exige une CA de confiance. Scaleway signe avec la CA
+#      de l'instance : sans elle, « self-signed certificate ». On la récupère
+#      avec `scw rdb instance get-certificate <instance-id> > ca.pem`.
+#
+#   2. NE PAS SE CONNECTER PAR ADRESSE IP. `pg` n'envoie de `servername` TLS
+#      que si l'hôte n'est pas une IP — SNI interdit les adresses. Avec une IP,
+#      Node retombe sur son défaut `localhost` et le compare au certificat :
+#      « Host: localhost is not in the cert's altnames ». Utiliser le NOM DNS
+#      de l'instance, qui figure dans les SAN du certificat.
+#
 #   docker run --rm \
-#     -e DATABASE_URL="postgres://owner:PASSWORD@host:5432/nodaq" \
+#     -v ./ca.pem:/ca.pem:ro \
+#     -e DATABASE_URL="postgres://owner:PASSWORD@rw-<instance-id>.rdb.<region>.scw.cloud:<port>/nodaq?sslmode=verify-full&sslrootcert=/ca.pem" \
 #     nodaq:latest node /app/migrate.mjs
+#
+#   Contre un Postgres local sans TLS, la forme courte suffit :
+#     -e DATABASE_URL="postgres://owner:PASSWORD@host:5432/nodaq"
 #
 # Run (no Replit variables needed):
 #   docker run -p 8080:8080 \

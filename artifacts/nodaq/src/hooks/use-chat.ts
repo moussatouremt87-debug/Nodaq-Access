@@ -15,7 +15,17 @@ const API_BASE = '/api';
 
 export type { AgentAction };
 
-const STORAGE_KEY = 'nodaq.chat.conversationId';
+/**
+ * La conversation courante, partagée par TOUS les points d'entrée.
+ *
+ * Exportée parce que le micro flottant y écrit aussi : une question dictée
+ * doit atterrir dans le MÊME fil que ce qu'on tape à l'écran. Deux clés
+ * séparées auraient donné deux conversations parallèles au même assistant,
+ * et l'utilisateur n'aurait pas compris pourquoi sa question dictée
+ * n'apparaît nulle part.
+ */
+export const CLE_CONVERSATION = 'nodaq.chat.conversationId';
+const STORAGE_KEY = CLE_CONVERSATION;
 
 /** Maps assistant message ID → list of actions performed during that exchange */
 export type ActionsMap = Map<string, AgentAction[]>;

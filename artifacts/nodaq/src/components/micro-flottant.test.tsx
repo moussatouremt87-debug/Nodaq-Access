@@ -23,6 +23,19 @@ const executions: Array<{ url: string; corps: unknown }> = [];
 /** Le plan que le serveur renverra au prochain appel. Modifiable par test. */
 let planCourant: unknown;
 
+/** Ce que l'utilisateur dicte. Modifiable par test. */
+let phraseDictee = 'ajoute au catalogue la pose de placo';
+
+/** Ce que l'assistant répondra sur /chat/messages. Modifiable par test. */
+let reponseChat: { statut: number; corps: unknown } = {
+  statut: 200,
+  corps: {
+    conversationId: 'conv-1',
+    message: { content: 'Oui — nodaq établit et envoie vos factures.' },
+    actions_proposees: [],
+  },
+};
+
 /** Le plan que le serveur renvoie pour « ajoute au catalogue la pose de placo ». */
 const PLAN_CATALOGUE = {
   planId: 'plan-1',
@@ -43,6 +56,12 @@ vi.mock('@/lib/auth', () => ({
   apiFetch: vi.fn(async (url: string, init?: RequestInit) => {
     const corps = init?.body ? JSON.parse(init.body as string) : null;
     executions.push({ url, corps });
+    if (url.includes('/chat/messages')) {
+      return new Response(JSON.stringify(reponseChat.corps), {
+        status: reponseChat.statut,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
     const charge = url.includes('/voix/executer')
       ? { applique: true, nbOperations: 1 }
       : planCourant;
@@ -64,7 +83,7 @@ vi.mock('@/hooks/use-dictee', () => ({
   useDictee: (interpreter: (texte: string) => void) => ({
     enregistre: false,
     transcrit: false,
-    demarrer: () => interpreter('ajoute au catalogue la pose de placo'),
+    demarrer: () => interpreter(phraseDictee),
     arreter: () => {},
   }),
 }));
@@ -73,6 +92,16 @@ vi.mock('@/hooks/use-dictee', () => ({
 beforeEach(() => {
   executions.length = 0;
   planCourant = PLAN_CATALOGUE;
+  phraseDictee = 'ajoute au catalogue la pose de placo';
+  localStorage.clear();
+  reponseChat = {
+    statut: 200,
+    corps: {
+      conversationId: 'conv-1',
+      message: { content: 'Oui — nodaq établit et envoie vos factures.' },
+      actions_proposees: [],
+    },
+  };
   Object.defineProperty(window, 'location', {
     configurable: true,
     value: { ...window.location, reload: vi.fn() },
@@ -171,5 +200,120 @@ describe('d — un plan d’avant le lot 4 continue de fonctionner', () => {
 
     expect(screen.queryByTestId('montant-a-saisir')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /valider/i })).toBeEnabled();
+  });
+});
+
+
+/*
+ * ── PARLER NORMALEMENT AU PRODUIT ────────────────────────────────────────
+ *
+ * Constaté le 29/08/2026 sur le déploiement : à « Est-ce que l'outil
+ * fonctionne pour envoyer des factures ? » — transcrite PARFAITEMENT — nodaq
+ * répondait « Je n'ai pas compris ».
+ *
+ * La dictée n'avait qu'une destination : l'extracteur d'opérations. Tout ce
+ * qui n'en produisait aucune était déclaré incompris. Or facturer est la
+ * raison d'être du produit, et l'assistant — présent sur le même écran —
+ * savait répondre. Même famille que l'incident du 22/08 qui a fait écrire la
+ * règle 3 bis : un garde-fou écrit pour un extracteur finit par attraper le
+ * cœur du métier dès qu'on parle normalement.
+ */
+const PLAN_SANS_OPERATION = { planId: null, operations: [], questions: [], nonCompris: ["Est-ce que l'outil fonctionne pour envoyer des factures ?"] };
+
+describe('une question dictée reçoit une RÉPONSE, pas un constat d’échec', () => {
+  async function dicterUneQuestion() {
+    planCourant = PLAN_SANS_OPERATION;
+    phraseDictee = "Est-ce que l'outil fonctionne pour envoyer des factures ?";
+    render(<MicroFlottant />);
+    fireEvent.pointerDown(screen.getByTestId('bouton-micro-flottant'));
+    return waitFor(() => screen.getByTestId('reponse-agent'));
+  }
+
+  test("la question part à l'assistant et sa réponse s'affiche", async () => {
+    const reponse = await dicterUneQuestion();
+
+    expect(reponse).toHaveTextContent(/nodaq établit et envoie vos factures/);
+    const versChat = executions.find((e) => e.url.includes('/chat/messages'));
+    expect(versChat, "la question n'a pas été envoyée à l'assistant").toBeDefined();
+    expect((versChat!.corps as { content: string }).content).toBe(
+      "Est-ce que l'outil fonctionne pour envoyer des factures ?",
+    );
+  });
+
+  test("« Je n'ai pas compris » ne s'affiche plus sur une phrase claire", async () => {
+    await dicterUneQuestion();          // signe POSITIF d'abord
+
+    // LA garde. Le libellé exact qui a fait croire que le produit était cassé.
+    expect(screen.queryByTestId('non-compris')).toBeNull();
+    expect(document.body.textContent ?? '').not.toMatch(/Je n.ai pas compris/);
+    // Et le vocabulaire du moteur ne fuit pas non plus à l'écran.
+    expect(document.body.textContent ?? '').not.toMatch(/Aucune opération à appliquer/);
+  });
+
+  test('la phrase entendue est montrée, pour qu’on voie ce qui a été transcrit', async () => {
+    await dicterUneQuestion();
+    expect(screen.getByTestId('reponse-agent-bloc')).toHaveTextContent(
+      "Est-ce que l'outil fonctionne pour envoyer des factures ?",
+    );
+  });
+
+  /*
+   * La question doit atterrir dans la MÊME conversation que ce qu'on tape :
+   * deux fils parallèles au même assistant, et l'utilisateur ne retrouve
+   * jamais ce qu'il a dicté.
+   */
+  test('l’échange rejoint la conversation de l’écran de discussion', async () => {
+    localStorage.setItem('nodaq.chat.conversationId', 'conv-existante');
+    await dicterUneQuestion();
+
+    const versChat = executions.find((e) => e.url.includes('/chat/messages'))!;
+    expect((versChat.corps as { conversationId: string }).conversationId).toBe('conv-existante');
+    expect(localStorage.getItem('nodaq.chat.conversationId')).toBe('conv-1');
+  });
+
+  /*
+   * Si l'assistant échoue, on le DIT. Retomber en silence sur « je n'ai pas
+   * compris » ferait porter à la phrase un défaut qui n'est pas le sien.
+   */
+  test('un assistant indisponible est annoncé comme tel', async () => {
+    reponseChat = { statut: 503, corps: { error: "L'assistant n'est pas configuré sur ce déploiement." } };
+    planCourant = PLAN_SANS_OPERATION;
+    phraseDictee = "Est-ce que l'outil fonctionne pour envoyer des factures ?";
+    render(<MicroFlottant />);
+    fireEvent.pointerDown(screen.getByTestId('bouton-micro-flottant'));
+
+    const bloc = await waitFor(() => screen.getByTestId('reponse-agent'));
+    expect(bloc).toHaveTextContent(/assistant n.a pas pu répondre/i);
+    expect(document.body.textContent ?? '').not.toMatch(/Je n.ai pas compris/);
+  });
+});
+
+describe('le cas MIXTE — une action et un reste', () => {
+  const PLAN_MIXTE = {
+    ...PLAN_CATALOGUE,
+    nonCompris: ['et est-ce que je peux envoyer une facture ensuite ?'],
+  };
+
+  test('l’action reste à valider, et le reste peut être posé à l’assistant', async () => {
+    planCourant = PLAN_MIXTE;
+    render(<MicroFlottant />);
+    fireEvent.pointerDown(screen.getByTestId('bouton-micro-flottant'));
+
+    await waitFor(() => expect(screen.getByTestId('liste-operations')).toBeInTheDocument());
+    const reste = screen.getByTestId('non-compris');
+    // Le mot « incompris » a disparu : c'est un RESTE, pas un échec.
+    expect(reste.textContent ?? '').not.toMatch(/Je n.ai pas compris/);
+
+    // Rien n'est parti tout seul : une phrase qui porte une action reste
+    // sous contrôle de l'utilisateur.
+    expect(executions.some((e) => e.url.includes('/chat/messages'))).toBe(false);
+
+    await userEvent.click(screen.getByTestId('demander-assistant'));
+    await waitFor(() => expect(screen.getByTestId('reponse-agent')).toBeInTheDocument());
+
+    const versChat = executions.find((e) => e.url.includes('/chat/messages'))!;
+    expect((versChat.corps as { content: string }).content).toBe(
+      'et est-ce que je peux envoyer une facture ensuite ?',
+    );
   });
 });
