@@ -543,7 +543,9 @@ export const ListPendingActionsResponseItem = zod.object({
   "affaireLabel": zod.string().nullish(),
   "amountCents": zod.number().nullish(),
   "createdAt": zod.coerce.date(),
-  "decidedAt": zod.coerce.date().nullish()
+  "decidedAt": zod.coerce.date().nullish(),
+  "applicable": zod.boolean().optional().describe('Ce plan s\'appliquerait-il maintenant ? Calculé par une SIMULATION — le vrai chemin d\'exécution, joué puis annulé — et non par une seconde série de vérifications qui finirait par diverger. Faux quand le plan a expiré, que sa cible a disparu, ou qu\'il n\'a plus d\'objet. L\'écran grise alors « Approuver » : un bouton actif qui échoue systématiquement est une impasse.'),
+  "motifNonApplicable": zod.string().nullish().describe('La raison, rédigée pour être lue. Renseignée uniquement quand `applicable` est faux.')
 })
 export const ListPendingActionsResponse = zod.array(ListPendingActionsResponseItem)
 
@@ -569,7 +571,9 @@ export const ApprovePendingActionResponse = zod.object({
   "affaireLabel": zod.string().nullish(),
   "amountCents": zod.number().nullish(),
   "createdAt": zod.coerce.date(),
-  "decidedAt": zod.coerce.date().nullish()
+  "decidedAt": zod.coerce.date().nullish(),
+  "applicable": zod.boolean().optional().describe('Ce plan s\'appliquerait-il maintenant ? Calculé par une SIMULATION — le vrai chemin d\'exécution, joué puis annulé — et non par une seconde série de vérifications qui finirait par diverger. Faux quand le plan a expiré, que sa cible a disparu, ou qu\'il n\'a plus d\'objet. L\'écran grise alors « Approuver » : un bouton actif qui échoue systématiquement est une impasse.'),
+  "motifNonApplicable": zod.string().nullish().describe('La raison, rédigée pour être lue. Renseignée uniquement quand `applicable` est faux.')
 })
 
 
@@ -594,7 +598,9 @@ export const RejectPendingActionResponse = zod.object({
   "affaireLabel": zod.string().nullish(),
   "amountCents": zod.number().nullish(),
   "createdAt": zod.coerce.date(),
-  "decidedAt": zod.coerce.date().nullish()
+  "decidedAt": zod.coerce.date().nullish(),
+  "applicable": zod.boolean().optional().describe('Ce plan s\'appliquerait-il maintenant ? Calculé par une SIMULATION — le vrai chemin d\'exécution, joué puis annulé — et non par une seconde série de vérifications qui finirait par diverger. Faux quand le plan a expiré, que sa cible a disparu, ou qu\'il n\'a plus d\'objet. L\'écran grise alors « Approuver » : un bouton actif qui échoue systématiquement est une impasse.'),
+  "motifNonApplicable": zod.string().nullish().describe('La raison, rédigée pour être lue. Renseignée uniquement quand `applicable` est faux.')
 })
 
 
