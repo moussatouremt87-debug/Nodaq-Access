@@ -95,16 +95,29 @@ function StatutBadge({ statut }: { statut: string }) {
 
 // ── Hooks ─────────────────────────────────────────────────────────────────────
 
-function useFactures(statut?: string) {
+/** Une page de cinquante — le même défaut que le serveur. */
+const PAR_PAGE = 50;
+
+function useFactures(statut: string | undefined, page: number, tri: string, sens: string) {
   return useQuery({
-    queryKey: ['factures', statut],
+    queryKey: ['factures', statut, page, tri, sens],
     queryFn: async () => {
       const sp = new URLSearchParams();
       if (statut) sp.set('statut', statut);
+      sp.set('limit', String(PAR_PAGE));
+      sp.set('offset', String(page * PAR_PAGE));
+      sp.set('tri', tri);
+      sp.set('sens', sens);
       const res = await fetch(`${API}/factures?${sp}`);
       if (!res.ok) throw new Error('Fetch failed');
-      return res.json() as Promise<{ factures: Facture[]; totalAmountCents: number; totalOverdueCents: number }>;
+      return res.json() as Promise<{
+        factures: Facture[]; total: number;
+        totalAmountCents: number; totalOverdueCents: number;
+      }>;
     },
+    // La page précédente reste affichée pendant le chargement de la suivante :
+    // sans cela, la liste clignote à vide à chaque changement de page.
+    placeholderData: (precedent) => precedent,
   });
 }
 
@@ -479,9 +492,23 @@ export default function FacturesPage() {
   const [emettreOpen, setEmettreOpen] = useState(false);
   const [selectedFacture, setSelectedFacture] = useState<Facture | null>(null);
 
+  const [page, setPage] = useState(0);
+  const [tri, setTri] = useState('date');
+  const [sens, setSens] = useState<'asc' | 'desc'>('desc');
+
   const { data, isLoading, isError } = useFactures(
-    statutFilter !== 'ALL' ? statutFilter : undefined,
+    statutFilter !== 'ALL' ? statutFilter : undefined, page, tri, sens,
   );
+
+  // Changer de filtre ou de tri remet à la première page : rester à la page 3
+  // d'un ensemble qui n'en compte plus qu'une afficherait un vide inexpliqué.
+  const changerFiltre = (v: string) => { setStatutFilter(v); setPage(0); };
+  const changerTri = (colonne: string) => {
+    if (colonne === tri) { setSens(s => (s === 'asc' ? 'desc' : 'asc')); }
+    else { setTri(colonne); setSens('desc'); }
+    setPage(0);
+  };
+  const nbPages = Math.max(1, Math.ceil((data?.total ?? 0) / PAR_PAGE));
 
   /**
    * Annule le dernier règlement. Le serveur écrit une contre-passation — le
@@ -583,7 +610,7 @@ export default function FacturesPage() {
           className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {stats.map(s => (
             <motion.button key={s.key} variants={itemVariants}
-              onClick={() => setStatutFilter(prev => prev === s.key ? 'ALL' : s.key)}
+              onClick={() => changerFiltre(statutFilter === s.key ? 'ALL' : s.key)}
               className={`text-left rounded-lg border p-3 hover-elevate transition-colors ${
                 statutFilter === s.key ? 'border-primary bg-primary/5' : 'border-card-border bg-card'
               }`}
@@ -597,7 +624,7 @@ export default function FacturesPage() {
 
         {/* Filter */}
         <div className="flex gap-3">
-          <Select value={statutFilter} onValueChange={setStatutFilter}>
+          <Select value={statutFilter} onValueChange={changerFiltre}>
             <SelectTrigger className="w-48" aria-label="Filtrer par statut">
               <SelectValue placeholder="Tous les statuts" />
             </SelectTrigger>
@@ -748,6 +775,24 @@ export default function FacturesPage() {
                 </AnimatePresence>
               </table>
             </div>
+            {/* ── La pagination ───────────────────────────────────────────
+                Affichée dès qu'il y a plus d'une page. Le NOMBRE TOTAL est
+                dit : « 51-100 sur 387 » situe, « page 2 » ne situe pas. */}
+            {nbPages > 1 && (
+              <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-border">
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {page * PAR_PAGE + 1}–{Math.min((page + 1) * PAR_PAGE, data?.total ?? 0)} sur {data?.total ?? 0}
+                </span>
+                <div className="flex items-center gap-1">
+                  <Button variant="outline" size="sm" disabled={page === 0}
+                    onClick={() => setPage(p => Math.max(0, p - 1))}
+                    data-testid="page-precedente">Précédent</Button>
+                  <Button variant="outline" size="sm" disabled={page >= nbPages - 1}
+                    onClick={() => setPage(p => p + 1)}
+                    data-testid="page-suivante">Suivant</Button>
+                </div>
+              </div>
+            )}
             </>
           )}
         </div>

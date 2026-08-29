@@ -12,7 +12,7 @@ import {
   withTenant, facturesTable, avoirsTable, activityTable, archivedPdfsTable,
   paiementsTable, CLE_PA_API_KEY, devisTable,
 } from "@workspace/db";
-import { and, eq, desc, sql } from "drizzle-orm";
+import { and, asc, desc, eq, sql, type AnyColumn } from "drizzle-orm";
 import { z } from "zod";
 import { facturerDevis, messageRefusFacturation } from "../lib/facturer-devis.js";
 import { facturerAffaire, messageRefusAffaire } from "../lib/facturer-affaire.js";
@@ -38,7 +38,7 @@ import { auditEmissionElectronique } from "../lib/emission-electronique.js";
 import { logger } from "../lib/logger.js";
 import { champsErreur } from "../lib/erreur-pg.js";
 import { secretExiste } from "../lib/tenant-secrets.js";
-import { estFactureEnRetard, residuelFactureCents } from "../lib/facturesEnRetard.js";
+import { estFactureEnRetard, residuelFactureCents, conditionFactureEnRetardSql } from "../lib/facturesEnRetard.js";
 import { VERTICAL_SETTING_KEY, DEFAULT_VERTICAL } from "../lib/vertical-tenant.js";
 import { indexerAuClasseur, nomAuClasseur } from "../lib/indexation-classeur.js";
 
@@ -212,27 +212,93 @@ async function assertBrouillon(
 
 // ── Routes ───────────────────────────────────────────────────────────────────
 
-router.get("/factures", async (req, res): Promise<void> => {
-  const tenantId = req.tenantId!;
-  const { statut, settled: settledParam } = req.query as Record<string, string>;
+/**
+ * Les colonnes de tri AUTORISÉES.
+ *
+ * Une liste blanche, pas un nom de colonne venu du client : `?tri=` arrive de
+ * l'extérieur, et l'interpoler dans un `ORDER BY` serait une injection.
+ */
+const TRIS: Record<string, AnyColumn> = {
+  date: facturesTable.createdAt,
+  echeance: facturesTable.dueDate,
+  montant: facturesTable.amountCents,
+  client: facturesTable.customerName,
+  numero: facturesTable.number,
+};
 
-  const factures = await withTenant(tenantId, async tx => {
-    let q = tx.select().from(facturesTable).$dynamic();
-    if (statut) q = q.where(eq(facturesTable.statut, statut));
-    return q.orderBy(desc(facturesTable.createdAt));
+const ListeFacturesQuery = z.object({
+  statut: z.string().max(40).optional(),
+  settled: z.enum(["true", "false"]).optional(),
+  // 200 au maximum : au-delà, on retombe sur le défaut qu'on corrige.
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+  tri: z.enum(["date", "echeance", "montant", "client", "numero"]).default("date"),
+  sens: z.enum(["asc", "desc"]).default("desc"),
+});
+
+/**
+ * GET /factures — paginée, triée et totalisée par le SERVEUR.
+ *
+ * ── Pourquoi la pagination est serveur, et le tri avec ────────────────────
+ * La route rendait TOUTES les factures du tenant, sans limite. À la troisième
+ * année d'activité, un artisan en a quatre cents : quatre cents lignes
+ * chargées d'un coup, avec le détail complet de chacune, sur un téléphone.
+ *
+ * Et le tri suit obligatoirement. Trier côté client une page de cinquante
+ * lignes trierait CETTE page, pas les quatre cents — ça aurait l'air juste et
+ * ce serait faux, ce qui est pire que pas de tri du tout.
+ *
+ * ── Les totaux portent sur TOUT, jamais sur la page ───────────────────────
+ * « Total émis » et « Impayés en retard » répondent à « où en suis-je ? ». Les
+ * calculer sur les cinquante lignes affichées donnerait un chiffre qui change
+ * quand on tourne la page — un indicateur qui bouge sans que rien ne bouge est
+ * pire qu'absent. Ils sont donc agrégés en SQL sur l'ensemble filtré.
+ */
+router.get("/factures", async (req, res): Promise<void> => {
+  const parsed = ListeFacturesQuery.safeParse(req.query);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const { statut, settled, limit, offset, tri, sens } = parsed.data;
+  const tenantId = req.tenantId!;
+  const aujourdhui = toDateString(new Date());
+
+  const resultat = await withTenant(tenantId, async tx => {
+    const conditions = [
+      statut ? eq(facturesTable.statut, statut) : undefined,
+      // Le filtre passe en SQL : il se faisait en JavaScript APRÈS avoir tout
+      // chargé, ce qui rendait la limite inopérante.
+      settled !== undefined ? eq(facturesTable.settled, settled === "true") : undefined,
+    ].filter((c) => c !== undefined);
+    const ou = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const colonne = TRIS[tri]!;
+    const factures = await tx.select().from(facturesTable)
+      .where(ou)
+      .orderBy(sens === "asc" ? asc(colonne) : desc(colonne))
+      .limit(limit).offset(offset);
+
+    // Les agrégats en UNE requête, sur l'ensemble filtré.
+    //
+    // `sum` d'un `integer` rend un `bigint`, que node-postgres livre en
+    // CHAÎNE : sans `Number(...)`, « 0 » et « 196100 » se concaténeraient en
+    // « 0196100 ». C'est arrivé, et le cockpit l'a affiché.
+    const [agg] = await tx.select({
+      total: sql<string>`count(*)`,
+      montant: sql<string>`coalesce(sum(${facturesTable.amountCents}), 0)`,
+      retard: sql<string>`coalesce(sum(
+        CASE WHEN ${conditionFactureEnRetardSql(aujourdhui)}
+             THEN coalesce(residual_cents, amount_cents, 0) ELSE 0 END
+      ), 0)`,
+    }).from(facturesTable).where(ou);
+
+    return {
+      factures,
+      total: Number(agg?.total ?? 0),
+      totalAmountCents: Number(agg?.montant ?? 0),
+      totalOverdueCents: Number(agg?.retard ?? 0),
+    };
   });
 
-  const filtered = settledParam !== undefined
-    ? factures.filter(f => f.settled === (settledParam === "true"))
-    : factures;
-
-  const totalAmountCents = filtered.reduce((acc, f) => acc + (f.amountCents ?? 0), 0);
-  const aujourdhui = toDateString(new Date());
-  const totalOverdueCents = filtered
-    .filter(f => estFactureEnRetard(f, aujourdhui))
-    .reduce((acc, f) => acc + residuelFactureCents(f), 0);
-
-  res.json({ factures: filtered, totalAmountCents, totalOverdueCents });
+  res.json(resultat);
 });
 
 router.post("/factures", async (req, res): Promise<void> => {
