@@ -69,8 +69,25 @@ router.post("/voix/executer", async (req, res): Promise<void> => {
     // Une opération a échoué : la transaction a tout annulé, y compris le
     // marquage. Le plan reste applicable une fois la cause corrigée.
     logger.error({ err: err instanceof Error ? err.message : "erreur" }, "[voix] exécution impossible");
+    /*
+     * ── DIRE CE QUI A ÉCHOUÉ ────────────────────────────────────────────────
+     * Ce message était générique : « Une des opérations n'a pas pu être
+     * appliquée. » L'utilisateur voyait un bandeau rouge sans savoir laquelle,
+     * ni pourquoi, ni quoi faire — alors que la cause était connue au mot près
+     * (« Campagne de relance sans appel ») et jetée juste ici.
+     *
+     * Les messages levés par `executerPlan` sont RÉDIGÉS pour être lus : ils
+     * décrivent un refus métier, pas une pile d'appels. On les relaie.
+     *
+     * Une erreur inattendue — un défaut du moteur, une contrainte violée —
+     * n'est PAS relayée : elle porterait des noms de colonnes et des détails
+     * d'implémentation, et n'aiderait personne. Elle reste dans le journal.
+     */
+    const motif = err instanceof Error && err.name === "Error" ? err.message : null;
     res.status(409).json({
-      error: "Une des opérations n'a pas pu être appliquée. Rien n'a été enregistré.",
+      error: motif
+        ? `${motif}. Rien n'a été enregistré.`
+        : "Une des opérations n'a pas pu être appliquée. Rien n'a été enregistré.",
     });
     return;
   }

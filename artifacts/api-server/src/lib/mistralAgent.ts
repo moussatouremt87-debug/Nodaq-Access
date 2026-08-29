@@ -42,6 +42,7 @@ import { centimesDepuisDictee } from "@nodaq/shared";
 import { affaireWords, estSecretProfessionnel, inactiveModuleTools, champsManquants } from "@nodaq/shared";
 import { modulesDuTenant } from "./modules-tenant.js";
 import { verticalDepuisTx, verticalDuTenant, vocabulaireAssistant } from "./vertical-tenant.js";
+import { conditionFactureEnRetardSql } from "./facturesEnRetard.js";
 import { montantsNonSources, MESSAGE_REFUS_CHIFFRAGE } from "./garde-montants.js";
 import { logger } from "./logger.js";
 
@@ -1146,6 +1147,55 @@ function proposerEcritureBrute(
   }
 }
 
+/**
+ * Les impayés JOIGNABLES d'un tenant, et le compte de ceux qui ne le sont pas.
+ *
+ * ── POURQUOI CETTE FONCTION EXISTE ICI ──────────────────────────────────────
+ * Elle vivait dans `chargerContexte`, côté extracteur d'intentions. Le micro
+ * passant désormais par l'agent, et l'extracteur ayant été retiré, ce calcul
+ * n'avait plus de porteur : l'agent proposait `champs: {}`, et l'exécution
+ * levait systématiquement « Campagne de relance sans appel ». La relance
+ * téléphonique était devenue impossible sans que rien ne le dise.
+ *
+ * La définition du RETARD vient du module partagé
+ * (`conditionFactureEnRetardSql`) : en écrire une seconde ici rejouerait le
+ * défaut que son en-tête raconte.
+ *
+ * Le NUMÉRO vient du client rattaché. Une facture sans client ou sans
+ * téléphone ne peut pas être appelée : elle est comptée À PART plutôt
+ * qu'ignorée en silence — l'artisan doit savoir combien de relances il ne
+ * pourra pas passer, et pourquoi.
+ */
+async function impayesJoignables(tenantId: string): Promise<{
+  joignables: Array<{
+    clientId: string | null; factureId: string; montantCents: number;
+    numero: string; clientNom: string;
+  }>;
+  sansNumero: number;
+}> {
+  return withTenant(tenantId, async (tx) => {
+    const retards = await tx.execute(sql`
+      SELECT f.id, f.customer_name, f.client_id, f.amount_cents, c.telephone
+        FROM factures f
+        LEFT JOIN clients c ON c.id = f.client_id
+       WHERE ${conditionFactureEnRetardSql(toDateString(new Date()))}`);
+    const lignes = retards.rows as Array<{
+      id: string; customer_name: string; client_id: string | null;
+      amount_cents: number; telephone: string | null;
+    }>;
+    const joignables = lignes
+      .filter((f) => f.telephone)
+      .map((f) => ({
+        clientId: f.client_id,
+        factureId: f.id,
+        montantCents: Number(f.amount_cents),
+        numero: f.telephone!,
+        clientNom: f.customer_name,
+      }));
+    return { joignables, sansNumero: lignes.length - joignables.length };
+  });
+}
+
 async function executeTool(
   tenantId: string,
   name: string,
@@ -1160,6 +1210,49 @@ async function executeTool(
   // Interception AVANT le switch, et les anciens `case` d'écriture ont été
   // supprimés : un code mort qui écrit en base est exactement ce qui se
   // rebranche par accident. Il ne reste rien à rebrancher.
+  /*
+   * ── UNE RELANCE SANS PERSONNE À APPELER N'EST PAS UNE OPÉRATION ──────────
+   * L'agent proposait « Préparer une campagne de relance téléphonique » quoi
+   * qu'il arrive, et la validation levait ensuite « Campagne de relance sans
+   * appel » — une impasse découverte au moment de cliquer, sur un message qui
+   * ne disait pas pourquoi.
+   *
+   * Quand il n'y a rien à relancer, l'agent RÉPOND. C'est la règle 3 bis :
+   * jamais une impasse là où une phrase honnête suffit.
+   */
+  if (name === "lancer_relance") {
+    const { joignables, sansNumero } = await impayesJoignables(tenantId);
+    if (joignables.length === 0) {
+      return {
+        result:
+          sansNumero > 0
+            ? `Aucune relance possible : ${sansNumero} facture(s) en retard, mais aucune ` +
+              "n'a de numéro de téléphone rattaché à son client. Ajoutez le numéro sur la " +
+              "fiche client et redemandez-moi."
+            : "Vous n'avez aucune facture en retard à relancer aujourd'hui.",
+      };
+    }
+    const total = joignables.reduce((t, a) => t + a.montantCents, 0);
+    return {
+      result:
+        `Campagne PROPOSÉE, pas encore appliquée : ${joignables.length} appel(s). ` +
+        "Elle attend la validation de l'utilisateur.",
+      operation: {
+        type: "lancer_relance",
+        libelle:
+          `Préparer une relance pour ${joignables.length} facture(s) en retard ` +
+          `(${(total / 100).toFixed(2)} €)` +
+          (sansNumero > 0 ? ` — ${sansNumero} sans téléphone, écartée(s)` : "") +
+          " — les appels resteront à valider",
+        // La liste voyage sérialisée : le plan attend en base, et c'est elle
+        // qui sera reprise à l'identique à la validation.
+        champs: { appels: JSON.stringify(joignables) },
+        certitude: "aucune_resolution",
+        aCompleter: [],
+      },
+    };
+  }
+
   if ((OUTILS_ECRITURE as readonly string[]).includes(name)) {
     // Le secteur est relu à CHAQUE proposition, jamais mémorisé : US-A6.1
     // exige qu'un changement s'applique dès la phrase suivante.

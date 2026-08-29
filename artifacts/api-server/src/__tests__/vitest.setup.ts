@@ -421,6 +421,68 @@ globalThis.fetch = async function patchedFetch(
     }
 
     /*
+     * Second tour de `lancer_relance` : le modèle simulé RELAIE le résultat
+     * de l'outil.
+     *
+     * Un vrai modèle reformule ; ici il faut pouvoir vérifier que la phrase
+     * produite par le serveur — « aucune facture en retard », « aucun numéro
+     * de téléphone » — arrive bien jusqu'à l'utilisateur. Sans ce relais, le
+     * test ne pourrait affirmer que l'absence d'opération, pas la présence
+     * d'une réponse utile. Or c'est précisément la réponse qui remplace
+     * l'impasse.
+     */
+    if (hasPendingToolResult) {
+      const dernierOutil = [...msgs].reverse().find((m) => m.role === "tool");
+      const texteOutil = typeof dernierOutil?.content === "string" ? dernierOutil.content : "";
+      if (/relance|facture en retard/i.test(texteOutil)) {
+        return new Response(
+          JSON.stringify({
+            id: "chatcmpl-vitest-relance-2",
+            object: "chat.completion",
+            model: "test/fake-chat-model",
+            choices: [{ index: 0, message: { role: "assistant", content: texteOutil }, finish_reason: "stop" }],
+            usage: { prompt_tokens: 12, completion_tokens: 8, total_tokens: 20 },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+    }
+
+    /*
+     * `lancer_relance` simulé — pour éprouver le CÂBLAGE de la relance.
+     *
+     * L'agent proposait cette opération quoi qu'il arrive, avec `champs: {}`,
+     * et la validation levait « Campagne de relance sans appel ». Une garde
+     * posée sur `proposerEcriture` seule ne l'attrape pas : le calcul des
+     * impayés vit dans `executeTool`, qui a la base. Il faut un vrai
+     * aller-retour.
+     */
+    if (!hasPendingToolResult && userText.includes("agent-test-relance")) {
+      return new Response(
+        JSON.stringify({
+          id: "chatcmpl-vitest-relance",
+          object: "chat.completion",
+          model: "test/fake-chat-model",
+          choices: [{
+            index: 0,
+            message: {
+              role: "assistant",
+              content: null,
+              tool_calls: [{
+                id: "call_vitest_relance",
+                type: "function",
+                function: { name: "lancer_relance", arguments: "{}" },
+              }],
+            },
+            finish_reason: "tool_calls",
+          }],
+          usage: { prompt_tokens: 12, completion_tokens: 8, total_tokens: 20 },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    /*
      * `create_affaire` simulé — pour éprouver le VOCABULAIRE du secteur de
      * bout en bout.
      *

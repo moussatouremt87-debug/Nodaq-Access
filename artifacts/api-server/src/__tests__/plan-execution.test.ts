@@ -265,3 +265,83 @@ describe("g — chaque type d'écriture aboutit vraiment", () => {
     expect(rows).toHaveLength(1);
   });
 });
+
+
+/*
+ * ── LA RELANCE TÉLÉPHONIQUE, DE BOUT EN BOUT ─────────────────────────────
+ *
+ * Constaté sur le déploiement le 29/08/2026 : valider « prépare les relances »
+ * rendait un bandeau rouge — « Une des opérations n'a pas pu être appliquée »
+ * — sans dire pourquoi.
+ *
+ * `proposerEcritureBrute` rendait `champs: {}` pour cet outil : `appels` était
+ * TOUJOURS vide, et `executerPlan` levait systématiquement. Le calcul des
+ * impayés joignables vivait dans l'extracteur d'intentions ; en le retirant,
+ * on a laissé la capacité sans porteur.
+ *
+ * Ces gardes exercent le CÂBLAGE — `executeTool`, qui a la base — et non la
+ * fonction pure. C'est la leçon du matin : une garde qui reçoit la donnée à la
+ * main ne prouve pas que quelqu'un la lui donne.
+ */
+describe("f — la relance téléphonique passe par l'agent", () => {
+  const demander = (l: Locataire) =>
+    request(serveurTest(app)).post("/api/chat/messages").set("Cookie", l.cookie)
+      .send({ content: "agent-test-relance" }).expect(200);
+
+  test("sans facture en retard, l'agent RÉPOND au lieu de proposer l'impossible", async () => {
+    const { body } = await demander(a);
+
+    // Aucune opération : proposer une campagne vide serait une impasse
+    // découverte au moment de cliquer.
+    expect(body.operations ?? []).toHaveLength(0);
+    expect(body.planId).toBeNull();
+    expect(body.message.content).toMatch(/aucune facture en retard/i);
+  });
+
+  test("avec une facture en retard et un téléphone, la campagne porte ses appels", async () => {
+    const clientId = crypto.randomUUID();
+    await adminPool.query(
+      `INSERT INTO clients (id, tenant_id, nom, telephone) VALUES ($1, $2::uuid, $3, $4)`,
+      [clientId, a.tenantId, "Girard Retard", "0612345678"],
+    );
+    await adminPool.query(
+      `INSERT INTO factures (id, tenant_id, number, customer_name, client_id, amount_cents,
+                             issued_date, due_date, statut)
+       VALUES ($1, $2::uuid, 'F-RETARD-1', 'Girard Retard', $3, 120000,
+               CURRENT_DATE - 60, CURRENT_DATE - 30, 'EMISE')`,
+      [crypto.randomUUID(), a.tenantId, clientId],
+    );
+
+    const { body } = await demander(a);
+
+    expect(body.operations).toHaveLength(1);
+    const appels = JSON.parse(body.operations[0].champs.appels);
+    expect(appels).toHaveLength(1);
+    expect(appels[0].numero).toBe("0612345678");
+    expect(appels[0].montantCents).toBe(120000);
+    // Le libellé annonce le nombre ET le montant : on valide ce qu'on voit.
+    expect(body.operations[0].libelle).toMatch(/1 facture/);
+    expect(body.operations[0].libelle).toMatch(/1200/);
+  });
+
+  /*
+   * Une facture en retard SANS téléphone est comptée à part, jamais ignorée en
+   * silence : l'artisan doit savoir combien de relances il ne pourra pas
+   * passer, et pourquoi.
+   */
+  test("un impayé sans téléphone est annoncé, pas escamoté", async () => {
+    await adminPool.query(
+      `INSERT INTO factures (id, tenant_id, number, customer_name, amount_cents,
+                             issued_date, due_date, statut)
+       VALUES ($1, $2::uuid, 'F-RETARD-2', 'Sans Numero', 90000,
+               CURRENT_DATE - 60, CURRENT_DATE - 30, 'EMISE')`,
+      [crypto.randomUUID(), b.tenantId],
+    );
+
+    const { body } = await demander(b);
+
+    expect(body.operations ?? []).toHaveLength(0);
+    expect(body.message.content).toMatch(/num[ée]ro de t[ée]l[ée]phone/i);
+    expect(body.message.content).toMatch(/1 facture/);
+  });
+});
