@@ -437,3 +437,58 @@ describe('un devis proposé montre ce qui va être écrit', () => {
     expect(screen.queryByTestId('lignes-dictees-0')).toBeNull();
   });
 });
+
+
+/*
+ * ── PAS DE BOUTON MORT SOUS UNE QUESTION ─────────────────────────────────
+ *
+ * Constaté le 29/08/2026 : l'agent répondait « Souhaitez-vous que je procède
+ * avec cette facture ? » sans proposer d'opération. Le panneau affichait
+ * « Valider » GRISÉ. L'utilisateur lisait une question, cherchait le bouton
+ * pour dire oui, et le trouvait inactif.
+ *
+ * La consigne de l'agent a été corrigée pour qu'il PROPOSE au lieu de
+ * demander — la validation à l'écran EST le consentement. Mais l'écran ne
+ * doit pas dépendre de la docilité d'un modèle : sans opération, il n'offre
+ * qu'une porte de sortie.
+ */
+describe('une réponse sans opération n’offre pas de bouton mort', () => {
+  async function repondreSansOperation() {
+    reponseChat = {
+      statut: 200,
+      corps: {
+        conversationId: 'conv-1',
+        message: { content: 'Souhaitez-vous que je procède avec cette facture ?' },
+        planId: null,
+        operations: [],
+      },
+    };
+    render(<MicroFlottant />);
+    fireEvent.pointerDown(screen.getByTestId('bouton-micro-flottant'));
+    return waitFor(() => screen.getByTestId('rien-a-valider'));
+  }
+
+  test('aucun bouton « Valider » n’est affiché', async () => {
+    await repondreSansOperation();          // signe POSITIF d'abord
+
+    // LA garde : un bouton grisé sous une question est une impasse.
+    expect(screen.queryByTestId('bouton-valider-plan')).toBeNull();
+  });
+
+  test('l’écran dit pourquoi, et laisse une sortie', async () => {
+    const mention = await repondreSansOperation();
+
+    expect(mention).toHaveTextContent(/sans proposer/i);
+    expect(screen.getByRole('button', { name: /Fermer/ })).toBeEnabled();
+  });
+
+  test('avec une opération, « Valider » revient et il est actif', async () => {
+    await ouvrirLePlan();          // PLAN_CATALOGUE porte une opération
+
+    const valider = screen.getByTestId('bouton-valider-plan');
+    expect(valider).toBeInTheDocument();
+    // `aCompleter` porte un prix à saisir : le bouton attend la saisie, ce
+    // qui est un blocage MOTIVÉ et affiché — pas une impasse.
+    expect(screen.getByTestId('montant-a-saisir')).toBeInTheDocument();
+  });
+});
