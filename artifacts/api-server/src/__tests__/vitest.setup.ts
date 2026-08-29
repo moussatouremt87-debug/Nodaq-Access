@@ -434,7 +434,7 @@ globalThis.fetch = async function patchedFetch(
     if (hasPendingToolResult) {
       const dernierOutil = [...msgs].reverse().find((m) => m.role === "tool");
       const texteOutil = typeof dernierOutil?.content === "string" ? dernierOutil.content : "";
-      if (/relance|facture en retard/i.test(texteOutil)) {
+      if (/relance|facture en retard|Je ne trouve aucune facture/i.test(texteOutil)) {
         return new Response(
           JSON.stringify({
             id: "chatcmpl-vitest-relance-2",
@@ -446,6 +446,38 @@ globalThis.fetch = async function patchedFetch(
           { status: 200, headers: { "Content-Type": "application/json" } },
         );
       }
+    }
+
+    /*
+     * `enregistrer_reglement` avec un identifiant INVENTÉ — le cas réel du
+     * 29/08/2026, où le modèle avait recopié le nom du paramètre.
+     */
+    if (!hasPendingToolResult && userText.includes("agent-test-reglement-fantome")) {
+      return new Response(
+        JSON.stringify({
+          id: "chatcmpl-vitest-reglement",
+          object: "chat.completion",
+          model: "test/fake-chat-model",
+          choices: [{
+            index: 0,
+            message: {
+              role: "assistant",
+              content: null,
+              tool_calls: [{
+                id: "call_vitest_reglement",
+                type: "function",
+                function: {
+                  name: "enregistrer_reglement",
+                  arguments: JSON.stringify({ factureId: "facture_id", montantEuros: 4200 }),
+                },
+              }],
+            },
+            finish_reason: "tool_calls",
+          }],
+          usage: { prompt_tokens: 12, completion_tokens: 8, total_tokens: 20 },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
     }
 
     /*

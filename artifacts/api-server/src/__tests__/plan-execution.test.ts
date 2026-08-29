@@ -425,3 +425,39 @@ describe("h — l'applicabilité d'un plan, sans rien écrire", () => {
     expect(await compterAffaires(a, "Après simulation")).toBe(1);
   });
 });
+
+
+/*
+ * ── UN IDENTIFIANT INVENTÉ N'EST PAS UNE RÉFÉRENCE ───────────────────────
+ *
+ * Constaté le 29/08/2026 : l'agent a proposé « Enregistrer un règlement sur
+ * la facture facture_id » — il avait recopié le NOM DU PARAMÈTRE. La
+ * validation échouait ensuite sur « Facture facture_id introuvable », APRÈS
+ * que l'artisan eut cliqué.
+ *
+ * Le dépôt l'interdit sans ambiguïté : « le modèle rend des intentions dont
+ * le schéma ne contient AUCUN identifiant — ce n'est pas une consigne de
+ * rédaction, c'est SortieModele qui refuse ». Ce refus existait sur l'ancien
+ * chemin vocal ; il n'a jamais existé sur celui de l'agent, où
+ * « Identifiant obtenu via list_factures » n'est qu'une phrase dans une
+ * description d'outil.
+ *
+ * La garde porte sur le CÂBLAGE — `executeTool`, qui a la base — et non sur
+ * une fonction pure qui recevrait l'identifiant à la main.
+ */
+describe("i — une cible inexistante n'est jamais proposée", () => {
+  const demander = (l: Locataire, texte: string) =>
+    request(serveurTest(app)).post("/api/chat/messages").set("Cookie", l.cookie)
+      .send({ content: texte }).expect(200);
+
+  test("un règlement sur une facture inconnue devient une RÉPONSE, pas une opération", async () => {
+    const { body } = await demander(a, "agent-test-reglement-fantome");
+
+    // Aucune opération : faire cliquer sur une écriture condamnée est une
+    // impasse découverte au pire moment.
+    expect(body.operations ?? []).toHaveLength(0);
+    expect(body.planId).toBeNull();
+    // Et l'agent propose la SUITE UTILE plutôt que de constater l'échec.
+    expect(body.message.content).toMatch(/facture/i);
+  });
+});

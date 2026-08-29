@@ -409,20 +409,45 @@ export function MicroFlottant() {
             ) : null}
           </div>
 
-          <div className="flex gap-2 pb-2">
-            <Button variant="outline" className="flex-1" onClick={() => setPlan(null)}>
-              <X className="mr-2 h-4 w-4" /> Annuler
-            </Button>
-            <Button
-              className="flex-1"
-              onClick={() => void valider()}
-              disabled={applique || !plan?.operations.length || incomplets.length > 0}
-              data-testid="bouton-valider-plan"
-            >
-              {applique ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
-              Valider
-            </Button>
-          </div>
+          {/*
+              QUAND L'AGENT N'A RIEN PROPOSÉ, IL N'Y A RIEN À VALIDER.
+
+              Le panneau montrait « Valider » grisé sous une réponse du type
+              « souhaitez-vous que je procède ? ». L'utilisateur lisait une
+              question, cherchait le bouton pour dire oui, et le trouvait
+              inactif : impasse. Constaté le 29/08/2026.
+
+              On n'affiche donc qu'une porte de sortie — « Fermer » — et l'on
+              dit où répondre. La consigne de l'agent a été corrigée pour
+              qu'il PROPOSE au lieu de demander, mais l'écran ne doit pas
+              dépendre de la docilité d'un modèle.
+          */}
+          {plan?.operations.length ? (
+            <div className="flex gap-2 pb-2">
+              <Button variant="outline" className="flex-1" onClick={() => setPlan(null)}>
+                <X className="mr-2 h-4 w-4" /> Annuler
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={() => void valider()}
+                disabled={applique || incomplets.length > 0}
+                data-testid="bouton-valider-plan"
+              >
+                {applique ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
+                Valider
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-2 pb-2">
+              <p className="text-xs text-muted-foreground" data-testid="rien-a-valider">
+                Rien à valider ici : l’assistant a répondu sans proposer d’écriture.
+                Redictez, ou poursuivez dans la discussion.
+              </p>
+              <Button variant="outline" className="w-full" onClick={() => setPlan(null)}>
+                <X className="mr-2 h-4 w-4" /> Fermer
+              </Button>
+            </div>
+          )}
         </SheetContent>
       </Sheet>
     </>
