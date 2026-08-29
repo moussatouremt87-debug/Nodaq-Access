@@ -878,12 +878,26 @@ export function proposerEcriture(
    * n'est alors retenu et le champ retombe sur `CHAMPS_A_COMPLETER`.
    */
   messageUtilisateur: string = "",
+  /**
+   * Le secteur du tenant, pour que le libellé parle SA langue.
+   *
+   * US-A6.1/AC2 : un consultant valide « Créer la mission », pas « Créer
+   * l'affaire ». Le mot était écrit en dur ici alors que l'ancien chemin
+   * vocal, lui, passait par `affaireWords`. Le défaut est devenu visible le
+   * jour où le micro a cessé de parler à cet ancien chemin : c'est un test
+   * de l'ancienne route qui l'a attrapé, en rougissant au moment de la
+   * retirer.
+   *
+   * Optionnel, et le repli est le mot NEUTRE de la base : un appelant qui ne
+   * connaît pas le secteur ne doit pas se voir imposer celui du bâtiment.
+   */
+  vertical?: string | null,
 ): OperationPlanifiee {
   // Même dérivation que dans `construirePlan` : `aCompleter` se calcule, il
   // ne s'écrit pas. Ce fichier est le SECOND endroit qui fabrique des
   // opérations — c'est le compilateur qui l'a signalé quand le champ est
   // devenu obligatoire, pas une relecture.
-  const op = proposerEcritureBrute(name, args, messageUtilisateur);
+  const op = proposerEcritureBrute(name, args, messageUtilisateur, vertical);
   return { ...op, aCompleter: champsManquants(op.type, op.champs) };
 }
 
@@ -891,7 +905,10 @@ function proposerEcritureBrute(
   name: string,
   args: Record<string, unknown>,
   messageUtilisateur: string,
+  vertical?: string | null,
 ): Omit<OperationPlanifiee, "aCompleter"> {
+  /** Le mot du secteur : « chantier », « mission », « dossier »… */
+  const mots = affaireWords(vertical);
   /** Le montant en centimes s'il figure dans le message, `null` sinon. */
   const centimes = (cle: string): string | null => {
     const v = args[cle];
@@ -907,14 +924,14 @@ function proposerEcritureBrute(
     case "create_affaire":
       return {
         type: "creer_affaire",
-        libelle: `Créer l'affaire « ${texte("label") ?? "sans nom"} »`,
+        libelle: `Créer ${mots.definite} « ${texte("label") ?? "sans nom"} »`,
         champs: { label: texte("label") ?? "Sans nom", clientNom: texte("clientName"), ville: null, dateDebut: null },
         certitude: "aucune_resolution",
       };
     case "update_affaire_status":
       return {
         type: "maj_statut_affaire",
-        libelle: `Passer une affaire en ${texte("status") ?? "?"}`,
+        libelle: `Passer ${mots.indefinite} en ${texte("status") ?? "?"}`,
         champs: { affaireId: texte("id") ?? "", statut: texte("status") ?? "" },
         certitude: "aucune_resolution",
       };
@@ -1144,7 +1161,14 @@ async function executeTool(
   // supprimés : un code mort qui écrit en base est exactement ce qui se
   // rebranche par accident. Il ne reste rien à rebrancher.
   if ((OUTILS_ECRITURE as readonly string[]).includes(name)) {
-    const operation = proposerEcriture(name, args, dernierMessageUtilisateur);
+    // Le secteur est relu à CHAQUE proposition, jamais mémorisé : US-A6.1
+    // exige qu'un changement s'applique dès la phrase suivante.
+    const operation = proposerEcriture(
+      name,
+      args,
+      dernierMessageUtilisateur,
+      await verticalDuTenant(tenantId),
+    );
     return {
       result:
         `Opération PROPOSÉE, pas encore appliquée : ${operation.libelle}. ` +

@@ -122,16 +122,6 @@ describe("a — AC1 : le prompt porte le vocabulaire du secteur déclaré", () =
     expect(texteConseil).not.toContain("chantier");
   });
 
-  test("dictée vocale : idem, sur son propre prompt", async () => {
-    const pourConseil = await capterPromptsSysteme(() =>
-      request(serveurTest(app)).post("/api/voix/interpreter").set("Cookie", conseil.cookie).send({ texte: "voix-test-vocabulaire" }),
-    );
-    const texte = pourConseil.join("\n");
-    expect(texte).toContain("mission");
-    expect(texte).not.toContain("chantier");
-    // Le cadrage « artisan du bâtiment » a bien disparu du prompt.
-    expect(texte).not.toContain("artisan du bâtiment");
-  });
 
   test("dictée de devis : idem, y compris dans l'exemple travaillé", async () => {
     const pourConseil = await capterPromptsSysteme(() =>
@@ -174,36 +164,18 @@ describe("b — AC3 : le changement de secteur s'applique sans redémarrage", ()
   });
 });
 
-// ── c. AC2 — le libellé soumis à validation parle la langue du secteur ─────
-
-describe("c — AC2 : le libellé d'une action à valider emploie le mot du secteur", () => {
-  test("une création dictée chez un consultant se lit « Créer la mission … »", async () => {
-    const res = await request(serveurTest(app))
-      .post("/api/voix/interpreter")
-      .set("Cookie", conseil.cookie)
-      .send({ texte: "voix-test-libelle" })
-      .expect(200);
-
-    const libelles = (res.body.operations ?? []).map((o: { libelle: string }) => o.libelle);
-    expect(libelles.length).toBeGreaterThan(0);
-    expect(libelles.join(" ")).toContain("mission");
-    expect(libelles.join(" ")).not.toContain("chantier");
-    // « affaire » est le mot NEUTRE de la base : correct en soi, mais ce
-    // n'est pas celui que l'écran de ce tenant affiche.
-    expect(libelles.join(" ")).not.toContain("l'affaire");
-  });
-
-  test("chez un tenant bâtiment, le même chemin dit « chantier »", async () => {
-    const res = await request(serveurTest(app))
-      .post("/api/voix/interpreter")
-      .set("Cookie", batiment.cookie)
-      .send({ texte: "voix-test-libelle" })
-      .expect(200);
-
-    const libelles = (res.body.operations ?? []).map((o: { libelle: string }) => o.libelle);
-    expect(libelles.join(" ")).toContain("chantier");
-  });
-});
+// ── c. AC2 — DÉPLACÉ ────────────────────────────────────────────────────────
+//
+// « Le libellé soumis à validation parle la langue du secteur » était vérifié
+// ici, à travers `POST /voix/interpreter`. Cette route a été retirée : le
+// micro parle désormais à l'agent de discussion.
+//
+// La garde n'a pas disparu, elle a changé de place — et de nature. Elle porte
+// maintenant directement sur `proposerEcriture`, dans
+// `agent-operateur.test.ts` : « le libellé d'une opération emploie le mot du
+// secteur ». C'est ce test-là qui a d'ailleurs révélé que le mot était écrit
+// EN DUR côté agent, défaut invisible tant que le micro parlait à l'ancienne
+// route.
 
 // ── d. Garde structurelle ──────────────────────────────────────────────────
 
