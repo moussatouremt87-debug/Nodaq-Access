@@ -271,3 +271,63 @@ describe('un prix dicté, quand le catalogue ne sait pas', () => {
     expect(lignesACompleter).toBe(0);
   });
 });
+
+/**
+ * ── LE PRIX DICTÉ L'EMPORTE SUR LE CATALOGUE ────────────────────────────────
+ *
+ * Constaté le 29/08/2026, en validant réellement une proposition de l'agent :
+ *
+ *   dicté  : « facture de 1 200 euros — reprise d'un mur de clôture »
+ *   écrit  : 1 × 68,00 € — « Maçonnerie de parpaings 20cm »
+ *
+ * Le mot « mur » suffisait à apparier une ligne de catalogue, et le prix de
+ * cette ligne écrasait le montant sorti de la bouche de l'utilisateur. Le
+ * libellé partait avec : le client aurait reçu une facture décrivant un
+ * ouvrage dont il n'a jamais été question.
+ *
+ * La règle 3 du dépôt dit l'inverse : quand l'humain prononce le chiffre, il
+ * en est la SEULE source recevable. Un catalogue ne le contredit pas.
+ *
+ * Et quand le prix dicté contredit le tarif, l'appariement lui-même devient
+ * douteux : garder la désignation du catalogue reviendrait à facturer autre
+ * chose que ce qui a été dit. On retombe donc sur les mots de l'utilisateur.
+ */
+describe("le prix dicté l'emporte sur le catalogue", () => {
+  test("un LIBELLÉ IDENTIQUE reste protégé : le tarif l'emporte encore", () => {
+    // La preuve est forte — le catalogue connaît cette ligne sous ce nom. La
+    // garde d'origine tient : un chiffre mal transcrit ne change pas un tarif.
+    const r = rapprocher(
+      { libelle: "Cloison BA13", quantite: 1, unite: "u", prixUnitaireHtCents: 120_000 },
+      CATALOGUE,
+    );
+    expect(r.prixUnitaireHtCents).toBe(4_500);
+    expect(r.provenance).toBe("catalogue");
+  });
+
+  test("le mot-clé ne suffit plus à écraser un montant prononcé", () => {
+    const r = rapprocher(
+      { libelle: "Reprise d'un mur en placo", quantite: 1, unite: null, prixUnitaireHtCents: 120_000 },
+      CATALOGUE,
+    );
+    expect(r.prixUnitaireHtCents).toBe(120_000);
+    expect(r.libelle).toBe("Reprise d'un mur en placo");
+  });
+
+  test("un prix dicté ÉGAL au tarif corrobore l'appariement : le catalogue est conservé", () => {
+    const r = rapprocher(
+      { libelle: "placo", quantite: 30, unite: "m", prixUnitaireHtCents: 4_500 },
+      CATALOGUE,
+    );
+    expect(r.prixUnitaireHtCents).toBe(4_500);
+    expect(r.libelle).toBe("Cloison BA13");
+    expect(r.catalogueLigneId).toBe("cat-placo");
+    expect(r.tauxTva).toBe(20);
+  });
+
+  test("sans prix dicté, le catalogue fait foi comme avant", () => {
+    const r = rapprocher({ libelle: "placo", quantite: 12, unite: "m2" }, CATALOGUE);
+    expect(r.prixUnitaireHtCents).toBe(4_500);
+    expect(r.libelle).toBe("Cloison BA13");
+    expect(r.provenance).toBe("catalogue");
+  });
+});
