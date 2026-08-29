@@ -260,3 +260,35 @@ describe("le libellé d'une opération emploie le mot du secteur", () => {
     ).toContain("une mission");
   });
 });
+
+
+/*
+ * ── UNE RELANCE SANS PERSONNE À APPELER ──────────────────────────────────
+ *
+ * Constaté sur le déploiement le 29/08/2026 : l'agent proposait « Préparer
+ * une campagne de relance téléphonique », et la validation rendait un bandeau
+ * rouge — « Une des opérations n'a pas pu être appliquée » — sans dire
+ * pourquoi.
+ *
+ * La cause : `proposerEcritureBrute` rendait `champs: {}` pour cet outil, donc
+ * `appels` était TOUJOURS vide et `executerPlan` levait systématiquement.
+ * Le calcul des impayés joignables vivait dans l'extracteur d'intentions ; en
+ * le retirant, on a laissé cette capacité sans porteur.
+ *
+ * Ces gardes tiennent les deux moitiés du correctif : le calcul est porté, et
+ * l'absence d'impayé donne une PHRASE plutôt qu'une opération condamnée.
+ */
+describe("lancer_relance ne propose plus une opération vouée à échouer", () => {
+  /*
+   * `proposerEcriture` reste volontairement muet sur cet outil : le calcul
+   * demande la base, et cette fonction est pure. C'est `executeTool` qui
+   * intercepte. Cette garde fige la frontière — si quelqu'un rebranchait
+   * `lancer_relance` sur le switch générique, l'opération repartirait vide.
+   */
+  test("l'outil n'est plus servi par le switch générique", () => {
+    const op = proposerEcriture("lancer_relance", {}, "");
+    // Le switch générique rendrait `champs: {}` — exactement ce qui produisait
+    // « Campagne de relance sans appel » à la validation.
+    expect(op.champs["appels"]).toBeUndefined();
+  });
+});
