@@ -157,6 +157,42 @@ export function cheminOuvertAuRole(role: string | null | undefined, chemin: stri
   return perimetre.some((prefixe) => chemin === prefixe || chemin.startsWith(`${prefixe}/`));
 }
 
+/**
+ * Les ROUTES du SPA ouvertes au comptable — le pendant de `ECRANS_COMPTABLE`.
+ *
+ * Deux listes et non une, pour la même raison que côté tiers de confiance :
+ * les chemins d'API et les routes d'écran ne coïncident pas. L'échéancier
+ * fiscal en est l'exemple — l'écran est `/echeancier`, la route d'API
+ * `/echeances`.
+ *
+ * Celle-ci ne PROTÈGE rien : elle évite d'afficher un lien qui répondrait 403.
+ * La protection est côté serveur (`PERIMETRE_API_PAR_ROLE`), parce qu'une URL
+ * reste tapable quoi qu'affiche le menu.
+ */
+export const ROUTES_COMPTABLE = [
+  "/",
+  "/cockpit",
+  "/compte-resultat",
+  "/factures",
+  "/avoirs",
+  "/charges-recurrentes",
+  "/classeur",
+  "/echeancier",
+  "/rapports",
+  "/activite",
+  "/marge",
+  "/previsionnel-tresorerie",
+  "/votre-metier",
+] as const;
+
+/** Vrai si cette route d'écran est ouverte au comptable. */
+export function routeOuverteAuComptable(route: string): boolean {
+  if (route === "/") return true;
+  return ROUTES_COMPTABLE.some(
+    (prefixe) => prefixe !== "/" && (route === prefixe || route.startsWith(`${prefixe}/`)),
+  );
+}
+
 /** Vrai si ce chemin d'API est ouvert au tiers de confiance en lecture seule. */
 export function cheminOuvertEnLectureSeule(chemin: string): boolean {
   return ECRANS_TIERS_LECTURE.some(
