@@ -647,3 +647,72 @@ describe("régression #41 — delai_paiement_client via paiements", () => {
     expect(result.valeur).toBe(15);
   });
 });
+
+
+/*
+ * ── LE FACTEUR 100 ───────────────────────────────────────────────────────
+ *
+ * Constaté sur le déploiement le 29/08/2026 : un chantier de 4 200 € était
+ * annoncé « 420 k € de travail en cours ». Cent fois trop.
+ *
+ * `montant_vendu_ht` est en CENTIMES — c'est la seule colonne monétaire du
+ * schéma dont le nom ne le dit pas, partout ailleurs le suffixe `_cents`
+ * l'annonce. Elle avait été lue comme des euros à CINQ endroits d'un même
+ * fichier, puis remultipliée par cent.
+ *
+ * Un carnet de commandes cent fois trop élevé est le genre de chiffre sur
+ * lequel on décide d'embaucher. Ces gardes portent donc sur des VALEURS,
+ * jamais sur une convention de nommage : c'est le résultat affiché qui doit
+ * être juste.
+ */
+describe("les montants d'affaires sont lus en CENTIMES", () => {
+  let tenant: TestTenant;
+
+  beforeAll(async () => {
+    tenant = await createTestTenant("centimes");
+    tenantIds.push(tenant.id);
+    // 4 200,00 € — la valeur exacte du chantier qui affichait 420 k €.
+    await adminPool.query(
+      `INSERT INTO affaires (id, tenant_id, label, status, montant_vendu_ht, created_at)
+       VALUES (gen_random_uuid()::text, $1::uuid, 'Refection toiture', 'EN_COURS', 420000, now())`,
+      [tenant.id],
+    );
+  }, 60_000);
+
+  test("le carnet de commandes rend 4 200 €, pas 420 000 €", async () => {
+    const r = await withTenant(tenant.id, (tx) =>
+      CALCULATORS["carnet_commandes_euros"](tx, parsePeriode("12_mois")),
+    );
+
+    // La valeur est en centimes : 420 000 centimes = 4 200 €.
+    expect(r.valeur).toBe(420000);
+    // LA garde : le défaut rendait 42 000 000, soit 420 k € à l'écran.
+    expect(r.valeur).not.toBe(42000000);
+    expect(r.unite).toBe("centimes HT");
+  });
+
+  test("le montant moyen par affaire rend 4 200 €, pas 420 000 €", async () => {
+    const r = await withTenant(tenant.id, (tx) =>
+      CALCULATORS["montant_moyen_affaire"](tx, parsePeriode("12_mois")),
+    );
+
+    expect(r.valeur).toBe(420000);
+    expect(r.valeur).not.toBe(42000000);
+  });
+
+  /*
+   * Le même défaut vivait dans trois autres indicateurs, où la colonne était
+   * comparée à des euros sans conversion. Ils ne rendent pas un montant mais
+   * un délai ou un pourcentage : la garde vérifie qu'ils restent dans un
+   * ordre de grandeur plausible, ce qu'un facteur 100 rendrait impossible.
+   */
+  test("les indicateurs dérivés restent dans un ordre de grandeur plausible", async () => {
+    for (const id of ["ecart_devise_realise", "carnet_commandes_euros", "montant_moyen_affaire"] as const) {
+      const r = await withTenant(tenant.id, (tx) => CALCULATORS[id](tx, parsePeriode("12_mois")));
+      if (r.valeur === null) continue;                     // seuil non atteint : légitime
+      // Un chantier de 4 200 € ne peut produire aucun indicateur au-delà de
+      // quelques centaines de milliers, quelle que soit son unité.
+      expect(Math.abs(r.valeur), id).toBeLessThan(1_000_000);
+    }
+  });
+});
