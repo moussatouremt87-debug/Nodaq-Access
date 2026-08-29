@@ -85,6 +85,129 @@ export const ECRANS_TIERS_LECTURE = [
   "/votre-metier",
 ] as const;
 
+/**
+ * Les écrans d'API ouverts au COMPTABLE.
+ *
+ * ── POURQUOI CETTE LISTE EXISTE ─────────────────────────────────────────────
+ * `ACCOUNTANT` figure dans `FINANCIAL_ROLES` — il voit donc les montants — mais
+ * RIEN ne limitait les écrans qu'il atteint. Il avait exactement ceux d'un
+ * patron : la prospection, l'équipe, les paramètres, et l'écran d'envoi des
+ * documents, qui porte le mot de passe SMTP du tenant.
+ *
+ * Constaté par le fondateur le 29/08/2026, sur son propre accès comptable.
+ *
+ * ── CE QU'UN COMPTABLE A BESOIN DE VOIR ─────────────────────────────────────
+ * Ce qu'il saisit et ce qu'il exporte : les produits (factures, avoirs), les
+ * charges, les justificatifs du classeur, le compte de résultat qu'il
+ * alimente, l'échéancier fiscal, et l'export FEC.
+ *
+ * La MARGE et le PRÉVISIONNEL y figurent par décision du fondateur : son
+ * cabinet fait du conseil de gestion, pas seulement de la tenue de comptes.
+ * Ce n'est pas une règle générale du produit — c'est un choix, et il se
+ * change ici.
+ *
+ * LISTE BLANCHE, jamais liste noire — même raison que pour le tiers de
+ * confiance : un routeur ajouté demain est refusé par défaut, et un oubli de
+ * liste noire est silencieux.
+ */
+export const ECRANS_COMPTABLE = [
+  "/cockpit",
+  "/compte-resultat",
+  "/factures",
+  "/avoirs",
+  "/charges-recurrentes",
+  "/classeur",
+  "/echeances",
+  "/rapports",
+  "/activity",
+  "/marge",
+  "/previsionnel-tresorerie",
+  /*
+   * Ajoutés APRÈS coup, et l'omission est instructive : une garde existante
+   * (`acces-financier-membres.test.ts`) exigeait déjà que le comptable
+   * atteigne ces trois routes, et ma première liste les fermait.
+   *
+   * Une restriction TROP LARGE est un défaut au même titre qu'une trop
+   * étroite — moins visible, car elle ne fuit rien, mais elle empêche le
+   * comptable de travailler. `/analytics/indicateurs` alimente le Cockpit et
+   * la Marge que je venais d'ouvrir : fermer la source en ouvrant l'écran
+   * aurait donné une page vide sans que rien ne l'explique.
+   */
+  "/analytics",
+  "/paiements",
+  "/contrats",
+  // Le secteur du tenant, pour que les libellés soient les mêmes des deux
+  // côtés — même raison que pour le tiers de confiance.
+  "/votre-metier",
+] as const;
+
+/**
+ * Le périmètre d'API d'un rôle, ou `undefined` quand il n'en a aucun.
+ *
+ * UNE SEULE CARTE, consultée par un seul point d'application. Écrire un
+ * second middleware pour le comptable aurait produit une troisième
+ * implémentation du même contrôle — ce dépôt a déjà payé trois fois ce
+ * travers, et à chaque fois les copies ont divergé.
+ *
+ * `OWNER` et `MEMBER` n'y figurent pas : le premier voit tout, le second est
+ * borné par `FINANCIAL_ROLES` (les montants) et par les droits d'écriture,
+ * pas par une liste d'écrans.
+ */
+export const PERIMETRE_API_PAR_ROLE: Partial<Record<MembershipRole, readonly string[]>> = {
+  VIEWER: ECRANS_TIERS_LECTURE,
+  ACCOUNTANT: ECRANS_COMPTABLE,
+};
+
+/**
+ * Ce chemin d'API est-il ouvert à ce rôle ?
+ *
+ * Un rôle sans périmètre déclaré passe : c'est le cas d'`OWNER`. L'absence de
+ * restriction est donc EXPLICITE dans la carte, jamais un effet de bord d'une
+ * condition oubliée.
+ */
+export function cheminOuvertAuRole(role: string | null | undefined, chemin: string): boolean {
+  const perimetre = PERIMETRE_API_PAR_ROLE[role as MembershipRole];
+  if (!perimetre) return true;
+  return perimetre.some((prefixe) => chemin === prefixe || chemin.startsWith(`${prefixe}/`));
+}
+
+/**
+ * Les ROUTES du SPA ouvertes au comptable — le pendant de `ECRANS_COMPTABLE`.
+ *
+ * Deux listes et non une, pour la même raison que côté tiers de confiance :
+ * les chemins d'API et les routes d'écran ne coïncident pas. L'échéancier
+ * fiscal en est l'exemple — l'écran est `/echeancier`, la route d'API
+ * `/echeances`.
+ *
+ * Celle-ci ne PROTÈGE rien : elle évite d'afficher un lien qui répondrait 403.
+ * La protection est côté serveur (`PERIMETRE_API_PAR_ROLE`), parce qu'une URL
+ * reste tapable quoi qu'affiche le menu.
+ */
+export const ROUTES_COMPTABLE = [
+  "/",
+  "/cockpit",
+  "/compte-resultat",
+  "/factures",
+  "/avoirs",
+  "/charges-recurrentes",
+  "/classeur",
+  "/echeancier",
+  "/rapports",
+  "/activite",
+  "/marge",
+  "/previsionnel-tresorerie",
+  "/contrats",
+  "/votre-metier",
+] as const;
+
+/** Vrai si cette route d'écran est ouverte au comptable. */
+export function routeOuverteAuComptable(route: string): boolean {
+  if (route === "/") return true;
+  return ROUTES_COMPTABLE.some(
+    (prefixe) => prefixe !== "/" && (route === prefixe || route.startsWith(`${prefixe}/`)),
+  );
+}
+
 /** Vrai si ce chemin d'API est ouvert au tiers de confiance en lecture seule. */
 export function cheminOuvertEnLectureSeule(chemin: string): boolean {
   return ECRANS_TIERS_LECTURE.some(

@@ -13,6 +13,7 @@
  * demanderait un environnement DOM pour un contrôle qui est purement textuel.
  * Même approche que les gardes structurelles de l'API.
  */
+import { routeOuverteAuComptable } from '@nodaq/shared';
 import { describe, test, expect } from "vitest";
 import { readFileSync } from "fs";
 import { join } from "path";
@@ -190,5 +191,42 @@ describe("prospection — masquée hors des verticaux exposés aux travaux", () 
 
   test("visible tant que le vertical n'est pas encore chargé (jamais masquée à tort)", () => {
     expect(prospection.visibleForVertical!(undefined)).toBe(true);
+  });
+});
+
+
+/*
+ * ── LE MENU DU COMPTABLE ──────────────────────────────────────────────────
+ *
+ * Ce filtre n'est PAS la protection : elle est côté serveur
+ * (`PERIMETRE_API_PAR_ROLE`), parce qu'une URL reste tapable quoi qu'affiche
+ * le menu. Il évite seulement d'offrir un lien qui répondrait 403.
+ *
+ * Le fondateur a constaté le 29/08/2026 que son comptable voyait « Envoi des
+ * documents » — l'écran qui porte le mot de passe SMTP.
+ */
+describe('les routes ouvertes au comptable', () => {
+  test('sa matière comptable lui est ouverte', () => {
+    for (const r of ['/factures', '/avoirs', '/compte-resultat', '/classeur', '/rapports']) {
+      expect(routeOuverteAuComptable(r), r).toBe(true);
+    }
+  });
+
+  test('la marge et le prévisionnel aussi — il conseille', () => {
+    expect(routeOuverteAuComptable('/marge')).toBe(true);
+    expect(routeOuverteAuComptable('/previsionnel-tresorerie')).toBe(true);
+  });
+
+  /*
+   * LA garde née du constat, et les commandes de l'entreprise avec elle.
+   */
+  test('les paramètres, l’envoi et la prospection lui sont fermés', () => {
+    for (const r of ['/parametres', '/parametres/envoi', '/prospection', '/prospects', '/equipe', '/connecteurs']) {
+      expect(routeOuverteAuComptable(r), r).toBe(false);
+    }
+  });
+
+  test('une route inconnue est fermée par DÉFAUT — liste blanche', () => {
+    expect(routeOuverteAuComptable('/un-ecran-de-demain')).toBe(false);
   });
 });
