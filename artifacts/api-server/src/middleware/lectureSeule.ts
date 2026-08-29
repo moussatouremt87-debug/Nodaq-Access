@@ -32,7 +32,7 @@
  * jamais prouver si les gardes ci-dessous s'appliquaient aussi à `/mfa/*`.
  */
 import type { Request, Response, NextFunction } from "express";
-import { estLectureSeule, cheminOuvertEnLectureSeule } from "@nodaq/shared";
+import { estLectureSeule, cheminOuvertAuRole } from "@nodaq/shared";
 
 export function lectureSeuleMethode(req: Request, res: Response, next: NextFunction): void {
   if (!estLectureSeule(req.session?.role)) { next(); return; }
@@ -44,13 +44,32 @@ export function lectureSeuleMethode(req: Request, res: Response, next: NextFunct
   });
 }
 
+/**
+ * Le périmètre d'écrans d'un rôle — tiers de confiance ET comptable.
+ *
+ * ── POURQUOI UN SEUL POINT D'APPLICATION ────────────────────────────────────
+ * Cette garde ne concernait que `VIEWER`. Le comptable, lui, atteignait TOUS
+ * les écrans d'un patron — y compris celui qui porte le mot de passe SMTP du
+ * tenant. Constaté le 29/08/2026.
+ *
+ * Écrire un second middleware aurait produit une troisième implémentation du
+ * même contrôle. Ce dépôt en a déjà payé trois : deux agents, deux calculs de
+ * département, deux notions de « facturé ». À chaque fois les copies ont
+ * divergé, et l'une a menti. Ici, le mensonge serait un écran ouvert à
+ * quelqu'un qui ne doit pas le voir.
+ *
+ * La carte `PERIMETRE_API_PAR_ROLE` est donc la source unique, et ce
+ * middleware son seul lecteur. Un rôle sans périmètre déclaré passe — c'est
+ * `OWNER`, et son absence de restriction est EXPLICITE dans la carte.
+ *
+ * `req.path` est relatif au point de montage du routeur (`/api`), donc déjà
+ * de la forme `/compte-resultat/...` — la même que les préfixes déclarés.
+ */
 export function lectureSeulePerimetre(req: Request, res: Response, next: NextFunction): void {
-  if (!estLectureSeule(req.session?.role)) { next(); return; }
-  // `req.path` est relatif au point de montage du routeur (`/api`), donc
-  // déjà de la forme `/compte-resultat/...` — la même forme que les préfixes
-  // de `ECRANS_TIERS_LECTURE`.
-  if (cheminOuvertEnLectureSeule(req.path)) { next(); return; }
+  if (cheminOuvertAuRole(req.session?.role, req.path)) { next(); return; }
   res.status(403).json({
-    error: "Cet écran n'est pas inclus dans l'accès qui vous a été ouvert.",
+    error: estLectureSeule(req.session?.role)
+      ? "Cet écran n'est pas inclus dans l'accès qui vous a été ouvert."
+      : "Cet écran n'est pas inclus dans votre accès.",
   });
 }
