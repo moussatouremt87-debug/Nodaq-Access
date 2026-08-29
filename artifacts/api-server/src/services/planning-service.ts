@@ -4,6 +4,7 @@
  * Fully testable without infrastructure.
  */
 import { compteDansCapacite, type AffaireWords } from "@nodaq/shared";
+import { STATUTS_AFFAIRE_ACTIVE } from "../lib/affaire-active.js";
 
 export type MemberRecord = {
   id: string;
@@ -114,7 +115,9 @@ function buildFeriesSet(from: Date, weeks: number): Set<string> {
 
 // ── Shared constants ──────────────────────────────────────────────────────
 
-export const WORK_STATUSES = new Set(["ACCEPTEE", "EN_COURS", "ACCEPTÉ", "ACCEPTÉE"]);
+// Cette liste était la SEULE juste des six qui existaient. Elle est
+// désormais la source, et les cinq autres en dérivent.
+export const WORK_STATUSES = new Set<string>(STATUTS_AFFAIRE_ACTIVE);
 export const DEVIS_STATUSES = new Set(["DEVIS_ENVOYE", "DEVIS_ENVOYÉ"]);
 const SCHEDULE_DAYS = ["LUN", "MAR", "MER", "JEU", "VEN"] as const;
 

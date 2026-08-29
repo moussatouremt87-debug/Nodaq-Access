@@ -24,6 +24,7 @@ import {
   basculerEspace,
 } from "../lib/authService";
 import { verticalDepuisTx } from "../lib/vertical-tenant.js";
+import { STATUTS_AFFAIRE_ACTIVE } from "../lib/affaire-active.js";
 
 const router: IRouter = Router();
 
@@ -206,7 +207,8 @@ router.get("/auth/me", async (req, res): Promise<void> => {
 // Même définition du "vendu" que revenusAcquis.ts (non exportée de là,
 // dupliquée ici à l'identique plutôt que de réorganiser ce module existant
 // pour un seul appelant).
-const AFFAIRES_EN_COURS_STATUSES = ["ACCEPTEE", "EN_COURS"];
+// Une seule définition pour tout le serveur — voir `lib/affaire-active.ts`.
+const AFFAIRES_EN_COURS_STATUSES = STATUTS_AFFAIRE_ACTIVE as unknown as string[];
 
 router.get("/auth/mes-espaces", async (req, res): Promise<void> => {
   const cookies = (req as any).signedCookies ?? {};

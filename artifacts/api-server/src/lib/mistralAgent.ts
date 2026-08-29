@@ -47,6 +47,7 @@ import { conditionFactureEnRetardSql } from "./facturesEnRetard.js";
 import { rapprocherDictee, totalProposition } from "@nodaq/shared";
 import { montantsNonSources, MESSAGE_REFUS_CHIFFRAGE } from "./garde-montants.js";
 import { logger } from "./logger.js";
+import { conditionAffaireActive } from "./affaire-active.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -603,7 +604,7 @@ async function buildSystemPrompt(tenantId: string): Promise<string> {
         quotedAmountCents: affairesTable.quotedAmountCents,
       })
       .from(affairesTable)
-      .where(eq(affairesTable.status, "EN_COURS"))
+      .where(conditionAffaireActive())
       .orderBy(desc(affairesTable.createdAt))
       .limit(8);
 
@@ -1833,7 +1834,7 @@ export async function getContextualSuggestions(tenantId: string): Promise<string
       const [activeAffaire] = await tx
         .select({ label: affairesTable.label })
         .from(affairesTable)
-        .where(eq(affairesTable.status, "EN_COURS"))
+        .where(conditionAffaireActive())
         .orderBy(desc(affairesTable.createdAt))
         .limit(1);
 

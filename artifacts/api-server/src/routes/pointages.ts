@@ -26,6 +26,7 @@ import {
   clientsTable,
 } from "@workspace/db";
 import { toDateString, bornesSemaine, HEURES_PAR_JOUR_STANDARD } from "@nodaq/shared";
+import { STATUTS_AFFAIRE_ACTIVE } from "../lib/affaire-active.js";
 
 const router: IRouter = Router();
 
@@ -35,7 +36,8 @@ const DATE_ISO = /^\d{4}-\d{2}-\d{2}$/;
 const JOURS_OUVRES = ["LUN", "MAR", "MER", "JEU", "VEN"] as const;
 
 /** Affaires sur lesquelles du temps peut être pointé. */
-const STATUTS_ACTIFS = ["EN_COURS", "ACCEPTEE"];
+// Une seule définition pour tout le serveur — voir `lib/affaire-active.ts`.
+const STATUTS_ACTIFS = STATUTS_AFFAIRE_ACTIVE as unknown as string[];
 
 // ── Schémas ───────────────────────────────────────────────────────────────────
 
