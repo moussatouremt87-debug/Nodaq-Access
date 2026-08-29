@@ -164,7 +164,39 @@ describe("b — AC3 : le changement de secteur s'applique sans redémarrage", ()
   });
 });
 
-// ── c. AC2 — DÉPLACÉ ────────────────────────────────────────────────────────
+// ── c. AC2 — le libellé soumis à validation parle la langue du secteur ─────
+//
+// Éprouvé DE BOUT EN BOUT, sur le chemin vivant : un message de discussion qui
+// déclenche `create_affaire`, et le libellé du plan qui en sort.
+//
+// Une garde posée sur `proposerEcriture` seule ne suffit pas — elle lui passe
+// le secteur à la main. Ce qu'il faut exercer, c'est le CÂBLAGE : `executeTool`
+// qui relit le secteur du tenant à chaque proposition. Vérifié en injectant un
+// secteur figé à cet endroit : la garde unitaire restait verte, celle-ci non.
+
+describe("c — AC2 : le libellé d'une action à valider emploie le mot du secteur", () => {
+  const libelles = async (l: { cookie: string }) => {
+    const { body } = await request(serveurTest(app))
+      .post("/api/chat/messages").set("Cookie", l.cookie)
+      .send({ content: "agent-test-affaire" }).expect(200);
+    return (body.operations ?? []).map((o: { libelle: string }) => o.libelle).join(" ");
+  };
+
+  test("chez un consultant, « Créer la mission »", async () => {
+    const texte = await libelles(conseil);
+    expect(texte).toContain("mission");
+    expect(texte).not.toContain("chantier");
+    expect(texte).not.toContain("l'affaire");
+  });
+
+  test("chez un tenant bâtiment, « Créer le chantier »", async () => {
+    const texte = await libelles(batiment);
+    expect(texte).toContain("chantier");
+    expect(texte).not.toContain("mission");
+  });
+});
+
+// ── AC2, note de déplacement ────────────────────────────────────────────────
 //
 // « Le libellé soumis à validation parle la langue du secteur » était vérifié
 // ici, à travers `POST /voix/interpreter`. Cette route a été retirée : le
