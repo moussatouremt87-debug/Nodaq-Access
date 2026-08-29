@@ -420,6 +420,45 @@ globalThis.fetch = async function patchedFetch(
       return repondre('"Ah, d\'accord. Alors, je note ça."');
     }
 
+    /*
+     * `create_affaire` simulé — pour éprouver le VOCABULAIRE du secteur de
+     * bout en bout.
+     *
+     * US-A6.1/AC2 : le libellé d'une opération à valider doit employer le mot
+     * du tenant — « mission » chez un consultant, « chantier » au bâtiment.
+     * Le mot était écrit en dur dans `proposerEcritureBrute`, et une garde
+     * posée sur cette fonction seule ne l'aurait pas attrapé : elle lui passe
+     * le secteur à la main. C'est le CÂBLAGE — `executeTool` qui relit le
+     * secteur du tenant — qu'il faut exercer, donc un vrai aller-retour.
+     */
+    if (!hasPendingToolResult && userText.includes("agent-test-affaire")) {
+      return new Response(
+        JSON.stringify({
+          id: "chatcmpl-vitest-affaire",
+          object: "chat.completion",
+          model: "test/fake-chat-model",
+          choices: [{
+            index: 0,
+            message: {
+              role: "assistant",
+              content: null,
+              tool_calls: [{
+                id: "call_vitest_affaire",
+                type: "function",
+                function: {
+                  name: "create_affaire",
+                  arguments: JSON.stringify({ label: "Toiture Martin" }),
+                },
+              }],
+            },
+            finish_reason: "tool_calls",
+          }],
+          usage: { prompt_tokens: 12, completion_tokens: 8, total_tokens: 20 },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
     // create_prospect simulation: one round only (no pending tool result)
     if (!hasPendingToolResult && userText.includes("jean dupont")) {
       const toolCallBody = JSON.stringify({

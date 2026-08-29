@@ -211,3 +211,52 @@ describe("le prix dicté d'une ligne de devis", () => {
     expect(Object.keys(op.champs)).toEqual(["devisId"]);
   });
 });
+
+
+/*
+ * ── US-A6.1 / AC2 : LE LIBELLÉ PARLE LA LANGUE DU SECTEUR ────────────────
+ *
+ * Un consultant valide « Créer la mission », pas « Créer l'affaire ».
+ *
+ * Le mot était écrit EN DUR dans `proposerEcritureBrute`, alors que l'ancien
+ * chemin vocal passait par `affaireWords`. Tant que le micro parlait à cet
+ * ancien chemin, personne ne voyait rien. Le jour où il est passé à l'agent,
+ * le défaut est devenu réel — et c'est un test de la route morte qui l'a
+ * attrapé, en rougissant au moment de la retirer.
+ *
+ * D'où cette garde, posée sur le chemin VIVANT : elle ne dépend plus d'une
+ * route qu'on s'apprête à supprimer.
+ */
+describe("le libellé d'une opération emploie le mot du secteur", () => {
+  const libelleDe = (vertical: string | null) =>
+    proposerEcriture("create_affaire", { label: "Toiture Martin" }, "", vertical).libelle;
+
+  test("bâtiment : « chantier »", () => {
+    expect(libelleDe("batiment")).toBe("Créer le chantier « Toiture Martin »");
+  });
+
+  test("services projet : « mission »", () => {
+    const l = libelleDe("services_projet");
+    expect(l).toBe("Créer la mission « Toiture Martin »");
+    // LA garde : le mot du bâtiment ne doit pas fuir chez un consultant.
+    expect(l).not.toContain("chantier");
+    expect(l).not.toContain("affaire");
+  });
+
+  /*
+   * Secteur non déclaré : le mot NEUTRE de la base. Surtout pas celui du
+   * bâtiment — un tenant qui n'a rien déclaré ne doit pas se voir imposer un
+   * métier qu'il n'a pas choisi.
+   */
+  test("secteur inconnu : le mot neutre, jamais celui du bâtiment", () => {
+    const l = libelleDe(null);
+    expect(l).toBe("Créer l’affaire « Toiture Martin »".replace("’", "'"));
+    expect(l).not.toContain("chantier");
+  });
+
+  test("le changement de statut suit le même vocabulaire", () => {
+    expect(
+      proposerEcriture("update_affaire_status", { status: "GAGNE" }, "", "services_projet").libelle,
+    ).toContain("une mission");
+  });
+});
