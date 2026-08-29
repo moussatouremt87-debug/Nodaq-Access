@@ -356,7 +356,7 @@ export const TOOLS: LlmTool[] = [
     type: "function",
     function: {
       name: "create_devis",
-      description: "Crée un DEVIS en brouillon à partir de lignes dictées. Tu donnes le libellé, la quantité et l'unité de chaque ligne — JAMAIS un prix : le serveur les chiffre depuis le catalogue du tenant.",
+      description: "Crée un DEVIS en brouillon à partir de lignes dictées. Tu donnes le libellé, la quantité et l'unité. Le prix vient du catalogue du tenant : tu ne renseignes prixUnitaireEuros QUE si l'utilisateur a PRONONCÉ ce montant. Recopier ce qu'il vient de dire est permis ; en déduire ou en inventer un ne l'est pas, et le serveur le refuserait.",
       parameters: {
         type: "object",
         properties: {
@@ -373,6 +373,11 @@ export const TOOLS: LlmTool[] = [
                 // départ de tous les métiers. Les unités du secteur sont
                 // données par `vocabulaireAssistant`, qui est par tenant.
                 unite: { type: "string", description: "L'unité telle que l'utilisateur l'a dictée." },
+                prixUnitaireEuros: {
+                  type: "number",
+                  description:
+                    "Prix unitaire HT en EUROS, uniquement s'il a été PRONONCÉ par l'utilisateur. Jamais de centimes : « 1200 euros » se rend 1200. Omets ce champ si le montant n'a pas été dit.",
+                },
               },
               required: ["libelle"],
             },
@@ -386,7 +391,7 @@ export const TOOLS: LlmTool[] = [
     type: "function",
     function: {
       name: "create_facture",
-      description: "Crée une FACTURE en brouillon (sans numéro) à partir de lignes dictées. Même règle que create_devis : aucun prix de ta part, le catalogue chiffre.",
+      description: "Crée une FACTURE en brouillon (sans numéro) à partir de lignes dictées. Même règle que create_devis : le catalogue chiffre, et prixUnitaireEuros ne se renseigne que si l'utilisateur a PRONONCÉ ce montant.",
       parameters: {
         type: "object",
         properties: {
@@ -399,6 +404,11 @@ export const TOOLS: LlmTool[] = [
                 libelle: { type: "string" },
                 quantite: { type: "number" },
                 unite: { type: "string" },
+                prixUnitaireEuros: {
+                  type: "number",
+                  description:
+                    "Prix unitaire HT en EUROS, uniquement s'il a été PRONONCÉ par l'utilisateur. Jamais de centimes : « 1200 euros » se rend 1200. Omets ce champ si le montant n'a pas été dit.",
+                },
               },
               required: ["libelle"],
             },
@@ -969,17 +979,42 @@ function proposerEcritureBrute(
       };
     case "create_devis":
     case "create_facture": {
-      // Les lignes ne portent AUCUN prix : le serveur les chiffre depuis le
-      // catalogue du tenant (`rapprocherDictee`). C'est la règle 3 appliquée
-      // à la lettre — « il s'appuie sur le catalogue du tenant ».
+      /*
+       * Le catalogue chiffre — et lui seul, TANT QU'IL SAIT.
+       *
+       * Une ligne peut désormais porter un prix DICTÉ, pour le cas qui
+       * bloquait tout : « la réfection du mur pour 1200 euros » n'est dans
+       * aucun catalogue, et l'artisan est alors la seule source recevable du
+       * chiffre — exactement ce que la règle 3 autorise.
+       *
+       * Le montant passe par `centimesDepuisDictee` : s'il ne se retrouve pas
+       * dans la transcription, il est ÉCARTÉ et la ligne redevient « à
+       * compléter ». Un modèle qui hallucine un prix est arrêté ici.
+       *
+       * La priorité du catalogue est tenue plus loin, dans `rapprocher` : ce
+       * prix ne sert que là où le catalogue n'a rien à dire.
+       */
       const brutes = Array.isArray(args["lignes"]) ? (args["lignes"] as unknown[]) : [];
       const lignes = brutes
         .filter((l): l is Record<string, unknown> => typeof l === "object" && l !== null)
-        .map((l) => ({
-          libelle: typeof l["libelle"] === "string" ? l["libelle"] : "",
-          quantite: typeof l["quantite"] === "number" ? l["quantite"] : null,
-          unite: typeof l["unite"] === "string" ? l["unite"] : null,
-        }))
+        .map((l) => {
+          const euros = l["prixUnitaireEuros"];
+          const cents = centimesDepuisDictee(
+            messageUtilisateur,
+            typeof euros === "number" ? euros : null,
+          );
+          const quantite = typeof l["quantite"] === "number" ? l["quantite"] : null;
+          return {
+            libelle: typeof l["libelle"] === "string" ? l["libelle"] : "",
+            // Un forfait dicté n'a pas de quantité : « 1200 euros » pour un
+            // ouvrage, c'est une fois. Sans ce défaut, `totalProposition`
+            // compterait la ligne « à compléter » alors qu'elle a un prix, et
+            // annoncerait un devis moins cher que la réalité.
+            quantite: quantite ?? (cents !== null ? 1 : null),
+            unite: typeof l["unite"] === "string" ? l["unite"] : null,
+            ...(cents !== null ? { prixUnitaireHtCents: cents } : {}),
+          };
+        })
         .filter((l) => l.libelle.trim().length > 0);
       const mot = name === "create_devis" ? "devis" : "facture";
       return {
