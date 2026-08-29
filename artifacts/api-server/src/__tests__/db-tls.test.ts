@@ -55,8 +55,36 @@ describe("avec une CA fournie", () => {
       // Un refus qui ne dit pas quoi faire fait perdre autant de temps qu'un
       // échec obscur : le message doit porter la correction.
       expect((e as Error).message).toMatch(/nom DNS/i);
+      // Le message doit donner LES DEUX sorties, dont celle qui évite de
+      // retoucher au secret.
+      expect((e as Error).message).toMatch(/DATABASE_SSL_SERVERNAME/);
       expect((e as Error).message).toContain("195.154.197.204");
     }
+  });
+
+  /*
+   * Scaleway ne publie aucun nom DNS dans son API : la chaîne fabriquée depuis
+   * la console porte l'IP. Exiger de la réécrire obligerait à RETAPER un
+   * secret — et un secret qu'on retape finit collé au mauvais endroit. Le nom
+   * de vérification se pose donc à part.
+   */
+  test("une IP est acceptée SI le nom de vérification est fourni ailleurs", () => {
+    const o = optionsTls(URL_IP, {
+      DATABASE_CA_PEM: CA,
+      DATABASE_SSL_SERVERNAME: "rw-abc.rdb.fr-par.scw.cloud",
+    } as NodeJS.ProcessEnv);
+
+    // On se connecte à l'ADRESSE, on vérifie le NOM. Un imposteur qui
+    // répondrait à cette IP ne pourrait pas présenter ce certificat.
+    expect(o!.servername).toBe("rw-abc.rdb.fr-par.scw.cloud");
+    expect(o!.rejectUnauthorized).toBe(true);
+  });
+
+  test("le nom de vérification ne peut pas être une IP non plus", () => {
+    expect(() => optionsTls(URL_IP, {
+      DATABASE_CA_PEM: CA,
+      DATABASE_SSL_SERVERNAME: "195.154.197.204",
+    } as NodeJS.ProcessEnv)).toThrow(/adresse IP/);
   });
 
   test("un certificat tronqué est refusé tout de suite", () => {

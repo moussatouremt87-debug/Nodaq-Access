@@ -35,7 +35,11 @@
  *    si l'hôte n'est PAS une IP — la norme SNI interdit les adresses. Avec une
  *    IP, Node retombe sur son défaut `localhost` et le compare au certificat :
  *    « Host: localhost is not in the cert's altnames ». D'où le refus explicite
- *    ci-dessous plutôt qu'un échec obscur au premier client.
+ *    plutôt qu'un échec obscur au premier client.
+ *
+ *    Scaleway ne publiant aucun nom DNS dans son API, une chaîne fabriquée
+ *    depuis la console porte l'adresse. `DATABASE_SSL_SERVERNAME` donne alors
+ *    le nom à vérifier sans qu'on ait à retaper le secret.
  */
 
 /** Ce que `pg` attend dans son champ `ssl`. */
@@ -121,14 +125,35 @@ export function optionsTls(
     );
   }
 
-  if (estAdresseIp(hote)) {
+  /*
+   * ── QUAND LA CHAÎNE VISE UNE IP ──────────────────────────────────────────
+   * Scaleway ne publie PAS de nom DNS dans son API : une chaîne de connexion
+   * fabriquée depuis la console porte donc l'adresse. Exiger de la réécrire
+   * obligerait à retaper un secret — et un secret qu'on retape est un secret
+   * qu'on finit par coller au mauvais endroit.
+   *
+   * `DATABASE_SSL_SERVERNAME` fournit alors le nom à VÉRIFIER, sans toucher
+   * au secret. Ce n'est pas un contournement : on se connecte à l'adresse,
+   * et on exige que le serveur présente un certificat valide pour ce NOM.
+   * Un imposteur qui répondrait à cette IP ne pourrait pas le produire.
+   */
+  const nomVerification = env["DATABASE_SSL_SERVERNAME"]?.trim();
+  if (nomVerification && estAdresseIp(nomVerification)) {
     throw new DbTlsError(
-      `La chaîne de connexion vise une ADRESSE IP (${hote}). La vérification ` +
-        "TLS échouerait : SNI interdit les adresses, et Node comparerait alors " +
-        "le certificat à « localhost ». Utilisez le NOM DNS de l'instance — " +
-        "il figure dans les SAN du certificat.",
+      `DATABASE_SSL_SERVERNAME vaut une adresse IP (${nomVerification}). ` +
+        "SNI interdit les adresses : il faut un nom DNS.",
     );
   }
 
-  return { ca, rejectUnauthorized: true, servername: hote };
+  if (estAdresseIp(hote) && !nomVerification) {
+    throw new DbTlsError(
+      `La chaîne de connexion vise une ADRESSE IP (${hote}). La vérification ` +
+        "TLS échouerait : SNI interdit les adresses, et Node comparerait alors " +
+        "le certificat à « localhost ». Deux sorties : viser le NOM DNS de " +
+        "l'instance dans la chaîne, ou le poser dans DATABASE_SSL_SERVERNAME " +
+        "sans toucher au secret. Il figure dans les SAN du certificat.",
+    );
+  }
+
+  return { ca, rejectUnauthorized: true, servername: nomVerification ?? hote };
 }
