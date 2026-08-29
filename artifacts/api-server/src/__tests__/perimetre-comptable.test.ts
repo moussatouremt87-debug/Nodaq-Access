@@ -67,7 +67,20 @@ describe("ce que le comptable ATTEINT", () => {
    * se fermait, il ne pourrait plus tenir la comptabilité — une restriction
    * trop large est aussi un défaut, moins visible mais tout aussi réel.
    */
+  /*
+   * Ces routes viennent d'`acces-financier-membres.test.ts`, qui exigeait
+   * DÉJÀ que le comptable les atteigne. Ma première liste blanche les
+   * fermait, et c'est cette garde-là qui l'a rattrapé.
+   *
+   * Elles sont reprises ici pour que le lien soit visible depuis le fichier
+   * qui définit le périmètre : quelqu'un qui rétrécira la liste demain verra
+   * rougir le test qui parle de son sujet, pas un fichier voisin dont il
+   * ignore l'existence.
+   */
   test.each([
+    ["/analytics/indicateurs"],
+    ["/paiements"],
+    ["/contrats"],
     ["/compte-resultat"],
     ["/factures"],
     ["/avoirs"],

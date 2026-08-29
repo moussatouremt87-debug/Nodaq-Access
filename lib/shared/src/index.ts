@@ -122,6 +122,20 @@ export const ECRANS_COMPTABLE = [
   "/activity",
   "/marge",
   "/previsionnel-tresorerie",
+  /*
+   * Ajoutés APRÈS coup, et l'omission est instructive : une garde existante
+   * (`acces-financier-membres.test.ts`) exigeait déjà que le comptable
+   * atteigne ces trois routes, et ma première liste les fermait.
+   *
+   * Une restriction TROP LARGE est un défaut au même titre qu'une trop
+   * étroite — moins visible, car elle ne fuit rien, mais elle empêche le
+   * comptable de travailler. `/analytics/indicateurs` alimente le Cockpit et
+   * la Marge que je venais d'ouvrir : fermer la source en ouvrant l'écran
+   * aurait donné une page vide sans que rien ne l'explique.
+   */
+  "/analytics",
+  "/paiements",
+  "/contrats",
   // Le secteur du tenant, pour que les libellés soient les mêmes des deux
   // côtés — même raison que pour le tiers de confiance.
   "/votre-metier",
@@ -182,6 +196,7 @@ export const ROUTES_COMPTABLE = [
   "/activite",
   "/marge",
   "/previsionnel-tresorerie",
+  "/contrats",
   "/votre-metier",
 ] as const;
 
