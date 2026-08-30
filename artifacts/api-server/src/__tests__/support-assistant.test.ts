@@ -6,7 +6,7 @@
  * phrases — celle-là se juge à l'usage, pas en CI.
  */
 import { describe, test, expect } from "vitest";
-import { CONSIGNE_SUPPORT } from "../lib/support-connaissances";
+import { CONSIGNE_SUPPORT, consigneSupport } from "../lib/support-connaissances";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -165,6 +165,12 @@ describe("la consigne tient les règles produit", () => {
   });
 });
 
+/*
+ * Ces assertions visent `consigneSupport()` — ce que le modèle REÇOIT — et non
+ * le gabarit. Depuis que la connaissance vit dans `docs/aide/*.md`, le gabarit
+ * ne contient plus que les règles de conduite ; interroger le mauvais des deux
+ * donnerait un vert qui ne prouve rien.
+ */
 describe("ce que la consigne SAIT du produit", () => {
   test("elle nomme les écrans réels, pas des écrans plausibles", () => {
     for (const ecran of ["Cockpit", "Brief matin", "Devis", "Factures", "Avoirs", "Classeur", "Marge"]) {
@@ -175,12 +181,14 @@ describe("ce que la consigne SAIT du produit", () => {
   test("elle décrit la règle comptable qu'un artisan enfreint le plus", () => {
     // « Je corrige ma facture déjà envoyée » — la question qui revient, et la
     // seule réponse juste est l'avoir.
-    expect(CONSIGNE_SUPPORT).toMatch(/on ne modifie jamais une facture émise/i);
-    expect(CONSIGNE_SUPPORT).toMatch(/AVOIR/);
+    const recue = consigneSupport();
+    expect(recue).toMatch(/on ne modifie jamais une facture émise/i);
+    expect(recue).toMatch(/avoir/i);
   });
 
   test("elle explique l'attestation TVA comme une obligation, pas un caprice", () => {
-    expect(CONSIGNE_SUPPORT).toMatch(/attestation TVA/i);
-    expect(CONSIGNE_SUPPORT).toMatch(/obligation fiscale/i);
+    const recue = consigneSupport();
+    expect(recue).toMatch(/attestation TVA/i);
+    expect(recue).toMatch(/obligation fiscale/i);
   });
 });

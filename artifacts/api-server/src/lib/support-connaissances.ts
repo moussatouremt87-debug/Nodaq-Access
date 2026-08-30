@@ -24,67 +24,39 @@
  * l'exposer sans risque d'isolation.
  */
 
+import { articlesAide } from "./aide-articles.js";
+
 /** Les écrans, dits avec les mots de l'utilisateur. */
 const ECRANS = `
 Cockpit — la vue d'ensemble : chantiers en cours, chiffre d'affaires du mois,
   factures en attente, actions à valider.
 Brief matin — ce qui s'est passé depuis hier et ce qui attend aujourd'hui.
-Assistant (Agent IA) — on lui dicte ou on lui écrit : « fais un devis pour
-  Madame Berthier, 30 m² de placo ». Il PROPOSE, l'utilisateur valide, puis
-  c'est écrit. Il n'écrit jamais tout seul.
-Chantiers (ou Affaires selon le métier) — un chantier naît d'un devis accepté.
-Devis — création, envoi par courriel, acceptation par le client via un lien.
-  Un devis accepté se transforme en chantier, puis se facture.
-Contrats — les prestations récurrentes, facturées à échéance.
-Prospects et Prospection — le suivi commercial et les pistes issues de données
-  publiques.
-Factures — création, émission, suivi des règlements et des impayés. Une facture
-  émise est archivée en PDF, inaltérable.
-Avoirs — pour corriger ou annuler une facture émise ou payée.
-Activité, Heures — les pointages des salariés, qui peuvent être facturés.
-Marge — la rentabilité par chantier.
-Rapports, Compte de résultat, Prévisionnel — les vues financières.
-Échéancier fiscal, Charges récurrentes — les sorties d'argent à venir.
-Classeur — tous les documents, y compris les PDF de factures et d'avoirs.
-Équipe et plannings — les salariés, leurs affectations, leurs absences.
-Votre métier — le secteur, qui adapte le vocabulaire et les modules.
-Paramètres, Envoi des documents, Profil entreprise — la configuration.
-`.trim();
-
-/** Les enchaînements les plus demandés, dans l'ordre réel des écrans. */
-const PARCOURS = `
-FAIRE UN DEVIS : écran Devis → nouveau devis → client, lignes, taux de TVA →
-  enregistrer. Ou le dicter à l'Assistant, puis valider sa proposition.
-
-FAIRE SIGNER UN DEVIS : depuis le devis, « Envoyer » par courriel. Le client
-  reçoit un lien et accepte en ligne. Le devis accepté devient un chantier.
-
-FACTURER : depuis un devis accepté, « Facturer ». La facture naît en brouillon.
-  Elle ne compte nulle part tant qu'elle n'est pas ÉMISE.
-
-ÉMETTRE UNE FACTURE : depuis la facture, « Émettre ». Elle reçoit son numéro
-  définitif et son PDF archivé. Si une ligne est à taux réduit (10 % ou 5,5 %),
-  l'attestation TVA signée par le client doit être cochée — c'est une
-  obligation fiscale, pas un caprice du logiciel.
-
-ENCAISSER : depuis la facture, marquer le règlement. L'opération est annulable.
-
-CORRIGER UNE FACTURE PARTIE : on ne modifie jamais une facture émise — on crée
-  un AVOIR. C'est la règle comptable, et le produit la fait respecter.
-
-AJOUTER UN SALARIÉ : Équipe et plannings → Ajouter.
-
-INVITER SON COMPTABLE : Paramètres → Membres → Inviter, en choisissant l'accès
-  comptable. Il reçoit un lien par courriel.
-
-SE CONNECTER : mot de passe, puis un code à six chiffres reçu par courriel.
-  Sur un appareil déjà utilisé, le code n'est plus redemandé pendant trois mois.
+Agent IA — on lui dicte : « fais un devis pour Madame Berthier, 30 m² de placo ».
+  Il PROPOSE, l'utilisateur valide, puis c'est écrit.
+Chantiers, Devis, Contrats, Prospects, Prospection — le commercial.
+Factures, Avoirs, Paiements, Échéancier fiscal, Charges récurrentes — l'argent.
+Marge, Rapports, Compte de résultat, Prévisionnel — les vues financières.
+Heures, Équipe et plannings — les salariés et leur temps.
+Classeur — tous les documents, dont les PDF de factures et d'avoirs.
+Votre métier, Paramètres, Envoi des documents, Profil entreprise — la configuration.
 `.trim();
 
 /**
- * La consigne. Écrite pour un artisan, pas pour un informaticien.
+ * La consigne, bâtie À PARTIR des articles publiés.
+ *
+ * Elle n'est plus figée dans le code : `docs/aide/*.md` sert l'humain qui lit
+ * et l'agent qui répond. Corriger une explication, c'est corriger un fichier —
+ * plus besoin de toucher au code pour une phrase.
  */
-export const CONSIGNE_SUPPORT = `
+export function consigneSupport(): string {
+  const articles = articlesAide();
+  const documentation = articles.length
+    ? articles.map((a) => `── ${a.titre} ──\n${a.corps}`).join("\n\n")
+    : "(aucun article disponible sur ce déploiement)";
+  return CONSIGNE_BASE.replace("{{DOCUMENTATION}}", documentation);
+}
+
+const CONSIGNE_BASE = `
 Tu es l'assistant d'aide de nodaq, un logiciel de gestion pour artisans et
 petites entreprises du bâtiment et des services.
 
@@ -146,6 +118,13 @@ a été fait et ce qui suit.
 LES ÉCRANS DE L'APPLICATION :
 ${ECRANS}
 
-LES PARCOURS COURANTS :
-${PARCOURS}
+LA DOCUMENTATION — c'est ta source, cite-la, ne l'invente pas :
+
+{{DOCUMENTATION}}
 `.trim();
+
+/**
+ * Conservée pour les gardes qui lisent la consigne sans charger les articles.
+ * C'est le même texte, documentation en moins.
+ */
+export const CONSIGNE_SUPPORT = CONSIGNE_BASE;

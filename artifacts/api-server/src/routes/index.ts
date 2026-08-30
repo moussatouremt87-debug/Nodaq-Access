@@ -14,7 +14,7 @@ import prospectsRouter from "./prospects";
 import briefRouter from "./brief";
 import pendingActionsRouter from "./pending_actions";
 import chatRouter from "./chat";
-import supportRouter from "./support";
+import supportRouter, { aidePubliqueRouter } from "./support";
 import chatMediaRouter from "./chat-media";
 import devisRouter from "./devis";
 import classeurRouter from "./classeur";
@@ -82,6 +82,9 @@ router.use(healthRouter);
 router.use(authRouter);
 router.use(publicRouter);   // /public/devis/:token/accept-page, /public/devis/:token/accept
 router.use(membresPublicRouter); // /membres/inviter/:token (lecture + acceptation)
+// L'aide est PUBLIQUE, sans session : celui qui n'arrive pas à se connecter est
+// précisément celui qui en a le plus besoin d'elle.
+router.use(aidePubliqueRouter);  // /aide/llms.txt, /aide/articles, /aide/:slug.md
 // Webhook PA (US-A2.6) : pas de session, authentifié par signature HMAC —
 // voir facturation-electronique.ts. Aucune PA réelle contractée à ce jour ;
 // route non testable bout en bout, seulement son authentification.

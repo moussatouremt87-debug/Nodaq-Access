@@ -26,11 +26,12 @@ import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { chatCompletion, getConfig, LlmConfigError, type LlmMessage } from "@nodaq/llm";
 import { messageValidation } from "../lib/message-validation.js";
-import { CONSIGNE_SUPPORT } from "../lib/support-connaissances.js";
+import { consigneSupport } from "../lib/support-connaissances.js";
 import {
   OUTILS_DIAGNOSTIC, OUTIL_TRANSMISSION, executerDiagnostic, transmettreALEquipe,
 } from "../lib/support-diagnostics.js";
 import { sendDocument } from "../lib/canal-emission.js";
+import { articlesAide, indexLlms } from "../lib/aide-articles.js";
 
 const router: IRouter = Router();
 
@@ -57,7 +58,7 @@ router.post("/support/messages", async (req, res): Promise<void> => {
   }
 
   const messages: LlmMessage[] = [
-    { role: "system", content: CONSIGNE_SUPPORT },
+    { role: "system", content: consigneSupport() },
     ...parsed.data.historique.map((m) => ({
       role: m.role as "user" | "assistant",
       content: m.contenu,
@@ -213,6 +214,42 @@ router.post("/support/messages", async (req, res): Promise<void> => {
       error: "L'assistant n'a pas pu répondre. Réessayez dans un instant.",
     });
   }
+});
+
+/*
+ * ── LA DOCUMENTATION, SERVIE AUX HUMAINS ET AUX MODÈLES ─────────────────────
+ *
+ * Trois routes PUBLIQUES, sans session : une page d'aide qu'il faut être
+ * connecté pour lire ne sert pas celui qui n'arrive pas à se connecter — et
+ * c'est précisément lui qui en a le plus besoin.
+ *
+ * Elles ne rendent que des fichiers versionnés dans le dépôt. Aucune donnée
+ * d'entreprise ne passe par là.
+ */
+export const aidePubliqueRouter: IRouter = Router();
+
+/** L'index destiné aux modèles, au format publié par ElevenLabs. */
+aidePubliqueRouter.get("/aide/llms.txt", (req, res): void => {
+  const base = process.env["PUBLIC_URL"]?.replace(/\/$/, "") ?? `${req.protocol}://${req.get("host")}`;
+  res.type("text/plain; charset=utf-8").send(indexLlms(base));
+});
+
+/** La liste, pour l'écran d'aide. */
+aidePubliqueRouter.get("/aide/articles", (_req, res): void => {
+  res.json({
+    articles: articlesAide().map((a) => ({ slug: a.slug, titre: a.titre, sujets: a.sujets })),
+  });
+});
+
+/** Une page, en markdown brut — lisible par un humain comme par un agent. */
+aidePubliqueRouter.get("/aide/:slug.md", (req, res): void => {
+  const article = articlesAide().find((a) => a.slug === req.params.slug);
+  if (!article) { res.status(404).type("text/plain").send("Article introuvable."); return; }
+  // Le corps porte déjà son titre : le préfixer en ajouterait un second.
+  const contenu = article.corps.startsWith("#")
+    ? article.corps
+    : `# ${article.titre}\n\n${article.corps}`;
+  res.type("text/markdown; charset=utf-8").send(`${contenu}\n`);
 });
 
 export default router;
