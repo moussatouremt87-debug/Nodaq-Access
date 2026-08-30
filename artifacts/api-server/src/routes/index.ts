@@ -14,6 +14,7 @@ import prospectsRouter from "./prospects";
 import briefRouter from "./brief";
 import pendingActionsRouter from "./pending_actions";
 import chatRouter from "./chat";
+import supportRouter from "./support";
 import chatMediaRouter from "./chat-media";
 import devisRouter from "./devis";
 import classeurRouter from "./classeur";
@@ -171,6 +172,10 @@ router.use(biz, contratsRouter);
 router.use(biz, briefRouter);
 router.use(biz, pendingActionsRouter);
 router.use(biz, chatRouter);
+// L'aide ne lit aucune table métier et n'a aucun outil : elle passe par
+// `biz` comme le reste pour rester derrière l'authentification, mais elle
+// n'a rien à isoler.
+router.use(biz, supportRouter);
 router.use(biz, chatMediaRouter);
 router.use(biz, devisRouter);
 // US-B9.4 — la garde du téléversement vit DANS `classeur.ts`, après multer :

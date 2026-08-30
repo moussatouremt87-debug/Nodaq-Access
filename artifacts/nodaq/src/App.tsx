@@ -18,6 +18,7 @@ import Prospects from '@/pages/prospects';
 import Prospection from '@/pages/prospection';
 import Brief from '@/pages/brief';
 import Chat from '@/pages/chat';
+import Aide from '@/pages/aide';
 import Devis from '@/pages/devis';
 import Classeur from '@/pages/classeur';
 import Marge from '@/pages/marge';
@@ -232,6 +233,7 @@ function ApplicationInterne() {
               <Route path="/prospection" component={PlatformRoute(Prospection)} />
               <Route path="/brief" component={PlatformRoute(Brief)} />
               <Route path="/chat" component={PlatformRoute(Chat)} />
+              <Route path="/aide" component={PlatformRoute(Aide)} />
               <Route path="/devis" component={PlatformRoute(Devis)} />
               <Route path="/classeur" component={PlatformRoute(Classeur)} />
               <Route path="/analytique" component={PlatformRoute(Analytique)} />
