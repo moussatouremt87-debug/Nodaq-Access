@@ -12,7 +12,7 @@
  *   — l'enrôlement ne marque JAMAIS le domaine vérifié ;
  *   — isolation : l'enrôlement d'un tenant n'écrit rien chez un autre.
  */
-import { describe, test, expect, beforeAll, afterAll, vi } from "vitest";
+import { describe, test, expect, beforeAll, beforeEach, afterAll, vi } from "vitest";
 import request from "supertest";
 import express from "express";
 import crypto from "node:crypto";
@@ -68,7 +68,35 @@ function appAvecTransport(transport: TransportTem, tenantId: string) {
 const reponseOk = (selecteur = "nodaq01", cle = "v=DKIM1; k=rsa; p=MIIBIjAN…"): TransportTem =>
   async () => ({ status: 200, texte: JSON.stringify({ dkim_config: { selector: selecteur, public_key: cle } }) });
 
+/**
+ * ── CHAQUE TEST PART D'UN ENVIRONNEMENT CONNU ───────────────────────────────
+ *
+ * Ce fichier écrivait `process.env.TEM_*` test par test, sans jamais remettre
+ * l'état d'origine. `process.env` est un GLOBAL de processus, et
+ * `fileParallelism` est actif : plusieurs fichiers de test partagent le même
+ * worker, donc les mêmes variables.
+ *
+ * Le 30/08/2026, « sans TEM_API_KEY, idem » a échoué une fois sur une dizaine
+ * de passes complètes, sous Europe/Paris, et n'a pas été reproduit depuis. Je
+ * n'ai donc PAS établi l'entrelacement exact — et je ne l'invente pas ici.
+ *
+ * Ce qui est certain se corrige quand même : un test dont le résultat dépend
+ * de ce qu'un voisin a laissé dans l'environnement n'est pas un test, c'est un
+ * tirage. La remise à zéro ci-dessous rend chaque cas autonome, et la
+ * restauration finale rend le fichier inoffensif pour les autres.
+ *
+ * Surtout PAS de `retry` : une garde du dépôt l'interdit, et l'épisode lui
+ * donne raison — un flottement masqué aurait laissé ce défaut en place.
+ */
+const ENV_TEM = ["TEM_BASE_URL", "TEM_API_KEY", "TEM_PROJECT_ID"] as const;
+const envInitial = new Map<string, string | undefined>();
+
+beforeEach(() => {
+  for (const cle of ENV_TEM) delete process.env[cle];
+});
+
 beforeAll(async () => {
+  for (const cle of ENV_TEM) envInitial.set(cle, process.env[cle]);
   a = await inscrire("a");
   b = await inscrire("b");
   await poserDomaine(a, "toituremartin.fr");
@@ -76,6 +104,12 @@ beforeAll(async () => {
 }, 90_000);
 
 afterAll(async () => {
+  // L'environnement est rendu tel qu'il a été trouvé : les autres fichiers du
+  // même worker ne doivent rien hériter d'ici.
+  for (const [cle, valeur] of envInitial) {
+    if (valeur === undefined) delete process.env[cle];
+    else process.env[cle] = valeur;
+  }
   await adminPool.query(`DELETE FROM parametres_envoi WHERE tenant_id = ANY($1::uuid[])`, [cleanupTenantIds]);
   await cleanupTenants(...cleanupTenantIds);
   await cleanupUsers(...cleanupEmails);
@@ -97,8 +131,31 @@ describe("configuration absente → 503, et le manuel reste ouvert", () => {
   test("sans TEM_API_KEY, idem", async () => {
     process.env["TEM_BASE_URL"] = "http://tem.invalide.test";
     delete process.env["TEM_API_KEY"];
-    const r = await request(appAvecTransport(reponseOk(), a.tenantId)).post("/enroler").expect(503);
-    expect(r.body.variableManquante).toBe("TEM_API_KEY");
+
+    /*
+     * ── CE CAS A FLOTTÉ, ET LA CAUSE N'EST PAS ÉTABLIE ─────────────────────
+     *
+     * Il a échoué une fois le 30/08/2026 sur une dizaine de passes complètes,
+     * sous Europe/Paris, et n'a jamais été reproduit depuis — ni en isolation,
+     * ni en passe complète.
+     *
+     * Ce qu'on sait : ce test supprime lui-même la variable juste avant la
+     * requête, et aucun AUTRE fichier du dépôt ne la pose. L'explication
+     * évidente — un voisin qui la réécrit — ne tient donc pas.
+     *
+     * Plutôt que d'inventer une cause ou de masquer le cas par un `retry`
+     * (qu'une garde du dépôt interdit), on rend le prochain échec DIAGNOSTIQUE.
+     * Le message dira ce qui a réellement été observé.
+     *
+     * La valeur de la clé n'est JAMAIS affichée — seulement sa présence.
+     */
+    const observe = () =>
+      `clé définie : ${process.env["TEM_API_KEY"] !== undefined} · ` +
+      `base définie : ${process.env["TEM_BASE_URL"] !== undefined}`;
+
+    const r = await request(appAvecTransport(reponseOk(), a.tenantId)).post("/enroler");
+    expect(r.status, `attendu 503 — ${observe()} · corps : ${JSON.stringify(r.body)}`).toBe(503);
+    expect(r.body.variableManquante, `${observe()}`).toBe("TEM_API_KEY");
   });
 
   test("la CLÉ n'apparaît dans aucune réponse", async () => {
@@ -131,7 +188,9 @@ describe("configuration absente → 503, et le manuel reste ouvert", () => {
 // ── Formes de réponse ───────────────────────────────────────────────────────
 
 describe("la réponse du fournisseur est validée, jamais devinée", () => {
-  beforeAll(() => {
+  // `beforeEach` et non `beforeAll` : la remise à zéro du fichier s'exécute
+  // avant chaque test, et un `beforeAll` ne repasserait jamais derrière elle.
+  beforeEach(() => {
     process.env["TEM_BASE_URL"] = "http://tem.invalide.test";
     process.env["TEM_API_KEY"] = CLE;
   });
@@ -202,7 +261,9 @@ describe("la réponse du fournisseur est validée, jamais devinée", () => {
 // ── Effets en base ──────────────────────────────────────────────────────────
 
 describe("ce que l'enrôlement écrit — et ce qu'il n'écrit pas", () => {
-  beforeAll(() => {
+  // `beforeEach` et non `beforeAll` : la remise à zéro du fichier s'exécute
+  // avant chaque test, et un `beforeAll` ne repasserait jamais derrière elle.
+  beforeEach(() => {
     process.env["TEM_BASE_URL"] = "http://tem.invalide.test";
     process.env["TEM_API_KEY"] = CLE;
   });
