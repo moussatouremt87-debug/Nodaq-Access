@@ -7,6 +7,7 @@
  */
 import { describe, test, expect } from "vitest";
 import { CONSIGNE_SUPPORT, consigneSupport } from "../lib/support-connaissances";
+import { exigeTransmission, suiteDe } from "../lib/support-diagnostics";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -79,9 +80,55 @@ describe("l'exception reste bornée", () => {
    * signale » et inventait une référence. La règle est devenue structurelle :
    * un diagnostic consulté déclenche le dossier, quoi que le modèle raconte.
    */
-  test("un diagnostic consulté déclenche la transmission, sans lire le texte", () => {
-    expect(routeSource).toMatch(/aDiagnostique = true/);
-    expect(routeSource).toMatch(/!transmission\?\.transmis && aDiagnostique/);
+  test("la décision vient du RÉSULTAT du diagnostic, pas du texte", () => {
+    expect(routeSource).toMatch(/suiteDe\(/);
+    expect(routeSource).toMatch(/exigeTransmission\(suite\)/);
+  });
+
+  /*
+   * ── ET ELLE NE SUR-DÉCLENCHE PLUS ─────────────────────────────────────────
+   *
+   * La règle « un diagnostic consulté ⇒ on transmet » a été vérifiée en
+   * production le 30/08 et sur-déclenchait. Sur un tenant vide, l'agent
+   * répondait correctement — aucune facture, voici le chemin pour en créer
+   * une — puis promettait une réponse par courriel que personne n'enverrait.
+   *
+   * Une promesse de rappel non tenue coûte plus qu'un ticket manquant.
+   */
+  test("un diagnostic qui RÉPOND ne crée aucun dossier", () => {
+    for (const suite of ["repond"] as const) {
+      expect(exigeTransmission(suite), `« ${suite} » ne doit pas transmettre`).toBe(false);
+    }
+  });
+
+  test("un diagnostic qui trouve une anomalie ou n'aboutit pas transmet", () => {
+    for (const suite of ["anomalie", "inabouti"] as const) {
+      expect(exigeTransmission(suite), `« ${suite} » doit transmettre`).toBe(true);
+    }
+  });
+
+  test("un diagnostic qui OUBLIE de dire sa suite transmet quand même", () => {
+    // Le repli sûr est celui qui ne perd pas de dossier : un diagnostic
+    // ajouté plus tard sans champ `suite` doit faire remonter, pas se taire.
+    expect(suiteDe({})).toBe("inabouti");
+    expect(suiteDe({ suite: "n'importe quoi" })).toBe("inabouti");
+    expect(suiteDe({ suite: "repond" })).toBe("repond");
+  });
+
+  test("les quatre diagnostics déclarent tous une suite", () => {
+    // Sans ce contrôle, un diagnostic muet retomberait silencieusement sur
+    // « inabouti » et rouvrirait la sur-transmission par la petite porte.
+    const src = readFileSync(
+      new URL("../lib/support-diagnostics.ts", import.meta.url), "utf8",
+    ).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+    const retours = src.match(/suite[,:]/g) ?? [];
+    expect(retours.length, "un diagnostic ne rend pas de `suite`").toBeGreaterThanOrEqual(4);
+  });
+
+  test("une transmission réussie n'est jamais refaite dans la même conversation", () => {
+    // Observé en production : le modèle a appelé l'outil à ses DEUX tours, et
+    // l'équipe a reçu deux courriels pour un seul dossier.
+    expect(routeSource).toMatch(/transmettre_a_l_equipe" && transmission\?\.transmis/);
   });
 
   test("aucune décision ne se prend en lisant la réponse du modèle", () => {
