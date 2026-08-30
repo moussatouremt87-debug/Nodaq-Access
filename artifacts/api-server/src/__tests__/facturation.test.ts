@@ -580,7 +580,13 @@ describe("h — AVOIR", () => {
       .set("Cookie", cookieA)
       .send({ factureRefId: id, montantHtCents: 1000, montantTvaCents: 200, motif: "Test" });
     expect(res.status).toBe(422);
-    expect(res.body.error).toMatch(/EMISE/);
+    // Le message a changé le 30/08/2026 : l'avoir est désormais possible sur
+    // une facture PAYEE (remboursement), donc il ne parle plus de la seule
+    // EMISE. L'intention de ce test ne bouge pas — un BROUILLON est refusé —
+    // et l'assertion se renforce : le refus doit NOMMER le statut fautif,
+    // sans quoi l'utilisateur ne sait pas quoi corriger.
+    expect(res.body.error).toMatch(/BROUILLON/);
+    expect(res.body.error).toMatch(/émise ou payée/i);
     console.log("[h] Avoir sur BROUILLON → 422 ✓");
   });
 });
