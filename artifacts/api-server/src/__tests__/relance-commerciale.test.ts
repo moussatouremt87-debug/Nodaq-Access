@@ -92,12 +92,25 @@ describe("a — la proposition, pas l'envoi", () => {
     expect(String(p["lienWhatsApp"])).toContain("https://wa.me/33612345678?text=");
   });
 
-  test("RIEN n'est envoyé — aucune trace dans le journal d'envois", async () => {
+  test("RIEN n'est envoyé — aucune trace de relance au journal d'envois", async () => {
+    /*
+     * L'assertion portait sur un journal VIDE. C'était un raccourci commode
+     * tant que rien d'autre n'y écrivait — et il a cessé de l'être le
+     * 30/08/2026, quand l'inscription s'est mise à envoyer un code de
+     * connexion, qui laisse légitimement sa trace ici.
+     *
+     * L'intention, elle, ne bouge pas : la règle 4 n'admet pas d'exception,
+     * relancer se VALIDE d'abord. On la dit désormais telle quelle, en
+     * excluant le courriel de sécurité qui n'a rien à voir avec la relance.
+     * Plus précis qu'avant, et non plus permissif.
+     */
     const { rows } = await adminPool.query(
-      `SELECT count(*)::int AS n FROM envois_journal WHERE tenant_id = $1`, [tenantId],
+      `SELECT coalesce(string_agg(DISTINCT document_type, ','), '') AS types
+         FROM envois_journal
+        WHERE tenant_id = $1 AND document_type <> 'CODE_CONNEXION'`,
+      [tenantId],
     );
-    // La règle 4 n'admet pas d'exception : relancer se valide d'abord.
-    expect(rows[0].n).toBe(0);
+    expect(rows[0].types, "aucun document commercial ne doit être parti").toBe("");
   });
 });
 

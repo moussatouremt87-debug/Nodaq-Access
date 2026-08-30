@@ -52,6 +52,63 @@ afterAll(async () => {
 const connexion = () =>
   request(serveurTest(app)).post("/api/auth/login").send({ email, password: motDePasse });
 
+/*
+ * ── L'INSCRIPTION AUSSI ENVOIE LE CODE ──────────────────────────────────────
+ *
+ * Constaté en production le 30/08/2026, sur le PREMIER compte créé après la
+ * mise en ligne : zéro code généré, zéro ligne au journal d'envois. Le code
+ * était branché sur la connexion seule — or celui qui vient de s'inscrire ne
+ * passe pas par là. L'écran l'accueillait avec « Nous venons de vous envoyer
+ * un code », une phrase fausse, devant six cases vides.
+ *
+ * Le test précédent ne l'avait pas vu parce qu'il fabriquait son utilisateur
+ * en base au lieu de passer par l'inscription. Un parcours éprouvé à partir du
+ * MILIEU laisse le début sans garde.
+ */
+describe("celui qui vient de s'inscrire reçoit son code", () => {
+  test("l'inscription envoie un code, sans passer par la connexion", async () => {
+    codesEnvoyes.length = 0;
+    const adresse = `inscription-${Date.now()}@test.nodaq`;
+    const res = await request(serveurTest(app))
+      .post("/api/auth/register")
+      .send({ email: adresse, password: "test-pass-1234", nom: "Patron", tenantNom: "Nouvelle entreprise" })
+      .expect(201);
+
+    expect(res.body.mfaStatus).toBe("code_envoye");
+    expect(codesEnvoyes).toHaveLength(1);
+
+    // L'adresse est rendue ENTIÈRE : c'est ce qui rend une coquille visible.
+    expect(res.body.destinataire).toBe(adresse);
+
+    // Et le code saisi ouvre l'application dans la foulée.
+    const cookie = res.headers["set-cookie"]![0]!;
+    await request(serveurTest(app))
+      .post("/api/mfa/code/verifier").set("Cookie", cookie)
+      .send({ code: codesEnvoyes[0] }).expect(200);
+    await request(serveurTest(app))
+      .get("/api/cockpit/kpis").set("Cookie", cookie).expect(200);
+
+    await adminPool.query("DELETE FROM users WHERE email = $1", [adresse]);
+  }, 60_000);
+
+  test("l'état rendu par /auth/me porte l'adresse, pour qu'une coquille se voie", async () => {
+    codesEnvoyes.length = 0;
+    const adresse = `coquille-${Date.now()}@test.nodaq`;
+    const res = await request(serveurTest(app))
+      .post("/api/auth/register")
+      .send({ email: adresse, password: "test-pass-1234", nom: "Patron", tenantNom: "Entreprise" })
+      .expect(201);
+    const cookie = res.headers["set-cookie"]![0]!;
+
+    const me = await request(serveurTest(app))
+      .get("/api/auth/me").set("Cookie", cookie).expect(200);
+    expect(me.body.mfaStatus).toBe("code_requis");
+    expect(me.body.destinataire).toBe(adresse);
+
+    await adminPool.query("DELETE FROM users WHERE email = $1", [adresse]);
+  }, 60_000);
+});
+
 describe("un patron sans application d'authentification", () => {
   test("entre avec un code reçu par courriel, puis n'a plus rien à saisir", async () => {
     codesEnvoyes.length = 0;

@@ -279,6 +279,7 @@ export default function MfaPage() {
 
         {etape === 'code-courriel' && (
           <CodeCourrielEcran
+            destinataire={auth && 'destinataire' in auth ? auth.destinataire : undefined}
             code={code}
             setCode={setCode}
             erreur={erreur}
@@ -549,8 +550,10 @@ function ParametresEcran({ statut, onActiver, onRetour }: {
  * jargon, aucune abréviation, aucune notion à comprendre avant d'agir.
  */
 function CodeCourrielEcran({
-  code, setCode, erreur, envoi, renvoye, onSubmit, onRenvoyer,
+  destinataire, code, setCode, erreur, envoi, renvoye, onSubmit, onRenvoyer,
 }: {
+  /** L'adresse où le code est parti. Entière : c'est ce qui rend une coquille visible. */
+  destinataire?: string;
   code: string;
   setCode: (v: string) => void;
   erreur: string | null;
@@ -567,6 +570,18 @@ function CodeCourrielEcran({
           Nous venons de vous envoyer un code à six chiffres par e-mail.
           Ouvrez votre messagerie et recopiez-le ici.
         </p>
+        {/*
+          * L'ADRESSE, EN ENTIER. Le 30/08/2026, un compte a été créé avec
+          * « contac@nodaq.fr » — un « t » manquant. L'écran disait « code
+          * envoyé » sans dire OÙ, et il a fallu interroger la base de
+          * production pour trouver la coquille. Affichée, elle se voit en
+          * trois secondes.
+          */}
+        {destinataire && (
+          <p className="text-sm font-medium break-all">
+            Envoyé à <span className="text-primary">{destinataire}</span>
+          </p>
+        )}
       </div>
 
       <form onSubmit={onSubmit} className="space-y-4">
@@ -607,6 +622,15 @@ function CodeCourrielEcran({
         >
           Je n'ai rien reçu — m'envoyer un nouveau code
         </button>
+
+        {/*
+          * La sortie. Sans elle, une lettre manquante enferme quelqu'un devant
+          * six cases vides sans aucun recours : le code partira toujours à la
+          * mauvaise adresse, quel que soit le nombre de renvois.
+          */}
+        <a href="/login" className="block text-sm text-muted-foreground hover:underline">
+          Ce n'est pas votre adresse ? Recommencer avec une autre
+        </a>
       </div>
 
       {/*

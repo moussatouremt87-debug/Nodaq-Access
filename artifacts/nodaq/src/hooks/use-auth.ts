@@ -22,7 +22,9 @@ export type AuthState =
   // `code_requis` : un code à six chiffres a été envoyé par courriel. C'est le
   // chemin par DÉFAUT depuis le 30/08/2026 ; `enroll_required` ne subsiste que
   // pour qui DEMANDE une application d'authentification.
-  | { authenticated: true; mfaStatus: 'code_requis' | 'enroll_required' | 'verify_required' }
+  | { authenticated: true; mfaStatus: 'code_requis' | 'enroll_required' | 'verify_required';
+      /** L'adresse où le code est parti — entière, pour qu'une coquille se voie. */
+      destinataire?: string }
   | {
       authenticated: true;
       mfaStatus: 'verified' | 'not_required';
