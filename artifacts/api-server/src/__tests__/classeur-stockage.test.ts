@@ -170,6 +170,11 @@ describe("d — document sans contenu archivé (créé avant la migration)", () 
 
     const dl = await request(serveurTest(app)).get(`/api/classeur/${id}/telechargement`).set("Cookie", cookieA);
     expect(dl.status).toBe(404);
-    expect(dl.body.error).toMatch(/contenu archivé/);
+    // Le message a changé le 29/08/2026. L'intention de ce test — « explicite »
+    // — ne bouge pas ; c'est sa formulation qui mentait : elle accusait « un
+    // import antérieur à la mise en place du stockage » pour des factures
+    // créées le jour même. Dire une cause fausse est pire que n'en dire aucune.
+    expect(dl.body.error).toMatch(/aucun fichier n'est rattaché/i);
+    expect(dl.body.error).not.toMatch(/import/i);
   });
 });
