@@ -80,8 +80,9 @@ describe("un patron sans application d'authentification", () => {
       .get("/api/cockpit/kpis").set("Cookie", cookieSession).expect(200);
 
     // 5. LA promesse. Il revient demain sur le même appareil : aucun code.
-    const cookieAppareil = (verif.headers["set-cookie"] ?? [])
-      .find((c: string) => c.startsWith("nodaq_appareil="))!;
+    const entetes = verif.headers["set-cookie"];
+    const cookies: string[] = Array.isArray(entetes) ? entetes : entetes ? [entetes] : [];
+    const cookieAppareil = cookies.find(c => c.startsWith("nodaq_appareil="))!;
     expect(cookieAppareil).toBeTruthy();
 
     codesEnvoyes.length = 0;

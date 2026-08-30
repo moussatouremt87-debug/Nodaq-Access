@@ -193,7 +193,24 @@ function reponseAuthentification(
   // n'attend plus. La condition est LUE au même endroit que celle du
   // middleware — deux copies auraient divergé.
   if (hasFinancialAccess(role) && !secondFacteurSuspendu()) {
-    if (!user.mfaEnabledAt) return { authenticated: true, mfaStatus: "enroll_required" as const };
+    /*
+     * ── « code_requis », ET NON PLUS « enroll_required » ─────────────────────
+     *
+     * C'est cette réponse que l'écran lit pour décider quoi afficher. Tant
+     * qu'elle disait `enroll_required`, elle envoyait un artisan qui n'a rien
+     * demandé vers un QR code et un téléchargement.
+     *
+     * `code_requis` signifie : un code à six chiffres est attendu. Il a déjà
+     * été expédié à la connexion ; l'écran propose de le saisir, et de le
+     * renvoyer si besoin. Aucun courriel ne part d'ici — `/auth/me` est appelée
+     * à chaque chargement de page, en faire un déclencheur d'envoi inonderait
+     * la boîte de l'utilisateur.
+     *
+     * L'enrôlement d'une application d'authentification reste possible, mais il
+     * se DEMANDE désormais, depuis « Sécurité du compte ». Il n'est plus une
+     * étape imposée.
+     */
+    if (!user.mfaEnabledAt) return { authenticated: true, mfaStatus: "code_requis" as const };
     if (!session.mfaVerifiedAt) return { authenticated: true, mfaStatus: "verify_required" as const };
     return {
       authenticated: true,
