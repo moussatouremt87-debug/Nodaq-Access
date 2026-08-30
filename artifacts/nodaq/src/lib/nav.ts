@@ -27,6 +27,7 @@ import {
   Landmark,
   LineChart,
   FileClock,
+  LifeBuoy,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { decennaleApplicable, type AffaireWords, type Vertical } from '@nodaq/shared';
@@ -75,6 +76,11 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: '/',      label: 'Cockpit',     icon: LayoutDashboard, testId: 'nav-cockpit', essentiel: true },
       { href: '/brief', label: 'Brief matin', icon: Sunrise,         testId: 'nav-brief' },
       { href: '/chat',  label: 'Agent IA',    icon: MessageSquare,   testId: 'nav-chat', essentiel: true },
+      // L'aide est ABSENTE de `MOBILE_NAV` : la barre du pouce garde quatre
+      // entrées, réservées aux gestes quotidiens. Une bande qu'il faut faire
+      // défiler n'est pas une navigation. Elle reste atteignable partout par
+      // « Plus », ce que la garde de parité mobile vérifie.
+      { href: '/aide',  label: 'Aide',        icon: LifeBuoy,        testId: 'nav-aide' },
     ],
   },
   {
