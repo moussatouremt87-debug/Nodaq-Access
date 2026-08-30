@@ -14,26 +14,89 @@ const routeSource = readFileSync(
   join(__dirname, "..", "routes", "support.ts"), "utf8",
 ).replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/[^\n]*/gm, "$1");
 
-describe("il ne peut RIEN déclencher", () => {
+/*
+ * ── L'EXCEPTION À LA RÈGLE 4, ET CE QUI LA REND INOFFENSIVE ─────────────────
+ *
+ * Décidé le 30/08/2026 : le support transmet à l'équipe SANS validation
+ * humaine. La règle 4 protège contre un agent qui agirait sur le MÉTIER de
+ * l'artisan — envoyer un devis, émettre une facture. Ici le courriel part chez
+ * l'éditeur, à la demande de quelqu'un qui vient de demander de l'aide.
+ *
+ * L'exception ne tient pas à une promesse mais à trois propriétés de FORME,
+ * figées ci-dessous. Les retirer demanderait de faire rougir ces tests, donc
+ * d'y penser.
+ */
+describe("l'exception reste bornée", () => {
+  const diagSource = readFileSync(
+    join(__dirname, "..", "lib", "support-diagnostics.ts"), "utf8",
+  ).replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/[^\n]*/gm, "$1");
+
   /*
-   * LA garde. Un assistant d'aide qui pourrait écrire serait un chemin
-   * d'écriture de plus, hors du parcours de validation de la règle 4. Le seul
-   * moyen sûr est de ne lui donner aucun outil — et de le vérifier ici, parce
-   * qu'ajouter un outil « juste pour lire » est exactement la pente.
+   * LA propriété. Le modèle ne choisit AUCUN destinataire : s'il pouvait, une
+   * phrase bien tournée lui ferait écrire à un client de l'artisan.
    */
-  test("aucun outil n'est passé au modèle", () => {
-    expect(routeSource).toMatch(/chatCompletion\(\s*config,\s*messages,\s*undefined/);
-    expect(routeSource).not.toMatch(/tools\s*:/);
+  test("l'outil de transmission n'accepte aucune adresse", () => {
+    const bloc = /OUTIL_TRANSMISSION = \{[\s\S]*?\n\};/.exec(diagSource)?.[0] ?? "";
+    expect(bloc, "OUTIL_TRANSMISSION introuvable").not.toBe("");
+    for (const interdit of ["email", "adresse", "destinataire", "to"]) {
+      expect(bloc.toLowerCase(), `« ${interdit} » ne doit pas être un paramètre`)
+        .not.toMatch(new RegExp(`properties[\\s\\S]*?${interdit}\\s*:`, "i"));
+    }
+    expect(bloc).toMatch(/required:\s*\["resume"\]/);
   });
 
-  test("il ne touche à aucune table métier", () => {
-    for (const interdit of ["withTenant", "db.select", "db.insert", "db.update", "Table"]) {
-      expect(routeSource, `${interdit} n'a rien à faire dans l'aide`).not.toContain(interdit);
+  test("les deux destinataires viennent de la configuration et de la session", () => {
+    expect(diagSource).toMatch(/SUPPORT_ESCALADE_EMAIL/);
+    expect(diagSource).toMatch(/ctx\.emailUtilisateur/);
+    // Aucune adresse en dur : ni de repli, ni d'exemple oublié.
+    expect(diagSource).not.toMatch(/[\w.+-]+@[\w-]+\.[a-z]{2,}/i);
+  });
+
+  test("sans configuration, rien ne part — et on le dit", () => {
+    expect(diagSource).toMatch(/transmis: false/);
+    expect(diagSource).toMatch(/n'est pas configurée/);
+  });
+
+  test("les diagnostics ne font que LIRE", () => {
+    for (const interdit of [".insert(", ".update(", ".delete(", "INSERT", "UPDATE ", "DELETE "]) {
+      expect(diagSource, `${interdit} n'a rien à faire dans un diagnostic`).not.toContain(interdit);
     }
   });
 
-  test("la conversation n'est écrite nulle part", () => {
-    expect(routeSource).not.toMatch(/insert|INSERT/);
+  test("ils passent tous par withTenant — l'isolation reste entière", () => {
+    const fonctions = diagSource.match(/export async function diagnostic\w+/g) ?? [];
+    expect(fonctions.length).toBeGreaterThanOrEqual(4);
+    // Autant d'appels à withTenant que de diagnostics : aucun ne lit à côté.
+    const appels = diagSource.match(/withTenant\(/g) ?? [];
+    expect(appels.length).toBeGreaterThanOrEqual(fonctions.length);
+  });
+
+  /*
+   * ── LA TRANSMISSION NE DÉPEND PAS DE LA PROSE DU MODÈLE ───────────────────
+   *
+   * Trois tentatives ont échoué le 30/08/2026 : consigne, consigne plus ferme,
+   * puis détection de « transmis » dans le texte — il écrivait « je le
+   * signale » et inventait une référence. La règle est devenue structurelle :
+   * un diagnostic consulté déclenche le dossier, quoi que le modèle raconte.
+   */
+  test("un diagnostic consulté déclenche la transmission, sans lire le texte", () => {
+    expect(routeSource).toMatch(/aDiagnostique = true/);
+    expect(routeSource).toMatch(/!transmission\?\.transmis && aDiagnostique/);
+  });
+
+  test("aucune décision ne se prend en lisant la réponse du modèle", () => {
+    // Un `texte.match(...)` qui déciderait d'envoyer serait un retour au
+    // whack-a-mole des formulations.
+    expect(routeSource).not.toMatch(/PROMESSE|texte\.match|test\(texte\)/);
+  });
+
+  test("les références inventées par le modèle sont retirées", () => {
+    expect(routeSource).toMatch(/texte\.replace\(/);
+    expect(routeSource).toMatch(/transmission\.reference/);
+  });
+
+  test("la conversation n'est écrite dans aucune table", () => {
+    expect(routeSource).not.toMatch(/\.insert\(/);
   });
 });
 
@@ -43,6 +106,29 @@ describe("la consigne tient les règles produit", () => {
     expect(CONSIGNE_SUPPORT).toMatch(/expert-comptable/i);
     // La formule de repli exacte imposée par la règle 3 bis.
     expect(CONSIGNE_SUPPORT).toMatch(/pas encore disponible dans nodaq/i);
+  });
+
+  /*
+   * Observé avec le vrai modèle le 30/08/2026 : interrogé sur un code non reçu,
+   * il a INVENTÉ une cause — « votre fournisseur a bloqué l'adresse » — sans
+   * appeler le moindre diagnostic. Il aurait envoyé l'artisan reconfigurer son
+   * envoi de courriel pour un problème qui n'existait pas.
+   *
+   * Un support qui suppose est pire qu'un support absent.
+   */
+  test("elle interdit d'affirmer une cause sans avoir regardé", () => {
+    const plat = CONSIGNE_SUPPORT.replace(/\s+/g, " ");
+    expect(plat).toMatch(/N'AFFIRMES JAMAIS UNE CAUSE SANS AVOIR REGARDÉ/);
+    // Les quatre aiguillages nommés : un modèle ne devine pas quel outil sert
+    // à quoi à partir d'une consigne générale.
+    for (const outil of ["diagnostic_facture", "diagnostic_envois", "diagnostic_chantiers", "diagnostic_impayes"]) {
+      expect(plat, `${outil} doit être associé à un symptôme`).toContain(outil);
+    }
+  });
+
+  test("elle interdit d'annoncer une action future", () => {
+    // « je regarde et je reviens vers vous » : il n'y aura pas de second tour.
+    expect(CONSIGNE_SUPPORT).toMatch(/N'ANNONCES JAMAIS UNE ACTION FUTURE/);
   });
 
   test("elle impose le vouvoiement", () => {

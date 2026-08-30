@@ -63,7 +63,7 @@ export type CanalEmission = "EMAIL" | "PLATEFORME_AGREEE";
  * par un appel au support. Le journal n'en garde que le statut, jamais le
  * corps — donc jamais le code.
  */
-export type TypeDocument = "DEVIS" | "FACTURE" | "AVOIR" | "INVITATION" | "ESSAI" | "CODE_CONNEXION";
+export type TypeDocument = "DEVIS" | "FACTURE" | "AVOIR" | "INVITATION" | "ESSAI" | "CODE_CONNEXION" | "ESCALADE_SUPPORT";
 
 export interface SendOptions {
   canal: CanalEmission;
