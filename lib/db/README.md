@@ -12,11 +12,12 @@ pnpm run db:setup
 
 Cette commande enchaîne dans l'ordre :
 
-| Étape | Script | Connexion requise |
-|-------|--------|-------------------|
-| 1. Provisionner `app_user` | `create-app-role.cjs` | `DATABASE_URL` (propriétaire) |
-| 2. Appliquer les migrations SQL (schéma + RLS) | `migrate.mjs` | `DATABASE_URL` (propriétaire) |
-| 3. Créer le premier tenant + OWNER | `seed-owner.cjs` | `DATABASE_URL` (propriétaire) |
+| Étape                                                                    | Script                          | Connexion requise                 |
+| ------------------------------------------------------------------------ | ------------------------------- | --------------------------------- |
+| 1. Provisionner `app_user`                                               | `create-app-role.cjs`           | `DATABASE_URL` (propriétaire)     |
+| 2. Appliquer les migrations SQL (schéma + RLS)                           | `migrate.mjs`                   | `DATABASE_URL` (propriétaire)     |
+| 3. Reprendre et vérifier les secrets legacy (enchaîné par `migrate.mjs`) | `migrate-connector-secrets.mjs` | `DATABASE_URL` + `ENCRYPTION_KEY` |
+| 4. Créer le premier tenant + OWNER                                       | `seed-owner.cjs`                | `DATABASE_URL` (propriétaire)     |
 
 L'étape 1 n'affiche `DATABASE_URL_APP` **que si elle a créé le rôle** (mot de passe
 généré). **Copiez-la dans vos Secrets** avant de lancer l'API.
@@ -28,11 +29,12 @@ affichée : continuez d'utiliser le `DATABASE_URL_APP` que vous avez déjà.
 
 ## Variables d'environnement
 
-| Variable | Utilisée par | Description |
-|----------|-------------|-------------|
-| `DATABASE_URL` | Scripts de migration uniquement | Connexion propriétaire (SUPERUSER). **Jamais en runtime.** |
-| `DATABASE_URL_APP` | Pool applicatif + tests | Connexion `app_user` — soumise au RLS. |
-| `SESSION_SECRET` | API Server | Secret HMAC pour les cookies signés (≥ 32 chars). |
+| Variable           | Utilisée par                            | Description                                                                                            |
+| ------------------ | --------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `DATABASE_URL`     | Scripts de migration + démarrage Docker | Connexion propriétaire. Le démarrage Docker la retire de l'environnement avant d'exécuter l'API.       |
+| `DATABASE_URL_APP` | Pool applicatif + tests                 | Connexion `app_user` — soumise au RLS.                                                                 |
+| `SESSION_SECRET`   | API Server                              | Secret HMAC pour les cookies signés (≥ 32 chars).                                                      |
+| `ENCRYPTION_KEY`   | Reprise + API Server                    | Clé AES-256 en base64. Obligatoire avant `db:migrate`, car la reprise ne possède aucun repli en clair. |
 
 ---
 
@@ -50,6 +52,14 @@ node lib/db/scripts/create-app-role.cjs
 # été mis à jour partout. Ne jamais lancer ceci contre l'instance de production
 # « pour tester ».
 node lib/db/scripts/create-app-role.cjs --rotate-password
+
+# Appliquer le SQL puis, obligatoirement, reprendre et vérifier les secrets de
+# connecteurs. Un échec de reprise rend la commande non nulle.
+pnpm run db:migrate
+
+# Prévisualiser la reprise seule : vérifie les conflits et l'ancien chiffrement,
+# mais ne modifie ni connectors.config ni tenant_secrets.
+node lib/db/scripts/migrate-connector-secrets.mjs --dry-run
 
 # Créer toutes les tables (idempotent)
 node lib/db/scripts/migrate-multitenant.cjs
@@ -76,10 +86,10 @@ Deux conséquences :
 **Le préfixe numérique est une étiquette, pas une clé.** Rien n'impose qu'il soit
 unique. Deux fichiers portent volontairement le préfixe `002` :
 
-| Fichier | Rôle |
-|---------|------|
+| Fichier           | Rôle                                                                   |
+| ----------------- | ---------------------------------------------------------------------- |
 | `002_columns.sql` | Ajoute les colonnes `tenant_id` et celles héritées des anciens scripts |
-| `002_rls.sql` | Crée `app_user`, les GRANT, et active RLS `ENABLE`+`FORCE` |
+| `002_rls.sql`     | Crée `app_user`, les GRANT, et active RLS `ENABLE`+`FORCE`             |
 
 L'ordre alphabétique (`'c' < 'r'`) donne exactement l'ordre de dépendance requis : les
 colonnes doivent exister avant les policies qui référencent `tenant_id`. **Ce n'est pas
@@ -128,6 +138,9 @@ migrate-multitenant  ◄── crée toutes les tables + index
 migrate-rls          ◄── active FORCE ROW LEVEL SECURITY + policies
       │
       ▼
+connector-secrets    ◄── chiffre la reprise legacy + garde post-reprise
+      │
+      ▼
 seed-owner           ◄── crée tenant + utilisateur OWNER
       │
       ▼
@@ -144,5 +157,3 @@ seed-owner           ◄── crée tenant + utilisateur OWNER
 tsc --build lib/db/
 # 3. Écrire un script de migration et l'appliquer avec DATABASE_URL
 ```
-
-

@@ -30,6 +30,7 @@ import { envoyerCodeConnexion, masquerEmail } from "../lib/envoi-code-connexion.
 import { poserCode } from "../lib/code-connexion.js";
 import { appareilReconnu, COOKIE_APPAREIL } from "../lib/appareil-confiance.js";
 import { messageValidation } from "../lib/message-validation.js";
+import { cookieDoitEtreSecurise } from "../lib/app-origin.js";
 
 const router: IRouter = Router();
 
@@ -48,7 +49,7 @@ export const COOKIE_OPTS = {
   // déploiement. Si elle est en HTTPS, on est dans un vrai déploiement
   // public et le cookie DOIT être secure. Si elle est en HTTP (localhost en
   // dev, ou une IP de réseau local pour un test), il ne peut pas l'être.
-  secure: (process.env.PUBLIC_URL ?? "").startsWith("https://"),
+  secure: cookieDoitEtreSecurise(),
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days (sliding — middleware extends DB record)
   signed: true,
 };

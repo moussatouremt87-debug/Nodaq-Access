@@ -22,6 +22,45 @@
 import type { Request, Response, NextFunction } from "express";
 import { abonnementCourant, constaterJalonsEssai } from "../lib/abonnement.js";
 
+export const MESSAGE_ABONNEMENT_LECTURE_SEULE =
+  "L'essai est terminé : votre espace est en lecture seule et toutes vos données sont conservées. Choisissez une formule dans Réglages → Abonnement pour reprendre la main.";
+
+/**
+ * Même en lecture seule, retirer un accès externe doit rester possible.
+ * L'exception est volontairement plus étroite que la route PATCH : un seul
+ * statut, aucune configuration, et seulement les types intégrés connus.
+ */
+function estDeconnexionConnecteur(req: Request): boolean {
+  if (req.method !== "PATCH") return false;
+  if (!/^\/connecteurs\/(?:BANQUE|PENNYLANE|STRIPE|GOOGLE_DRIVE|SLACK|ZAPIER)$/.test(req.path)) return false;
+  if (!req.body || typeof req.body !== "object" || Array.isArray(req.body)) return false;
+  const body = req.body as Record<string, unknown>;
+  if (body["status"] !== "NON_CONNECTE") return false;
+  const config = body["config"];
+  if (config !== undefined && (
+    !config
+    || typeof config !== "object"
+    || Array.isArray(config)
+    || Object.keys(config as Record<string, unknown>).length > 0
+  )) return false;
+  if (
+    body["externalRevocationConfirmed"] !== undefined
+    && body["externalRevocationConfirmed"] !== true
+  ) return false;
+  if (
+    body["externalRevocationId"] !== undefined
+    && typeof body["externalRevocationId"] !== "string"
+  ) return false;
+  if (body["connectionId"] !== undefined && typeof body["connectionId"] !== "string") return false;
+  return Object.keys(body).every((key) => (
+    key === "status"
+    || key === "config"
+    || key === "externalRevocationConfirmed"
+    || key === "externalRevocationId"
+    || key === "connectionId"
+  ));
+}
+
 export async function abonnementLectureSeule(
   req: Request,
   res: Response,
@@ -43,9 +82,12 @@ export async function abonnementLectureSeule(
     next();
     return;
   }
+  if (estDeconnexionConnecteur(req)) {
+    next();
+    return;
+  }
   res.status(403).json({
-    error:
-      "L'essai est terminé : votre espace est en lecture seule et toutes vos données sont conservées. Choisissez une formule dans Réglages → Abonnement pour reprendre la main.",
+    error: MESSAGE_ABONNEMENT_LECTURE_SEULE,
     abonnement: "LECTURE_SEULE",
   });
 }
