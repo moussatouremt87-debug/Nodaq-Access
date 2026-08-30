@@ -138,8 +138,14 @@ COPY --from=builder --chown=nodaq:nodaq \
 
 # Les articles d'aide. Le disque du conteneur est éphémère : ils doivent être
 # DANS l'image, comme les migrations. `AIDE_DIR` les désigne à l'exécution.
-COPY --from=builder --chown=nodaq:nodaq \
-  /workspace/docs/aide ./aide
+#
+# Copiés depuis le CONTEXTE, pas depuis l'étage `builder` : celui-ci ne reçoit
+# que `lib/`, `artifacts/api-server/` et `artifacts/nodaq/` — `docs/` n'y a
+# jamais existé, et la première version de cette ligne faisait échouer la
+# construction. Ces fichiers ne sont de toute façon pas compilés : les faire
+# transiter par l'étage de compilation n'apporterait rien et invaliderait son
+# cache à chaque correction d'une phrase.
+COPY --chown=nodaq:nodaq docs/aide ./aide
 
 # package.json — used by the /api/health endpoint to read the version field
 COPY --from=builder --chown=nodaq:nodaq \
