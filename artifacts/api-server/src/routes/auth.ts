@@ -25,6 +25,10 @@ import {
 } from "../lib/authService";
 import { verticalDepuisTx } from "../lib/vertical-tenant.js";
 import { STATUTS_AFFAIRE_ACTIVE } from "../lib/affaire-active.js";
+import { marquerMfaVerifie } from "../lib/session-mfa.js";
+import { envoyerCodeConnexion, masquerEmail } from "../lib/envoi-code-connexion.js";
+import { poserCode } from "../lib/code-connexion.js";
+import { appareilReconnu, COOKIE_APPAREIL } from "../lib/appareil-confiance.js";
 
 const router: IRouter = Router();
 
@@ -122,7 +126,40 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   // existante — le chemin mauvais-mot-de-passe garde exactement son coût et
   // son timing actuels, aucun nouveau signal n'est introduit ici.
   if (hasFinancialAccess(preferred.role)) {
-    res.json({ ok: true, mfaStatus: user.mfaEnabledAt ? "verify_required" : "enroll_required" });
+    /*
+     * ── L'APPAREIL DÉJÀ PROUVÉ NE REDEMANDE RIEN ────────────────────────────
+     *
+     * Le second facteur était exigé à CHAQUE connexion : plusieurs centaines de
+     * fois par an pour un patron qui ouvre son cockpit tous les matins. C'est
+     * cette FRÉQUENCE, plus que le facteur lui-même, qui rendait la chose
+     * intenable pour quelqu'un peu à l'aise avec le numérique.
+     *
+     * Le jeton d'appareil ne donne accès à rien seul : il atteste seulement
+     * qu'un second facteur a déjà été prouvé ICI. Le mot de passe reste exigé,
+     * et il vient d'être vérifié juste au-dessus.
+     */
+    if (await appareilReconnu(user.id, req.cookies?.[COOKIE_APPAREIL])) {
+      await marquerMfaVerifie(session.id);
+      res.json({ ok: true, mfaStatus: "verified", appareilReconnu: true });
+      return;
+    }
+
+    // Qui a déjà une application d'authentification la garde : on ne retire
+    // rien, on cesse de l'imposer à ceux qui n'en veulent pas.
+    if (user.mfaEnabledAt) {
+      res.json({ ok: true, mfaStatus: "verify_required" });
+      return;
+    }
+
+    const emission = await poserCode(user.id);
+    if (emission.kind === "trop_de_demandes") {
+      res.json({ ok: true, mfaStatus: "code_trop_de_demandes" });
+      return;
+    }
+    await envoyerCodeConnexion(preferred.tenantId, user.email, emission.code);
+    // L'adresse est MASQUÉE : elle rappelle où regarder sans confirmer une
+    // adresse complète à qui aurait seulement deviné le mot de passe.
+    res.json({ ok: true, mfaStatus: "code_envoye", destinataire: masquerEmail(user.email) });
     return;
   }
 

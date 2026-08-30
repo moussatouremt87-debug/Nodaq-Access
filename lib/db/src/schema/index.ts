@@ -3,6 +3,8 @@ export * from "./tenants";
 export * from "./users";
 export * from "./memberships";
 export * from "./sessions";
+export * from "./codes_connexion";
+export * from "./appareils_confiance";
 
 // Business tables
 export * from "./affaires";
