@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { attestationsSapTable, withTenant, affairesTable, facturesTable, prospectsTable, pendingActionsTable, settingsTable, teamMembersTable, teamMemberHabilitationsTable } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
+import { attestationsSapTable, withTenant, activityTable, affairesTable, facturesTable, prospectsTable, pendingActionsTable, settingsTable, teamMembersTable, teamMemberHabilitationsTable } from "@workspace/db";
+import { eq, sql, desc } from "drizzle-orm";
 import { toDateString, verticalPack, estRetardSignificatif, statutHabilitation, rappelAttestation, type Vertical } from "@nodaq/shared";
 import { conditionFactureEnRetardSql } from "../lib/facturesEnRetard.js";
 import { verticalDepuisTx } from "../lib/vertical-tenant.js";
@@ -42,6 +42,29 @@ router.get("/brief", async (req, res): Promise<void> => {
       .where(eq(affairesTable.status, "EN_COURS"))
       .limit(5);
 
+    /*
+     * ── CE QUE L'ÉQUIPE A FAIT ────────────────────────────────────────────
+     * Décision du fondateur le 29/08/2026 : tout remonte ICI, dans le brief,
+     * SANS notification. Seuls les actes qui engagent — devis, factures,
+     * avoirs — méritent d'interrompre quelqu'un. Un patron qui reçoit quinze
+     * alertes par jour n'en lit aucune.
+     *
+     * Seules les lignes portant un AUTEUR sont retenues : une activité sans
+     * auteur est le fait du système (renouvellement d'abonnement, objectif
+     * franchi), et « nodaq a créé une affaire » n'apprend rien à personne.
+     */
+    const activiteEquipe = await tx
+      .select({
+        label: activityTable.label,
+        type: activityTable.type,
+        auteurNom: activityTable.auteurNom,
+        creeLe: activityTable.createdAt,
+      })
+      .from(activityTable)
+      .where(sql`auteur_user_id IS NOT NULL AND created_at >= now() - interval '24 hours'`)
+      .orderBy(desc(activityTable.createdAt))
+      .limit(12);
+
     const newProspects = await tx
       .select()
       .from(prospectsTable)
@@ -73,7 +96,7 @@ router.get("/brief", async (req, res): Promise<void> => {
       .from(attestationsSapTable);
 
     return {
-      overdueFactures, affairesEnCours, newProspects, pendingActions, habilitationsRows,
+      overdueFactures, affairesEnCours, newProspects, activiteEquipe, pendingActions, habilitationsRows,
       anneesAttestees: anneesAttestees.map((a) => a.annee),
       vertical: await verticalDepuisTx(tx),
     };
@@ -191,6 +214,27 @@ router.get("/brief", async (req, res): Promise<void> => {
         meta: p.companyName ?? p.stage,
         urgent: false,
         link: "/prospects",
+      })),
+    });
+  }
+
+  /*
+   * L'équipe, en fin de brief : ce n'est pas une urgence, c'est de
+   * l'information. Les urgences (impayés, habilitations) sont plus haut, et
+   * cette section ne porte donc AUCUN `urgent: true` — sinon elle diluerait
+   * ce qui doit vraiment attirer l'œil.
+   */
+  if (data.activiteEquipe.length > 0) {
+    sections.push({
+      type: "equipe",
+      title: `Votre équipe — ${data.activiteEquipe.length} action${data.activiteEquipe.length > 1 ? "s" : ""} depuis hier`,
+      items: data.activiteEquipe.map((a) => ({
+        label: a.label,
+        // Le nom copié au moment des faits : un départ n'efface pas
+        // l'historique. Voir la migration 067.
+        meta: a.auteurNom ?? "un membre de l'équipe",
+        urgent: false,
+        link: "/activite",
       })),
     });
   }

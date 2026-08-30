@@ -35,6 +35,7 @@ import {
 import { loadCompanySettings, sellerInfoFromSettings } from "../lib/seller-info.js";
 import { sendDocument } from "../lib/canal-emission.js";
 import { auditEmissionElectronique } from "../lib/emission-electronique.js";
+import { consignerActivite, auteurDeLaSession } from "../lib/consigner-activite.js";
 import { logger } from "../lib/logger.js";
 import { champsErreur } from "../lib/erreur-pg.js";
 import { secretExiste } from "../lib/tenant-secrets.js";
@@ -618,12 +619,7 @@ router.post("/factures/:id/emettre", async (req, res): Promise<void> => {
         byteSize: pdfBytes.length,
       });
 
-      await tx.insert(activityTable).values({
-        tenantId,
-        type: "facture_emise",
-        label: `Facture émise : ${numero}`,
-        meta: preCheck.customerName,
-      });
+      await consignerActivite(tx, tenantId, { type: "facture_emise", label: `Facture émise : ${numero}`, meta: preCheck.customerName }, auteurDeLaSession(req.session));
 
       return { kind: "ok" as const, facture: committed! };
     });
@@ -835,12 +831,7 @@ router.post("/factures/:id/payer", async (req, res): Promise<void> => {
     }
     await recalculerFacture(tx, id!);
     const [updated] = await tx.select().from(facturesTable).where(eq(facturesTable.id, id!));
-    await tx.insert(activityTable).values({
-      tenantId,
-      type: "facture_paid",
-      label: `Facture réglée : ${f.number}`,
-      meta: f.customerName,
-    });
+    await consignerActivite(tx, tenantId, { type: "facture_paid", label: `Facture réglée : ${f.number}`, meta: f.customerName }, auteurDeLaSession(req.session));
     return { kind: "ok" as const, facture: updated! };
   });
 
@@ -946,12 +937,7 @@ router.post("/factures/:id/annuler-paiement", async (req, res): Promise<void> =>
     // des VALIDATIONS d'actions agentiques, pas un audit général. L'y forcer
     // demanderait de relâcher sa contrainte, donc d'affaiblir une garde pour
     // un usage qu'elle n'a jamais visé.
-    await tx.insert(activityTable).values({
-      tenantId,
-      type: "facture_paiement_annule",
-      label: `Règlement annulé sur la facture ${f.number || "(brouillon)"}`,
-      meta: `${(dernier.montantCents / 100).toFixed(2)} € — ${statutAvant} → ${apres!.statut} — ${req.session?.email ?? "inconnu"}`,
-    });
+    await consignerActivite(tx, tenantId, { type: "facture_paiement_annule", label: `Règlement annulé sur la facture ${f.number || "(brouillon)"}`, meta: `${(dernier.montantCents / 100).toFixed(2)} € — ${statutAvant} → ${apres!.statut} — ${req.session?.email ?? "inconnu"}` }, auteurDeLaSession(req.session));
 
     return { kind: "ok" as const, facture: apres!, montantAnnuleCents: dernier.montantCents };
   });

@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { withTenant, prospectsTable, activityTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
+import { consignerActivite, auteurDeLaSession } from "../lib/consigner-activite.js";
 import {
   CreateProspectBody,
   UpdateProspectBody,
@@ -44,12 +45,7 @@ router.post("/prospects", async (req, res): Promise<void> => {
       estimatedValueCents: data.estimatedValueCents ?? null,
       notes: data.notes ?? null,
     }).returning();
-    await tx.insert(activityTable).values({
-      tenantId,
-      type: "prospect_added",
-      label: `Nouveau prospect : ${prospect!.name}`,
-      meta: prospect!.companyName ?? null,
-    });
+    await consignerActivite(tx, tenantId, { type: "prospect_added", label: `Nouveau prospect : ${prospect!.name}`, meta: prospect!.companyName ?? null }, auteurDeLaSession(req.session));
     return prospect;
   });
 

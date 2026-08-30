@@ -11,6 +11,7 @@ import {
   ListAffairesQueryParams,
 } from "@workspace/api-zod";
 import { maskFinancialFields } from "../lib/maskFinancialFields.js";
+import { consignerActivite, auteurDeLaSession } from "../lib/consigner-activite.js";
 
 const router: IRouter = Router();
 
@@ -114,12 +115,7 @@ router.post("/affaires", async (req, res): Promise<void> => {
       reference: `AFF-${refNum}`,
       ...(data.habilitationsRequises ? { habilitationsRequises: JSON.stringify(data.habilitationsRequises) } : {}),
     }).returning();
-    await tx.insert(activityTable).values({
-      tenantId,
-      type: "affaire_created",
-      label: `Nouvelle affaire : ${affaire!.label}`,
-      meta: affaire!.clientName ?? null,
-    });
+    await consignerActivite(tx, tenantId, { type: "affaire_created", label: `Nouvelle affaire : ${affaire!.label}`, meta: affaire!.clientName ?? null }, auteurDeLaSession(req.session));
     return affaire;
   });
 
