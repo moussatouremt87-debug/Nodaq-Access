@@ -144,7 +144,8 @@ export function rapprocher(
 
   if (cible.length === 0) return sansPrix();
 
-  const depuis = (entree: CatalogueEntree, provenance: ProvenancePrix): LigneProposee => ({
+  const depuis = (entree: CatalogueEntree, provenance: ProvenancePrix): LigneProposee => {
+    return {
     libelle: entree.libelle,
     quantite: intention.quantite,
     // L'unité du catalogue fait foi quand elle existe : c'est elle qui
@@ -156,7 +157,8 @@ export function rapprocher(
     tauxTva: entree.tauxTva,
     provenance,
     catalogueLigneId: entree.id,
-  });
+    };
+  };
 
   // 1. Alias appris par ce tenant.
   const idAlias = alias.get(cible);
@@ -180,7 +182,39 @@ export function rapprocher(
       return m.length > 0 && m.split(" ").every((partie) => motsIntention.has(partie));
     }),
   );
-  if (parMotCle.length === 1) return depuis(parMotCle[0]!, "catalogue");
+  /*
+   * ── UN MOT-CLÉ NE SUFFIT PAS À ÉCRASER UN MONTANT PRONONCÉ ───────────────
+   *
+   * Le 29/08/2026, « facture de 1 200 euros — reprise d'un mur de clôture »
+   * s'est écrite « 1 × 68,00 € — Maçonnerie de parpaings 20cm » : le mot-clé
+   * « mur » avait suffi à apparier une ligne dont le tarif a écrasé le montant
+   * prononcé, et dont la désignation a remplacé les mots de l'utilisateur sur
+   * un document destiné à son client.
+   *
+   * La distinction porte sur la FORCE de la preuve, pas sur le principe :
+   *
+   *   — alias appris et libellé identique (1 et 2) : le catalogue connaît
+   *     vraiment cette ligne. Il reste prioritaire, et c'est voulu — sans
+   *     quoi un chiffre mal transcrit changerait un tarif sans que personne
+   *     ne le voie. C'est la garde écrite plus haut, elle ne bouge pas.
+   *
+   *   — mot-clé (3) : la preuve est faible. Un montant qui la contredit
+   *     signale un appariement douteux. Conserver la désignation du catalogue
+   *     reviendrait alors à facturer autre chose que ce qui a été dit ; on
+   *     repart des mots de l'utilisateur, avec son prix (règle 3 : quand
+   *     l'humain prononce le chiffre, il en est la seule source recevable).
+   *
+   * Un prix dicté ÉGAL au tarif corrobore l'appariement : le catalogue est
+   * conservé en entier — désignation, unité, taux de TVA.
+   */
+  if (parMotCle.length === 1) {
+    const entree = parMotCle[0]!;
+    const dicte = intention.prixUnitaireHtCents;
+    const contredit =
+      typeof dicte === "number" && Number.isFinite(dicte) && dicte > 0 &&
+      dicte !== entree.prixUnitaireHtCents;
+    return contredit ? sansPrix() : depuis(entree, "catalogue");
+  }
 
   // Aucune correspondance, ou plusieurs également plausibles.
   return sansPrix();
