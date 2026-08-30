@@ -89,3 +89,33 @@ describe("tout chemin de second facteur passe par terminerVerification", () => {
     expect(bloc).toMatch(/setLocation\(/);
   });
 });
+
+/**
+ * ── LA SORTIE DOIT VRAIMENT SORTIR ──────────────────────────────────────────
+ *
+ * Constaté le 30/08/2026 : l'écran proposait « recommencer avec une autre
+ * adresse » par un simple lien vers /login. La session restait ouverte, la
+ * garde de route ramenait aussitôt sur cet écran — et l'application s'ouvrait
+ * même directement ici à chaque visite.
+ *
+ * Quelqu'un qui s'est trompé d'adresse n'avait alors AUCUN moyen de repartir :
+ * les codes continuaient de partir au mauvais endroit, quel que soit le nombre
+ * de renvois. Une sortie qui ne sort pas est pire qu'une absence de sortie,
+ * parce qu'elle fait perdre du temps avant de comprendre.
+ */
+describe("l'écran de code offre une vraie sortie", () => {
+  test("elle ferme la session AVANT de naviguer", () => {
+    const bloc = /async function changerDeCompte\(\)\s*\{[\s\S]*?\n  \}/.exec(source)?.[0] ?? "";
+    expect(bloc, "changerDeCompte introuvable").not.toBe("");
+    expect(bloc, "sans déconnexion, la garde ramène sur cet écran").toMatch(/auth\/logout/);
+    expect(bloc).toMatch(/setLocation\(/);
+    // L'ordre compte : naviguer avant de fermer laisse la garde décider sur
+    // une session encore valide.
+    expect(bloc.indexOf("logout")).toBeLessThan(bloc.indexOf("setLocation"));
+  });
+
+  test("aucune sortie ne se contente d'un lien vers /login", () => {
+    // Un <a href="/login"> ne ferme rien : c'est la forme exacte du défaut.
+    expect(source).not.toMatch(/href=["\']\/login["\']/);
+  });
+});
