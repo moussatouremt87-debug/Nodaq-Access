@@ -111,7 +111,23 @@ export default function MfaPage() {
         setCode('');
         return;
       }
-      setLocation('/');
+      /*
+       * `terminerVerification()`, et surtout PAS un `setLocation` seul.
+       *
+       * Constaté en production le 30/08/2026 : le code était accepté, puis
+       * l'écran le redemandait — et le second envoi rejouait un code déjà
+       * consommé, d'où « ce code n'est plus valable ». L'utilisateur ne
+       * pouvait pas entrer.
+       *
+       * La cause : l'état d'authentification restait EN CACHE à « code
+       * requis ». La navigation partait, la garde la renvoyait aussitôt sur
+       * cet écran, et le parcours bouclait.
+       *
+       * Cette routine existait déjà et faisait les trois gestes nécessaires —
+       * invalider, recharger, naviguer. N'en refaire qu'un seul était une
+       * quatrième copie divergente de plus.
+       */
+      await terminerVerification();
     } finally {
       setEnvoi(false);
     }
