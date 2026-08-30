@@ -79,6 +79,42 @@ router.post("/auth/register", async (req, res): Promise<void> => {
 
   const session = await createSession(userId, tenantId, req.headers["user-agent"]);
   res.cookie(COOKIE_NAME, session.id, COOKIE_OPTS);
+
+  /*
+   * ── L'INSCRIPTION DOIT ENVOYER LE CODE, ELLE AUSSI ───────────────────────
+   *
+   * Constaté en production le 30/08/2026, sur le tout premier compte créé
+   * après la mise en ligne : `contact@nodaq.fr` — zéro code généré, zéro ligne
+   * au journal d'envois. L'envoi n'avait pas échoué, il n'avait JAMAIS été
+   * tenté.
+   *
+   * Le code était branché sur `/auth/login` seulement. Or celui qui vient de
+   * s'inscrire ne passe pas par la connexion : il est déjà en session, et
+   * l'écran l'accueille avec « Nous venons de vous envoyer un code à six
+   * chiffres ». Une phrase FAUSSE, suivie d'une impasse : six cases vides, et
+   * rien à y mettre.
+   *
+   * La première minute d'usage du produit mentait à l'utilisateur. Le lien
+   * « m'envoyer un nouveau code » était la seule sortie, et rien ne le
+   * désignait comme telle.
+   *
+   * Le créateur d'un espace est OWNER par construction — donc toujours soumis
+   * au second facteur. La condition est néanmoins écrite : elle dit pourquoi
+   * l'envoi a lieu, et elle survivra au jour où l'inscription créera un autre
+   * rôle.
+   */
+  if (hasFinancialAccess("OWNER") && !secondFacteurSuspendu()) {
+    const emission = await poserCode(userId);
+    if (emission.kind === "ok") {
+      await envoyerCodeConnexion(tenantId, email, emission.code);
+      res.status(201).json({
+        ok: true, userId, tenantId,
+        mfaStatus: "code_envoye", destinataire: email,
+      });
+      return;
+    }
+  }
+
   res.status(201).json({ ok: true, userId, tenantId });
 });
 
@@ -210,7 +246,21 @@ function reponseAuthentification(
      * se DEMANDE désormais, depuis « Sécurité du compte ». Il n'est plus une
      * étape imposée.
      */
-    if (!user.mfaEnabledAt) return { authenticated: true, mfaStatus: "code_requis" as const };
+    if (!user.mfaEnabledAt) {
+      /*
+       * L'adresse accompagne l'état, et elle est ENTIÈRE.
+       *
+       * Le 30/08/2026, un compte a été créé avec « contac@nodaq.fr » — un « t »
+       * manquant. L'écran annonçait « code envoyé » sans dire OÙ : il a fallu
+       * interroger la base de production pour voir la faute de frappe.
+       *
+       * Le masquage qui existe à la connexion protège contre quelqu'un qui
+       * aurait deviné un mot de passe et voudrait confirmer une adresse. Ici,
+       * cette personne a DÉJÀ franchi le mot de passe : le masque ne protège
+       * plus rien et coûte la détection d'une coquille. Mauvais échange.
+       */
+      return { authenticated: true, mfaStatus: "code_requis" as const, destinataire: user.email };
+    }
     if (!session.mfaVerifiedAt) return { authenticated: true, mfaStatus: "verify_required" as const };
     return {
       authenticated: true,
