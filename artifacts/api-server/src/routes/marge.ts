@@ -4,6 +4,8 @@ import { sql } from "drizzle-orm";
 import { GetMargeStatsQueryParams } from "@workspace/api-zod";
 import { planPermetMargeChantier, MESSAGE_MARGE_EQUIPE } from "@nodaq/shared";
 import { abonnementCourant } from "../lib/abonnement.js";
+import { montantFactureParAffaire, montantFactureAffaire } from "../lib/montant-facture-affaire.js";
+import { statutsCaSql } from "../lib/chiffreAffaires.js";
 
 const router: IRouter = Router();
 
@@ -24,28 +26,47 @@ router.get("/marge", async (req, res): Promise<void> => {
     return;
   }
 
-  const { affaires, monthly } = await withTenant(tenantId, async (tx) => {
+  const { affaires, monthly, factureParAffaire } = await withTenant(tenantId, async (tx) => {
+    // Le montant facturé d'un chantier est DÉRIVÉ de ses factures : la colonne
+    // `invoiced_amount_cents` n'est écrite par aucun chemin de facturation.
+    const factureParAffaire = await montantFactureParAffaire(tx);
     let affaires = await tx.select().from(affairesTable);
     if (parsed.data.statut) {
       affaires = affaires.filter(a => a.status === parsed.data.statut);
     }
 
     const statusClause = parsed.data.statut
-      ? sql`AND status = ${parsed.data.statut}`
+      ? sql`AND a.status = ${parsed.data.statut}`
       : sql``;
+    /*
+     * ── LA COURBE SUIT LES FACTURES, PLUS LA CRÉATION DU CHANTIER ───────────
+     *
+     * Elle groupait sur `affaires.created_at` en sommant `invoiced_amount_cents`
+     * — deux fautes à la fois : la colonne n'est jamais écrite, donc la courbe
+     * était plate à zéro ; et même alimentée, elle aurait rangé tout le chiffre
+     * d'affaires d'un chantier dans le mois où il a été CRÉÉ, pas dans ceux où
+     * il a été facturé. Un chantier ouvert en janvier et facturé en juin aurait
+     * fait un pic en janvier.
+     *
+     * Le mois d'une recette, c'est la date d'émission de la facture.
+     * La marge, elle, reste portée par le chantier : c'est la seule
+     * granularité où elle est mesurée.
+     */
     const monthly = await tx.execute(sql`
       SELECT
-        to_char(created_at, 'YYYY-MM') as month,
-        coalesce(sum(invoiced_amount_cents), 0)::float as "revenueCents",
-        coalesce(sum(margin_cents), 0)::float as "marginCents"
-      FROM affaires
-      WHERE created_at >= now() - interval '6 months'
+        to_char(f.issued_date::date, 'YYYY-MM') as month,
+        coalesce(sum(CASE WHEN f.total_ht_cents > 0 THEN f.total_ht_cents ELSE f.amount_cents END), 0)::float as "revenueCents",
+        coalesce(sum(a.margin_cents), 0)::float as "marginCents"
+      FROM factures f
+      JOIN affaires a ON a.id = f.affaire_id
+      WHERE f.issued_date::date >= (now() - interval '6 months')::date
+        AND f.statut IN (${statutsCaSql})
       ${statusClause}
-      GROUP BY to_char(created_at, 'YYYY-MM')
+      GROUP BY to_char(f.issued_date::date, 'YYYY-MM')
       ORDER BY month ASC
     `);
 
-    return { affaires, monthly };
+    return { affaires, monthly, factureParAffaire };
   });
 
   // Une marge INCONNUE n'est pas une marge NULLE. `?? 0` la faisait entrer dans
@@ -53,17 +74,21 @@ router.get("/marge", async (req, res): Promise<void> => {
   // marge tirait la moyenne vers le bas et s'affichait « 0 % », ce qui se lit
   // « ce chantier n'a rien rapporté ». On ne totalise que le connu, et on dit
   // combien d'affaires ne le sont pas.
+  /** Montant facturé retenu : les factures du chantier, sinon la saisie manuelle. */
+  const facture = (a: { id: string; invoicedAmountCents: number | null }): number | null =>
+    montantFactureAffaire(a.id, factureParAffaire, a.invoicedAmountCents);
+
   const affairesMargeConnue = affaires.filter((a) => a.marginCents !== null);
   const affairesMargeInconnue = affaires.length - affairesMargeConnue.length;
 
-  const totalRevenueCents = affaires.reduce((acc, a) => acc + (a.invoicedAmountCents ?? 0), 0);
+  const totalRevenueCents = affaires.reduce((acc, a) => acc + (facture(a) ?? 0), 0);
   const totalMarginCents = affairesMargeConnue.length
     ? affairesMargeConnue.reduce((acc, a) => acc + (a.marginCents ?? 0), 0)
     : null;
   // Le CA de référence est celui des SEULES affaires à marge connue : rapporter
   // une marge partielle au CA total inventerait un pourcentage trop bas.
   const revenueMargeConnueCents = affairesMargeConnue.reduce(
-    (acc, a) => acc + (a.invoicedAmountCents ?? 0),
+    (acc, a) => acc + (facture(a) ?? 0),
     0,
   );
   const marginPct =
@@ -72,17 +97,17 @@ router.get("/marge", async (req, res): Promise<void> => {
       : null;
 
   const margeAffaires = affaires
-    .filter(a => (a.invoicedAmountCents ?? 0) > 0 || a.marginCents !== null)
+    .filter(a => (facture(a) ?? 0) > 0 || a.marginCents !== null)
     .map(a => ({
       id: a.id,
       label: a.label,
       clientName: a.clientName,
       status: a.status,
-      invoicedAmountCents: a.invoicedAmountCents,
+      invoicedAmountCents: facture(a),
       /** `null` = marge non mesurée. À afficher comme telle, jamais comme 0. */
       marginCents: a.marginCents,
-      marginPct: a.marginCents !== null && a.invoicedAmountCents && a.invoicedAmountCents > 0
-        ? (a.marginCents / a.invoicedAmountCents) * 100
+      marginPct: a.marginCents !== null && (facture(a) ?? 0) > 0
+        ? (a.marginCents / (facture(a) as number)) * 100
         : null,
     }))
     .sort((a, b) => (b.invoicedAmountCents ?? 0) - (a.invoicedAmountCents ?? 0));
