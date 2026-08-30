@@ -29,7 +29,11 @@ import { messageValidation } from "../lib/message-validation.js";
 import { consigneSupport } from "../lib/support-connaissances.js";
 import {
   OUTILS_DIAGNOSTIC, OUTIL_TRANSMISSION, executerDiagnostic, transmettreALEquipe,
+  exigeTransmission, suiteDe, type SuiteDiagnostic,
 } from "../lib/support-diagnostics.js";
+
+/** Ordre de gravité — c'est la plus grave qui commande, jamais la dernière. */
+const GRAVITE: Record<SuiteDiagnostic, number> = { repond: 0, inabouti: 1, anomalie: 2 };
 import { sendDocument } from "../lib/canal-emission.js";
 import { articlesAide, indexLlms } from "../lib/aide-articles.js";
 
@@ -85,8 +89,13 @@ router.post("/support/messages", async (req, res): Promise<void> => {
     const outils = [...OUTILS_DIAGNOSTIC, OUTIL_TRANSMISSION];
     /** Une promesse de transmission doit correspondre à une transmission. */
     let transmission: { transmis: boolean; reference?: string } | null = null;
-    /** Un diagnostic consulté = un problème concret signalé. */
-    let aDiagnostique = false;
+    /**
+     * La suite à donner, LA PLUS GRAVE rencontrée parmi les diagnostics.
+     *
+     * `null` tant qu'aucun diagnostic n'a été consulté : une question de pure
+     * documentation (« comment faire un avoir ? ») ne crée aucun dossier.
+     */
+    let suite: SuiteDiagnostic | null = null;
     let reponse = await chatCompletion(config, messages, outils, {
       temperature: 0.2,
       max_tokens: 700,
@@ -99,6 +108,20 @@ router.post("/support/messages", async (req, res): Promise<void> => {
       for (const appel of appels) {
         let args: Record<string, unknown> = {};
         try { args = JSON.parse(appel.function.arguments || "{}"); } catch { args = {}; }
+        /*
+         * Une transmission déjà réussie ne se refait pas. Observé en
+         * production le 30/08 : le modèle a appelé l'outil à ses DEUX tours,
+         * et l'équipe a reçu deux courriels pour un dossier — avec deux
+         * références, dont une seule est montrée à l'utilisateur.
+         */
+        if (appel.function.name === "transmettre_a_l_equipe" && transmission?.transmis) {
+          messages.push({
+            role: "tool", tool_call_id: appel.id,
+            content: JSON.stringify({ transmis: true, reference: transmission.reference,
+              note: "Déjà transmis dans cette conversation. Ne pas recommencer." }),
+          } as never);
+          continue;
+        }
         const resultat =
           appel.function.name === "transmettre_a_l_equipe"
             ? (transmission = await transmettreALEquipe(
@@ -124,7 +147,17 @@ router.post("/support/messages", async (req, res): Promise<void> => {
                   return envoi.success;
                 },
               ))
-            : ((aDiagnostique = true), await executerDiagnostic(tenantId, appel.function.name, args));
+            : await (async () => {
+                const r = await executerDiagnostic(tenantId, appel.function.name, args);
+                /*
+                 * On retient la suite LA PLUS GRAVE. Deux diagnostics dont
+                 * l'un répond et l'autre trouve une anomalie ne s'annulent
+                 * pas : c'est l'anomalie qui commande.
+                 */
+                const s = suiteDe(r);
+                if (suite === null || GRAVITE[s] > GRAVITE[suite]) suite = s;
+                return r;
+              })();
         messages.push({
           role: "tool",
           tool_call_id: appel.id,
@@ -150,15 +183,23 @@ router.post("/support/messages", async (req, res): Promise<void> => {
      *   3. un repli cherchait « transmis » dans le texte → il écrivait
      *      « je le signale », et inventait une référence par-dessus.
      *
-     * Courir après les formulations est sans fin. La règle devient donc
-     * structurelle : dès qu'un DIAGNOSTIC a été consulté — c'est-à-dire dès que
-     * l'utilisateur a signalé quelque chose de concret — le dossier part. Le
-     * modèle n'a plus rien à décider, et son éventuel oubli n'a plus d'effet.
+     * Courir après les formulations est sans fin. La décision est donc prise
+     * ICI, sur ce que le diagnostic a RENDU — jamais sur ce que le modèle en
+     * dit.
      *
-     * Le coût d'un ticket de trop est nul ; celui d'un problème perdu ne l'est
-     * pas.
+     * La première version de cette règle transmettait dès qu'un diagnostic
+     * avait été consulté. Vérifiée en production le 30/08, elle sur-déclenchait :
+     * sur un tenant vide, l'agent expliquait correctement qu'il n'y a aucune
+     * facture, donnait le chemin pour en créer une — puis promettait une
+     * réponse par courriel que personne n'enverrait, faute d'avoir quoi que ce
+     * soit à ajouter.
+     *
+     * Une promesse de rappel non tenue coûte plus qu'un ticket manquant : elle
+     * apprend à l'utilisateur que le support parle pour ne rien faire. On
+     * transmet donc quand le diagnostic n'a PAS suffi — anomalie trouvée, ou
+     * situation inexpliquée. Voir `exigeTransmission`.
      */
-    if (!transmission?.transmis && aDiagnostique) {
+    if (!transmission?.transmis && suite !== null && exigeTransmission(suite)) {
       transmission = await transmettreALEquipe(
         {
           tenantId,

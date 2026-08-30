@@ -57,9 +57,7 @@ export async function diagnosticFacture(
       ? lignes.filter((f) => (f.number ?? "").includes(reference))
       : lignes;
 
-    return {
-      trouvees: visees.length,
-      factures: visees.slice(0, 5).map((f) => {
+    const detaillees = visees.slice(0, 5).map((f) => {
         const tauxReduit = (f.lines as Array<{ vatRate?: number }> | null ?? [])
           .some((l) => l.vatRate === 10 || l.vatRate === 5.5);
         return {
@@ -74,8 +72,20 @@ export async function diagnosticFacture(
           dateEmission: f.issuedDate,
           echeance: f.dueDate,
         };
-      }),
-    };
+      });
+
+    /*
+     * Aucune facture : l'écran est vide, et le dire SUFFIT. Ce n'est pas un
+     * défaut du logiciel, et personne n'a rien à rappeler à ce sujet.
+     * Un blocage nommé suffit aussi : la case à cocher est la réponse.
+     * Des factures existent mais rien n'explique la plainte → inabouti.
+     */
+    const suite: SuiteDiagnostic =
+      visees.length === 0
+        ? "repond"
+        : detaillees.some((f) => f.blocageEmission) ? "repond" : "inabouti";
+
+    return { suite, trouvees: visees.length, factures: detaillees };
   });
 }
 
@@ -87,10 +97,20 @@ export async function diagnosticChantiers(tenantId: string): Promise<Record<stri
       .from(affairesTable);
     const parStatut: Record<string, number> = {};
     for (const a of lignes) parStatut[a.status] = (parStatut[a.status] ?? 0) + 1;
+    const actifs = lignes.filter((a) => estAffaireActive(a.status)).length;
+    /*
+     * Aucun chantier, ou des chantiers dont aucun n'est dans un statut compté
+     * comme actif : l'explication est complète, et l'utilisateur peut agir
+     * seul. En revanche, des chantiers actifs alors qu'il se plaint d'un
+     * compteur à zéro, c'est une CONTRADICTION — donc peut-être le défaut
+     * d'affichage rencontré le 29/08. Celle-là doit remonter.
+     */
+    const suite: SuiteDiagnostic = actifs > 0 ? "inabouti" : "repond";
     return {
+      suite,
       total: lignes.length,
       parStatut,
-      actifs: lignes.filter((a) => estAffaireActive(a.status)).length,
+      actifs,
       statutsComptesCommeActifs: STATUTS_AFFAIRE_ACTIVE,
     };
   });
@@ -151,7 +171,18 @@ export async function diagnosticEnvois(
             + "S'il n'est pas arrivé : vérifier d'abord l'orthographe de cette "
             + "adresse caractère par caractère, puis le dossier des indésirables.";
 
+    /*
+     * Un envoi en échec est une ANOMALIE : le motif rendu par le serveur de
+     * messagerie doit arriver chez l'équipe, c'est lui qui permet de corriger.
+     * Aucun envoi tenté : l'explication est complète (« le message n'a jamais
+     * été demandé »), mais il se peut que l'application n'ait pas déclenché ce
+     * qu'elle devait — inabouti, donc on transmet. Un envoi bien parti répond.
+     */
+    const suite: SuiteDiagnostic =
+      echecs.length > 0 ? "anomalie" : lignes.length === 0 ? "inabouti" : "repond";
+
     return {
+      suite,
       conclusion,
       derniersEnvois: lignes.map((l) => ({
         type: l.documentType,
@@ -176,6 +207,9 @@ export async function diagnosticImpayes(tenantId: string): Promise<Record<string
        GROUP BY statut
     `);
     return {
+      // La répartition par statut EXPLIQUE le montant à elle seule : un
+      // brouillon n'est dû par personne. Rien à faire remonter.
+      suite: "repond" as SuiteDiagnostic,
       repartitionParStatut: r.rows,
       rappel:
         "Un BROUILLON n'est dû par personne : il n'entre ni dans les impayés ni "
@@ -284,6 +318,53 @@ export const OUTILS_DIAGNOSTIC = [
     },
   },
 ];
+
+/**
+ * ── FAUT-IL TRANSMETTRE ? LA RÉPONSE EST CALCULÉE, PAS DEVINÉE ──────────────
+ *
+ * La première règle était : « un diagnostic consulté ⇒ on transmet ». Elle
+ * réglait un vrai problème — le modèle annonçait une transmission sans la
+ * faire, trois fois de suite — mais elle sur-déclenche.
+ *
+ * Vu en production le 30/08/2026. Un tenant tout neuf, la question « je
+ * n'arrive pas à émettre ma facture ». Le diagnostic répond : il n'y a aucune
+ * facture. L'agent le dit, donne le chemin pour en créer une — la réponse est
+ * COMPLÈTE — puis annonce quand même « la réponse arrivera par courriel ».
+ *
+ * Personne ne rappellera, puisqu'il n'y a rien à ajouter. On promet donc un
+ * suivi qui n'arrivera pas, pour une question déjà résolue. Répété, cela
+ * apprend à l'utilisateur que la promesse ne vaut rien — et noie l'équipe sous
+ * des dossiers sans objet, au milieu desquels le vrai passe inaperçu.
+ *
+ * La règle devient donc : on transmet quand le diagnostic N'A PAS suffi.
+ *
+ *   — il a trouvé une ANOMALIE (un envoi en échec) → transmettre ;
+ *   — il est INABOUTI : des données existent, rien n'explique la plainte
+ *     → transmettre, car c'est peut-être un défaut du logiciel ;
+ *   — il RÉPOND (état vide assumé, blocage connu et nommé, envoi bien parti)
+ *     → ne pas transmettre : la réponse tient dans l'écran.
+ *
+ * C'est toujours une décision STRUCTURELLE, prise en TypeScript sur des règles
+ * relisibles. Le modèle ne la prend pas — il ne l'a jamais bien prise.
+ */
+export type SuiteDiagnostic = "repond" | "anomalie" | "inabouti";
+
+/** Vrai quand le dossier doit partir chez l'équipe. */
+export function exigeTransmission(suite: SuiteDiagnostic): boolean {
+  return suite !== "repond";
+}
+
+/**
+ * Lit la suite à donner dans le résultat d'un diagnostic.
+ *
+ * Le champ est posé par les diagnostics eux-mêmes. En son absence — un
+ * diagnostic futur qui l'oublierait — on retombe sur « inabouti », donc on
+ * transmet : le repli sûr est celui qui ne perd pas de dossier.
+ */
+export function suiteDe(resultat: Record<string, unknown>): SuiteDiagnostic {
+  const s = resultat["suite"];
+  return s === "repond" || s === "anomalie" || s === "inabouti" ? s : "inabouti";
+}
 
 /** Exécute un outil de diagnostic. Aucun n'écrit — c'est vérifié par un test. */
 export async function executerDiagnostic(
