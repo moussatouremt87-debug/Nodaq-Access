@@ -3,8 +3,8 @@ import multer from "multer";
 import { perimetreSanteClasseur } from "../middleware/perimetreSante.js";
 import crypto from "node:crypto";
 import { z } from "zod/v4";
-import { withTenant, classeurTable, classeurDocumentBytesTable } from "@workspace/db";
-import { eq, inArray, desc } from "drizzle-orm";
+import { withTenant, classeurTable, classeurDocumentBytesTable, archivedPdfsTable } from "@workspace/db";
+import { and, eq, inArray, desc } from "drizzle-orm";
 import { ListClasseurQueryParams, DeleteClasseurDocumentParams } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -92,7 +92,36 @@ router.get("/classeur", async (req, res): Promise<void> => {
       .where(inArray(classeurDocumentBytesTable.documentId, ids))
   );
   const idsWithBytes = new Set(withBytes.map(r => r.documentId));
-  const documents = all.map(d => ({ ...d, hasContent: idsWithBytes.has(d.id) }));
+
+  /*
+   * ── LES PIÈCES MÉTIER SONT ARCHIVÉES AILLEURS ────────────────────────────
+   *
+   * Les PDF de factures et d'avoirs ne passent pas par `classeur_document_bytes`,
+   * qui ne reçoit que les dépôts manuels. La règle 5 les écrit dans
+   * `archived_pdfs`, dans la transaction même qui passe le document en EMISE.
+   *
+   * Sans ce second regard, la liste annonçait `hasContent: false` sur des
+   * documents parfaitement téléchargeables — et l'écran grisait le bouton.
+   */
+  const sources = all
+    .filter(d => d.sourceType && d.sourceId)
+    .map(d => ({ id: d.id, sourceType: d.sourceType as string, sourceId: d.sourceId as string }));
+  const idsArchives = new Set<string>();
+  if (sources.length > 0) {
+    const archives = await withTenant(tenantId, async (tx) =>
+      tx.select({
+          documentType: archivedPdfsTable.documentType,
+          documentId: archivedPdfsTable.documentId,
+        })
+        .from(archivedPdfsTable)
+        .where(inArray(archivedPdfsTable.documentId, sources.map(s => s.sourceId)))
+    );
+    const cles = new Set(archives.map(a => `${a.documentType}:${a.documentId}`));
+    for (const s of sources) {
+      if (cles.has(`${s.sourceType}:${s.sourceId}`)) idsArchives.add(s.id);
+    }
+  }
+  const documents = all.map(d => ({ ...d, hasContent: idsWithBytes.has(d.id) || idsArchives.has(d.id) }));
 
   res.json({ documents, total: documents.length });
 });
@@ -145,19 +174,39 @@ router.get("/classeur/:id/telechargement", async (req, res): Promise<void> => {
     if (!doc) return null;
     const [content] = await tx.select().from(classeurDocumentBytesTable)
       .where(eq(classeurDocumentBytesTable.documentId, parsed.data.id));
-    if (!content) return { doc, content: null };
-    return { doc, content };
+    if (content) return { doc, bytes: content.bytes, mime: doc.mimeType };
+
+    // Repli sur l'archive immuable : c'est là que vivent les PDF de factures
+    // et d'avoirs (règle 5). Le Classeur les indexe par `sourceType`/`sourceId`.
+    if (doc.sourceType && doc.sourceId) {
+      const [archive] = await tx.select().from(archivedPdfsTable).where(
+        and(
+          eq(archivedPdfsTable.documentType, doc.sourceType),
+          eq(archivedPdfsTable.documentId, doc.sourceId),
+        ),
+      );
+      if (archive) return { doc, bytes: archive.bytes, mime: "application/pdf" };
+    }
+    return { doc, bytes: null, mime: null };
   });
 
   if (!result) { res.status(404).json({ error: "Document introuvable" }); return; }
-  if (!result.content) {
-    res.status(404).json({ error: "Ce document n'a pas de contenu archivé (importé avant la mise en place du stockage)." });
+  if (!result.bytes) {
+    // Le message accusait « un import antérieur à la mise en place du stockage »
+    // pour des factures créées le jour même. Il disait la mauvaise cause, ce qui
+    // est pire que de n'en dire aucune.
+    res.status(404).json({
+      error: "Aucun fichier n'est rattaché à ce document — seule sa fiche existe.",
+    });
     return;
   }
 
-  res.setHeader("Content-Type", result.doc.mimeType ?? "application/octet-stream");
+  // `res.attachment()` DÉDUIT le type MIME de l'extension du nom et écrase
+  // l'en-tête posé avant lui : « Facture de test », sans extension, repassait
+  // en application/octet-stream. On le pose donc APRÈS.
   res.attachment(result.doc.name);
-  res.send(result.content.bytes);
+  res.setHeader("Content-Type", result.mime ?? result.doc.mimeType ?? "application/octet-stream");
+  res.send(result.bytes);
 });
 
 router.delete("/classeur/:id", async (req, res): Promise<void> => {
