@@ -123,6 +123,8 @@ router.post("/avoirs", async (req, res): Promise<void> => {
     | { kind: "not_emise"; statut: string }
     | { kind: "already_covered" }
     | { kind: "insufficient_residual"; residual: number }
+    /** Chemin « remboursement » : le cumul des avoirs dépasserait le facturé. */
+    | { kind: "depasse_total"; dejaRendu: number; total: number }
     | { kind: "ok"; numero: string; oldResidual: number; newResidual: number; isFullCancellation: boolean; facture: typeof facturesTable.$inferSelect };
 
   let tx1: TX1Result;
@@ -132,6 +134,46 @@ router.post("/avoirs", async (req, res): Promise<void> => {
       const [facture] = await tx.select().from(facturesTable)
         .where(eq(facturesTable.id, d.factureRefId));
       if (!facture) return { kind: "not_found" as const };
+      /*
+       * ── UN AVOIR APRÈS ENCAISSEMENT EST UN REMBOURSEMENT ─────────────────
+       *
+       * Sur une facture EMISE, l'avoir réduit ce qui reste DÛ. Sur une facture
+       * PAYEE il ne reste rien à réduire : l'avoir devient une somme à rendre.
+       * L'invariant change de nature — non plus « ne pas dépasser le solde
+       * restant », mais « ne pas rendre plus que ce qui a été facturé ».
+       *
+       * La facture, elle, RESTE payée : elle l'a été, le journal des
+       * encaissements en porte la trace, et la réécrire nierait un fait.
+       * L'avoir vit à côté et porte la correction — exactement comme un avoir
+       * partiel, où `amount_cents` n'est jamais retouché.
+       */
+      if (facture.statut === "PAYEE") {
+        // Verrou de ligne : deux avoirs concurrents sur la même facture se
+        // sérialisent ici, comme le fait le WHERE conditionnel du chemin EMISE.
+        await tx.execute(sql`SELECT 1 FROM factures WHERE id = ${d.factureRefId} FOR UPDATE`);
+        const cumul = await tx.execute(sql`
+          SELECT coalesce(sum(montant_ht_cents + montant_tva_cents), 0)::bigint AS total
+            FROM avoirs WHERE facture_ref_id = ${d.factureRefId}
+        `);
+        const dejaRendu = Number((cumul.rows[0] as { total: string | number }).total);
+        if (dejaRendu + avoirTTC > facture.amountCents) {
+          return {
+            kind: "depasse_total" as const,
+            dejaRendu,
+            total: facture.amountCents,
+          };
+        }
+        const num = await assignAvoirNumero(tx, tenantId, year);
+        return {
+          kind: "ok" as const,
+          numero: num,
+          oldResidual: facture.residualCents ?? 0,
+          newResidual: facture.residualCents ?? 0,
+          isFullCancellation: false,
+          facture,
+        };
+      }
+
       if (facture.statut !== "EMISE") return { kind: "not_emise" as const, statut: facture.statut };
 
       const residualCents = facture.residualCents ?? facture.amountCents;
@@ -192,7 +234,16 @@ router.post("/avoirs", async (req, res): Promise<void> => {
 
   if (tx1.kind === "not_found") { res.status(404).json({ error: "Facture référencée introuvable" }); return; }
   if (tx1.kind === "not_emise") {
-    res.status(422).json({ error: `L'avoir ne peut référencer qu'une facture EMISE (statut actuel : ${tx1.statut}).` }); return;
+    res.status(422).json({ error: `L'avoir ne peut référencer qu'une facture émise ou payée (statut actuel : ${tx1.statut}).` }); return;
+  }
+  if (tx1.kind === "depasse_total") {
+    res.status(422).json({
+      error:
+        `Montant de l'avoir TTC (${(avoirTTC / 100).toFixed(2)} €) : le cumul des avoirs ` +
+        `(${((tx1.dejaRendu + avoirTTC) / 100).toFixed(2)} €) dépasse le montant facturé ` +
+        `(${(tx1.total / 100).toFixed(2)} €). On ne rend pas plus qu'on n'a facturé.`,
+    });
+    return;
   }
   if (tx1.kind === "already_covered") {
     res.status(409).json({ error: "Cette facture est intégralement couverte par des avoirs. Aucun avoir supplémentaire possible." }); return;
@@ -236,9 +287,12 @@ router.post("/avoirs", async (req, res): Promise<void> => {
    */
   async function compensateTx1(erreurDeclenchante: unknown): Promise<void> {
     try {
+      // Le statut restauré est celui LU avant la transaction, jamais « EMISE »
+      // en dur : sur une facture payée, cette constante effaçait l'encaissement
+      // au moment même où l'on tentait de réparer.
       await withTenant(tenantId, tx =>
         tx.update(facturesTable)
-          .set({ residualCents: oldResidual, avoirId: null, statut: "EMISE" })
+          .set({ residualCents: oldResidual, avoirId: null, statut: facture.statut })
           .where(eq(facturesTable.id, d.factureRefId)),
       );
     } catch (erreurCompensation) {
