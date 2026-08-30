@@ -133,6 +133,23 @@ export default function MfaPage() {
     }
   }
 
+  /**
+   * LA SORTIE. Sans elle, une session en attente est une souricière.
+   *
+   * Un lien vers `/login` ne suffit pas : la session existe toujours, la garde
+   * de route ramène aussitôt sur cet écran, et l'application s'ouvre même
+   * directement ici à chaque visite. Quelqu'un qui s'est trompé d'adresse n'a
+   * alors AUCUN moyen de repartir — les codes continueront de partir au
+   * mauvais endroit, quel que soit le nombre de renvois.
+   *
+   * Fermer la session d'abord, naviguer ensuite.
+   */
+  async function changerDeCompte() {
+    await apiFetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+    await qc.invalidateQueries({ queryKey: ['auth-me'] });
+    setLocation('/login');
+  }
+
   async function renvoyerCode() {
     setErreur(null);
     setRenvoye(false);
@@ -303,6 +320,7 @@ export default function MfaPage() {
             renvoye={renvoye}
             onSubmit={soumettreCodeCourriel}
             onRenvoyer={renvoyerCode}
+            onChangerDeCompte={changerDeCompte}
           />
         )}
 
@@ -567,6 +585,7 @@ function ParametresEcran({ statut, onActiver, onRetour }: {
  */
 function CodeCourrielEcran({
   destinataire, code, setCode, erreur, envoi, renvoye, onSubmit, onRenvoyer,
+  onChangerDeCompte,
 }: {
   /** L'adresse où le code est parti. Entière : c'est ce qui rend une coquille visible. */
   destinataire?: string;
@@ -577,6 +596,7 @@ function CodeCourrielEcran({
   renvoye: boolean;
   onSubmit: (e: React.FormEvent) => void;
   onRenvoyer: () => void;
+  onChangerDeCompte: () => void;
 }) {
   return (
     <div className="space-y-5">
@@ -644,9 +664,13 @@ function CodeCourrielEcran({
           * six cases vides sans aucun recours : le code partira toujours à la
           * mauvaise adresse, quel que soit le nombre de renvois.
           */}
-        <a href="/login" className="block text-sm text-muted-foreground hover:underline">
-          Ce n'est pas votre adresse ? Recommencer avec une autre
-        </a>
+        <button
+          type="button"
+          onClick={onChangerDeCompte}
+          className="block text-sm text-muted-foreground hover:underline text-left"
+        >
+          Ce n'est pas votre adresse ? Se déconnecter et recommencer
+        </button>
       </div>
 
       {/*
