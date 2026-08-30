@@ -3,6 +3,7 @@ import { withTenant, connectorsTable, bankConnectionsTable } from "@workspace/db
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { getConfig, creerUtilisateur, creerSessionConnexion, BanqueConfigError } from "@nodaq/banque-agreee";
+import { messageValidation } from "../lib/message-validation.js";
 
 const router: IRouter = Router();
 
@@ -49,7 +50,7 @@ router.get("/connecteurs", async (req, res): Promise<void> => {
 router.patch("/connecteurs/:type", async (req, res): Promise<void> => {
   const { type } = req.params;
   const parsed = UpdateConnectorBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const tenantId = req.tenantId!;
 
   const updated = await withTenant(tenantId, async (tx) => {

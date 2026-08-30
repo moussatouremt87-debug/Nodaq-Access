@@ -8,6 +8,7 @@ import {
   normaliserIban,
   messageRefusIban,
 } from "@nodaq/shared";
+import { messageValidation } from "../lib/message-validation.js";
 
 const router: IRouter = Router();
 
@@ -46,7 +47,7 @@ router.get("/parametres", async (req, res): Promise<void> => {
 
 router.patch("/parametres", async (req, res): Promise<void> => {
   const parsed = SetSettingsBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
 
   // ── Bornes des réglages d'objectif ──────────────────────────────────────
   //

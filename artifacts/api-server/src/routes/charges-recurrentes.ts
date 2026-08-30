@@ -9,6 +9,7 @@ import {
   UpdateChargeRecurrenteBody,
   DeleteChargeRecurrenteParams,
 } from "@workspace/api-zod";
+import { messageValidation } from "../lib/message-validation.js";
 
 const router: IRouter = Router();
 
@@ -20,7 +21,7 @@ function toDateStr(v: Date | string | null | undefined): string | undefined {
 
 router.get("/charges-recurrentes", async (req, res): Promise<void> => {
   const parsed = ListChargesRecurrentesQueryParams.safeParse(req.query);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const tenantId = req.tenantId!;
 
   let all = await withTenant(tenantId, async (tx) =>
@@ -41,7 +42,7 @@ router.get("/charges-recurrentes", async (req, res): Promise<void> => {
 
 router.post("/charges-recurrentes", async (req, res): Promise<void> => {
   const parsed = CreateChargeRecurrenteBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const tenantId = req.tenantId!;
 
   const insertData: Record<string, unknown> = {
@@ -91,7 +92,7 @@ router.patch("/charges-recurrentes/:id", async (req, res): Promise<void> => {
 
 router.delete("/charges-recurrentes/:id", async (req, res): Promise<void> => {
   const parsed = DeleteChargeRecurrenteParams.safeParse(req.params);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const tenantId = req.tenantId!;
 
   const [existing] = await withTenant(tenantId, async (tx) =>

@@ -17,6 +17,7 @@ import { Router, type IRouter } from "express";
 import { and, eq, gte, lte } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant, affectationsTable } from "@workspace/db";
+import { messageValidation } from "../lib/message-validation.js";
 
 const router: IRouter = Router();
 
@@ -81,7 +82,7 @@ router.get("/affectations", async (req, res): Promise<void> => {
       clientId: z.string().optional(),
     })
     .safeParse(req.query);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const f = parsed.data;
 
   const affectations = await withTenant(tenantId, (tx) => {
@@ -116,7 +117,7 @@ router.get("/affectations/:id", async (req, res): Promise<void> => {
 
 router.post("/affectations", async (req, res): Promise<void> => {
   const parsed = AffectationBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const d = parsed.data;
 
   if (periodeIncoherente(d.dateDebut, d.dateFin)) {
@@ -145,7 +146,7 @@ router.post("/affectations", async (req, res): Promise<void> => {
 
 router.patch("/affectations/:id", async (req, res): Promise<void> => {
   const parsed = AffectationPatch.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const tenantId = req.tenantId!;
   const { id } = req.params;
   const d = parsed.data;

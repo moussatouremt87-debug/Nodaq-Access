@@ -10,6 +10,7 @@ import {
 } from "@workspace/api-zod";
 import { maskFinancialFields } from "../lib/maskFinancialFields.js";
 import { indexerAuClasseur, nomAuClasseur } from "../lib/indexation-classeur.js";
+import { messageValidation } from "../lib/message-validation.js";
 
 function nextOccurrence(startDate: string | null, cadence: string): string | null {
   if (!startDate) return null;
@@ -40,7 +41,7 @@ router.get("/contrats", async (req, res): Promise<void> => {
 
 router.post("/contrats", async (req, res): Promise<void> => {
   const parsed = CreateContratBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const data = parsed.data;
   const toStr = (v: unknown) => v instanceof Date ? toDateString(v) : (v as string | null | undefined) ?? null;
   const tenantId = req.tenantId!;
@@ -69,9 +70,9 @@ router.post("/contrats", async (req, res): Promise<void> => {
 
 router.patch("/contrats/:id", async (req, res): Promise<void> => {
   const params = UpdateContratParams.safeParse(req.params);
-  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  if (!params.success) { res.status(400).json({ error: messageValidation(params.error) }); return; }
   const parsed = UpdateContratBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const data = parsed.data;
   const updateData: Record<string, unknown> = {};
   if (data.label !== undefined) updateData.label = data.label;
@@ -93,7 +94,7 @@ router.patch("/contrats/:id", async (req, res): Promise<void> => {
 
 router.delete("/contrats/:id", async (req, res): Promise<void> => {
   const params = DeleteContratParams.safeParse(req.params);
-  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  if (!params.success) { res.status(400).json({ error: messageValidation(params.error) }); return; }
   const tenantId = req.tenantId!;
   const [deleted] = await withTenant(tenantId, async (tx) =>
     tx.delete(contratsTable).where(eq(contratsTable.id, params.data.id)).returning()

@@ -16,6 +16,7 @@ import { and, eq, desc } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant, clientsTable, TYPES_CLIENT } from "@workspace/db";
 import { normaliser } from "@nodaq/shared";
+import { messageValidation } from "../lib/message-validation.js";
 
 const router: IRouter = Router();
 
@@ -91,7 +92,7 @@ router.get("/clients/:id", async (req, res): Promise<void> => {
 
 router.post("/clients", async (req, res): Promise<void> => {
   const parsed = ClientBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const tenantId = req.tenantId!;
   const d = parsed.data;
 
@@ -105,7 +106,7 @@ router.post("/clients", async (req, res): Promise<void> => {
 
 router.patch("/clients/:id", async (req, res): Promise<void> => {
   const parsed = ClientPatch.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const tenantId = req.tenantId!;
   const { id } = req.params;
 

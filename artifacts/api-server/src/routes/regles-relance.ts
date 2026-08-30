@@ -25,6 +25,7 @@ import {
   resumerRegleRelance,
   type RegleRelance,
 } from "@nodaq/shared";
+import { messageValidation } from "../lib/message-validation.js";
 
 export const reglesRelanceReadRouter: IRouter = Router();
 export const reglesRelanceWriteRouter: IRouter = Router();
@@ -99,7 +100,7 @@ const CorpsRegle = z.object({
 reglesRelanceWriteRouter.put("/relance/regles", async (req, res): Promise<void> => {
   const parsed = CorpsRegle.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    res.status(400).json({ error: messageValidation(parsed.error) });
     return;
   }
 

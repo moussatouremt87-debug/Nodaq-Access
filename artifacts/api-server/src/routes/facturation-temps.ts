@@ -23,6 +23,7 @@ import {
 } from "@workspace/db";
 import { lignesDepuisHeures, tauxOccupation, type HeurePointee } from "@nodaq/shared";
 import { indexerAuClasseur, nomAuClasseur } from "../lib/indexation-classeur.js";
+import { messageValidation } from "../lib/message-validation.js";
 
 const router: IRouter = Router();
 
@@ -58,7 +59,7 @@ router.get("/taux-horaires", async (req, res): Promise<void> => {
  */
 router.post("/taux-horaires", async (req, res): Promise<void> => {
   const parsed = CorpsTaux.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const tenantId = req.tenantId!;
   const d = parsed.data;
 
@@ -131,7 +132,7 @@ const CorpsDepuisHeures = z.object({
  */
 router.post("/factures/depuis-heures", async (req, res): Promise<void> => {
   const parsed = CorpsDepuisHeures.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const tenantId = req.tenantId!;
   const d = parsed.data;
 

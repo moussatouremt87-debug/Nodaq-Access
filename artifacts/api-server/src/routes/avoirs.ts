@@ -31,6 +31,7 @@ import { loadSellerInfo } from "../lib/seller-info.js";
 import { enregistrerIncidentAvoirCompensationEchouee } from "../lib/incidents-facturation.js";
 import { indexerAuClasseur, nomAuClasseur } from "../lib/indexation-classeur.js";
 import { consignerActivite, auteurDeLaSession } from "../lib/consigner-activite.js";
+import { messageValidation } from "../lib/message-validation.js";
 
 const router: IRouter = Router();
 
@@ -100,7 +101,7 @@ router.get("/avoirs/:id", async (req, res): Promise<void> => {
 router.post("/avoirs", async (req, res): Promise<void> => {
   const tenantId = req.tenantId!;
   const parsed = CreateAvoirBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const d = parsed.data;
   const avoirTTC = d.montantHtCents + d.montantTvaCents;
 

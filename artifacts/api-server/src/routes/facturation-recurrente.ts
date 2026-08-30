@@ -24,6 +24,7 @@ import { withTenant, contratsTable, facturesTable, sitesTable } from "@workspace
 import { echeancesAFacturer, type Cadence, type EcheanceDue } from "@nodaq/shared";
 import { z } from "zod";
 import { indexerAuClasseur, nomAuClasseur } from "../lib/indexation-classeur.js";
+import { messageValidation } from "../lib/message-validation.js";
 
 const router: IRouter = Router();
 
@@ -72,7 +73,7 @@ const estDoublon = (err: unknown, profondeur = 0): boolean => {
 
 router.post("/contrats/facturer-echeances", async (req, res): Promise<void> => {
   const parsed = Corps.safeParse(req.body ?? {});
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const { contratId, vatRate } = parsed.data;
   const tenantId = req.tenantId!;
   const aujourdhui = aujourdhuiIso();

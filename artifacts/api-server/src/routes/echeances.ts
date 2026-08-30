@@ -9,6 +9,7 @@ import {
   UpdateEcheanceBody,
   DeleteEcheanceParams,
 } from "@workspace/api-zod";
+import { messageValidation } from "../lib/message-validation.js";
 
 const router: IRouter = Router();
 
@@ -29,7 +30,7 @@ export function computeEcheanceStatus(dueDate: string, currentStatus: string): s
 
 router.get("/echeances", async (req, res): Promise<void> => {
   const parsed = ListEcheancesQueryParams.safeParse(req.query);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const tenantId = req.tenantId!;
 
   let all = await withTenant(tenantId, async (tx) =>
@@ -43,7 +44,7 @@ router.get("/echeances", async (req, res): Promise<void> => {
 
 router.post("/echeances", async (req, res): Promise<void> => {
   const parsed = CreateEcheanceBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const dueDate = toDateStr(parsed.data.dueDate as unknown as Date | string);
   const tenantId = req.tenantId!;
 
@@ -95,7 +96,7 @@ router.patch("/echeances/:id", async (req, res): Promise<void> => {
 
 router.delete("/echeances/:id", async (req, res): Promise<void> => {
   const parsed = DeleteEcheanceParams.safeParse(req.params);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const tenantId = req.tenantId!;
 
   const [existing] = await withTenant(tenantId, async (tx) =>

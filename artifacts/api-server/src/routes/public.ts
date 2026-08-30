@@ -33,6 +33,7 @@ import { toDateString } from "@nodaq/shared";
 import { genererPdfDevis, chargerEmetteur, nomFichierDevis } from "../lib/pdf-devis.js";
 import { loadCompanySettings } from "../lib/seller-info.js";
 import { enregistrerOpposition } from "../lib/prospection.js";
+import { messageValidation } from "../lib/message-validation.js";
 
 const router: IRouter = Router();
 
@@ -288,7 +289,7 @@ router.post("/public/devis/:token/accept", limiterDebit, async (req, res): Promi
   }
 
   const parsed = AcceptBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
 
   // Étape 1 — recherche par jeton via la policy étroite : aucun contexte de
   // tenant n'est encore connu, et c'est justement ce que la policy permet.

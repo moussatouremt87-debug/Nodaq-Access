@@ -49,6 +49,7 @@ import { loadCompanySettings } from "../lib/seller-info.js";
 import { poserOppositionAppel } from "../lib/appels-relance.js";
 import { constaterUsageVocal } from "../lib/abonnement.js";
 import { emettreLienPaiement } from "../lib/lien-paiement.js";
+import { messageValidation } from "../lib/message-validation.js";
 
 const router: IRouter = Router();
 
@@ -155,7 +156,7 @@ router.get("/insistance", async (req, res): Promise<void> => {
 router.post("/echelonnement", async (req, res): Promise<void> => {
   const parsed = DemandeEchelonnement.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    res.status(400).json({ error: messageValidation(parsed.error) });
     return;
   }
 
@@ -269,7 +270,7 @@ const CorpsPromesse = z.object({
 router.post("/promesse", async (req, res): Promise<void> => {
   const parsed = CorpsPromesse.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    res.status(400).json({ error: messageValidation(parsed.error) });
     return;
   }
   const { montantCents, date, confirme } = parsed.data;

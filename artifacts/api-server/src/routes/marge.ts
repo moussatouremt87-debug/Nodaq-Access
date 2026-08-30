@@ -6,12 +6,13 @@ import { planPermetMargeChantier, MESSAGE_MARGE_EQUIPE } from "@nodaq/shared";
 import { abonnementCourant } from "../lib/abonnement.js";
 import { montantFactureParAffaire, montantFactureAffaire } from "../lib/montant-facture-affaire.js";
 import { statutsCaSql } from "../lib/chiffreAffaires.js";
+import { messageValidation } from "../lib/message-validation.js";
 
 const router: IRouter = Router();
 
 router.get("/marge", async (req, res): Promise<void> => {
   const parsed = GetMargeStatsQueryParams.safeParse(req.query);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
 
   const tenantId = req.tenantId!;
 

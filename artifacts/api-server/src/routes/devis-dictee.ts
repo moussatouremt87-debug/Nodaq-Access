@@ -31,6 +31,7 @@ import {
   type Vertical,
 } from "@nodaq/shared";
 import { verticalDuTenant } from "../lib/vertical-tenant.js";
+import { messageValidation } from "../lib/message-validation.js";
 
 const router: IRouter = Router();
 
@@ -132,7 +133,7 @@ function extraireJson(contenu: string): unknown {
  */
 router.post("/devis/dictee/proposer", async (req, res): Promise<void> => {
   const parsed = ProposerBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const tenantId = req.tenantId!;
 
   let config;

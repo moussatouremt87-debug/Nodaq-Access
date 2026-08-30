@@ -27,6 +27,7 @@ import {
 } from "@workspace/db";
 import { toDateString, bornesSemaine, HEURES_PAR_JOUR_STANDARD } from "@nodaq/shared";
 import { STATUTS_AFFAIRE_ACTIVE } from "../lib/affaire-active.js";
+import { messageValidation } from "../lib/message-validation.js";
 
 const router: IRouter = Router();
 
@@ -136,7 +137,7 @@ function estViolationUnicite(err: unknown): boolean {
 router.get("/pointages", async (req, res): Promise<void> => {
   const parsed = ListQuery.safeParse(req.query);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    res.status(400).json({ error: messageValidation(parsed.error) });
     return;
   }
   const { debut, fin, affaireId, clientId, membreId } = parsed.data;
@@ -454,7 +455,7 @@ router.get("/pointages/recapitulatif-semaine", async (req, res): Promise<void> =
 router.post("/pointages/recapitulatif-semaine/confirmer", async (req, res): Promise<void> => {
   const parsed = ConfirmerBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    res.status(400).json({ error: messageValidation(parsed.error) });
     return;
   }
   const { date, lignes } = parsed.data;
@@ -547,7 +548,7 @@ router.post("/pointages/recapitulatif-semaine/confirmer", async (req, res): Prom
 router.post("/pointages", async (req, res): Promise<void> => {
   const parsed = CreatePointageBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    res.status(400).json({ error: messageValidation(parsed.error) });
     return;
   }
   const d = parsed.data;
@@ -587,7 +588,7 @@ router.post("/pointages", async (req, res): Promise<void> => {
 router.patch("/pointages/:id", async (req, res): Promise<void> => {
   const parsed = UpdatePointageBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    res.status(400).json({ error: messageValidation(parsed.error) });
     return;
   }
   const d = parsed.data;

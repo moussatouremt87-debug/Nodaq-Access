@@ -8,6 +8,7 @@ import {
 import { runAgent, getContextualSuggestions } from "../lib/mistralAgent";
 import { LlmConfigError } from "@nodaq/llm";
 import { enregistrerPlan } from "../lib/plan-vocal.js";
+import { messageValidation } from "../lib/message-validation.js";
 
 const router: IRouter = Router();
 
@@ -15,7 +16,7 @@ const router: IRouter = Router();
 
 router.get("/chat/messages", async (req, res): Promise<void> => {
   const parsed = GetChatHistoryQueryParams.safeParse(req.query);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const { conversationId } = parsed.data;
 
   if (!conversationId) {
@@ -38,7 +39,7 @@ router.get("/chat/messages", async (req, res): Promise<void> => {
 
 router.post("/chat/messages", async (req, res): Promise<void> => {
   const parsed = SendChatMessageBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
 
   const { content, conversationId } = parsed.data;
   const convId = conversationId ?? crypto.randomUUID();

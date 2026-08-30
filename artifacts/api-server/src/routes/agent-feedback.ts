@@ -16,6 +16,7 @@ import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { withTenant, agentFeedbackTable, NOTES_FEEDBACK } from "@workspace/db";
+import { messageValidation } from "../lib/message-validation.js";
 
 const router: IRouter = Router();
 
@@ -29,7 +30,7 @@ const CorpsFeedback = z.object({
 
 router.post("/agent/feedback", async (req, res): Promise<void> => {
   const parsed = CorpsFeedback.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const tenantId = req.tenantId!;
   const d = parsed.data;
 

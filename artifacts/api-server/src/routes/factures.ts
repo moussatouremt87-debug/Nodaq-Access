@@ -42,6 +42,7 @@ import { secretExiste } from "../lib/tenant-secrets.js";
 import { estFactureEnRetard, residuelFactureCents, conditionFactureEnRetardSql } from "../lib/facturesEnRetard.js";
 import { VERTICAL_SETTING_KEY, DEFAULT_VERTICAL } from "../lib/vertical-tenant.js";
 import { indexerAuClasseur, nomAuClasseur } from "../lib/indexation-classeur.js";
+import { messageValidation } from "../lib/message-validation.js";
 
 const router: IRouter = Router();
 
@@ -257,7 +258,7 @@ const ListeFacturesQuery = z.object({
  */
 router.get("/factures", async (req, res): Promise<void> => {
   const parsed = ListeFacturesQuery.safeParse(req.query);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const { statut, settled, limit, offset, tri, sens } = parsed.data;
   const tenantId = req.tenantId!;
   const aujourdhui = toDateString(new Date());
@@ -304,7 +305,7 @@ router.get("/factures", async (req, res): Promise<void> => {
 
 router.post("/factures", async (req, res): Promise<void> => {
   const parsed = CreateFactureBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const d = parsed.data;
   const tenantId = req.tenantId!;
 
@@ -367,7 +368,7 @@ router.patch("/factures/:id", async (req, res): Promise<void> => {
   const tenantId = req.tenantId!;
   const { id } = req.params;
   const parsed = UpdateFactureBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const d = parsed.data;
 
   const updated = await withTenant(tenantId, async tx => {
@@ -455,7 +456,7 @@ router.post("/factures/:id/emettre", async (req, res): Promise<void> => {
   const tenantId = req.tenantId!;
   const { id } = req.params;
   const parsed = EmettreBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const opts = parsed.data;
 
   const issuedDate = opts.issuedDate ?? toDateString(new Date());
@@ -1012,7 +1013,7 @@ router.post("/affaires/:id/facturer", async (req, res): Promise<void> => {
     confirmerSecondeFacture: z.boolean().default(false),
     vatRate: z.number().min(0).max(100).optional(),
   }).safeParse(req.body ?? {});
-  if (!corps.success) { res.status(400).json({ error: corps.error.message }); return; }
+  if (!corps.success) { res.status(400).json({ error: messageValidation(corps.error) }); return; }
 
   const { resultat, motMission } = await withTenant(tenantId, async (tx) => ({
     resultat: await facturerAffaire(tx, tenantId, id!, corps.data),

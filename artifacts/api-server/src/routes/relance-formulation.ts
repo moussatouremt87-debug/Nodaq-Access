@@ -43,6 +43,7 @@ import {
 import { eq } from "drizzle-orm";
 import { withTenant, appelsRelanceTable, campagnesRelanceTable } from "@workspace/db";
 import { logger } from "../lib/logger.js";
+import { messageValidation } from "../lib/message-validation.js";
 
 const router: IRouter = Router();
 
@@ -135,7 +136,7 @@ async function nomDuDebiteur(
 router.post("/", async (req, res): Promise<void> => {
   const parsed = CorpsFormulation.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    res.status(400).json({ error: messageValidation(parsed.error) });
     return;
   }
   const { intention, faits, historique } = parsed.data;

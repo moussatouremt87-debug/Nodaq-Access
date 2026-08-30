@@ -21,6 +21,7 @@ import { sql } from "drizzle-orm";
 import { withTenant, settingsTable } from "@workspace/db";
 import { MODULES } from "@nodaq/shared";
 import { modulesDuTenant, PREFIXE_MODULE } from "../lib/modules-tenant.js";
+import { messageValidation } from "../lib/message-validation.js";
 
 export const modulesReadRouter: IRouter = Router();
 export const modulesWriteRouter: IRouter = Router();
@@ -37,7 +38,7 @@ const CorpsChoix = z.object({
 modulesWriteRouter.patch("/modules", async (req, res): Promise<void> => {
   const parsed = CorpsChoix.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    res.status(400).json({ error: messageValidation(parsed.error) });
     return;
   }
 

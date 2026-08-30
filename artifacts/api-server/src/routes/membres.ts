@@ -59,6 +59,7 @@ import {
   AccepterInvitationBody,
   ProgrammerEcheanceMembreBody,
 } from "@workspace/api-zod";
+import { messageValidation } from "../lib/message-validation.js";
 
 const router: IRouter = Router();
 export const membresPublicRouter: IRouter = Router();
@@ -152,7 +153,7 @@ router.get("/membres", async (req, res): Promise<void> => {
 
 router.post("/membres/inviter", async (req, res): Promise<void> => {
   const parsed = InviterMembreBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const tenantId = req.tenantId!;
   const email = parsed.data.email.toLowerCase().trim();
   // "MEMBER" | "ACCOUNTANT" | "OWNER" (US-A5.1) | "VIEWER" (US-A5.4) —
@@ -374,9 +375,9 @@ router.post("/membres/invitations/:id/renvoyer", async (req, res): Promise<void>
 
 router.patch("/membres/:id/role", async (req, res): Promise<void> => {
   const params = ChangerRoleMembreParams.safeParse(req.params);
-  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  if (!params.success) { res.status(400).json({ error: messageValidation(params.error) }); return; }
   const parsed = ChangerRoleMembreBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const tenantId = req.tenantId!;
 
   const [cible] = await db
@@ -456,9 +457,9 @@ router.patch("/membres/:id/role", async (req, res): Promise<void> => {
  */
 router.patch("/membres/:id/echeance", async (req, res): Promise<void> => {
   const params = ChangerRoleMembreParams.safeParse(req.params);
-  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  if (!params.success) { res.status(400).json({ error: messageValidation(params.error) }); return; }
   const parsed = ProgrammerEcheanceMembreBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const tenantId = req.tenantId!;
 
   const [cible] = await db
@@ -528,7 +529,7 @@ router.patch("/membres/:id/echeance", async (req, res): Promise<void> => {
 
 router.delete("/membres/:id", async (req, res): Promise<void> => {
   const params = RevoquerMembreParams.safeParse(req.params);
-  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  if (!params.success) { res.status(400).json({ error: messageValidation(params.error) }); return; }
   const tenantId = req.tenantId!;
 
   const [cible] = await db
@@ -667,7 +668,7 @@ membresPublicRouter.post("/membres/inviter/:token/accepter", limiterDebit, async
   const params = AccepterInvitationParams.safeParse({ token });
   if (!params.success) { res.status(404).json(INTROUVABLE); return; }
   const parsed = AccepterInvitationBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
 
   const invite = await lookupInviteByToken(token);
   if (!invite) { res.status(404).json(INTROUVABLE); return; }
