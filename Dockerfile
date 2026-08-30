@@ -136,6 +136,11 @@ COPY --from=builder --chown=nodaq:nodaq \
 COPY --from=builder --chown=nodaq:nodaq \
   /workspace/lib/db/migrations ./migrations
 
+# Les articles d'aide. Le disque du conteneur est éphémère : ils doivent être
+# DANS l'image, comme les migrations. `AIDE_DIR` les désigne à l'exécution.
+COPY --from=builder --chown=nodaq:nodaq \
+  /workspace/docs/aide ./aide
+
 # package.json — used by the /api/health endpoint to read the version field
 COPY --from=builder --chown=nodaq:nodaq \
   /workspace/artifacts/api-server/package.json ./package.json
@@ -148,7 +153,8 @@ ENV NODE_ENV=production \
     # Tell migrate.mjs where the SQL files are inside the image.
     # Without this the script resolves paths relative to its own parent dir,
     # which in the container would be /app (not /app/migrations).
-    MIGRATIONS_DIR=/app/migrations
+    MIGRATIONS_DIR=/app/migrations \
+    AIDE_DIR=/app/aide
 
 # Users are French companies — a "month" or "quarter" means Paris calendar
 # time. Pinning TZ avoids off-by-one period boundaries on hosts running UTC.
