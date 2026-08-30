@@ -15,6 +15,7 @@ import briefRouter from "./brief";
 import pendingActionsRouter from "./pending_actions";
 import chatRouter from "./chat";
 import supportRouter, { aidePubliqueRouter } from "./support";
+import etatServiceRouter from "./etat-service";
 import chatMediaRouter from "./chat-media";
 import devisRouter from "./devis";
 import classeurRouter from "./classeur";
@@ -85,6 +86,9 @@ router.use(membresPublicRouter); // /membres/inviter/:token (lecture + acceptati
 // L'aide est PUBLIQUE, sans session : celui qui n'arrive pas à se connecter est
 // précisément celui qui en a le plus besoin d'elle.
 router.use(aidePubliqueRouter);  // /aide/llms.txt, /aide/articles, /aide/:slug.md
+// L'état des services, pour la même raison : « est-ce en panne ou c'est moi ? »
+// est une question qu'on se pose PRÉCISÉMENT quand on n'arrive pas à entrer.
+router.use(etatServiceRouter);   // /etat
 // Webhook PA (US-A2.6) : pas de session, authentifié par signature HMAC —
 // voir facturation-electronique.ts. Aucune PA réelle contractée à ce jour ;
 // route non testable bout en bout, seulement son authentification.

@@ -23,8 +23,40 @@ const RACINE = join(__dirname, "..");
 const SOURCE_NAV = readFileSync(join(RACINE, "lib", "nav.ts"), "utf8");
 const SOURCE_APP = readFileSync(join(RACINE, "App.tsx"), "utf8");
 
+/**
+ * Les routes PUBLIQUES, lues dans `ROUTES_PUBLIQUES` de App.tsx.
+ *
+ * Elles vivaient ici en dur — `["/login", "/register", "/mfa"]` — alors que
+ * App.tsx tient déjà la liste, et qu'une garde voisine (`app-routes.test.ts`)
+ * s'en sert pour vérifier qu'aucune ne retourne dans l'AppShell. Deux copies
+ * de la même liste : la première route publique ajoutée ensuite faisait rougir
+ * cette garde-ci sans qu'aucune règle soit enfreinte.
+ *
+ * On lit donc la source unique. Un écran hors application authentifiée n'a pas
+ * à figurer dans un menu — il n'y a pas de menu quand on n'est pas entré.
+ */
+function routesPubliques(): string[] {
+  const bloc = /export const ROUTES_PUBLIQUES = \[([\s\S]*?)\] as const;/.exec(SOURCE_APP);
+  if (!bloc) {
+    throw new Error(
+      "ROUTES_PUBLIQUES introuvable dans App.tsx. Cette garde le lit " +
+        "textuellement — si le bloc a été renommé, mettez la garde à jour " +
+        "plutôt que de la contourner.",
+    );
+  }
+  /*
+   * Les commentaires sont RETIRÉS avant l'analyse. Sans cela, l'apostrophe
+   * française d'un commentaire (« on n'arrive pas ») ouvre une fausse chaîne
+   * qui avale le guillemet de la route suivante — et la route disparaît de la
+   * liste sans que rien ne le signale. Constaté ici même en ajoutant `/etat`.
+   */
+  const sansCommentaires = bloc[1]!.replace(/\/\/[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
+  return [...sansCommentaires.matchAll(/'([^']+)'/g)].map((m) => m[1]!);
+}
+
 /** Routes déclarées dans App.tsx, hors routes publiques et paramétrées. */
 function routesDeclarees(): string[] {
+  const publiques = new Set(routesPubliques());
   const trouvees = [...SOURCE_APP.matchAll(/<Route\s+path="([^"]+)"/g)].map((m) => m[1]!);
   return trouvees.filter(
     (r) =>
@@ -34,7 +66,7 @@ function routesDeclarees(): string[] {
       // "/mfa" (ticket 4.15) : atteignable via le lien dédié "Sécurité du
       // compte" du pied de la barre latérale (app-shell.tsx), volontairement
       // hors de NAV_SECTIONS/MOBILE_NAV — ce n'est pas une section métier.
-      !["/login", "/register", "/mfa"].includes(r),
+      !publiques.has(r),
   );
 }
 
