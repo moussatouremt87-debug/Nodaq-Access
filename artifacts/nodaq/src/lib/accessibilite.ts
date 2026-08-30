@@ -59,6 +59,10 @@ export const ECRANS_AUDITES: readonly EcranAudite[] = [
   { chemin: '/login', charger: () => import('@/pages/login') },
   { chemin: '/register', charger: () => import('@/pages/register') },
   { chemin: '/mfa', charger: () => import('@/pages/mfa') },
+  // L'état des services : elle se rend seule, sans jeton ni session — donc
+  // auditée, pas exemptée. Et elle compte : on la lit en situation de panne,
+  // c'est-à-dire quand plus rien d'autre n'aide.
+  { chemin: '/etat', charger: () => import('@/pages/etat') },
   {
     chemin: '/devis/accepter/:token',
     exempt:

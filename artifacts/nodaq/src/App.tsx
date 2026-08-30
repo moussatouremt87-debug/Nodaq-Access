@@ -44,6 +44,7 @@ import Register from '@/pages/register';
 import DevisAccepter from '@/pages/devis-accepter';
 import MembreAccepter from '@/pages/membre-accepter';
 import Mfa from '@/pages/mfa';
+import Etat from '@/pages/etat';
 import { useAuth, FINANCIAL_ROLES, type MembershipRole } from '@/hooks/use-auth';
 
 /**
@@ -179,6 +180,8 @@ export const ROUTES_PUBLIQUES = [
   '/login',
   '/register',
   '/mfa',
+  // Publique par nécessité : on la consulte quand on n'arrive PAS à entrer.
+  '/etat',
 ] as const;
 
 function AppRouter() {
@@ -192,6 +195,8 @@ function AppRouter() {
       {/* MFA (ticket 4.15) — une identité en attente de second facteur n'a
           pas de `role` : l'AppShell, qui appelle useIsOwner(), choquerait. */}
       <Route path="/mfa" component={Mfa} />
+      {/* L'état des services : sans session, sans coquille. */}
+      <Route path="/etat" component={Etat} />
 
       {/* Tout le reste vit dans l'application interne. */}
       <Route component={ApplicationInterne} />
