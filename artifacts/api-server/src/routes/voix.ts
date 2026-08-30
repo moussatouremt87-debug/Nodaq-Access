@@ -33,6 +33,7 @@ import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { executerPlan } from "../lib/plan-vocal.js";
 import { logger } from "../lib/logger.js";
+import { messageValidation } from "../lib/message-validation.js";
 
 const router: IRouter = Router();
 
@@ -54,7 +55,7 @@ const ExecuterBody = z.object({
 
 router.post("/voix/executer", async (req, res): Promise<void> => {
   const parsed = ExecuterBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const tenantId = req.tenantId!;
 
   let resultat;

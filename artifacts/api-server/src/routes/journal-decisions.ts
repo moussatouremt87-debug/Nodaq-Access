@@ -21,6 +21,7 @@ import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { withTenant, journalDecisionsTable, pendingActionsTable } from "@workspace/db";
 import { and, desc, gte, isNull, lte, sql } from "drizzle-orm";
+import { messageValidation } from "../lib/message-validation.js";
 
 const router: IRouter = Router();
 
@@ -137,7 +138,7 @@ const LIBELLE_DECISION: Record<LigneJournal["decision"], string> = {
 
 router.get("/journal-decisions", async (req, res): Promise<void> => {
   const parsed = PeriodQuery.safeParse(req.query);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   res.json(await lireJournal(req.tenantId!, parsed.data.from, parsed.data.to));
 });
 
@@ -175,7 +176,7 @@ export function buildJournalCsvRows(lignes: readonly LigneJournal[]): string[] {
 
 router.get("/journal-decisions/export", async (req, res): Promise<void> => {
   const parsed = PeriodQuery.safeParse(req.query);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
 
   const lignes = await lireJournal(req.tenantId!, parsed.data.from, parsed.data.to);
   const csv = "﻿" + buildJournalCsvRows(lignes).join("\r\n");

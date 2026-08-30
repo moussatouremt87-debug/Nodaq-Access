@@ -6,6 +6,7 @@ import { z } from "zod/v4";
 import { withTenant, classeurTable, classeurDocumentBytesTable, archivedPdfsTable } from "@workspace/db";
 import { and, eq, inArray, desc } from "drizzle-orm";
 import { ListClasseurQueryParams, DeleteClasseurDocumentParams } from "@workspace/api-zod";
+import { messageValidation } from "../lib/message-validation.js";
 
 const router: IRouter = Router();
 
@@ -69,7 +70,7 @@ const DocumentIdParams = z.object({ id: z.string() });
 
 router.get("/classeur", async (req, res): Promise<void> => {
   const parsed = ListClasseurQueryParams.safeParse(req.query);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const { category, search } = parsed.data;
   const tenantId = req.tenantId!;
 
@@ -135,7 +136,7 @@ router.post("/classeur", uploadUnique, perimetreSanteClasseur, async (req, res):
     return;
   }
   const parsed = UploadFields.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const data = parsed.data;
   const tenantId = req.tenantId!;
 
@@ -166,7 +167,7 @@ router.post("/classeur", uploadUnique, perimetreSanteClasseur, async (req, res):
 
 router.get("/classeur/:id/telechargement", async (req, res): Promise<void> => {
   const parsed = DocumentIdParams.safeParse(req.params);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const tenantId = req.tenantId!;
 
   const result = await withTenant(tenantId, async (tx) => {
@@ -211,7 +212,7 @@ router.get("/classeur/:id/telechargement", async (req, res): Promise<void> => {
 
 router.delete("/classeur/:id", async (req, res): Promise<void> => {
   const parsed = DeleteClasseurDocumentParams.safeParse(req.params);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const tenantId = req.tenantId!;
 
   const [existing] = await withTenant(tenantId, async (tx) =>

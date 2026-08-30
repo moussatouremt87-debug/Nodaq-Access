@@ -26,6 +26,7 @@ import {
 } from "@workspace/db";
 import { planAttestations, type PrestataireSap, type EncaissementClient } from "@nodaq/shared";
 import { genererAttestationSapPdf } from "../lib/attestation-sap-pdf.js";
+import { messageValidation } from "../lib/message-validation.js";
 
 const router: IRouter = Router();
 
@@ -72,7 +73,7 @@ async function prestataireDuTenant(
  */
 router.post("/attestations-sap", async (req, res): Promise<void> => {
   const parsed = Corps.safeParse(req.body ?? {});
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const { annee } = parsed.data;
   const tenantId = req.tenantId!;
 

@@ -89,6 +89,7 @@ import {
 } from "../lib/permis-construire.js";
 import { lireCachePermis, ecrireCachePermis } from "../lib/cache-permis.js";
 import { VERTICAL_SETTING_KEY } from "../lib/vertical-tenant.js";
+import { messageValidation } from "../lib/message-validation.js";
 
 const router: IRouter = Router();
 
@@ -143,7 +144,7 @@ router.get("/prospection/contacts", async (req, res): Promise<void> => {
 
 router.post("/prospection/contacts", async (req, res): Promise<void> => {
   const parsed = ContactBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const tenantId = req.tenantId!;
 
   const [cree] = await withTenant(tenantId, (tx) =>
@@ -169,7 +170,7 @@ router.post("/prospection/importer", async (req, res): Promise<void> => {
       contacts: z.array(ContactBody).min(1).max(2000),
     })
     .safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const tenantId = req.tenantId!;
   const d = parsed.data;
   const aujourdhui = toDateString(new Date());
@@ -268,7 +269,7 @@ router.post("/prospection/depuis-clients", async (req, res): Promise<void> => {
 
 router.post("/prospection/contacts/:id/base", async (req, res): Promise<void> => {
   const parsed = BaseBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const tenantId = req.tenantId!;
   const { id } = req.params;
 
@@ -384,7 +385,7 @@ router.post("/prospection/envoyer", async (req, res): Promise<void> => {
       message: z.string().min(1).max(20_000),
     })
     .safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const tenantId = req.tenantId!;
   const d = parsed.data;
 

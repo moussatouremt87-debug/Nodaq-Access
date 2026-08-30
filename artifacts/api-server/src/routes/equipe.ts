@@ -15,6 +15,7 @@ import {
   type AffaireRecord,
 } from "../services/planning-service";
 import { verticalDepuisTx } from "../lib/vertical-tenant.js";
+import { messageValidation } from "../lib/message-validation.js";
 
 /**
  * planning-service.ts does all of its internal calendar arithmetic in UTC
@@ -143,7 +144,7 @@ const CreateHabilitationBody = z.object({
 router.post("/equipe/:id/habilitations", async (req, res): Promise<void> => {
   const { id: membreId } = req.params as { id: string };
   const parsed = CreateHabilitationBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
 
   const tenantId = req.tenantId!;
   const { type, libelle, dateExpiration } = parsed.data;
@@ -180,7 +181,7 @@ router.delete("/equipe/:id/habilitations/:habilitationId", async (req, res): Pro
 
 router.post("/equipe", async (req, res): Promise<void> => {
   const parsed = CreateMemberBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
 
   const { name, role = "Collaborateur", email, availability = "DISPONIBLE", schedule = [], typeLien } = parsed.data;
   const tenantId = req.tenantId!;
@@ -200,7 +201,7 @@ router.post("/equipe", async (req, res): Promise<void> => {
 router.patch("/equipe/:id", async (req, res): Promise<void> => {
   const { id } = req.params as { id: string };
   const parsed = UpdateMemberBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
 
   const tenantId = req.tenantId!;
 

@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { VERTICALS } from "@nodaq/shared";
 import { VERTICAL_SETTING_KEY, DEFAULT_VERTICAL } from "../lib/vertical-tenant.js";
+import { messageValidation } from "../lib/message-validation.js";
 
 const router: IRouter = Router();
 
@@ -32,7 +33,7 @@ router.get("/votre-metier", async (req, res): Promise<void> => {
 
 router.patch("/votre-metier", async (req, res): Promise<void> => {
   const parsed = PatchBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const { metier } = parsed.data;
   const tenantId = req.tenantId!;
 

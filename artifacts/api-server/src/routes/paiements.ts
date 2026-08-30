@@ -22,6 +22,7 @@ import {
 } from "@workspace/db";
 import { toDateString } from "@nodaq/shared";
 import { recalculerFacture } from "../lib/reglement-facture.js";
+import { messageValidation } from "../lib/message-validation.js";
 
 const router: IRouter = Router();
 
@@ -48,7 +49,7 @@ router.get("/paiements", async (req, res): Promise<void> => {
   const filtres = z
     .object({ factureId: z.string().optional(), affaireId: z.string().optional() })
     .safeParse(req.query);
-  if (!filtres.success) { res.status(400).json({ error: filtres.error.message }); return; }
+  if (!filtres.success) { res.status(400).json({ error: messageValidation(filtres.error) }); return; }
 
   const paiements = await withTenant(tenantId, (tx) => {
     const conditions = [
@@ -72,7 +73,7 @@ router.get("/paiements", async (req, res): Promise<void> => {
 
 router.post("/paiements", async (req, res): Promise<void> => {
   const parsed = PaiementBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const tenantId = req.tenantId!;
   const d = parsed.data;
 

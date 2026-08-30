@@ -16,6 +16,7 @@ import {
   DeleteDevisParams,
   ConvertDevisToAffaireParams,
 } from "@workspace/api-zod";
+import { messageValidation } from "../lib/message-validation.js";
 
 const router: IRouter = Router();
 
@@ -123,7 +124,7 @@ function toDateStr(v: Date | string | null | undefined): string | null {
 
 router.get("/devis", async (req, res): Promise<void> => {
   const parsed = ListDevisQueryParams.safeParse(req.query);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const { statut, search } = parsed.data;
   const tenantId = req.tenantId!;
 
@@ -142,7 +143,7 @@ router.get("/devis", async (req, res): Promise<void> => {
 
 router.post("/devis", async (req, res): Promise<void> => {
   const parsed = CreateDevisBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const {
     clientName, lines = [], tvaRate = 20, remise = 0, notes, validUntil,
     autoliquidation, retenueGarantiePct, affaireId,
@@ -187,7 +188,7 @@ router.post("/devis", async (req, res): Promise<void> => {
 
 router.get("/devis/:id", async (req, res): Promise<void> => {
   const parsed = GetDevisParams.safeParse(req.params);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const tenantId = req.tenantId!;
   const [d] = await withTenant(tenantId, async (tx) =>
     tx.select().from(devisTable).where(eq(devisTable.id, parsed.data.id))
@@ -239,7 +240,7 @@ router.patch("/devis/:id", async (req, res): Promise<void> => {
 
 router.delete("/devis/:id", async (req, res): Promise<void> => {
   const parsed = DeleteDevisParams.safeParse(req.params);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const tenantId = req.tenantId!;
   await withTenant(tenantId, async (tx) =>
     tx.delete(devisTable).where(eq(devisTable.id, parsed.data.id))
@@ -290,7 +291,7 @@ function urlAcceptation(token: string): string {
  */
 router.post("/devis/:id/envoyer", async (req, res): Promise<void> => {
   const parsed = SendDevisBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const tenantId = req.tenantId!;
   const { id } = req.params;
 
@@ -444,7 +445,7 @@ router.get("/devis/:id/pdf", async (req, res): Promise<void> => {
 
 router.post("/devis/:id/convert", async (req, res): Promise<void> => {
   const parsed = ConvertDevisToAffaireParams.safeParse(req.params);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const tenantId = req.tenantId!;
 
   const result = await withTenant(tenantId, async (tx) => {

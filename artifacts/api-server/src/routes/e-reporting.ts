@@ -17,6 +17,7 @@ import { notInArray } from "drizzle-orm";
 import { withTenant, facturesTable, paTransmissionsTable } from "@workspace/db";
 import { aggregateEReporting, type EReportingSourceInvoice } from "@nodaq/facturx";
 import { getConfig, submitInvoice, PaConfigError } from "@nodaq/plateforme-agreee";
+import { messageValidation } from "../lib/message-validation.js";
 
 const router: IRouter = Router();
 
@@ -49,7 +50,7 @@ async function ledger(tenantId: string): Promise<EReportingSourceInvoice[]> {
 
 router.get("/e-reporting/apercu", async (req, res): Promise<void> => {
   const parsed = PeriodeQuery.safeParse(req.query);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const { periodeDebut, periodeFin } = parsed.data;
   const tenantId = req.tenantId!;
 
@@ -72,7 +73,7 @@ const DeclarerBody = z.object({
 
 router.post("/e-reporting/declarer", async (req, res): Promise<void> => {
   const parsed = DeclarerBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const { periodeDebut, periodeFin, tvaDeclareeCents } = parsed.data;
   const tenantId = req.tenantId!;
 

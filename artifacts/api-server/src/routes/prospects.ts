@@ -9,12 +9,13 @@ import {
   DeleteProspectParams,
   ListProspectsQueryParams,
 } from "@workspace/api-zod";
+import { messageValidation } from "../lib/message-validation.js";
 
 const router: IRouter = Router();
 
 router.get("/prospects", async (req, res): Promise<void> => {
   const parsed = ListProspectsQueryParams.safeParse(req.query);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const { stage } = parsed.data;
   const tenantId = req.tenantId!;
 
@@ -29,7 +30,7 @@ router.get("/prospects", async (req, res): Promise<void> => {
 
 router.post("/prospects", async (req, res): Promise<void> => {
   const parsed = CreateProspectBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const data = parsed.data;
   const tenantId = req.tenantId!;
 
@@ -54,9 +55,9 @@ router.post("/prospects", async (req, res): Promise<void> => {
 
 router.patch("/prospects/:id", async (req, res): Promise<void> => {
   const params = UpdateProspectParams.safeParse(req.params);
-  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  if (!params.success) { res.status(400).json({ error: messageValidation(params.error) }); return; }
   const parsed = UpdateProspectBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const data = parsed.data;
   const updateData: Record<string, unknown> = {};
   if (data.name !== undefined) updateData.name = data.name;
@@ -78,7 +79,7 @@ router.patch("/prospects/:id", async (req, res): Promise<void> => {
 
 router.delete("/prospects/:id", async (req, res): Promise<void> => {
   const params = DeleteProspectParams.safeParse(req.params);
-  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  if (!params.success) { res.status(400).json({ error: messageValidation(params.error) }); return; }
   const tenantId = req.tenantId!;
   const [deleted] = await withTenant(tenantId, async (tx) =>
     tx.delete(prospectsTable).where(eq(prospectsTable.id, params.data.id)).returning()

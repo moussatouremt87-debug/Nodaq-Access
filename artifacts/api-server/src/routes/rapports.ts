@@ -3,12 +3,13 @@ import { withTenant, affairesTable, facturesTable, prospectsTable, avoirsTable }
 import { productionVendue } from "@nodaq/shared";
 import { chargerReprise } from "../lib/reprise-ca.js";
 import { GetRapportMensuelQueryParams } from "@workspace/api-zod";
+import { messageValidation } from "../lib/message-validation.js";
 
 const router: IRouter = Router();
 
 router.get("/rapports/mensuel", async (req, res): Promise<void> => {
   const parsed = GetRapportMensuelQueryParams.safeParse(req.query);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
 
   const now = new Date();
   const mois = parsed.data.mois ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;

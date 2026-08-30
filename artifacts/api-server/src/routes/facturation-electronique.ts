@@ -27,6 +27,7 @@ import {
 } from "@workspace/db";
 import { enregistrerSecret, secretExiste, revoquerSecret, lireSecret } from "../lib/tenant-secrets.js";
 import { extractFacturXXml, parseCiiEssentials } from "@nodaq/facturx";
+import { messageValidation } from "../lib/message-validation.js";
 
 const router: IRouter = Router();
 
@@ -125,7 +126,7 @@ const ParametresBody = z.object({
 
 router.put("/facturation-electronique", async (req, res): Promise<void> => {
   const parsed = ParametresBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const tenantId = req.tenantId!;
   const { cleApi } = parsed.data;
 

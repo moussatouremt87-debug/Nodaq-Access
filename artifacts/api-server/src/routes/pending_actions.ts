@@ -9,6 +9,7 @@ import {
 import { executerPlan, planApplicable, TYPE_PLAN } from "../lib/plan-vocal.js";
 import { executerRelanceDevis, TYPE_RELANCE_DEVIS } from "../lib/executer-relance-devis.js";
 import { logger } from "../lib/logger.js";
+import { messageValidation } from "../lib/message-validation.js";
 
 const router: IRouter = Router();
 
@@ -53,7 +54,7 @@ router.get("/pending-actions", async (req, res): Promise<void> => {
 
 router.post("/pending-actions/:id/approve", async (req, res): Promise<void> => {
   const params = ApprovePendingActionParams.safeParse(req.params);
-  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  if (!params.success) { res.status(400).json({ error: messageValidation(params.error) }); return; }
   const tenantId = req.tenantId!;
 
   const [avant] = await withTenant(tenantId, (tx) =>
@@ -184,7 +185,7 @@ router.post("/pending-actions/:id/approve", async (req, res): Promise<void> => {
 
 router.post("/pending-actions/:id/reject", async (req, res): Promise<void> => {
   const params = RejectPendingActionParams.safeParse(req.params);
-  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  if (!params.success) { res.status(400).json({ error: messageValidation(params.error) }); return; }
   const tenantId = req.tenantId!;
 
   const [action] = await withTenant(tenantId, async (tx) => {

@@ -32,6 +32,7 @@ import {
   reclamerPlaceFondateurs,
   tousLesPlans,
 } from "../lib/abonnement.js";
+import { messageValidation } from "../lib/message-validation.js";
 
 export const abonnementReadRouter: IRouter = Router();
 export const abonnementWriteRouter: IRouter = Router();
@@ -64,7 +65,7 @@ const CorpsFormule = z.object({
 abonnementWriteRouter.post("/abonnement/formule", async (req, res): Promise<void> => {
   const parsed = CorpsFormule.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    res.status(400).json({ error: messageValidation(parsed.error) });
     return;
   }
   const tenantId = req.tenantId!;
@@ -179,7 +180,7 @@ const CorpsModule = z.object({ actif: z.boolean() });
 abonnementWriteRouter.post("/abonnement/module-vocal", async (req, res): Promise<void> => {
   const parsed = CorpsModule.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    res.status(400).json({ error: messageValidation(parsed.error) });
     return;
   }
   const tenantId = req.tenantId!;

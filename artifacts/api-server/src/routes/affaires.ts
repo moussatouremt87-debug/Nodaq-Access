@@ -12,6 +12,7 @@ import {
 } from "@workspace/api-zod";
 import { maskFinancialFields } from "../lib/maskFinancialFields.js";
 import { consignerActivite, auteurDeLaSession } from "../lib/consigner-activite.js";
+import { messageValidation } from "../lib/message-validation.js";
 
 const router: IRouter = Router();
 
@@ -67,7 +68,7 @@ router.get("/affaires/stats", async (req, res): Promise<void> => {
 
 router.get("/affaires", async (req, res): Promise<void> => {
   const parsed = ListAffairesQueryParams.safeParse(req.query);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const { statut, inclureArchivees } = parsed.data;
 
   const tenantId = req.tenantId!;
@@ -96,7 +97,7 @@ router.get("/affaires", async (req, res): Promise<void> => {
 
 router.post("/affaires", async (req, res): Promise<void> => {
   const parsed = CreateAffaireBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const data = parsed.data;
   const tenantId = req.tenantId!;
   const refNum = String(Date.now()).slice(-6);
@@ -124,7 +125,7 @@ router.post("/affaires", async (req, res): Promise<void> => {
 
 router.get("/affaires/:id", async (req, res): Promise<void> => {
   const params = GetAffaireParams.safeParse(req.params);
-  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  if (!params.success) { res.status(400).json({ error: messageValidation(params.error) }); return; }
   const tenantId = req.tenantId!;
   const [affaire] = await withTenant(tenantId, async (tx) =>
     tx.select().from(affairesTable).where(eq(affairesTable.id, params.data.id))
@@ -139,9 +140,9 @@ router.get("/affaires/:id", async (req, res): Promise<void> => {
 
 router.patch("/affaires/:id", async (req, res): Promise<void> => {
   const params = UpdateAffaireParams.safeParse(req.params);
-  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  if (!params.success) { res.status(400).json({ error: messageValidation(params.error) }); return; }
   const parsed = UpdateAffaireBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const data = parsed.data;
   const updateData: Record<string, unknown> = {};
   if (data.label !== undefined) updateData.label = data.label;
@@ -173,7 +174,7 @@ router.patch("/affaires/:id", async (req, res): Promise<void> => {
 
 router.delete("/affaires/:id", async (req, res): Promise<void> => {
   const params = DeleteAffaireParams.safeParse(req.params);
-  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  if (!params.success) { res.status(400).json({ error: messageValidation(params.error) }); return; }
   const tenantId = req.tenantId!;
   const [deleted] = await withTenant(tenantId, async (tx) =>
     tx.delete(affairesTable).where(eq(affairesTable.id, params.data.id)).returning()

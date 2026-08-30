@@ -13,6 +13,7 @@ import { hasFinancialAccess, verticalLabel, type Vertical } from "@nodaq/shared"
 import { listUserMemberships } from "../lib/authService";
 import { buildLineResults, computeTotals, buildCompteResultatCsvRows } from "./compte-resultat";
 import { verticalDepuisTx } from "../lib/vertical-tenant.js";
+import { messageValidation } from "../lib/message-validation.js";
 
 const router: IRouter = Router();
 
@@ -24,7 +25,7 @@ const PeriodQuery = z.object({
 
 router.get("/cabinet/export", async (req, res): Promise<void> => {
   const parsed = PeriodQuery.safeParse(req.query);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const { from, to } = parsed.data;
 
   const memberships = (await listUserMemberships(req.session!.userId))

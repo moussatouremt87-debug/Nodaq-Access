@@ -36,6 +36,7 @@ import { toDateString, compteDansCapacite , PROFIL_VIDE, peutEmettreDocumentLega
 import { indexerAuClasseur, nomAuClasseur } from "../lib/indexation-classeur.js";
 import { verticalDepuisTx } from "../lib/vertical-tenant.js";
 import { couvertureSecteur } from "@nodaq/shared";
+import { messageValidation } from "../lib/message-validation.js";
 
 // ── Validation SIRET (Luhn, inlinée pour éviter la dépendance circulaire) ────
 
@@ -335,7 +336,7 @@ const ConfirmProfileBody = z.object({
 onboardingWriteRouter.post("/onboarding/profil/confirmer", async (req, res): Promise<void> => {
   const parsed = ConfirmProfileBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    res.status(400).json({ error: messageValidation(parsed.error) });
     return;
   }
   const tenantId = req.tenantId!;
@@ -402,7 +403,7 @@ const CorpsQualification = z.object({
  */
 onboardingWriteRouter.patch("/onboarding/qualification", async (req, res): Promise<void> => {
   const parsed = CorpsQualification.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const tenantId = req.tenantId!;
   const d = parsed.data;
 
@@ -476,7 +477,7 @@ onboardingWriteRouter.post("/reprise/blocs/:bloc", async (req, res): Promise<voi
 
   const parsed = PasserBlocBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    res.status(400).json({ error: messageValidation(parsed.error) });
     return;
   }
 

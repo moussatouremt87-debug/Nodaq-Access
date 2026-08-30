@@ -28,6 +28,7 @@ import { declencherAppelVocal } from "../lib/agent-vocal.js";
 import { numeroAutoriseEnTest } from "../lib/numeros-test.js";
 import { empreinte } from "../lib/prospection.js";
 import { abonnementCourant, tousLesPlans } from "../lib/abonnement.js";
+import { messageValidation } from "../lib/message-validation.js";
 
 export const campagnesRelanceReadRouter: IRouter = Router();
 export const campagnesRelanceWriteRouter: IRouter = Router();
@@ -67,7 +68,7 @@ campagnesRelanceReadRouter.get("/relance/campagnes", async (req, res): Promise<v
 campagnesRelanceWriteRouter.post("/relance/campagnes", async (req, res): Promise<void> => {
   const parsed = CorpsCampagne.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    res.status(400).json({ error: messageValidation(parsed.error) });
     return;
   }
   const { appels, mandat: demande, ...fenetre } = parsed.data;
@@ -137,7 +138,7 @@ campagnesRelanceWriteRouter.delete(
   async (req, res): Promise<void> => {
     const params = ExclureParams.safeParse(req.params);
     if (!params.success) {
-      res.status(400).json({ error: params.error.message });
+      res.status(400).json({ error: messageValidation(params.error) });
       return;
     }
     const tenantId = req.tenantId!;
@@ -244,7 +245,7 @@ campagnesRelanceWriteRouter.patch(
   async (req, res): Promise<void> => {
     const parsed = DemandeMandat.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ error: parsed.error.message });
+      res.status(400).json({ error: messageValidation(parsed.error) });
       return;
     }
     const id = String(req.params["id"] ?? "");
@@ -326,7 +327,7 @@ campagnesRelanceWriteRouter.post(
       .object({ factureId: z.string().min(1), numero: z.string().min(1) })
       .safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ error: parsed.error.message });
+      res.status(400).json({ error: messageValidation(parsed.error) });
       return;
     }
     const campagneId = String(req.params["id"] ?? "");

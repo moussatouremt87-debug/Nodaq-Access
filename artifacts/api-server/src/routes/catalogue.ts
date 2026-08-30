@@ -12,6 +12,7 @@ import { withTenant, catalogueLignesTable, catalogueAliasTable, devisTable } fro
 import type { DevisLine } from "@workspace/db";
 import { apprendreAlias, oublierAlias, messageRefus } from "../lib/alias-catalogue.js";
 import { normaliser } from "@nodaq/shared";
+import { messageValidation } from "../lib/message-validation.js";
 
 const router: IRouter = Router();
 
@@ -55,7 +56,7 @@ router.get("/catalogue", async (req, res): Promise<void> => {
 
 router.post("/catalogue", async (req, res): Promise<void> => {
   const parsed = CreateLigneBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const d = parsed.data;
   const tenantId = req.tenantId!;
 
@@ -83,7 +84,7 @@ router.post("/catalogue", async (req, res): Promise<void> => {
 
 router.patch("/catalogue/:id", async (req, res): Promise<void> => {
   const parsed = UpdateLigneBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const d = parsed.data;
   const id = req.params["id"] as string;
   const tenantId = req.tenantId!;
@@ -240,7 +241,7 @@ router.post("/catalogue/alias", async (req, res): Promise<void> => {
       remplacer: z.boolean().default(false),
     })
     .safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: messageValidation(parsed.error) }); return; }
   const tenantId = req.tenantId!;
 
   const resultat = await apprendreAlias(
