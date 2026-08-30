@@ -18,13 +18,18 @@
  *
  * La règle correcte, uniforme sur les avoirs partiels comme totaux :
  *
- *   CA d'une période = somme des `amount_cents` des factures dont le statut est
+ *   CA d'une période = somme des bases HT des factures dont le statut est
  *   EMISE, PAYEE ou ANNULEE_PAR_AVOIR et dont la date d'émission tombe dans la
- *   période, MOINS la somme des avoirs (HT + TVA) émis sur la même période.
+ *   période, MOINS la somme des montants HT des avoirs émis sur la même période.
  *
  * Une facture totalement annulée est donc INCLUSE, puis annulée par son avoir :
- * solde nul, sans double comptage. Un avoir partiel diminue le CA du montant de
- * l'avoir, ce qui est exact puisque `amount_cents` n'est pas retouché.
+ * solde nul, sans double comptage. Un avoir partiel diminue le CA de son montant
+ * HT, ce qui est exact puisque la facture n'est pas retouchée.
+ *
+ * HT DES DEUX CÔTÉS, et c'est le correctif du 29/08/2026. Ce paragraphe disait
+ * `amount_cents` — le TTC — et « avoirs (HT + TVA) ». C'était cohérent avec
+ * lui-même, mais le compte de résultat, lui, sommait le HT : le Cockpit
+ * annonçait 159 822,40 € contre 136 526,00 €, soit la TVA collectée en trop.
  * ─────────────────────────────────────────────────────────────────────────────
  *
  * POURQUOI UNE LISTE BLANCHE et non une exclusion de `BROUILLON` : un statut
@@ -60,6 +65,25 @@ export const statutsCaSql: SQL = sql.join(
   sql`, `,
 );
 
+/**
+ * La base HT d'une facture — LA grandeur du chiffre d'affaires.
+ *
+ * Constaté le 29/08/2026 : le Cockpit annonçait 159 822,40 € là où le compte
+ * de résultat, sur exactement les mêmes factures, affichait 136 526,00 €.
+ * L'écart valait 23 296,40 € — la TVA collectée, au centime.
+ *
+ * `amount_cents` est le TTC. La TVA n'est pas un produit : elle est encaissée
+ * pour l'État et reversée. L'inclure gonfle la jauge sur laquelle un patron
+ * décide d'embaucher — et cette jauge s'affiche en gros sur la page d'accueil.
+ *
+ * Le repli sur `amount_cents` quand la base HT vaut 0 reprend `htCents()` de
+ * `productionVendue.ts`, mot pour mot : les factures REPRISES d'un ancien
+ * logiciel n'ont aucune ventilation, et les compter pour zéro effacerait le
+ * passé de l'entreprise. Les deux définitions disent désormais la même chose ;
+ * c'est tout l'objet du correctif.
+ */
+const htFactureSql: SQL = sql`CASE WHEN total_ht_cents > 0 THEN total_ht_cents ELSE amount_cents END`;
+
 function bornes(colonne: SQL, p: PeriodeCa): SQL {
   const haute =
     p.finExclue != null ? sql` AND ${colonne} < ${p.finExclue}::date` : sql``;
@@ -79,9 +103,9 @@ export function conditionFactureCa(p: PeriodeCa): SQL {
  */
 export function caNetCentsSql(p: PeriodeCa): SQL<number> {
   return sql<number>`(
-    (SELECT coalesce(sum(amount_cents), 0) FROM factures WHERE ${conditionFactureCa(p)})
+    (SELECT coalesce(sum(${htFactureSql}), 0) FROM factures WHERE ${conditionFactureCa(p)})
     -
-    (SELECT coalesce(sum(montant_ht_cents + montant_tva_cents), 0) FROM avoirs
+    (SELECT coalesce(sum(montant_ht_cents), 0) FROM avoirs
       WHERE ${bornes(sql`issued_date`, p)})
   )::float`;
 }

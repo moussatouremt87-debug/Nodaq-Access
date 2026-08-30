@@ -41,17 +41,27 @@ async function facture(opts: {
   amountCents: number;
   statut?: Statut;
   settled?: boolean;
+  /**
+   * Base HT du document. Laissée absente, la ligne imite une facture REPRISE
+   * d'un ancien logiciel : `total_ht_cents` y vaut 0 et le CA se rabat sur
+   * `amount_cents`. Les cas historiques ci-dessous s'appuient sur ce repli.
+   */
+  totalHtCents?: number;
+  totalTvaCents?: number;
 }): Promise<string> {
   const id = crypto.randomUUID();
   await adminPool.query(
     `INSERT INTO factures (id, tenant_id, number, customer_name, amount_cents,
+                           total_ht_cents, total_tva_cents,
                            due_date, issued_date, statut, settled)
-     VALUES ($1, $2::uuid, $3, 'Client Test', $4, $5, $5, $6, $7)`,
+     VALUES ($1, $2::uuid, $3, 'Client Test', $4, $5, $6, $7, $7, $8, $9)`,
     [
       id,
       tenantId,
       `F-${Math.random().toString(36).slice(2, 10)}`,
       opts.amountCents,
+      opts.totalHtCents ?? 0,
+      opts.totalTvaCents ?? 0,
       opts.issuedDate,
       opts.statut ?? "EMISE",
       opts.settled ?? false,
@@ -167,6 +177,8 @@ describe("c — facture totalement annulée par avoir", () => {
     const f = await facture({
       issuedDate: aujourdhui,
       amountCents: 1_000_000,
+      totalHtCents: 800_000,
+      totalTvaCents: 200_000,
       statut: "ANNULEE_PAR_AVOIR",
     });
     await avoir({
@@ -175,6 +187,9 @@ describe("c — facture totalement annulée par avoir", () => {
       montantHtCents: 800_000,
       montantTvaCents: 200_000,
     });
+    // Le CA est une grandeur HT : 800 000 facturés, 800 000 annulés. La TVA
+    // n'entre ni d'un côté ni de l'autre. L'assertion, elle, est la même
+    // qu'avant — c'est le jeu d'essai qui cesse de mélanger deux bases.
     expect(await caExercice()).toBe(0);
   });
 
@@ -196,26 +211,50 @@ describe("d — avoir partiel", () => {
   test("2 000 € d'avoir sur 10 000 € de facture → CA = 8 000 €", async () => {
     // La facture reste EMISE, `amount_cents` n'est pas retouché : c'est
     // l'avoir, et lui seul, qui porte la correction.
-    const f = await facture({ issuedDate: aujourdhui, amountCents: 1_000_000 });
+    //
+    // 10 000 € HT facturés, 2 000 € HT annulés. La base HT est posée
+    // explicitement : sans elle, la ligne imiterait une facture reprise et se
+    // rabattrait sur son TTC, qu'on comparerait ensuite à un avoir ventilé.
+    const f = await facture({
+      issuedDate: aujourdhui,
+      amountCents: 1_200_000,
+      totalHtCents: 1_000_000,
+      totalTvaCents: 200_000,
+    });
     await avoir({
       factureRefId: f,
       issuedDate: aujourdhui,
-      montantHtCents: 160_000,
+      montantHtCents: 200_000,
       montantTvaCents: 40_000,
     });
     expect(await caExercice()).toBe(800_000);
   });
 
-  test("la TVA de l'avoir est déduite, pas seulement le HT", async () => {
-    const f = await facture({ issuedDate: aujourdhui, amountCents: 1_000_000 });
+  /*
+   * Ce test affirmait l'inverse jusqu'au 29/08/2026 : « la TVA de l'avoir est
+   * déduite, pas seulement le HT ». Il avait raison — TANT QUE le CA était
+   * une grandeur TTC. Retrancher un avoir TTC d'un total TTC est cohérent.
+   *
+   * Ce n'est pas l'assertion qui était fautive, c'est sa PRÉMISSE. Le CA est
+   * une grandeur HT ; y retrancher la TVA d'un avoir reviendrait à soustraire
+   * une taxe d'un montant qui ne l'a jamais contenue.
+   */
+  test("seul le HT de l'avoir est déduit — la TVA n'entre d'aucun côté", async () => {
+    const f = await facture({
+      issuedDate: aujourdhui,
+      amountCents: 1_200_000,
+      totalHtCents: 1_000_000,
+      totalTvaCents: 200_000,
+    });
     await avoir({
       factureRefId: f,
       issuedDate: aujourdhui,
       montantHtCents: 100_000,
       montantTvaCents: 20_000,
     });
-    // 1 000 000 − (100 000 + 20 000). Oublier la TVA donnerait 900 000.
-    expect(await caExercice()).toBe(880_000);
+    // 1 000 000 − 100 000. Déduire aussi la TVA donnerait 880 000, c'est-à-dire
+    // une taxe retranchée d'une base qui ne la contient pas.
+    expect(await caExercice()).toBe(900_000);
   });
 });
 
@@ -318,5 +357,65 @@ describe("les objectifs du cockpit lisent le MÊME chiffre d'affaires", () => {
     expect(o).toBeDefined();
     expect(o.caExerciceCents).toBe(0);
     expect(o.ecartCents).toBe(2_000_000);
+  });
+});
+
+/**
+ * ── g. LE CHIFFRE D'AFFAIRES EST UNE GRANDEUR HT ────────────────────────────
+ *
+ * Constaté le 29/08/2026 : le Cockpit annonçait 159 822,40 € là où le compte
+ * de résultat, sur les mêmes factures, affichait 136 526,00 €. L'écart —
+ * 23 296,40 € — était exactement la TVA collectée.
+ *
+ * `amount_cents` est le TTC ; `productionVendue` (compte de résultat) le
+ * disait déjà en commentaire et sommait `total_ht_cents`. La définition SQL,
+ * elle, sommait le TTC : deux écrans, deux réponses, et c'est le mauvais qui
+ * s'affichait en gros sur la page d'accueil.
+ *
+ * La TVA n'est pas un produit : elle est collectée pour l'État et reversée.
+ * L'inclure dans le CA gonfle la jauge sur laquelle un patron décide
+ * d'embaucher.
+ */
+describe("g — le CA est HT, jamais TTC", () => {
+  test("une facture de 100 000 HT + 20 000 de TVA compte pour 100 000", async () => {
+    await facture({
+      issuedDate: aujourdhui,
+      amountCents: 120_000,
+      totalHtCents: 100_000,
+      totalTvaCents: 20_000,
+    });
+    expect(await caExercice()).toBe(100_000);
+  });
+
+  test("un avoir se déduit en HT lui aussi", async () => {
+    await facture({
+      issuedDate: aujourdhui,
+      amountCents: 120_000,
+      totalHtCents: 100_000,
+      totalTvaCents: 20_000,
+    });
+    const f = await facture({
+      issuedDate: aujourdhui,
+      amountCents: 60_000,
+      totalHtCents: 50_000,
+      totalTvaCents: 10_000,
+    });
+    await avoir({
+      factureRefId: f,
+      issuedDate: aujourdhui,
+      montantHtCents: 50_000,
+      montantTvaCents: 10_000,
+    });
+    // 100 000 + 50 000 − 50 000 = 100 000. Déduire le TTC de l'avoir
+    // (60 000) donnerait 90 000 : on retrancherait de la TVA d'un montant HT.
+    expect(await caExercice()).toBe(100_000);
+  });
+
+  test("une facture REPRISE, sans base HT, garde son repli sur le TTC", async () => {
+    // Les lignes importées d'un ancien logiciel n'ont pas de ventilation.
+    // Les compter pour 0 effacerait le passé de l'entreprise : on se rabat
+    // sur la seule valeur disponible, comme `productionVendue` le fait déjà.
+    await facture({ issuedDate: aujourdhui, amountCents: 750_000 });
+    expect(await caExercice()).toBe(750_000);
   });
 });
