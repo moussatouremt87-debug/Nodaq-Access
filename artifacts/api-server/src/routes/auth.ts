@@ -29,6 +29,7 @@ import { marquerMfaVerifie } from "../lib/session-mfa.js";
 import { envoyerCodeConnexion, masquerEmail } from "../lib/envoi-code-connexion.js";
 import { poserCode } from "../lib/code-connexion.js";
 import { appareilReconnu, COOKIE_APPAREIL } from "../lib/appareil-confiance.js";
+import { messageValidation } from "../lib/message-validation.js";
 
 const router: IRouter = Router();
 
@@ -63,7 +64,12 @@ const RegisterBody = z.object({
 
 router.post("/auth/register", async (req, res): Promise<void> => {
   const parsed = RegisterBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }); return; }
+  if (!parsed.success) {
+    // L'inscription est le PREMIER écran. Un message anglais y contredit
+    // tout le reste du produit, et c'est celui qu'on lit en premier.
+    res.status(400).json({ error: messageValidation(parsed.error) });
+    return;
+  }
 
   const { email, password, nom, tenantNom } = parsed.data;
 

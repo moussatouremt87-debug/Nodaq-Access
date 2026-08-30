@@ -88,7 +88,7 @@ router.patch("/contrats/:id", async (req, res): Promise<void> => {
   const [contrat] = await withTenant(tenantId, async (tx) =>
     tx.update(contratsTable).set(updateData).where(eq(contratsTable.id, params.data.id)).returning()
   );
-  if (!contrat) { res.status(404).json({ error: "Contrat not found" }); return; }
+  if (!contrat) { res.status(404).json({ error: "Contrat introuvable." }); return; }
   res.json({ ...contrat, nextOccurrenceDate: nextOccurrence(contrat.startDate, contrat.cadence) });
 });
 
@@ -99,7 +99,7 @@ router.delete("/contrats/:id", async (req, res): Promise<void> => {
   const [deleted] = await withTenant(tenantId, async (tx) =>
     tx.delete(contratsTable).where(eq(contratsTable.id, params.data.id)).returning()
   );
-  if (!deleted) { res.status(404).json({ error: "Contrat not found" }); return; }
+  if (!deleted) { res.status(404).json({ error: "Contrat introuvable." }); return; }
   res.sendStatus(204);
 });
 

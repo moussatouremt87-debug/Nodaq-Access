@@ -191,7 +191,7 @@ router.get("/classeur/:id/telechargement", async (req, res): Promise<void> => {
     return { doc, bytes: null, mime: null };
   });
 
-  if (!result) { res.status(404).json({ error: "Document introuvable" }); return; }
+  if (!result) { res.status(404).json({ error: "Document introuvable." }); return; }
   if (!result.bytes) {
     // Le message accusait « un import antérieur à la mise en place du stockage »
     // pour des factures créées le jour même. Il disait la mauvaise cause, ce qui
@@ -218,7 +218,7 @@ router.delete("/classeur/:id", async (req, res): Promise<void> => {
   const [existing] = await withTenant(tenantId, async (tx) =>
     tx.select().from(classeurTable).where(eq(classeurTable.id, parsed.data.id))
   );
-  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+  if (!existing) { res.status(404).json({ error: "Document introuvable." }); return; }
 
   await withTenant(tenantId, async (tx) => {
     await tx.delete(classeurDocumentBytesTable).where(eq(classeurDocumentBytesTable.documentId, parsed.data.id));

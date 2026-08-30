@@ -62,7 +62,7 @@ router.post("/pending-actions/:id/approve", async (req, res): Promise<void> => {
       .from(pendingActionsTable)
       .where(eq(pendingActionsTable.id, params.data.id)),
   );
-  if (!avant) { res.status(404).json({ error: "Action not found" }); return; }
+  if (!avant) { res.status(404).json({ error: "Action introuvable." }); return; }
 
   // Un plan vocal ne se flippe pas : il s'EXÉCUTE. C'est executerPlan, seul,
   // qui écrit — /voix/executer et ce bouton doivent converger sur le même
@@ -96,7 +96,7 @@ router.post("/pending-actions/:id/approve", async (req, res): Promise<void> => {
 
     switch (resultat.kind) {
       case "introuvable":
-        res.status(404).json({ error: "Action not found" });
+        res.status(404).json({ error: "Action introuvable." });
         return;
       case "expire":
         res.status(410).json({
@@ -126,7 +126,7 @@ router.post("/pending-actions/:id/approve", async (req, res): Promise<void> => {
   if (avant.type === TYPE_RELANCE_DEVIS) {
     const resultat = await executerRelanceDevis(tenantId, params.data.id);
     if (resultat.kind === "introuvable") {
-      res.status(404).json({ error: "Action not found" });
+      res.status(404).json({ error: "Action introuvable." });
       return;
     }
     if (resultat.kind === "deja_execute") {
@@ -179,7 +179,7 @@ router.post("/pending-actions/:id/approve", async (req, res): Promise<void> => {
     return action;
   });
 
-  if (!action) { res.status(404).json({ error: "Action not found" }); return; }
+  if (!action) { res.status(404).json({ error: "Action introuvable." }); return; }
   res.json(action);
 });
 
@@ -215,7 +215,7 @@ router.post("/pending-actions/:id/reject", async (req, res): Promise<void> => {
     }
     return lignes;
   });
-  if (!action) { res.status(404).json({ error: "Action not found" }); return; }
+  if (!action) { res.status(404).json({ error: "Action introuvable." }); return; }
   res.json(action);
 });
 

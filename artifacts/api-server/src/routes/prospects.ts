@@ -73,7 +73,7 @@ router.patch("/prospects/:id", async (req, res): Promise<void> => {
   const [prospect] = await withTenant(tenantId, async (tx) =>
     tx.update(prospectsTable).set(updateData).where(eq(prospectsTable.id, params.data.id)).returning()
   );
-  if (!prospect) { res.status(404).json({ error: "Prospect not found" }); return; }
+  if (!prospect) { res.status(404).json({ error: "Prospect introuvable." }); return; }
   res.json(prospect);
 });
 
@@ -84,7 +84,7 @@ router.delete("/prospects/:id", async (req, res): Promise<void> => {
   const [deleted] = await withTenant(tenantId, async (tx) =>
     tx.delete(prospectsTable).where(eq(prospectsTable.id, params.data.id)).returning()
   );
-  if (!deleted) { res.status(404).json({ error: "Prospect not found" }); return; }
+  if (!deleted) { res.status(404).json({ error: "Prospect introuvable." }); return; }
   res.sendStatus(204);
 });
 

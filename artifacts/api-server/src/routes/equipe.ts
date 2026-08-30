@@ -175,7 +175,7 @@ router.delete("/equipe/:id/habilitations/:habilitationId", async (req, res): Pro
       .where(and(eq(teamMemberHabilitationsTable.id, habilitationId), eq(teamMemberHabilitationsTable.membreId, membreId)))
       .returning()
   );
-  if (!deleted) { res.status(404).json({ error: "Not found" }); return; }
+  if (!deleted) { res.status(404).json({ error: "Habilitation introuvable." }); return; }
   res.status(204).send();
 });
 
@@ -224,7 +224,7 @@ router.patch("/equipe/:id", async (req, res): Promise<void> => {
     return updated;
   });
 
-  if (!updated) { res.status(404).json({ error: "Not found" }); return; }
+  if (!updated) { res.status(404).json({ error: "Membre introuvable." }); return; }
   res.json({ ...updated, schedule: (() => { try { return JSON.parse(updated.schedule); } catch { return []; } })() });
 });
 
@@ -235,7 +235,7 @@ router.delete("/equipe/:id", async (req, res): Promise<void> => {
   const [deleted] = await withTenant(tenantId, async (tx) =>
     tx.delete(teamMembersTable).where(eq(teamMembersTable.id, id)).returning()
   );
-  if (!deleted) { res.status(404).json({ error: "Not found" }); return; }
+  if (!deleted) { res.status(404).json({ error: "Membre introuvable." }); return; }
   res.status(204).send();
 });
 
@@ -442,7 +442,7 @@ router.post("/equipe/absences", async (req, res): Promise<void> => {
     return result.rows[0];
   });
 
-  if (!row) { res.status(400).json({ error: "membreId does not reference a known team member" }); return; }
+  if (!row) { res.status(400).json({ error: "Ce membre d'équipe n'existe pas." }); return; }
   res.status(201).json(row);
 });
 

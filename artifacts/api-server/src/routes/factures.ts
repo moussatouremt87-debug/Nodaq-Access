@@ -359,7 +359,7 @@ router.get("/factures/:id", async (req, res): Promise<void> => {
   const [f] = await withTenant(tenantId, tx =>
     tx.select().from(facturesTable).where(eq(facturesTable.id, id!)),
   );
-  if (!f) { res.status(404).json({ error: "Not found" }); return; }
+  if (!f) { res.status(404).json({ error: "Facture introuvable." }); return; }
   res.json(f);
 });
 

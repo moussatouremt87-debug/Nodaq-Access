@@ -13,7 +13,7 @@ export function resolveTenant(
   next: NextFunction,
 ): void {
   if (!req.session) {
-    res.status(401).json({ error: "Session manquante — requireAuth must run first." });
+    res.status(401).json({ error: "Votre session a expiré. Reconnectez-vous." });
     return;
   }
   req.tenantId = req.session.tenantId;

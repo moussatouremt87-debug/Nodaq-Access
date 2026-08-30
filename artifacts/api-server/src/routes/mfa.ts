@@ -68,7 +68,9 @@ const VerifyBody = z.object({
 router.post("/mfa/verify", async (req, res): Promise<void> => {
   const parsed = VerifyBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Requête invalide" });
+    // Le repli était français, mais le message de Zod qui le précédait ne
+    // l'était pas — et c'est LUI qu'on lisait presque toujours.
+    res.status(400).json({ error: messageValidation(parsed.error) });
     return;
   }
   const { secret, code } = parsed.data;

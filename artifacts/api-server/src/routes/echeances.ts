@@ -67,12 +67,17 @@ router.post("/echeances", async (req, res): Promise<void> => {
 router.patch("/echeances/:id", async (req, res): Promise<void> => {
   const params = UpdateEcheanceParams.safeParse(req.params);
   const body = UpdateEcheanceBody.safeParse(req.body);
-  if (!params.success || !body.success) { res.status(400).json({ error: "Invalid input" }); return; }
+  // Deux gardes distinctes, et non un ternaire : `params.success ? …` ne
+  // restreint pas le type de `body`, si bien que `body.error` restait
+  // possiblement indéfini et le compilateur refusait. Séparées, elles disent
+  // en plus À L'UTILISATEUR laquelle des deux parties ne va pas.
+  if (!params.success) { res.status(400).json({ error: messageValidation(params.error) }); return; }
+  if (!body.success) { res.status(400).json({ error: messageValidation(body.error) }); return; }
 
   const [existing] = await withTenant(req.tenantId!, async (tx) =>
     tx.select().from(echeancesTable).where(eq(echeancesTable.id, params.data.id))
   );
-  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+  if (!existing) { res.status(404).json({ error: "Échéance introuvable." }); return; }
 
   const updateData: Record<string, unknown> = {};
   if (body.data.label !== undefined) updateData.label = body.data.label;
@@ -102,7 +107,7 @@ router.delete("/echeances/:id", async (req, res): Promise<void> => {
   const [existing] = await withTenant(tenantId, async (tx) =>
     tx.select().from(echeancesTable).where(eq(echeancesTable.id, parsed.data.id))
   );
-  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+  if (!existing) { res.status(404).json({ error: "Échéance introuvable." }); return; }
 
   await withTenant(tenantId, async (tx) =>
     tx.delete(echeancesTable).where(eq(echeancesTable.id, parsed.data.id))

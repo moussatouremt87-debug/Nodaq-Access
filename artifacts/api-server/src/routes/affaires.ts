@@ -130,7 +130,7 @@ router.get("/affaires/:id", async (req, res): Promise<void> => {
   const [affaire] = await withTenant(tenantId, async (tx) =>
     tx.select().from(affairesTable).where(eq(affairesTable.id, params.data.id))
   );
-  if (!affaire) { res.status(404).json({ error: "Affaire not found" }); return; }
+  if (!affaire) { res.status(404).json({ error: "Affaire introuvable." }); return; }
   res.json(maskFinancialFields(
     avecHabilitationsParsees(affaire),
     ["quotedAmountCents", "invoicedAmountCents", "marginCents", "montantVenduHt"],
@@ -168,7 +168,7 @@ router.patch("/affaires/:id", async (req, res): Promise<void> => {
   const [affaire] = await withTenant(tenantId, async (tx) =>
     tx.update(affairesTable).set(updateData).where(eq(affairesTable.id, params.data.id)).returning()
   );
-  if (!affaire) { res.status(404).json({ error: "Affaire not found" }); return; }
+  if (!affaire) { res.status(404).json({ error: "Affaire introuvable." }); return; }
   res.json(avecHabilitationsParsees(affaire));
 });
 
@@ -179,7 +179,7 @@ router.delete("/affaires/:id", async (req, res): Promise<void> => {
   const [deleted] = await withTenant(tenantId, async (tx) =>
     tx.delete(affairesTable).where(eq(affairesTable.id, params.data.id)).returning()
   );
-  if (!deleted) { res.status(404).json({ error: "Affaire not found" }); return; }
+  if (!deleted) { res.status(404).json({ error: "Affaire introuvable." }); return; }
   res.sendStatus(204);
 });
 
