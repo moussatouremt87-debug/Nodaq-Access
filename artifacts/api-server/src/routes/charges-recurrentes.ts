@@ -66,13 +66,18 @@ router.post("/charges-recurrentes", async (req, res): Promise<void> => {
 router.patch("/charges-recurrentes/:id", async (req, res): Promise<void> => {
   const params = UpdateChargeRecurrenteParams.safeParse(req.params);
   const body = UpdateChargeRecurrenteBody.safeParse(req.body);
-  if (!params.success || !body.success) { res.status(400).json({ error: "Invalid input" }); return; }
+  // Deux gardes distinctes, et non un ternaire : `params.success ? …` ne
+  // restreint pas le type de `body`, si bien que `body.error` restait
+  // possiblement indéfini et le compilateur refusait. Séparées, elles disent
+  // en plus À L'UTILISATEUR laquelle des deux parties ne va pas.
+  if (!params.success) { res.status(400).json({ error: messageValidation(params.error) }); return; }
+  if (!body.success) { res.status(400).json({ error: messageValidation(body.error) }); return; }
   const tenantId = req.tenantId!;
 
   const [existing] = await withTenant(tenantId, async (tx) =>
     tx.select().from(chargesRecurrentesTable).where(eq(chargesRecurrentesTable.id, params.data.id))
   );
-  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+  if (!existing) { res.status(404).json({ error: "Charge récurrente introuvable." }); return; }
 
   const updateData: Record<string, unknown> = {};
   if (body.data.label !== undefined) updateData.label = body.data.label;
@@ -98,7 +103,7 @@ router.delete("/charges-recurrentes/:id", async (req, res): Promise<void> => {
   const [existing] = await withTenant(tenantId, async (tx) =>
     tx.select().from(chargesRecurrentesTable).where(eq(chargesRecurrentesTable.id, parsed.data.id))
   );
-  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+  if (!existing) { res.status(404).json({ error: "Charge récurrente introuvable." }); return; }
 
   await withTenant(tenantId, async (tx) =>
     tx.delete(chargesRecurrentesTable).where(eq(chargesRecurrentesTable.id, parsed.data.id))

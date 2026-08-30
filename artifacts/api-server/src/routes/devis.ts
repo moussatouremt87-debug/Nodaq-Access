@@ -193,14 +193,19 @@ router.get("/devis/:id", async (req, res): Promise<void> => {
   const [d] = await withTenant(tenantId, async (tx) =>
     tx.select().from(devisTable).where(eq(devisTable.id, parsed.data.id))
   );
-  if (!d) { res.status(404).json({ error: "Not found" }); return; }
+  if (!d) { res.status(404).json({ error: "Devis introuvable." }); return; }
   res.json(d);
 });
 
 router.patch("/devis/:id", async (req, res): Promise<void> => {
   const params = UpdateDevisParams.safeParse(req.params);
   const body = UpdateDevisBody.safeParse(req.body);
-  if (!params.success || !body.success) { res.status(400).json({ error: "Invalid input" }); return; }
+  // Deux gardes distinctes, et non un ternaire : `params.success ? …` ne
+  // restreint pas le type de `body`, si bien que `body.error` restait
+  // possiblement indéfini et le compilateur refusait. Séparées, elles disent
+  // en plus À L'UTILISATEUR laquelle des deux parties ne va pas.
+  if (!params.success) { res.status(400).json({ error: messageValidation(params.error) }); return; }
+  if (!body.success) { res.status(400).json({ error: messageValidation(body.error) }); return; }
   const tenantId = req.tenantId!;
 
   const updated = await withTenant(tenantId, async (tx) => {
@@ -234,7 +239,7 @@ router.patch("/devis/:id", async (req, res): Promise<void> => {
     return u;
   });
 
-  if (!updated) { res.status(404).json({ error: "Not found" }); return; }
+  if (!updated) { res.status(404).json({ error: "Devis introuvable." }); return; }
   res.json(updated);
 });
 
@@ -450,7 +455,7 @@ router.post("/devis/:id/convert", async (req, res): Promise<void> => {
 
   const result = await withTenant(tenantId, async (tx) => {
     const [d] = await tx.select().from(devisTable).where(eq(devisTable.id, parsed.data.id));
-    if (!d) return { error: "Not found", status: 404 };
+    if (!d) return { error: "Devis introuvable.", status: 404 };
     if (d.status !== "ACCEPTE") return { error: "Seuls les devis acceptés peuvent être convertis en affaire.", status: 422 };
 
     if (d.affaireId) {

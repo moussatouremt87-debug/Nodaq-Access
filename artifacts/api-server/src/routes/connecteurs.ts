@@ -84,7 +84,7 @@ router.patch("/connecteurs/:type", async (req, res): Promise<void> => {
     return updated;
   });
 
-  if (!updated) { res.status(404).json({ error: "Not found" }); return; }
+  if (!updated) { res.status(404).json({ error: "Connecteur introuvable." }); return; }
   res.json({ ...updated, config: redactConfig(updated.config as Record<string, string>) });
 });
 

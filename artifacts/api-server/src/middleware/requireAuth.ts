@@ -18,7 +18,7 @@ export async function requireAuth(
   const sessionId: string | undefined = cookies[COOKIE_NAME];
 
   if (!sessionId) {
-    res.status(401).json({ error: "Authentication required" });
+    res.status(401).json({ error: "Vous n'êtes pas connecté." });
     return;
   }
 
