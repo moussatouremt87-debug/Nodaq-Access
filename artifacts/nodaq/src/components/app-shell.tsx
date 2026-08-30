@@ -8,7 +8,7 @@ import { ThemeToggle } from './theme-toggle';
 import { useModeInterface, visibleDansMode } from '@/contexts/mode-interface';
 import { useAuth, useLectureSeule } from '@/hooks/use-auth';
 import { useVertical } from '@/hooks/use-vertical';
-import { routeOuverteEnLectureSeule, routeOuverteAuComptable } from '@nodaq/shared';
+import { routeOuverteEnLectureSeule, routeOuverteAuRole } from '@nodaq/shared';
 import { useMesEspaces, useBasculerEspace, type Espace } from '@/hooks/use-cabinet';
 import { useModules, cheminsDeModulesEteints } from '@/hooks/use-modules';
 import {
@@ -50,7 +50,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     // @nodaq/shared, jamais recopiée ici. Ce filtre n'est PAS la protection —
     // elle est côté serveur — il évite seulement d'afficher un lien qui
     // répondrait 403.
-    && (role !== 'ACCOUNTANT' || routeOuverteAuComptable(item.href))
+    // Le périmètre d'écran d'un rôle, lu depuis la MÊME carte que le serveur.
+    // Une condition par rôle aurait divergé de la liste d'API au premier ajout.
+    && routeOuverteAuRole(role, item.href)
     // US-A5.2 — `/cabinet` n'a de sens que pour un utilisateur qui a
     // PLUSIEURS espaces. Filtre local plutôt qu'un nouveau prédicat générique
     // dans `NavItem` : un seul cas, et il ne dépend ni du rôle ni du secteur.

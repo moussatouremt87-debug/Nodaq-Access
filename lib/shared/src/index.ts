@@ -22,7 +22,19 @@ export type TenantId = z.infer<typeof TenantId>;
  * hook) — this file previously declared a lowercase variant that nothing
  * imported. One casing, read from here, not two hand-maintained lists.
  */
-export const MembershipRole = z.enum(["OWNER", "MEMBER", "ACCOUNTANT", "VIEWER"]);
+/**
+ * `OUVRIER` (29/08/2026) : le compagnon de terrain.
+ *
+ * Il n'existait qu'un rôle `MEMBER` pour deux métiers sans rapport — une
+ * secrétaire qui établit des devis et suit les clients, et un ouvrier qui
+ * pointe ses heures. Les deux avaient exactement les mêmes droits.
+ *
+ * Le rôle AJOUTÉ est le plus étroit, jamais l'inverse : redéfinir `MEMBER`
+ * aurait changé silencieusement les droits des membres existants. Ici
+ * personne ne perd rien, aucune migration de données n'est nécessaire, et un
+ * oubli dans la liste blanche FERME au lieu d'ouvrir.
+ */
+export const MembershipRole = z.enum(["OWNER", "MEMBER", "ACCOUNTANT", "VIEWER", "OUVRIER"]);
 export type MembershipRole = z.infer<typeof MembershipRole>;
 
 /**
@@ -153,9 +165,33 @@ export const ECRANS_COMPTABLE = [
  * borné par `FINANCIAL_ROLES` (les montants) et par les droits d'écriture,
  * pas par une liste d'écrans.
  */
+/**
+ * Les écrans d'API ouverts à un OUVRIER.
+ *
+ * Son travail : voir où il va, pointer ses heures, consulter les documents du
+ * chantier, parler à l'assistant. Rien d'autre.
+ *
+ * Ce qu'il ne voit PAS et qu'un `MEMBER` voit : les devis, les prospects, les
+ * contrats. Un compagnon n'a pas à connaître le pipeline commercial de son
+ * patron — et il est déjà hors de `FINANCIAL_ROLES`, donc les montants lui
+ * sont masqués partout où ils apparaîtraient.
+ */
+export const ECRANS_OUVRIER = [
+  "/cockpit",
+  "/brief",
+  "/affaires",
+  "/pointages",
+  "/affectations",
+  "/classeur",
+  "/sites",
+  "/chat",
+  "/votre-metier",
+] as const;
+
 export const PERIMETRE_API_PAR_ROLE: Partial<Record<MembershipRole, readonly string[]>> = {
   VIEWER: ECRANS_TIERS_LECTURE,
   ACCOUNTANT: ECRANS_COMPTABLE,
+  OUVRIER: ECRANS_OUVRIER,
 };
 
 /**
@@ -200,12 +236,42 @@ export const ROUTES_COMPTABLE = [
   "/votre-metier",
 ] as const;
 
+/** Les routes du SPA ouvertes à un ouvrier — pendant de `ECRANS_OUVRIER`. */
+export const ROUTES_OUVRIER = [
+  "/",
+  "/cockpit",
+  "/brief",
+  "/affaires",
+  "/heures",
+  "/equipe",
+  "/classeur",
+  "/chat",
+  "/votre-metier",
+] as const;
+
+/**
+ * Les routes d'écran d'un rôle, ou `undefined` quand il n'est pas borné.
+ *
+ * Même carte unique que côté API, pour la même raison : trois conditions
+ * empilées dans le filtre de navigation auraient divergé de la liste serveur
+ * au premier ajout.
+ */
+export const ROUTES_PAR_ROLE: Partial<Record<MembershipRole, readonly string[]>> = {
+  ACCOUNTANT: ROUTES_COMPTABLE,
+  OUVRIER: ROUTES_OUVRIER,
+};
+
+/** Cette route d'écran est-elle ouverte à ce rôle ? */
+export function routeOuverteAuRole(role: string | null | undefined, route: string): boolean {
+  const routes = ROUTES_PAR_ROLE[role as MembershipRole];
+  if (!routes) return true;
+  if (route === "/") return true;
+  return routes.some((p) => p !== "/" && (route === p || route.startsWith(`${p}/`)));
+}
+
 /** Vrai si cette route d'écran est ouverte au comptable. */
 export function routeOuverteAuComptable(route: string): boolean {
-  if (route === "/") return true;
-  return ROUTES_COMPTABLE.some(
-    (prefixe) => prefixe !== "/" && (route === prefixe || route.startsWith(`${prefixe}/`)),
-  );
+  return routeOuverteAuRole("ACCOUNTANT", route);
 }
 
 /** Vrai si ce chemin d'API est ouvert au tiers de confiance en lecture seule. */

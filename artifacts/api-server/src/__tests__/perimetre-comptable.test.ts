@@ -38,6 +38,7 @@ const emails: string[] = [];
 let tenant: TestTenant;
 let comptable: string;
 let patron: string;
+let ouvrier: string;
 
 beforeAll(async () => {
   tenant = await createTestTenant("perimetre");
@@ -49,8 +50,13 @@ beforeAll(async () => {
   await createTestMembership(c.id, tenant.id, "ACCOUNTANT");
   await createTestMembership(o.id, tenant.id, "OWNER");
 
+  const w = await createTestUser("ouvrier");
+  emails.push(w.email);
+  await createTestMembership(w.id, tenant.id, "OUVRIER" as "MEMBER");
+
   comptable = cookieHeader((await createTestSession(c.id, tenant.id)).id);
   patron = cookieHeader((await createTestSession(o.id, tenant.id)).id);
+  ouvrier = cookieHeader((await createTestSession(w.id, tenant.id)).id);
 }, 120_000);
 
 afterAll(async () => {
@@ -155,5 +161,40 @@ describe("le patron n'est restreint par rien", () => {
 
   test("la prospection lui reste ouverte", async () => {
     expect((await get(patron, "/prospection/contacts")).status).not.toBe(403);
+  });
+});
+
+
+/*
+ * ── L'OUVRIER ────────────────────────────────────────────────────────────
+ *
+ * Il n'existait qu'un rôle `MEMBER` pour deux métiers sans rapport : une
+ * secrétaire qui établit des devis et suit les clients, et un compagnon qui
+ * pointe ses heures. Les deux avaient exactement les mêmes droits.
+ *
+ * Le rôle AJOUTÉ est le plus étroit : redéfinir `MEMBER` aurait changé
+ * silencieusement les droits des membres existants.
+ */
+describe("l'ouvrier voit son chantier, rien du commerce", () => {
+  test.each([["/pointages"], ["/affaires"], ["/classeur"], ["/brief"]])(
+    "%s lui est ouvert",
+    async (chemin) => {
+      expect((await get(ouvrier, chemin)).status).not.toBe(403);
+    },
+  );
+
+  /*
+   * LA garde. Un compagnon n'a pas à connaître le pipeline commercial de son
+   * patron — ni ce qu'il facture, ni qui il démarche.
+   */
+  test.each([["/devis"], ["/prospects"], ["/contrats"], ["/factures"], ["/marge"]])(
+    "%s lui est refusé",
+    async (chemin) => {
+      expect((await get(ouvrier, chemin)).status).toBe(403);
+    },
+  );
+
+  test("une route non déclarée lui est refusée par DÉFAUT", async () => {
+    expect((await get(ouvrier, "/un-ecran-de-demain")).status).toBe(403);
   });
 });
