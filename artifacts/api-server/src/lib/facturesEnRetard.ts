@@ -14,7 +14,27 @@
  */
 import { sql, type SQL } from "drizzle-orm";
 
-const STATUTS_JAMAIS_EN_RETARD = ["PAYEE", "ANNULEE_PAR_AVOIR"] as const;
+/**
+ * Les statuts qu'aucune échéance ne met en retard.
+ *
+ * `BROUILLON` en fait partie, et c'est le cœur du correctif du 29/08/2026 :
+ * `factures.ts` renseigne `due_date` dès la CRÉATION, alors que le statut vaut
+ * encore `BROUILLON`. L'échéance existe donc AVANT que le document n'existe
+ * pour le client. Un brouillon de 12 000 €, jamais émis et jamais envoyé,
+ * gonflait le total « en retard » de l'écran Factures.
+ *
+ * La portée n'était pas cosmétique : cette définition alimente le Cockpit, le
+ * Brief matin, l'écran Factures ET la liste d'impayés que l'agent propose de
+ * relancer. Une relance pouvait partir chez un client pour une facture qu'il
+ * n'avait jamais reçue.
+ *
+ * `STATUTS_CA` (`chiffreAffaires.ts`) avait déjà exclu `BROUILLON` pour la même
+ * raison, écrite dans les mêmes termes. Les deux listes se rejoignent ici.
+ *
+ * Exportée pour que le test puisse vérifier que la version SQL ci-dessous en
+ * dérive réellement — c'était le vrai risque de divergence.
+ */
+export const STATUTS_JAMAIS_EN_RETARD = ["PAYEE", "ANNULEE_PAR_AVOIR", "BROUILLON"] as const;
 
 /** Version JS — filtre sur des lignes déjà chargées (`factures.ts`). */
 export function estFactureEnRetard(
@@ -34,7 +54,18 @@ export function estFactureEnRetard(
  * déjà la bonne version, sans cast, reprise ici à l'identique.
  */
 export function conditionFactureEnRetardSql(aujourdhui: string): SQL {
-  return sql`statut NOT IN ('PAYEE', 'ANNULEE_PAR_AVOIR') AND due_date < ${aujourdhui}`;
+  // Dérivée de la MÊME constante que la version JS, et non recopiée : la liste
+  // était écrite en dur ici, si bien qu'ajouter un statut au-dessus n'aurait
+  // rien changé au SQL. Les deux chemins auraient répondu différemment sans
+  // qu'aucun test ne s'en aperçoive — exactement le mode de divergence que
+  // l'en-tête de ce fichier dit vouloir éviter.
+  //
+  // Paramétré, jamais concaténé : `sql.join` produit des placeholders.
+  const exclus = sql.join(
+    STATUTS_JAMAIS_EN_RETARD.map((s) => sql`${s}`),
+    sql`, `,
+  );
+  return sql`statut NOT IN (${exclus}) AND due_date < ${aujourdhui}`;
 }
 
 /** Montant restant dû d'une facture — solde partiel s'il existe, sinon le montant total. */
