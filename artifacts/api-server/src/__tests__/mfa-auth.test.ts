@@ -272,15 +272,30 @@ describe("f — secret TOTP illisible en base", () => {
 // ── g. /api/auth/login — mfaStatus correct, sans fuite avant preuve ──────────
 
 describe("g — POST /api/auth/login reflète l'état MFA sans fuiter tenantId/role", () => {
-  test("OWNER jamais enrôlé → enroll_required, sans tenantId ni role", async () => {
+  /*
+   * Renommé le 30/08/2026. Un patron jamais enrôlé ne reçoit plus
+   * `enroll_required` — l'application d'authentification n'est plus la seule
+   * porte. Un code à six chiffres part par courriel, et l'état le dit.
+   *
+   * LA MOITIÉ QUI COMPTE NE BOUGE PAS : ni `tenantId` ni `role` avant que le
+   * second facteur soit prouvé. C'est cette assertion-là qui protège, pas le
+   * nom de l'état — et elle est même renforcée ci-dessous, le code ne devant
+   * évidemment jamais figurer dans la réponse.
+   */
+  test("OWNER jamais enrôlé → un code part, sans tenantId ni role", async () => {
     const u = await creerUtilisateur("OWNER", "login-enroll");
     const res = await request(serveurTest(app))
       .post("/api/auth/login")
       .send({ email: u.email, password: u.password })
       .expect(200);
-    expect(res.body.mfaStatus).toBe("enroll_required");
+    expect(res.body.mfaStatus).toBe("code_envoye");
     expect(res.body.tenantId).toBeUndefined();
     expect(res.body.role).toBeUndefined();
+    // L'adresse est rappelée, masquée : « p•••••@… », jamais en entier.
+    expect(res.body.destinataire).toMatch(/•/);
+    expect(res.body.destinataire).not.toBe(u.email);
+    // Et le code lui-même ne traverse JAMAIS la réponse HTTP.
+    expect(JSON.stringify(res.body)).not.toMatch(/\b\d{6}\b/);
   });
 
   test("OWNER déjà enrôlé → verify_required, sans tenantId ni role", async () => {

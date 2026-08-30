@@ -31,6 +31,10 @@ import {
 } from "../lib/totp.js";
 import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { poserCode as poserCodeConnexion, verifierCode as verifierCodeConnexion } from "../lib/code-connexion.js";
+import { poserAppareil, optionsCookieAppareil, COOKIE_APPAREIL, DUREE_CONFIANCE_JOURS } from "../lib/appareil-confiance.js";
+import { envoyerCodeConnexion, masquerEmail } from "../lib/envoi-code-connexion.js";
+import { messageValidation } from "../lib/message-validation.js";
 
 const router: IRouter = Router();
 
@@ -146,3 +150,71 @@ router.get("/mfa/status", async (req, res): Promise<void> => {
 });
 
 export default router;
+
+/*
+ * ── LE SECOND FACTEUR SANS APPLICATION À INSTALLER ──────────────────────────
+ *
+ * Ces deux routes sont le chemin par DÉFAUT depuis le 30/08/2026. L'enrôlement
+ * TOTP reste disponible au-dessus, pour qui le veut — mais il n'est plus la
+ * seule porte. Un artisan de 55 ans ne télécharge pas une application
+ * d'authentification pour ouvrir son cockpit : il abandonne.
+ *
+ * Elles vivent derrière `requireAuth` comme le reste du routeur : le mot de
+ * passe a déjà été prouvé, la session existe, il ne lui manque que
+ * `mfaVerifiedAt`.
+ */
+
+const CodeBody = z.object({
+  code: z.string().trim().regex(/^\d{6}$/, "Le code comporte six chiffres."),
+});
+
+router.post("/mfa/code/verifier", async (req, res): Promise<void> => {
+  const parsed = CodeBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: messageValidation(parsed.error) });
+    return;
+  }
+  const userId = req.session!.userId;
+  const r = await verifierCodeConnexion(userId, parsed.data.code);
+
+  if (r.kind !== "ok") {
+    // Chaque refus dit quoi FAIRE. « Code incorrect » sans suite laisse
+    // l'utilisateur devant un champ vide sans savoir s'il doit réessayer,
+    // attendre, ou en redemander un.
+    const messages: Record<typeof r.kind, string> = {
+      aucun_code: "Ce code n'est plus valable. Demandez-en un nouveau.",
+      expire: "Ce code a expiré. Demandez-en un nouveau.",
+      trop_d_essais: "Trop d'essais sur ce code. Demandez-en un nouveau.",
+      incorrect:
+        r.kind === "incorrect" && r.essaisRestants > 0
+          ? `Code incorrect — il vous reste ${r.essaisRestants} essai${r.essaisRestants > 1 ? "s" : ""}.`
+          : "Code incorrect. Demandez-en un nouveau.",
+    };
+    res.status(400).json({ error: messages[r.kind] });
+    return;
+  }
+
+  await marquerSessionMfaVerifiee(req.session!.id);
+
+  // L'appareil devient de confiance : c'est ce qui fait passer le second
+  // facteur de « chaque connexion » à trois ou quatre fois par an.
+  const jeton = await poserAppareil(userId, req.headers["user-agent"]);
+  res.cookie(COOKIE_APPAREIL, jeton, optionsCookieAppareil());
+  res.json({ ok: true, appareilMemorise: true, joursDeConfiance: DUREE_CONFIANCE_JOURS });
+});
+
+router.post("/mfa/code/renvoyer", async (req, res): Promise<void> => {
+  const userId = req.session!.userId;
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+  if (!user) { res.status(404).json({ error: "Compte introuvable." }); return; }
+
+  const emission = await poserCodeConnexion(userId);
+  if (emission.kind === "trop_de_demandes") {
+    res.status(429).json({
+      error: "Trop de codes demandés. Patientez une heure, ou connectez-vous depuis un appareil déjà reconnu.",
+    });
+    return;
+  }
+  await envoyerCodeConnexion(req.session!.tenantId, user.email, emission.code);
+  res.json({ ok: true, destinataire: masquerEmail(user.email) });
+});

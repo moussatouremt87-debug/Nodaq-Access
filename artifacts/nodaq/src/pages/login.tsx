@@ -47,7 +47,8 @@ export default function LoginPage() {
       // MFA (ticket 4.15) — OWNER/ACCOUNTANT sans second facteur prouvé pour
       // CETTE session : la connexion a réussi, mais /mfa reste à traverser
       // avant la destination initialement visée.
-      if (data?.mfaStatus === 'enroll_required' || data?.mfaStatus === 'verify_required') {
+      if (data?.mfaStatus === 'code_envoye' || data?.mfaStatus === 'code_requis'
+          || data?.mfaStatus === 'enroll_required' || data?.mfaStatus === 'verify_required') {
         setLocation(`/mfa?from=${encodeURIComponent(returnTo)}`);
         return;
       }

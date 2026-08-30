@@ -32,6 +32,8 @@ import {
 
 type Etape =
   | 'chargement'
+  /** Le chemin par DÉFAUT depuis le 30/08/2026 : six chiffres reçus par courriel. */
+  | 'code-courriel'
   | 'enrolement'
   | 'codes-recuperation'
   | 'verification'
@@ -59,6 +61,7 @@ export default function MfaPage() {
   const [envoi, setEnvoi] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
   const [codesNotes, setCodesNotes] = useState(false);
+  const [renvoye, setRenvoye] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
@@ -66,7 +69,12 @@ export default function MfaPage() {
       setLocation('/login');
       return;
     }
-    if (auth.mfaStatus === 'enroll_required') {
+    if (auth.mfaStatus === 'code_requis') {
+      // Le code est DÉJÀ parti à la connexion : on affiche le champ, on ne
+      // redemande pas d'envoi. Sinon un simple rechargement de page enverrait
+      // un second courriel et invaliderait le premier code.
+      setEtape('code-courriel');
+    } else if (auth.mfaStatus === 'enroll_required') {
       demarrerEnrolement();
     } else if (auth.mfaStatus === 'verify_required') {
       setEtape('verification');
@@ -75,6 +83,52 @@ export default function MfaPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, auth?.authenticated, auth && 'mfaStatus' in auth ? auth.mfaStatus : undefined]);
+
+  /**
+   * Le chemin par défaut : six chiffres reçus par courriel.
+   *
+   * En cas de succès, le serveur pose un cookie d'appareil de confiance : la
+   * prochaine connexion sur cette machine ne redemandera rien pendant 90 jours.
+   * C'est ce qui fait passer le second facteur de trois cents fois par an à
+   * trois ou quatre.
+   */
+  async function soumettreCodeCourriel(e: React.FormEvent) {
+    e.preventDefault();
+    setErreur(null);
+    setEnvoi(true);
+    try {
+      const res = await apiFetch('/api/mfa/code/verifier', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: code.trim() }),
+      });
+      const donnees = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        // Le serveur dit quoi FAIRE (réessayer, en redemander un). On le rend
+        // tel quel plutôt que d'écrire un « Code incorrect » qui laisse
+        // l'utilisateur devant un champ vide sans savoir quoi faire.
+        setErreur(donnees.error ?? 'Ce code n\'a pas été accepté.');
+        setCode('');
+        return;
+      }
+      setLocation('/');
+    } finally {
+      setEnvoi(false);
+    }
+  }
+
+  async function renvoyerCode() {
+    setErreur(null);
+    setRenvoye(false);
+    const res = await apiFetch('/api/mfa/code/renvoyer', { method: 'POST' });
+    const donnees = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setErreur(donnees.error ?? 'Impossible d\'envoyer un nouveau code.');
+      return;
+    }
+    setCode('');
+    setRenvoye(true);
+  }
 
   async function demarrerEnrolement() {
     setErreur(null);
@@ -220,6 +274,18 @@ export default function MfaPage() {
             confirme={codesNotes}
             setConfirme={setCodesNotes}
             onContinuer={terminerVerification}
+          />
+        )}
+
+        {etape === 'code-courriel' && (
+          <CodeCourrielEcran
+            code={code}
+            setCode={setCode}
+            erreur={erreur}
+            envoi={envoi}
+            renvoye={renvoye}
+            onSubmit={soumettreCodeCourriel}
+            onRenvoyer={renvoyerCode}
           />
         )}
 
@@ -472,5 +538,85 @@ function ParametresEcran({ statut, onActiver, onRetour }: {
         Retour
       </Button>
     </>
+  );
+}
+
+/**
+ * L'écran que voit un artisan qui n'a installé aucune application.
+ *
+ * Écrit pour quelqu'un qui n'est pas à l'aise : une seule chose à faire, dite
+ * en une phrase, et le mot « code » plutôt que « second facteur ». Aucun
+ * jargon, aucune abréviation, aucune notion à comprendre avant d'agir.
+ */
+function CodeCourrielEcran({
+  code, setCode, erreur, envoi, renvoye, onSubmit, onRenvoyer,
+}: {
+  code: string;
+  setCode: (v: string) => void;
+  erreur: string | null;
+  envoi: boolean;
+  renvoye: boolean;
+  onSubmit: (e: React.FormEvent) => void;
+  onRenvoyer: () => void;
+}) {
+  return (
+    <div className="space-y-5">
+      <div className="space-y-2">
+        <h1 className="text-xl font-bold">Vérifions que c'est bien vous</h1>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          Nous venons de vous envoyer un code à six chiffres par e-mail.
+          Ouvrez votre messagerie et recopiez-le ici.
+        </p>
+      </div>
+
+      <form onSubmit={onSubmit} className="space-y-4">
+        {/*
+          * Le composant à six cases déjà utilisé par l'écran de vérification.
+          * Une case par chiffre : on voit où on en est, et le pavé numérique
+          * sort tout seul sur téléphone.
+          */}
+        <div className="flex justify-center">
+          <InputOTP maxLength={6} value={code} onChange={setCode} autoFocus>
+            <InputOTPGroup>
+              {[0, 1, 2, 3, 4, 5].map(i => <InputOTPSlot key={i} index={i} />)}
+            </InputOTPGroup>
+          </InputOTP>
+        </div>
+
+        {erreur && <p className="text-sm text-destructive">{erreur}</p>}
+        {renvoye && !erreur && (
+          <p className="text-sm text-primary">
+            Un nouveau code vient de partir. Le précédent ne fonctionne plus.
+          </p>
+        )}
+
+        <Button type="submit" className="w-full h-11" disabled={envoi || code.length !== 6}>
+          {envoi ? 'Vérification…' : 'Continuer'}
+        </Button>
+      </form>
+
+      <div className="space-y-3 border-t border-card-border pt-4">
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Le code est valable dix minutes. Pensez à regarder dans les indésirables :
+          c'est là qu'il atterrit le plus souvent la première fois.
+        </p>
+        <button
+          type="button"
+          onClick={onRenvoyer}
+          className="text-sm text-primary hover:underline"
+        >
+          Je n'ai rien reçu — m'envoyer un nouveau code
+        </button>
+      </div>
+
+      {/*
+        * Dit une fois, à l'endroit où la question se pose. Un utilisateur qui
+        * vient de saisir un code se demande s'il devra le refaire chaque jour :
+        * y répondre ici évite l'abandon au deuxième passage.
+        */}
+      <p className="text-xs text-muted-foreground">
+        Sur cet appareil, nous ne vous le redemanderons pas avant trois mois.
+      </p>
+    </div>
   );
 }

@@ -25,6 +25,10 @@ import {
 } from "../lib/authService";
 import { verticalDepuisTx } from "../lib/vertical-tenant.js";
 import { STATUTS_AFFAIRE_ACTIVE } from "../lib/affaire-active.js";
+import { marquerMfaVerifie } from "../lib/session-mfa.js";
+import { envoyerCodeConnexion, masquerEmail } from "../lib/envoi-code-connexion.js";
+import { poserCode } from "../lib/code-connexion.js";
+import { appareilReconnu, COOKIE_APPAREIL } from "../lib/appareil-confiance.js";
 
 const router: IRouter = Router();
 
@@ -122,7 +126,40 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   // existante — le chemin mauvais-mot-de-passe garde exactement son coût et
   // son timing actuels, aucun nouveau signal n'est introduit ici.
   if (hasFinancialAccess(preferred.role)) {
-    res.json({ ok: true, mfaStatus: user.mfaEnabledAt ? "verify_required" : "enroll_required" });
+    /*
+     * ── L'APPAREIL DÉJÀ PROUVÉ NE REDEMANDE RIEN ────────────────────────────
+     *
+     * Le second facteur était exigé à CHAQUE connexion : plusieurs centaines de
+     * fois par an pour un patron qui ouvre son cockpit tous les matins. C'est
+     * cette FRÉQUENCE, plus que le facteur lui-même, qui rendait la chose
+     * intenable pour quelqu'un peu à l'aise avec le numérique.
+     *
+     * Le jeton d'appareil ne donne accès à rien seul : il atteste seulement
+     * qu'un second facteur a déjà été prouvé ICI. Le mot de passe reste exigé,
+     * et il vient d'être vérifié juste au-dessus.
+     */
+    if (await appareilReconnu(user.id, req.cookies?.[COOKIE_APPAREIL])) {
+      await marquerMfaVerifie(session.id);
+      res.json({ ok: true, mfaStatus: "verified", appareilReconnu: true });
+      return;
+    }
+
+    // Qui a déjà une application d'authentification la garde : on ne retire
+    // rien, on cesse de l'imposer à ceux qui n'en veulent pas.
+    if (user.mfaEnabledAt) {
+      res.json({ ok: true, mfaStatus: "verify_required" });
+      return;
+    }
+
+    const emission = await poserCode(user.id);
+    if (emission.kind === "trop_de_demandes") {
+      res.json({ ok: true, mfaStatus: "code_trop_de_demandes" });
+      return;
+    }
+    await envoyerCodeConnexion(preferred.tenantId, user.email, emission.code);
+    // L'adresse est MASQUÉE : elle rappelle où regarder sans confirmer une
+    // adresse complète à qui aurait seulement deviné le mot de passe.
+    res.json({ ok: true, mfaStatus: "code_envoye", destinataire: masquerEmail(user.email) });
     return;
   }
 
@@ -156,7 +193,24 @@ function reponseAuthentification(
   // n'attend plus. La condition est LUE au même endroit que celle du
   // middleware — deux copies auraient divergé.
   if (hasFinancialAccess(role) && !secondFacteurSuspendu()) {
-    if (!user.mfaEnabledAt) return { authenticated: true, mfaStatus: "enroll_required" as const };
+    /*
+     * ── « code_requis », ET NON PLUS « enroll_required » ─────────────────────
+     *
+     * C'est cette réponse que l'écran lit pour décider quoi afficher. Tant
+     * qu'elle disait `enroll_required`, elle envoyait un artisan qui n'a rien
+     * demandé vers un QR code et un téléchargement.
+     *
+     * `code_requis` signifie : un code à six chiffres est attendu. Il a déjà
+     * été expédié à la connexion ; l'écran propose de le saisir, et de le
+     * renvoyer si besoin. Aucun courriel ne part d'ici — `/auth/me` est appelée
+     * à chaque chargement de page, en faire un déclencheur d'envoi inonderait
+     * la boîte de l'utilisateur.
+     *
+     * L'enrôlement d'une application d'authentification reste possible, mais il
+     * se DEMANDE désormais, depuis « Sécurité du compte ». Il n'est plus une
+     * étape imposée.
+     */
+    if (!user.mfaEnabledAt) return { authenticated: true, mfaStatus: "code_requis" as const };
     if (!session.mfaVerifiedAt) return { authenticated: true, mfaStatus: "verify_required" as const };
     return {
       authenticated: true,

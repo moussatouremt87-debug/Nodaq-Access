@@ -55,7 +55,15 @@ import {
 
 export type CanalEmission = "EMAIL" | "PLATEFORME_AGREEE";
 
-export type TypeDocument = "DEVIS" | "FACTURE" | "AVOIR" | "INVITATION" | "ESSAI";
+/**
+ * `CODE_CONNEXION` n'est pas un document commercial — c'est un courriel de
+ * sécurité. Il figure ici pour que son ÉCHEC d'envoi soit visible au même
+ * endroit que les autres : un code qui ne part pas enferme l'utilisateur
+ * dehors, et c'est exactement le genre de panne qu'on ne veut pas découvrir
+ * par un appel au support. Le journal n'en garde que le statut, jamais le
+ * corps — donc jamais le code.
+ */
+export type TypeDocument = "DEVIS" | "FACTURE" | "AVOIR" | "INVITATION" | "ESSAI" | "CODE_CONNEXION";
 
 export interface SendOptions {
   canal: CanalEmission;

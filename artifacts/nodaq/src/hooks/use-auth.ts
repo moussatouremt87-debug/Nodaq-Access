@@ -19,7 +19,10 @@ export const FINANCIAL_ROLES: readonly MembershipRole[] = ['OWNER', 'ACCOUNTANT'
  */
 export type AuthState =
   | { authenticated: false }
-  | { authenticated: true; mfaStatus: 'enroll_required' | 'verify_required' }
+  // `code_requis` : un code à six chiffres a été envoyé par courriel. C'est le
+  // chemin par DÉFAUT depuis le 30/08/2026 ; `enroll_required` ne subsiste que
+  // pour qui DEMANDE une application d'authentification.
+  | { authenticated: true; mfaStatus: 'code_requis' | 'enroll_required' | 'verify_required' }
   | {
       authenticated: true;
       mfaStatus: 'verified' | 'not_required';
