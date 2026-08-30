@@ -246,6 +246,36 @@ function reponseAuthentification(
      * se DEMANDE désormais, depuis « Sécurité du compte ». Il n'est plus une
      * étape imposée.
      */
+    /*
+     * ── L'ORDRE DE CES TROIS TESTS EST LE CŒUR DU SUJET ──────────────────────
+     *
+     * La SESSION DÉJÀ VÉRIFIÉE passe en premier. Une version antérieure
+     * demandait d'abord « cet utilisateur a-t-il une application
+     * d'authentification ? » — et comme celui qui prouve son identité par
+     * COURRIEL n'en active jamais, cette ligne répondait « code requis » pour
+     * toujours.
+     *
+     * Constaté en production le 30/08/2026, puis reproduit au navigateur : le
+     * code était accepté, la session marquée `mfa_verified_at` en base, les
+     * routes métier passaient à 200 — et `/auth/me` continuait de répondre
+     * « code requis ». La garde de route renvoyait donc l'utilisateur sur
+     * l'écran du code, indéfiniment. Il ne pouvait jamais entrer.
+     *
+     * `mfaEnabledAt` désigne l'APPLICATION d'authentification, pas la preuve du
+     * second facteur. Les confondre, c'est nier le chemin par courriel tout
+     * entier.
+     */
+    if (session.mfaVerifiedAt) {
+      return {
+        authenticated: true,
+        mfaStatus: "verified" as const,
+        userId: user.id,
+        email: user.email,
+        nom: user.nom,
+        tenantId,
+        role,
+      };
+    }
     if (!user.mfaEnabledAt) {
       /*
        * L'adresse accompagne l'état, et elle est ENTIÈRE.
@@ -261,7 +291,7 @@ function reponseAuthentification(
        */
       return { authenticated: true, mfaStatus: "code_requis" as const, destinataire: user.email };
     }
-    if (!session.mfaVerifiedAt) return { authenticated: true, mfaStatus: "verify_required" as const };
+    return { authenticated: true, mfaStatus: "verify_required" as const };
     return {
       authenticated: true,
       mfaStatus: "verified" as const,

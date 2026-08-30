@@ -91,6 +91,42 @@ describe("celui qui vient de s'inscrire reçoit son code", () => {
     await adminPool.query("DELETE FROM users WHERE email = $1", [adresse]);
   }, 60_000);
 
+  /*
+   * ── LA GARDE QUI MANQUAIT, ET QUI A COÛTÉ LA MISE EN LIGNE ────────────────
+   *
+   * Le code était accepté, la session marquée en base, les routes métier
+   * ouvertes — et `/auth/me` répondait encore « code requis ». La garde de
+   * route renvoyait l'utilisateur sur l'écran du code, en boucle.
+   *
+   * Aucun test ne regardait l'état APRÈS vérification. Ils s'arrêtaient tous
+   * juste avant, ou vérifiaient une route métier — qui, elle, lisait la bonne
+   * colonne. Le seul point de vue non couvert était celui de l'écran.
+   */
+  test("APRÈS vérification, l'état dit « verified » et porte le rôle", async () => {
+    codesEnvoyes.length = 0;
+    const adresse = `apres-verif-${Date.now()}@test.nodaq`;
+    const reg = await request(serveurTest(app))
+      .post("/api/auth/register")
+      .send({ email: adresse, password: "test-pass-1234", nom: "Patron", tenantNom: "Entreprise" })
+      .expect(201);
+    const cookie = reg.headers["set-cookie"]![0]!;
+
+    await request(serveurTest(app))
+      .post("/api/mfa/code/verifier").set("Cookie", cookie)
+      .send({ code: codesEnvoyes[0] }).expect(200);
+
+    const me = await request(serveurTest(app))
+      .get("/api/auth/me").set("Cookie", cookie).expect(200);
+
+    expect(me.body.mfaStatus).toBe("verified");
+    // `role` est ce que la garde de route exige pour laisser passer. Sans lui,
+    // elle renvoie sur l'écran du code — quoi qu'en dise `mfaStatus`.
+    expect(me.body.role).toBe("OWNER");
+    expect(me.body.tenantId).toBeTruthy();
+
+    await adminPool.query("DELETE FROM users WHERE email = $1", [adresse]);
+  }, 60_000);
+
   test("l'état rendu par /auth/me porte l'adresse, pour qu'une coquille se voie", async () => {
     codesEnvoyes.length = 0;
     const adresse = `coquille-${Date.now()}@test.nodaq`;
