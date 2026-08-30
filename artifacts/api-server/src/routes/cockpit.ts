@@ -15,6 +15,7 @@ import { caNetCentsSql, nbFacturesCaSql, conditionFactureCa } from "../lib/chiff
 import { conditionFactureEnRetardSql } from "../lib/facturesEnRetard.js";
 import { maskFinancialFields } from "../lib/maskFinancialFields.js";
 import { verticalDepuisTx } from "../lib/vertical-tenant.js";
+import { conditionAffaireActive } from "../lib/affaire-active.js";
 
 
 /**
@@ -60,7 +61,7 @@ router.get("/cockpit/kpis", async (req, res): Promise<void> => {
     const [affairesEnCours] = await tx
       .select({ count: sql<number>`count(*)::int` })
       .from(affairesTable)
-      .where(eq(affairesTable.status, "EN_COURS"));
+      .where(conditionAffaireActive());
 
     const now = new Date();
     // Date métier d'émission, en composantes locales. `created_at` est la date

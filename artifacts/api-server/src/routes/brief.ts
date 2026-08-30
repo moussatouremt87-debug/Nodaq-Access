@@ -4,6 +4,7 @@ import { eq, sql, desc } from "drizzle-orm";
 import { toDateString, verticalPack, estRetardSignificatif, statutHabilitation, rappelAttestation, type Vertical } from "@nodaq/shared";
 import { conditionFactureEnRetardSql } from "../lib/facturesEnRetard.js";
 import { verticalDepuisTx } from "../lib/vertical-tenant.js";
+import { conditionAffaireActive } from "../lib/affaire-active.js";
 
 const router: IRouter = Router();
 
@@ -39,7 +40,7 @@ router.get("/brief", async (req, res): Promise<void> => {
     const affairesEnCours = await tx
       .select()
       .from(affairesTable)
-      .where(eq(affairesTable.status, "EN_COURS"))
+      .where(conditionAffaireActive())
       .limit(5);
 
     /*
