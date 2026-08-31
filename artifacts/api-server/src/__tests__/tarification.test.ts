@@ -24,6 +24,7 @@ import {
   cleanupUsers,
   serveurTest,
 } from "./helpers";
+import { moisCalendaireParis } from "@nodaq/shared";
 import {
   etatAbonnement,
   abonnementCourant,
@@ -231,11 +232,27 @@ describe("compteur vocal — 10 dossiers inclus, le 11e compté, jamais coupé",
     // 10 impayés SUPPLÉMENTAIRES ce mois-ci (le 1er existe déjà) = 11 dossiers…
     const maintenant = new Date();
     for (let i = 2; i <= 11; i++) await insererTentative(maintenant, `facture-relancee-${i}`);
-    // …et 3 dossiers le mois dernier, qui ne comptent pas : reset mensuel.
-    const moisDernier = new Date(maintenant);
-    moisDernier.setDate(1);
-    moisDernier.setDate(0); // dernier jour du mois précédent
-    moisDernier.setHours(10, 0, 0, 0);
+    /*
+     * …et 3 dossiers le mois dernier, qui ne comptent pas : reset mensuel.
+     *
+     * ── LE MOIS PRÉCÉDENT SE CALCULE EN HEURE DE PARIS ───────────────────
+     *
+     * Le compteur regroupe par mois calendaire de PARIS (`moisCalendaireParis`,
+     * 4.43 §1). Ce test construisait ses dates en heure LOCALE, et les deux
+     * divergent au basculement de mois : le 31/08/2026 à 18 h UTC, il était
+     * déjà le 1er septembre à Auckland, donc « le mois dernier » y désignait
+     * août — c'est-à-dire le mois COURANT de Paris. Les trois entrées étaient
+     * comptées, le test attendait 11 et trouvait 14.
+     *
+     * Aucune arithmétique locale ne s'en sort : sous Auckland, le mois
+     * précédent EST le mois courant de Paris. Le test doit donc lire la même
+     * horloge que le code qu'il vérifie — on part du mois de Paris, on recule
+     * d'un mois, et on se place à son milieu.
+     */
+    const [anParis, moisParis] = moisCalendaireParis(maintenant).split("-").map(Number);
+    // `Date.UTC` avec le mois précédent (indices JS : mois - 2), à midi UTC —
+    // à douze heures de chaque bord, donc hors d'atteinte de tout décalage.
+    const moisDernier = new Date(Date.UTC(anParis!, moisParis! - 2, 15, 12, 0, 0));
     for (let i = 0; i < 3; i++) await insererTentative(moisDernier, `facture-vieille-${i}`);
 
     const etat = await etatAbonnement(tenantId);

@@ -45,6 +45,7 @@ import DevisAccepter from '@/pages/devis-accepter';
 import MembreAccepter from '@/pages/membre-accepter';
 import Mfa from '@/pages/mfa';
 import Etat from '@/pages/etat';
+import MotDePasseOublie from '@/pages/mot-de-passe-oublie';
 import { useAuth, FINANCIAL_ROLES, type MembershipRole } from '@/hooks/use-auth';
 
 /**
@@ -182,6 +183,8 @@ export const ROUTES_PUBLIQUES = [
   '/mfa',
   // Publique par nécessité : on la consulte quand on n'arrive PAS à entrer.
   '/etat',
+  // Idem : on ne peut pas être connecté pour demander à l'être.
+  '/mot-de-passe-oublie',
 ] as const;
 
 function AppRouter() {
@@ -197,6 +200,7 @@ function AppRouter() {
       <Route path="/mfa" component={Mfa} />
       {/* L'état des services : sans session, sans coquille. */}
       <Route path="/etat" component={Etat} />
+      <Route path="/mot-de-passe-oublie" component={MotDePasseOublie} />
 
       {/* Tout le reste vit dans l'application interne. */}
       <Route component={ApplicationInterne} />
