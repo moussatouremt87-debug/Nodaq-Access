@@ -75,10 +75,24 @@ beforeAll(async () => {
   const session = await createTestSession(user.id, tenantId);
   cookie = cookieHeader(session.id);
 
-  // Matérialise l'abonnement d'essai (le tenant de test est né après le
-  // backfill de la migration : la première lecture le crée).
+  /*
+   * Cette assertion disait `TRIAL` — elle encodait la règle produit d'avant le
+   * 31/08/2026, quand l'inscription ouvrait un essai de 14 jours. L'essai
+   * gratuit a été supprimé (migration 071).
+   *
+   * Elle est RÉÉCRITE, pas retirée : elle vérifie toujours que la ligne
+   * d'abonnement existe et qu'AUCUNE date d'essai ne court — ce qui reste la
+   * propriété intéressante, et une décision commerciale plutôt qu'un détail
+   * technique.
+   *
+   * ACTIVE et non EN_ATTENTE parce que `createTestTenant` pose désormais un
+   * abonnement actif : un tenant de fixture représente un client qui se sert
+   * du produit. Les tests ci-dessous reposent le statut qu'ils veulent
+   * éprouver, essai compris, via `poserAbonnement`.
+   */
   const sub = await abonnementCourant(tenantId);
-  expect(sub.statut).toBe("TRIAL");
+  expect(sub.statut).toBe("ACTIVE");
+  expect(sub.trialEndsAt, "aucun essai ne doit courir").toBeNull();
 }, 60_000);
 
 afterAll(async () => {

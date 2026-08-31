@@ -44,9 +44,18 @@ export const subscriptionsTable = pgTable(
     tenantId: uuid("tenant_id").notNull().references(() => tenantsTable.id),
     planId: text("plan_id").notNull().references(() => plansTable.id),
 
-    statut: text("statut", { enum: ["TRIAL", "ACTIVE", "READONLY"] })
+    /*
+     * EN_ATTENTE : inscrit, rien payé, aucune écriture possible. Depuis la
+     * décision du 31/08/2026, c'est l'état de NAISSANCE d'un tenant — l'essai
+     * gratuit n'existe plus (migration 071).
+     *
+     * TRIAL n'est pas retiré : des essais ouverts avant cette date courent
+     * encore et doivent s'éteindre proprement en READONLY. Le supprimer du
+     * type les rendrait illisibles.
+     */
+    statut: text("statut", { enum: ["TRIAL", "ACTIVE", "READONLY", "EN_ATTENTE"] })
       .notNull()
-      .default("TRIAL"),
+      .default("EN_ATTENTE"),
     periodicite: text("periodicite", { enum: ["MENSUEL", "ANNUEL"] })
       .notNull()
       .default("MENSUEL"),

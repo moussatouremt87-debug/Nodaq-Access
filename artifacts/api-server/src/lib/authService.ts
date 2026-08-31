@@ -14,7 +14,7 @@ import {
   type Membership,
 } from "@workspace/db";
 import { eq, and, gt, sql } from "drizzle-orm";
-import { creerAbonnementEssai } from "./abonnement.js";
+import { creerAbonnementEnAttente } from "./abonnement.js";
 
 /** 7-day sliding window */
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -62,7 +62,7 @@ export async function createUserTenantOwner(
     await tx.execute(
       sql`select set_config('app.current_tenant_id', ${tenant!.id}, true)`,
     );
-    await creerAbonnementEssai(tx, tenant!.id);
+    await creerAbonnementEnAttente(tx, tenant!.id);
 
     return { userId: user!.id, tenantId: tenant!.id };
   });
