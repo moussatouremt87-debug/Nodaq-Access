@@ -26,6 +26,33 @@ export const MESSAGE_ABONNEMENT_LECTURE_SEULE =
   "L'essai est terminé : votre espace est en lecture seule et toutes vos données sont conservées. Choisissez une formule dans Réglages → Abonnement pour reprendre la main.";
 
 /**
+ * EN_ATTENTE bloque comme READONLY, mais ne se raconte PAS pareil.
+ *
+ * Techniquement, un seul statut aurait suffi. Mais dire « L'essai est
+ * terminé » à quelqu'un qui vient de s'inscrire et n'a jamais eu d'essai est
+ * le genre de phrase qui fait douter du sérieux d'un produit dans sa première
+ * minute — le même travers que l'agent qui renvoyait vers un expert-comptable
+ * (règle 3 bis). Deux états qui bloquent pareil et se disent différemment.
+ *
+ * Aucune menace, aucune date : rien ne court, rien n'expire. Et le chemin est
+ * nommé, comme partout ailleurs.
+ */
+export const MESSAGE_ABONNEMENT_EN_ATTENTE =
+  "Votre abonnement n'est pas encore activé : votre espace est en lecture seule et "
+  + "tout ce que vous y mettez est conservé. Activez-le dans Réglages → Abonnement "
+  + "pour commencer à travailler.";
+
+/** Les statuts qui interdisent d'écrire. Une seule liste, lue par la garde. */
+export const STATUTS_SANS_ECRITURE = ["READONLY", "EN_ATTENTE"] as const;
+
+/** Le message qui correspond à l'état — jamais celui du voisin. */
+export function messageBlocage(statut: string): string {
+  return statut === "EN_ATTENTE"
+    ? MESSAGE_ABONNEMENT_EN_ATTENTE
+    : MESSAGE_ABONNEMENT_LECTURE_SEULE;
+}
+
+/**
  * Même en lecture seule, retirer un accès externe doit rester possible.
  * L'exception est volontairement plus étroite que la route PATCH : un seul
  * statut, aucune configuration, et seulement les types intégrés connus.
@@ -75,9 +102,11 @@ export async function abonnementLectureSeule(
     return;
   }
   const sub = await abonnementCourant(req.tenantId!);
-  if (sub.statut !== "READONLY") {
+  if (!(STATUTS_SANS_ECRITURE as readonly string[]).includes(sub.statut)) {
     // Jalons d'essai (4.43 §5) : une requête mutante est le signe d'un tenant
-    // actif — l'occasion de constater J7/J10, sans retarder la requête.
+    // actif — l'occasion de constater J7/J10, sans retarder la requête. Ne
+    // concerne que les essais ouverts avant le 31/08/2026 ; il ne s'en crée
+    // plus.
     if (sub.statut === "TRIAL") void constaterJalonsEssai(req.tenantId!).catch(() => {});
     next();
     return;
@@ -87,7 +116,12 @@ export async function abonnementLectureSeule(
     return;
   }
   res.status(403).json({
-    error: MESSAGE_ABONNEMENT_LECTURE_SEULE,
+    error: messageBlocage(sub.statut),
+    // Le code reste LECTURE_SEULE dans les deux cas : c'est ce que l'écran
+    // interprète pour désactiver les commandes, et le distinguer obligerait
+    // chaque appelant à connaître deux codes pour un même comportement.
+    // La différence est dans la PHRASE, là où elle se voit.
     abonnement: "LECTURE_SEULE",
+    statut: sub.statut,
   });
 }

@@ -27,7 +27,7 @@ export interface EtatAbonnement {
   plan: PlanTarif;
   moduleVocal: PlanTarif | null;
   subscription: {
-    statut: 'TRIAL' | 'ACTIVE' | 'READONLY';
+    statut: 'TRIAL' | 'ACTIVE' | 'READONLY' | 'EN_ATTENTE';
     periodicite: 'MENSUEL' | 'ANNUEL';
     trialEndsAt: string | null;
     priceLockedAt: string | null;
@@ -35,7 +35,7 @@ export interface EtatAbonnement {
     echeance: string | null;
     moduleVocal: boolean;
   };
-  statut: 'TRIAL' | 'ACTIVE' | 'READONLY';
+  statut: 'TRIAL' | 'ACTIVE' | 'READONLY' | 'EN_ATTENTE';
   utilisateurs: {
     actifs: number;
     inclus: number;

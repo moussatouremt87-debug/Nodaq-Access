@@ -42,6 +42,18 @@ function LibelleStatut({ etat }: { etat: EtatAbonnement }) {
       </span>
     );
   }
+  if (etat.statut === 'EN_ATTENTE') {
+    /*
+     * Ni « essai terminé » ni rouge d'alerte : cette personne vient de
+     * s'inscrire et n'a rien raté. L'état est neutre et le ton l'est aussi —
+     * le rouge dirait qu'elle a fait une faute.
+     */
+    return (
+      <span className="rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400">
+        Abonnement à activer — vos données sont conservées
+      </span>
+    );
+  }
   if (etat.statut === 'READONLY') {
     return (
       <span className="rounded-full bg-destructive/10 px-2.5 py-0.5 text-xs font-medium text-destructive">

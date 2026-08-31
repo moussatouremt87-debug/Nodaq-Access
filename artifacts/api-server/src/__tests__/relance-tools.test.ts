@@ -17,7 +17,8 @@ import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import crypto from "node:crypto";
 import app from "../app";
-import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner, serveurTest } from "./helpers";
+import { adminPool, cleanupTenants, cleanupUsers, completeMfaForRegisteredOwner,
+  activerModuleVocal, serveurTest } from "./helpers";
 
 const tenantIds: string[] = [];
 const emails: string[] = [];
@@ -77,6 +78,9 @@ beforeAll(async () => {
     .send({ email, password: "test-pass-1234", nom: "Patron", tenantNom: "Tools SARL" })
     .expect(201);
   await completeMfaForRegisteredOwner(reg.body.userId);
+  // La Relance vocale est un supplément payant : un tenant qui compose
+  // des appels l'a souscrit. L'essai le donnait autrefois d'office.
+  await activerModuleVocal(reg.body.tenantId);
   const cookie = reg.headers["set-cookie"][0];
   tenantIds.push(reg.body.tenantId);
 

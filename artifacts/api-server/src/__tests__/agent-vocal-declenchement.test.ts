@@ -20,6 +20,7 @@ import {
   cleanupTenants,
   cleanupUsers,
   completeMfaForRegisteredOwner,
+  activerModuleVocal,
   serveurTest,
 } from "./helpers";
 import { FAKE_ELEVENLABS_BASE } from "./vitest.setup";
@@ -40,6 +41,9 @@ async function tenantAvecCampagne(options: { raisonSociale?: string } = {}): Pro
     .send({ email, password: "test-pass-1234", nom: "P", tenantNom: "Déclenchement SARL" })
     .expect(201);
   await completeMfaForRegisteredOwner(reg.body.userId);
+  // La Relance vocale est un supplément payant : un tenant qui compose
+  // des appels l'a souscrit. L'essai le donnait autrefois d'office.
+  await activerModuleVocal(reg.body.tenantId);
   const cookie = reg.headers["set-cookie"][0];
   tenantIds.push(reg.body.tenantId);
 

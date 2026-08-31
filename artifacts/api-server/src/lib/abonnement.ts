@@ -59,7 +59,7 @@ export interface EtatAbonnement {
   readonly moduleVocal: Plan | null;
   readonly subscription: Subscription;
   /** Statut APRÈS constat d'échéance d'essai — jamais un TRIAL périmé. */
-  readonly statut: "TRIAL" | "ACTIVE" | "READONLY";
+  readonly statut: "TRIAL" | "ACTIVE" | "READONLY" | "EN_ATTENTE";
   readonly utilisateurs: {
     readonly actifs: number;
     readonly inclus: number;
@@ -93,23 +93,43 @@ async function planParId(id: string): Promise<Plan> {
 }
 
 /**
- * Crée l'abonnement d'essai d'un tenant neuf. Appelé dans LA transaction de
- * création du tenant (authService) : un tenant sans abonnement n'existe pas.
+ * Crée l'abonnement d'un tenant neuf. Appelé dans LA transaction de création
+ * du tenant (authService) : un tenant sans abonnement n'existe pas.
+ *
+ * ── PLUS D'ESSAI GRATUIT (décision fondateur, 31/08/2026) ───────────────────
+ *
+ * Les 50 places Fondateurs à 29 €/mois se paient dès l'inscription. Une
+ * poignée de TPE sélectionnées à la main sont offertes — mais par DÉROGATION
+ * DE REMISE sur leur ligne, pas par un essai : la place est consommée, le prix
+ * est verrouillé, et la gratuité se lit dans la donnée plutôt que de se
+ * deviner d'un statut.
+ *
+ * Le plan reste `equipe` tant que la souscription n'a pas eu lieu : il fixe
+ * les LIMITES visibles (5 sièges), pas ce qui est dû. Rien n'est facturé en
+ * EN_ATTENTE.
+ *
+ * `trialEndsAt` reste NUL, et c'est ce qui compte : le constat paresseux
+ * TRIAL → READONLY est gardé par `statut = 'TRIAL'`, donc il ne touchera
+ * jamais une ligne EN_ATTENTE. Aucune date ne court, rien n'expire.
  */
-export function creerAbonnementEssai(tx: Tx, tenantId: string): Promise<unknown> {
+export function creerAbonnementEnAttente(tx: Tx, tenantId: string): Promise<unknown> {
   return tx.insert(subscriptionsTable).values({
     tenantId,
     planId: "equipe",
-    statut: "TRIAL",
-    trialEndsAt: new Date(Date.now() + ESSAI_JOURS * 24 * 60 * 60 * 1000),
+    statut: "EN_ATTENTE",
   });
 }
 
 /**
  * L'abonnement courant, échéance d'essai constatée. S'il n'existe pas (tenant
- * antérieur au backfill de la 065 — ne devrait pas arriver), il est créé en
- * essai plutôt que de rendre une erreur : l'absence d'abonnement n'est pas
- * une faute de l'utilisateur.
+ * antérieur au backfill de la 065 — ne devrait pas arriver), il est créé
+ * EN_ATTENTE plutôt que de rendre une erreur : l'absence d'abonnement n'est
+ * pas une faute de l'utilisateur.
+ *
+ * Le constat TRIAL → READONLY reste en place et ne concerne QUE les essais
+ * déjà en cours au 31/08/2026. Un essai accordé est une promesse faite : la
+ * révoquer par migration l'aurait rompue sans prévenir. Ils s'éteignent
+ * d'eux-mêmes ; aucune inscription nouvelle n'en ouvre.
  */
 export async function abonnementCourant(tenantId: string): Promise<Subscription> {
   return withTenant(tenantId, async (tx) => {
@@ -119,7 +139,7 @@ export async function abonnementCourant(tenantId: string): Promise<Subscription>
       .where(eq(subscriptionsTable.tenantId, tenantId));
 
     if (!sub) {
-      await creerAbonnementEssai(tx, tenantId);
+      await creerAbonnementEnAttente(tx, tenantId);
       [sub] = await tx
         .select()
         .from(subscriptionsTable)

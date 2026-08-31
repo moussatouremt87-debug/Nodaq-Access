@@ -172,12 +172,79 @@ export interface TestUser   { id: string; email: string; passwordHash: string }
 export interface TestMember { id: string; name: string; tenantId: string }
 export interface TestSession { id: string; userId: string; tenantId: string; expiresAt: Date }
 
+/**
+ * Rend l'abonnement d'un tenant ACTIF — ce qu'est un client qui travaille.
+ *
+ * ── POURQUOI CE HELPER EXISTE ───────────────────────────────────────────────
+ *
+ * Depuis la suppression de l'essai gratuit (31/08/2026), un tenant naît
+ * EN_ATTENTE et `abonnementLectureSeule` refuse toute écriture tant que rien
+ * n'est payé. C'est voulu en production, et cela a fait rougir 499 tests d'un
+ * coup : la suite entière crée des tenants puis écrit dedans.
+ *
+ * Le correctif est ici et non dans la garde. Un tenant de test représente un
+ * client qui SE SERT du produit, donc un client à jour de son abonnement —
+ * comme il représente déjà un utilisateur dont le second facteur est prouvé.
+ * Assouplir la garde pour faire passer les tests reviendrait à ne plus tester
+ * ce qu'on livre.
+ *
+ * Le comportement de facturation lui-même a ses propres tests, qui posent
+ * leurs statuts explicitement : `abonnement-sans-essai.test.ts`.
+ */
+export async function activerAbonnement(tenantId: string): Promise<void> {
+  await adminPool.query(
+    `UPDATE subscriptions SET statut = 'ACTIVE', updated_at = now()
+      WHERE tenant_id = $1::uuid AND statut = 'EN_ATTENTE'`,
+    [tenantId],
+  );
+}
+
+/**
+ * Active le module Relance vocale — un SUPPLÉMENT payant, opt-in.
+ *
+ * Nécessaire depuis la fin de l'essai gratuit. La route de planification
+ * d'appels refuse un tenant qui n'a pas accepté le tarif du module, avec une
+ * exemption explicite pour l'essai : « 14 jours toutes fonctionnalités, il n'y
+ * a pas encore de tarif à accepter ». Tant que les tenants de test naissaient
+ * TRIAL, ils passaient par cette porte sans que personne le remarque.
+ *
+ * Un tenant qui lance des appels est donc un tenant qui a souscrit le module,
+ * et les fixtures vocales le disent maintenant explicitement.
+ */
+export async function activerModuleVocal(tenantId: string): Promise<void> {
+  await adminPool.query(
+    `UPDATE subscriptions SET module_vocal = true, module_vocal_depuis = now(),
+            updated_at = now()
+      WHERE tenant_id = $1::uuid`,
+    [tenantId],
+  );
+}
+
 export async function createTestTenant(nom = "Test Tenant"): Promise<TestTenant> {
   const { rows } = await adminPool.query<TestTenant>(
     "INSERT INTO tenants (id, nom) VALUES (gen_random_uuid(), $1) RETURNING id, nom",
     [nom + " " + Date.now()],
   );
-  return rows[0]!;
+  const tenant = rows[0]!;
+  /*
+   * L'abonnement est posé ACTIF ici, et pas laissé à fabriquer plus tard.
+   *
+   * Ce helper insère un tenant en SQL brut, sans passer par `authService` : il
+   * n'avait donc jamais de ligne `subscriptions`, et `abonnementCourant` en
+   * fabriquait une à la première lecture. Tant que ce repli était un essai de
+   * 14 jours, les écritures passaient et personne ne voyait le raccourci.
+   * Depuis qu'il naît EN_ATTENTE, vingt-cinq fichiers se sont arrêtés net.
+   *
+   * Le poser explicitement rend la fixture honnête : elle décrit un client à
+   * jour, ce que tout tenant qui travaille est en production.
+   */
+  await adminPool.query(
+    `INSERT INTO subscriptions (id, tenant_id, plan_id, statut)
+     VALUES (gen_random_uuid()::text, $1::uuid, 'equipe', 'ACTIVE')
+     ON CONFLICT (tenant_id) DO UPDATE SET statut = 'ACTIVE'`,
+    [tenant.id],
+  );
+  return tenant;
 }
 
 export async function createTestUser(
@@ -263,6 +330,22 @@ export async function completeMfaForRegisteredOwner(userId: string): Promise<voi
     );
   }
   await marquerSessionMfaVerifiee(sessionId);
+
+  /*
+   * L'abonnement suit le même raisonnement que le second facteur : un tenant
+   * de fixture représente un client qui SE SERT du produit. Depuis la fin de
+   * l'essai gratuit, il naît EN_ATTENTE et ne peut rien écrire — voir
+   * `activerAbonnement`.
+   *
+   * Le tenant est lu depuis la SESSION plutôt que demandé en paramètre : les
+   * appelants ne passent que `userId`, et les faire tous changer pour ajouter
+   * un argument aurait touché une centaine de fichiers pour la même chose.
+   */
+  const { rows: tenants } = await adminPool.query<{ tenant_id: string }>(
+    `SELECT tenant_id FROM sessions WHERE id = $1`, [sessionId],
+  );
+  const tenantId = tenants[0]?.tenant_id;
+  if (tenantId) await activerAbonnement(tenantId);
 }
 
 export async function createTestTeamMember(
