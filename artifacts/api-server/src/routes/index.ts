@@ -16,6 +16,7 @@ import pendingActionsRouter from "./pending_actions";
 import chatRouter from "./chat";
 import supportRouter, { aidePubliqueRouter } from "./support";
 import etatServiceRouter from "./etat-service";
+import briefQuotidienRouter from "./brief-quotidien";
 import chatMediaRouter from "./chat-media";
 import devisRouter from "./devis";
 import classeurRouter from "./classeur";
@@ -89,6 +90,10 @@ router.use(aidePubliqueRouter);  // /aide/llms.txt, /aide/articles, /aide/:slug.
 // L'état des services, pour la même raison : « est-ce en panne ou c'est moi ? »
 // est une question qu'on se pose PRÉCISÉMENT quand on n'arrive pas à entrer.
 router.use(etatServiceRouter);   // /etat
+// Déclencheur du brief du matin : appelé par un cron de conteneur, sans
+// session, authentifié par un secret partagé comparé en temps constant.
+// Sans secret configuré, la route REFUSE — elle ne s'ouvre pas par défaut.
+router.use(briefQuotidienRouter); // /interne/brief-quotidien
 // Webhook PA (US-A2.6) : pas de session, authentifié par signature HMAC —
 // voir facturation-electronique.ts. Aucune PA réelle contractée à ce jour ;
 // route non testable bout en bout, seulement son authentification.

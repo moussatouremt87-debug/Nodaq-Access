@@ -55,4 +55,5 @@ export * from "./agent_feedback";
 export * from "./onboarding_qualification";
 export * from "./taux_horaires";
 export * from "./tarification";
+export * from "./briefs_envoyes";
 export * from "./cache_permis";
