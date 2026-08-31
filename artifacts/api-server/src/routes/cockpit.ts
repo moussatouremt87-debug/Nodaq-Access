@@ -16,6 +16,7 @@ import { conditionFactureEnRetardSql } from "../lib/facturesEnRetard.js";
 import { maskFinancialFields } from "../lib/maskFinancialFields.js";
 import { verticalDepuisTx } from "../lib/vertical-tenant.js";
 import { conditionAffaireActive } from "../lib/affaire-active.js";
+import { valeurProduite } from "../lib/valeur-produite.js";
 
 
 /**
@@ -286,6 +287,28 @@ router.get("/cockpit/activity", async (req, res): Promise<void> => {
     meta: i.meta ?? null,
     createdAt: i.createdAt,
   })));
+});
+
+/**
+ * Ce que nodaq a fait ce mois-ci — le panneau de valeur.
+ *
+ * RÉSERVÉ AUX RÔLES FINANCIERS, comme le chiffre d'affaires juste au-dessus.
+ * Ce panneau ne dit pas seulement « le produit travaille » : il expose les
+ * impayés, les encaissements à venir et le coût de l'abonnement. Un salarié
+ * n'a pas à connaître la trésorerie de son patron.
+ *
+ * 403 et non un panneau vide : un écran qui rend des zéros laisserait croire
+ * qu'il n'y a rien, alors qu'il y a « vous n'y avez pas accès ». C'est la même
+ * distinction que le `null` plutôt que `0` sur les incidents de facturation.
+ */
+router.get("/cockpit/valeur", async (req, res): Promise<void> => {
+  if (!hasFinancialAccess(req.session?.role)) {
+    res.status(403).json({
+      error: "Ce récapitulatif est réservé au propriétaire et au comptable.",
+    });
+    return;
+  }
+  res.json(await valeurProduite(req.tenantId!));
 });
 
 export default router;
