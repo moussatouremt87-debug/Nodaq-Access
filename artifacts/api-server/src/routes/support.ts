@@ -109,10 +109,21 @@ router.post("/support/messages", async (req, res): Promise<void> => {
         let args: Record<string, unknown> = {};
         try { args = JSON.parse(appel.function.arguments || "{}"); } catch { args = {}; }
         /*
-         * Une transmission déjà réussie ne se refait pas. Observé en
-         * production le 30/08 : le modèle a appelé l'outil à ses DEUX tours,
-         * et l'équipe a reçu deux courriels pour un dossier — avec deux
-         * références, dont une seule est montrée à l'utilisateur.
+         * Une transmission déjà réussie ne se refait pas.
+         *
+         * PRÉCAUTION, et non correctif — le récit qui accompagnait cette garde
+         * était FAUX et vaut d'être corrigé ici plutôt qu'effacé.
+         *
+         * J'avais lu deux lignes `ESCALADE_SUPPORT` au journal d'envois après
+         * une seule question, et conclu que le modèle avait appelé l'outil
+         * deux fois. Non : `transmettreALEquipe` envoie DEUX courriels par
+         * dossier, et c'est voulu — un à l'équipe, un accusé de réception à
+         * l'utilisateur. Un dossier, deux lignes. Rien n'était en double.
+         *
+         * J'ai lu un compteur sans vérifier ce qu'il comptait. La garde reste
+         * parce que le cas limite est réel — rien n'empêche un modèle
+         * d'appeler l'outil à ses deux tours — mais elle n'a jamais réparé
+         * quoi que ce soit d'observé.
          */
         if (appel.function.name === "transmettre_a_l_equipe" && transmission?.transmis) {
           messages.push({

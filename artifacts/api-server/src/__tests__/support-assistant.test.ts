@@ -126,9 +126,29 @@ describe("l'exception reste bornée", () => {
   });
 
   test("une transmission réussie n'est jamais refaite dans la même conversation", () => {
-    // Observé en production : le modèle a appelé l'outil à ses DEUX tours, et
-    // l'équipe a reçu deux courriels pour un seul dossier.
+    /*
+     * PRÉCAUTION, pas correctif. Le commentaire précédent affirmait avoir
+     * observé un doublon en production : c'était une erreur de lecture. Un
+     * dossier produit DEUX lignes au journal — le courriel à l'équipe et
+     * l'accusé de réception à l'utilisateur — et j'y avais vu deux dossiers.
+     *
+     * La garde reste : rien n'empêche un modèle d'appeler l'outil à ses deux
+     * tours, et un second dossier porterait une référence que l'utilisateur
+     * n'aurait jamais vue.
+     */
     expect(routeSource).toMatch(/transmettre_a_l_equipe" && transmission\?\.transmis/);
+  });
+
+  test("un dossier envoie DEUX courriels, et c'est voulu", () => {
+    // La propriété que j'avais prise pour un défaut. L'écrire noir sur blanc
+    // évite qu'on la « corrige » un jour en supprimant l'accusé de réception —
+    // sans lui, l'utilisateur n'a aucune trace écrite de sa demande.
+    const diag = readFileSync(
+      join(__dirname, "..", "lib", "support-diagnostics.ts"), "utf8",
+    ).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+    const envois = diag.match(/await envoyer\(\{/g) ?? [];
+    expect(envois.length, "un dossier doit produire deux envois").toBe(2);
+    expect(diag).toMatch(/to:\s*ctx\.emailUtilisateur/);
   });
 
   test("aucune décision ne se prend en lisant la réponse du modèle", () => {
