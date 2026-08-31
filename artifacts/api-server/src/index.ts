@@ -1,5 +1,6 @@
 import { logger } from "./lib/logger";
 import { verifierConfigurationChiffrement } from "@nodaq/crypto";
+import { verifierOriginesDemarrage } from "./lib/app-origin.js";
 
 const rawPort = process.env["PORT"];
 
@@ -48,6 +49,7 @@ if (!process.env["APP_URL"] && process.env["NODE_ENV"] === "production") {
       "Set it to the canonical origin of this deployment (e.g. https://app.nodaq.fr).",
   );
 }
+verifierOriginesDemarrage();
 
 // ── LLM configuration guard ──────────────────────────────────────────────────
 // Fail fast at startup so a misconfigured deployment is immediately visible.

@@ -17,7 +17,11 @@
 #   qu'une image arm64 échoue à compiler le front. Scaleway Containers tourne
 #   en x86_64 de toute façon : c'est l'architecture qu'il faut construire.
 #
-# Migrate (one-off, owner creds, before first start):
+# Migrations et reprise des secrets de connecteurs sont lancees automatiquement
+# par le CMD avant chaque demarrage. `node /app/migrate.mjs` reste disponible en
+# one-off et enchaine lui aussi les deux operations.
+#
+# Migrate (one-off, owner creds):
 #
 #   ── CONTRE UN POSTGRES GÉRÉ (Scaleway RDB), DEUX PIÈGES ────────────────────
 #   Les deux ont coûté trois tentatives le 29/08/2026, et l'exemple qui figurait
@@ -35,8 +39,9 @@
 #      de l'instance, qui figure dans les SAN du certificat.
 #
 #   docker run --rm \
-#     -v ./ca.pem:/ca.pem:ro \
-#     -e DATABASE_URL="postgres://owner:PASSWORD@rw-<instance-id>.rdb.<region>.scw.cloud:<port>/nodaq?sslmode=verify-full&sslrootcert=/ca.pem" \
+#     -e DATABASE_URL="postgres://owner:PASSWORD@rw-<instance-id>.rdb.<region>.scw.cloud:<port>/nodaq" \
+#     -e DATABASE_CA_PEM="$(cat ca.pem)" \
+#     -e ENCRYPTION_KEY="<meme-cle-que-l-api>" \
 #     nodaq:latest node /app/migrate.mjs
 #
 #   Contre un Postgres local sans TLS, la forme courte suffit :
@@ -44,7 +49,9 @@
 #
 # Run (no Replit variables needed):
 #   docker run -p 8080:8080 \
+#     -e DATABASE_URL="postgres://owner:PASSWORD@host:5432/nodaq" \
 #     -e DATABASE_URL_APP="postgres://app_user:PASSWORD@host:5432/nodaq" \
+#     -e DATABASE_CA_PEM="$(cat ca.pem)" \
 #     -e SESSION_SECRET="$(openssl rand -hex 32)" \
 #     -e PUBLIC_URL="https://app.nodaq.fr" \
 #     -e PORT=8080 \
@@ -72,6 +79,8 @@ COPY pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json ./
 COPY lib/ ./lib/
 COPY artifacts/api-server/ ./artifacts/api-server/
 COPY artifacts/nodaq/ ./artifacts/nodaq/
+# Les articles sont copies depuis ce stage dans l'image finale.
+COPY docs/aide/ ./docs/aide/
 
 # Install all dependencies (dev + prod) — build tools need dev deps
 RUN pnpm install --frozen-lockfile
@@ -96,6 +105,14 @@ RUN pnpm --filter @workspace/nodaq run build
 
 # ── Build the API server (esbuild single-file bundle) ────────────────────────
 RUN pnpm --filter @workspace/api-server run build
+
+# Runner owner autonome : @nodaq/crypto est bundle dans du JavaScript ESM.
+# Node 24 refuse de depouiller le TypeScript situe sous node_modules ; copier le
+# paquet workspace brut rendrait donc la reprise inutilisable en production.
+# `pg` reste externe car le standalone runtime l'embarque deja.
+RUN pnpm --filter @workspace/api-server exec esbuild ../../lib/db/scripts/migrate-connector-secrets.mjs --bundle \
+    --platform=node --format=esm --target=node24 --external:pg \
+    --outfile=/workspace/migrate-connector-secrets.runtime.mjs
 
 # ── Create a standalone deployment with real, non-symlinked node_modules ─────
 # pnpm deploy resolves all workspace:* dependencies and copies files out of the
@@ -128,11 +145,15 @@ COPY --from=builder --chown=nodaq:nodaq \
 COPY --from=builder --chown=nodaq:nodaq \
   /workspace/artifacts/nodaq/dist/public ./public
 
-# Migration runner + SQL files
-# Run as a one-off before the app starts: node /app/migrate.mjs
-# Requires DATABASE_URL (owner creds), not DATABASE_URL_APP.
+# Runner SQL + reprise chiffree + demarrage obligatoire.
+# `start-api.sh` execute migrate.mjs, qui enchaine la reprise, puis retire
+# DATABASE_URL avant d'executer l'API avec le seul role app_user.
 COPY --from=builder --chown=nodaq:nodaq \
   /workspace/lib/db/scripts/migrate.mjs ./migrate.mjs
+COPY --from=builder --chown=nodaq:nodaq \
+  /workspace/migrate-connector-secrets.runtime.mjs ./migrate-connector-secrets.mjs
+COPY --from=builder --chown=nodaq:nodaq \
+  /workspace/lib/db/scripts/start-api.sh ./start-api.sh
 COPY --from=builder --chown=nodaq:nodaq \
   /workspace/lib/db/migrations ./migrations
 
@@ -179,4 +200,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     ).on('error', function() { process.exit(1); })"
 
 # ── Entrypoint ────────────────────────────────────────────────────────────────
-CMD ["node", "--enable-source-maps", "./dist/index.mjs"]
+# Le shell fait `exec` sur Node apres avoir retire DATABASE_URL owner.
+CMD ["sh", "./start-api.sh"]

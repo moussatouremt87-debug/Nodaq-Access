@@ -45,6 +45,15 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # `db:migrate` enchaine la reprise chiffree des anciennes configurations
+      # de connecteurs. La CI utilise une cle ephemere, differente a chaque run,
+      # avant de creer la moindre donnee.
+      - name: Generate ephemeral encryption key
+        run: |
+          NODAQ_CI_ENCRYPTION_KEY=$(node -p "require('node:crypto').randomBytes(32).toString('base64')")
+          echo "::add-mask::$NODAQ_CI_ENCRYPTION_KEY"
+          echo "ENCRYPTION_KEY=$NODAQ_CI_ENCRYPTION_KEY" >> "$GITHUB_ENV"
+
       # ── Database Setup ──────────────────────────────────────────────────
       # Reproduit exactement `pnpm db:setup` :
       #   create-app-role.cjs → migrate.mjs → seed-owner.cjs
