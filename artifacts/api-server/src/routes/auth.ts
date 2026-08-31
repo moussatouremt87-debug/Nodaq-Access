@@ -26,10 +26,13 @@ import {
 import { verticalDepuisTx } from "../lib/vertical-tenant.js";
 import { STATUTS_AFFAIRE_ACTIVE } from "../lib/affaire-active.js";
 import { marquerMfaVerifie } from "../lib/session-mfa.js";
-import { envoyerCodeConnexion, masquerEmail } from "../lib/envoi-code-connexion.js";
+import { envoyerCodeConnexion, envoyerCodeReinitialisation, masquerEmail } from "../lib/envoi-code-connexion.js";
 import { poserCode } from "../lib/code-connexion.js";
 import { appareilReconnu, COOKIE_APPAREIL } from "../lib/appareil-confiance.js";
 import { messageValidation } from "../lib/message-validation.js";
+import {
+  demanderReinitialisation, reinitialiserMotDePasse, LONGUEUR_MINIMALE,
+} from "../lib/mot-de-passe-oublie.js";
 import { cookieDoitEtreSecurise } from "../lib/app-origin.js";
 
 const router: IRouter = Router();
@@ -418,6 +421,108 @@ router.post("/auth/basculer-espace", async (req, res): Promise<void> => {
   }
 
   res.json(reponseAuthentification(ctx.user, ctx.session, membership.role, parsed.data.tenantId));
+});
+
+/*
+ * ── MOT DE PASSE OUBLIÉ ─────────────────────────────────────────────────────
+ *
+ * Il n'existait AUCUN chemin de retour : un artisan qui oubliait son mot de
+ * passe était enfermé dehors définitivement, et le seul recours aurait été de
+ * modifier sa ligne en base à la main.
+ *
+ * Les deux routes sont PUBLIQUES, par nécessité : on ne peut pas être connecté
+ * pour demander à l'être. Même raison que les articles d'aide et la page
+ * d'état — celui qui n'entre pas est précisément celui qui en a besoin.
+ */
+
+const OublieBody = z.object({
+  email: z.string().trim().min(1, "Indiquez votre adresse e-mail.").max(200),
+});
+
+/**
+ * La réponse est TOUJOURS la même, et c'est le point important.
+ *
+ * Adresse inconnue, limite horaire atteinte, envoi en échec : dans les trois
+ * cas, `{ ok: true }`. Un formulaire qui répondrait « cette adresse n'existe
+ * pas » serait un outil d'énumération — on y essaie une liste d'adresses et on
+ * apprend lesquelles sont clientes de nodaq.
+ *
+ * Le prix est qu'une faute de frappe reste silencieuse. C'est pourquoi l'écran
+ * dit « si un compte existe pour cette adresse, un code vient de partir » : la
+ * phrase est vraie dans tous les cas, et elle n'apprend rien à personne.
+ */
+router.post("/auth/mot-de-passe/oublie", async (req, res): Promise<void> => {
+  const parsed = OublieBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: messageValidation(parsed.error) });
+    return;
+  }
+
+  const demande = await demanderReinitialisation(parsed.data.email);
+  if (demande.kind === "envoye") {
+    const memberships = await findUserMemberships(demande.userId);
+    const tenantId = memberships[0]?.tenantId;
+    // Sans tenant, aucun envoi possible — le journal d'envois est porté par
+    // le tenant. On se tait plutôt que de rendre une erreur qui révélerait
+    // qu'un compte existe.
+    if (tenantId) {
+      await envoyerCodeReinitialisation(
+        tenantId, parsed.data.email.trim().toLowerCase(), demande.code,
+      );
+    }
+  }
+  res.json({ ok: true });
+});
+
+const ReinitBody = z.object({
+  email: z.string().trim().min(1).max(200),
+  code: z.string().trim().min(1, "Saisissez le code reçu par courriel."),
+  motDePasse: z.string().min(1, "Choisissez un mot de passe."),
+});
+
+/**
+ * Pose le nouveau mot de passe, puis referme tout : sessions supprimées,
+ * appareils de confiance révoqués.
+ *
+ * Quelqu'un qui réinitialise dit « je n'ai plus la main ». Lui rendre son mot
+ * de passe en laissant ouvertes les sessions de celui qui la lui a prise
+ * n'aurait aucun sens — c'est le geste qui reprend le compte, pas seulement le
+ * mot de passe.
+ */
+router.post("/auth/mot-de-passe/reinitialiser", async (req, res): Promise<void> => {
+  const parsed = ReinitBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: messageValidation(parsed.error) });
+    return;
+  }
+
+  const r = await reinitialiserMotDePasse(
+    parsed.data.email, parsed.data.code, parsed.data.motDePasse,
+  );
+  if (r.kind === "trop_court") {
+    res.status(400).json({
+      error: `Le mot de passe doit comporter au moins ${LONGUEUR_MINIMALE} caractères.`,
+    });
+    return;
+  }
+  if (r.kind === "refuse") {
+    // Le motif est rendu tel quel : il porte sur le CODE, jamais sur
+    // l'existence du compte. « aucun_code » se dit pareil pour une adresse
+    // inconnue et pour un compte réel sans demande en cours.
+    const messages: Record<string, string> = {
+      aucun_code: "Aucun code en cours. Demandez-en un nouveau.",
+      expire: "Ce code n'est plus valable. Demandez-en un nouveau.",
+      trop_d_essais: "Trop d'essais. Demandez un nouveau code.",
+      incorrect: "Ce code ne correspond pas.",
+    };
+    res.status(400).json({ error: messages[r.detail.kind] ?? "Code refusé." });
+    return;
+  }
+
+  // Aucune session n'est ouverte ici : la personne se reconnecte avec son
+  // nouveau mot de passe. Ouvrir une session sur la foi d'un code reçu par
+  // courriel contournerait le mot de passe qu'on vient de lui faire choisir.
+  res.json({ ok: true });
 });
 
 export default router;

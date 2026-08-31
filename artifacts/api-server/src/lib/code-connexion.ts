@@ -29,6 +29,13 @@ import crypto from "node:crypto";
 import { and, desc, eq, gt, isNull, sql } from "drizzle-orm";
 import { db, codesConnexionTable } from "@workspace/db";
 
+/**
+ * À quoi sert un code. Un code de connexion ne réinitialise PAS un mot de
+ * passe : ouvrir une session et reprendre un compte n'ont pas la même
+ * conséquence, et un code dicté au téléphone ne doit pas donner les deux.
+ */
+export type UsageCode = "connexion" | "reinitialisation";
+
 export const DUREE_CODE_MINUTES = 10;
 export const MAX_TENTATIVES = 5;
 /** Plafond d'émission : au-delà, on cesse d'envoyer (et de facturer l'e-mail). */
@@ -62,13 +69,16 @@ export type ResultatEmission =
  * annule l'ancien, sans quoi plusieurs codes valides cohabiteraient et
  * multiplieraient les essais autorisés.
  */
-export async function poserCode(userId: string): Promise<ResultatEmission> {
+export async function poserCode(
+  userId: string, usage: UsageCode = "connexion",
+): Promise<ResultatEmission> {
   const ilYaUneHeure = new Date(Date.now() - 60 * 60 * 1000);
   const [{ recents }] = await db
     .select({ recents: sql<number>`count(*)::int` })
     .from(codesConnexionTable)
     .where(and(
       eq(codesConnexionTable.userId, userId),
+      eq(codesConnexionTable.usage, usage),
       gt(codesConnexionTable.createdAt, ilYaUneHeure),
     ));
   if ((recents ?? 0) >= MAX_CODES_PAR_HEURE) return { kind: "trop_de_demandes" };
@@ -77,13 +87,14 @@ export async function poserCode(userId: string): Promise<ResultatEmission> {
     .set({ usedAt: new Date() })
     .where(and(
       eq(codesConnexionTable.userId, userId),
+      eq(codesConnexionTable.usage, usage),
       isNull(codesConnexionTable.usedAt),
     ));
 
   const code = genererCode();
   const expireLe = new Date(Date.now() + DUREE_CODE_MINUTES * 60 * 1000);
   await db.insert(codesConnexionTable).values({
-    userId, codeSha256: condensat(code), expiresAt: expireLe,
+    userId, usage, codeSha256: condensat(code), expiresAt: expireLe,
   });
   return { kind: "ok", code, expireLe };
 }
@@ -100,12 +111,15 @@ export type ResultatVerification =
  * attaquant qui coupe la connexion juste après l'envoi ne doit pas obtenir un
  * essai gratuit.
  */
-export async function verifierCode(userId: string, saisi: string): Promise<ResultatVerification> {
+export async function verifierCode(
+  userId: string, saisi: string, usage: UsageCode = "connexion",
+): Promise<ResultatVerification> {
   const [courant] = await db
     .select()
     .from(codesConnexionTable)
     .where(and(
       eq(codesConnexionTable.userId, userId),
+      eq(codesConnexionTable.usage, usage),
       isNull(codesConnexionTable.usedAt),
     ))
     .orderBy(desc(codesConnexionTable.createdAt))

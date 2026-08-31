@@ -6,7 +6,7 @@
  * « le calcul rend un nombre » que sur « le nombre ne ment pas dans les cas
  * où il serait tentant de mentir ».
  */
-import { describe, test, expect, beforeAll, afterAll } from "vitest";
+import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from "vitest";
 import request from "supertest";
 import crypto from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -17,6 +17,29 @@ import {
   completeMfaForRegisteredOwner, serveurTest,
 } from "./helpers";
 import { valeurProduite, debutDuMois } from "../lib/valeur-produite";
+
+/*
+ * ── L'HORLOGE EST GELÉE AU MILIEU DU MOIS ───────────────────────────────────
+ *
+ * Le panneau calcule sur « du 1er du mois à aujourd'hui ». Les fixtures posent
+ * des dates dans ce mois — relance le 6, encaissement le 8 — et il leur faut
+ * donc de la place AVANT et APRÈS.
+ *
+ * Sans gel, ce fichier échoue deux jours par mois. Constaté sous
+ * Pacific/Auckland le 31/08/2026 à 18 h UTC : là-bas on était déjà le 1er
+ * septembre, la fenêtre ne faisait qu'un jour, et toutes les fixtures d'août
+ * en tombaient. Le code était juste ; c'est le test qui dépendait du jour.
+ *
+ * Seul `Date` est simulé : figer les minuteries arrêterait le pool PostgreSQL
+ * et supertest avec elles.
+ */
+const ANCRE = new Date(2026, 5, 15, 12, 0, 0, 0); // 15 juin, midi, heure locale
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(ANCRE);
+});
+afterEach(() => { vi.useRealTimers(); });
 
 const tenantIds: string[] = [];
 const emails: string[] = [];

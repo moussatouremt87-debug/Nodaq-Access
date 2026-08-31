@@ -63,6 +63,8 @@ export const ECRANS_AUDITES: readonly EcranAudite[] = [
   // auditée, pas exemptée. Et elle compte : on la lit en situation de panne,
   // c'est-à-dire quand plus rien d'autre n'aide.
   { chemin: '/etat', charger: () => import('@/pages/etat') },
+  // Elle se rend seule, sans jeton ni session — donc auditée, pas exemptée.
+  { chemin: '/mot-de-passe-oublie', charger: () => import('@/pages/mot-de-passe-oublie') },
   {
     chemin: '/devis/accepter/:token',
     exempt:

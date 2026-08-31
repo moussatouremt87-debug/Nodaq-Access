@@ -135,6 +135,12 @@ export default function LoginPage() {
           </a>
         </p>
 
+        <p className="mt-2 text-center text-xs text-muted-foreground">
+          <a href="/mot-de-passe-oublie" className="underline hover:text-foreground">
+            Mot de passe oublié ?
+          </a>
+        </p>
+
         {/* Ce lien est ici parce que c'est ICI qu'on se demande si la panne
             vient de soi. Le mettre à l'intérieur de l'application le rendrait
             inaccessible à qui n'y entre pas. */}

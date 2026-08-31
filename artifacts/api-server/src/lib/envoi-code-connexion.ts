@@ -50,3 +50,41 @@ export async function envoyerCodeConnexion(
     documentType: "CODE_CONNEXION",
   });
 }
+
+/**
+ * Le code de RÉINITIALISATION — un message distinct, et pas par coquetterie.
+ *
+ * Le texte de connexion dit « saisissez-le pour terminer votre connexion ».
+ * L'envoyer à quelqu'un qui a demandé à changer son mot de passe le laisserait
+ * croire qu'une connexion est en cours à son insu — exactement l'inquiétude
+ * qu'on veut éviter.
+ *
+ * Et l'avertissement change de sens. Pour la connexion : « sans ce code,
+ * personne n'entre ». Ici, un code non demandé signale que quelqu'un CONNAÎT
+ * l'adresse et tente de reprendre le compte : cela mérite d'être dit.
+ */
+export async function envoyerCodeReinitialisation(
+  tenantId: string,
+  destinataire: string,
+  code: string,
+): Promise<void> {
+  const corps = [
+    `Votre code pour changer de mot de passe : ${code}`,
+    ``,
+    `Saisissez-le dans nodaq pour choisir un nouveau mot de passe.`,
+    `Il est valable ${DUREE_CODE_MINUTES} minutes et ne sert qu'une fois.`,
+    ``,
+    `Si vous n'avez rien demandé, ignorez ce message : votre mot de passe`,
+    `actuel reste valable et personne ne peut le changer sans ce code.`,
+    `Prévenez-nous si vous recevez plusieurs de ces messages.`,
+  ].join("\n");
+
+  await sendDocument({
+    canal: "EMAIL",
+    tenantId,
+    to: destinataire,
+    subject: `nodaq — changer votre mot de passe : ${code}`,
+    body: corps,
+    documentType: "CODE_CONNEXION",
+  });
+}
