@@ -69,6 +69,24 @@ beforeAll(async () => {
   );
   if (bundle.status !== 0) throw new Error(`bundle: ${bundle.stderr}`);
   cible = new pg.Pool({ connectionString: urlBase });
+  /*
+   * ── UN POOL SANS ÉCOUTEUR D'ERREUR FAIT ÉCHOUER TOUTE L'EXÉCUTION ─────────
+   *
+   * Le `afterAll` supprime la base avec `WITH (FORCE)`, ce qui TERMINE les
+   * connexions restantes côté serveur. PostgreSQL renvoie alors `57P01` au
+   * client concerné ; `pg.Pool` l'émet en événement `error`, et un `error`
+   * sans écouteur devient une erreur NON GÉRÉE.
+   *
+   * Vu en CI le 31/08/2026 : les 1784 tests au vert, `Errors: 1`, exécution
+   * rouge. C'est pire qu'un test qui échoue — rien ne désigne le coupable, et
+   * la tentation est de relancer sans comprendre.
+   *
+   * L'écouteur est vide À DESSEIN : à ce moment-là, la base est en train de
+   * disparaître, et une connexion coupée est le comportement attendu, pas un
+   * incident à signaler. Ce n'est pas une erreur masquée, c'est une erreur
+   * dont on sait qu'on la provoque.
+   */
+  cible.on("error", () => {});
 }, 90_000);
 
 afterEach(async () => {
