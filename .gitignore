@@ -71,3 +71,13 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# Réglages Claude Code LOCAUX au poste. `settings.json` — les réglages
+# partagés du projet — reste versionné s'il existe un jour ; ce qui suit ne
+# décrit que cette machine : permissions accordées, verrou de tâches
+# planifiées, arbres de travail. Aucun secret n'y vit, mais un `git add -A`
+# distrait les emporterait, et la liste de permissions d'un poste n'a rien à
+# faire dans l'historique d'un autre.
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+.claude/worktrees/
