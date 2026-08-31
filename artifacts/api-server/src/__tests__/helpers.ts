@@ -368,6 +368,8 @@ export async function createTestTeamMember(
 // Order matters — pointages has FKs to team_members and affaires, so it must be
 // deleted before them.
 const BUSINESS_TABLES = [
+  // `briefs_envoyes` ne référence que `tenants` : aucune contrainte d'ordre.
+  "briefs_envoyes",
   "pointages", "taux_horaires", "catalogue_alias", "catalogue_lignes", "envois_journal", "parametres_envoi", "objectifs_franchissements",
   "tenant_secrets",
   // Ordre : les enfants avant les parents (client_id référence clients).
@@ -425,6 +427,7 @@ export function tableInsertSql(table: string, tenantId: string, memberAId?: stri
 
   const map: Record<string, [string, unknown[]]> = {
     activity:             [`INSERT INTO activity (id, label, type, tenant_id) VALUES ($1, 'rls-test', 'NOTE', $2)`, [id, tenantId]],
+    briefs_envoyes:       [`INSERT INTO briefs_envoyes (id, tenant_id, jour, destinataire) VALUES ($1, $2, '2026-01-01', 'rls-test@nodaq.test')`, [id, tenantId]],
     affaires:             [`INSERT INTO affaires (id, label, tenant_id) VALUES ($1, 'rls-test', $2)`, [id, tenantId]],
     analytics_tool_logs:  [`INSERT INTO analytics_tool_logs (tenant_id, indicateur_id, status) VALUES ($1, 'ca_facture', 'ok')`, [tenantId]],
     chat_messages:      [`INSERT INTO chat_messages (id, content, conversation_id, role, tenant_id) VALUES ($1, 'rls-test', 'conv-rls', 'user', $2)`, [id, tenantId]],
