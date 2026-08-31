@@ -1,5 +1,6 @@
 import { useMemo, useState, useCallback } from 'react';
 import { ObjectifsCockpit } from '@/components/objectifs-cockpit';
+import { ValeurProduite } from '@/components/valeur-produite';
 import { Link } from 'wouter';
 import {
   Briefcase,
@@ -310,6 +311,14 @@ export default function Cockpit() {
               ou si le patron l'a désactivé : la réponse est alors vide. */}
           <div className="mb-4">
             <ObjectifsCockpit />
+          </div>
+
+          {/* Ce que nodaq a fait ce mois-ci. Le bloc se retire lui-même quand
+              le rôle n'y a pas droit (403) ou qu'il n'y a rien à dire : une
+              colonne de zéros donnerait l'impression d'un produit inutile,
+              juste avant l'échéance de l'abonnement. */}
+          <div className="mb-4">
+            <ValeurProduite />
           </div>
 
           <motion.div
