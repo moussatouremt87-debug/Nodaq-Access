@@ -29,7 +29,7 @@ import { messageValidation } from "../lib/message-validation.js";
 import { consigneSupport } from "../lib/support-connaissances.js";
 import {
   OUTILS_DIAGNOSTIC, OUTIL_TRANSMISSION, executerDiagnostic, transmettreALEquipe,
-  exigeTransmission, suiteDe, type SuiteDiagnostic,
+  exigeTransmission, suiteDe, ecranSur, type SuiteDiagnostic,
 } from "../lib/support-diagnostics.js";
 
 /** Ordre de gravité — c'est la plus grave qui commande, jamais la dernière. */
@@ -52,6 +52,12 @@ const CorpsSupport = z.object({
     .max(MAX_TOURS * 2)
     .optional()
     .default([]),
+  /**
+   * L'écran d'où part la demande. Facultatif — un ancien client ne l'envoie
+   * pas — et VALIDÉ côté serveur contre une liste blanche : une chaîne libre
+   * finirait dans le courriel que lit l'équipe.
+   */
+  ecran: z.string().max(120).optional(),
 });
 
 router.post("/support/messages", async (req, res): Promise<void> => {
@@ -96,6 +102,8 @@ router.post("/support/messages", async (req, res): Promise<void> => {
      * documentation (« comment faire un avoir ? ») ne crée aucun dossier.
      */
     let suite: SuiteDiagnostic | null = null;
+    /** Les diagnostics RÉELLEMENT appelés — la catégorie du dossier en découle. */
+    const diagnostics: string[] = [];
     let reponse = await chatCompletion(config, messages, outils, {
       temperature: 0.2,
       max_tokens: 700,
@@ -144,6 +152,7 @@ router.post("/support/messages", async (req, res): Promise<void> => {
                   emailUtilisateur: req.session!.email,
                   role: req.session?.role ?? "?",
                   historique: [...parsed.data.historique, { role: "user", contenu: parsed.data.message }],
+                  diagnostics, verdict: suite, ecran: ecranSur(parsed.data.ecran),
                 },
                 typeof args["resume"] === "string" ? args["resume"] : parsed.data.message,
                 async (opts) => {
@@ -165,6 +174,9 @@ router.post("/support/messages", async (req, res): Promise<void> => {
                  * l'un répond et l'autre trouve une anomalie ne s'annulent
                  * pas : c'est l'anomalie qui commande.
                  */
+                if (!diagnostics.includes(appel.function.name)) {
+                  diagnostics.push(appel.function.name);
+                }
                 const s = suiteDe(r);
                 if (suite === null || GRAVITE[s] > GRAVITE[suite]) suite = s;
                 return r;
@@ -217,6 +229,7 @@ router.post("/support/messages", async (req, res): Promise<void> => {
           emailUtilisateur: req.session!.email,
           role: req.session?.role ?? "?",
           historique: [...parsed.data.historique, { role: "user", contenu: parsed.data.message }],
+          diagnostics, verdict: suite, ecran: ecranSur(parsed.data.ecran),
         },
         texte ?? parsed.data.message,
         async (opts) => {
