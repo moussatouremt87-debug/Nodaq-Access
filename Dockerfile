@@ -125,6 +125,18 @@ RUN pnpm --filter @workspace/api-server deploy --prod --legacy /standalone
 # ── Stage 2: Production image ─────────────────────────────────────────────────
 FROM node:24-slim AS production
 
+# L'empreinte du code EMBARQUÉE dans l'image.
+#
+# Sans elle, un dossier de support ne dit pas sur quelle version l'artisan
+# était : impossible de savoir si le défaut qu'il décrit est déjà corrigé, et
+# on perd le temps de reproduire quelque chose qui n'existe plus.
+#
+# Passée à la construction :
+#   docker build --build-arg NODAQ_COMMIT="$(git rev-parse --short HEAD)" ...
+# Absente, le code retombe sur la version du package.json et le dit.
+ARG NODAQ_COMMIT=""
+ENV NODAQ_COMMIT=$NODAQ_COMMIT
+
 WORKDIR /app
 
 # Create a non-root user (Debian syntax: groupadd / useradd)

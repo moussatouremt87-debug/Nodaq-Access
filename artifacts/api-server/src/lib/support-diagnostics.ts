@@ -32,6 +32,7 @@ import {
   withTenant, facturesTable, affairesTable, envoisJournalTable,
 } from "@workspace/db";
 import { estAffaireActive, STATUTS_AFFAIRE_ACTIVE } from "./affaire-active.js";
+import { versionDeployee } from "./version-deployee.js";
 
 /** Pourquoi une facture refuse de s'émettre, dit en clair. */
 export async function diagnosticFacture(
@@ -387,12 +388,59 @@ export async function executerDiagnostic(
 }
 
 /** Ce que l'appelant doit fournir — jamais une adresse, jamais un destinataire. */
+/**
+ * La catégorie d'un dossier — DÉRIVÉE du diagnostic consulté.
+ *
+ * Ni demandée à l'artisan, ni produite par le modèle.
+ *
+ * Pas à l'artisan : il est bloqué, et lui faire remplir une liste déroulante
+ * revient à lui faire faire le travail du logiciel (règle 3 bis). L'assistant
+ * vient de mener un diagnostic — il SAIT de quoi on parle.
+ *
+ * Pas au modèle non plus : une catégorie inventée classe le dossier au mauvais
+ * endroit, et personne ne s'en aperçoit avant de chercher au mauvais endroit.
+ * Le diagnostic réellement appelé est un fait, pas une interprétation.
+ */
+export const CATEGORIE_PAR_DIAGNOSTIC: Record<string, string> = {
+  diagnostic_facture: "facturation",
+  diagnostic_envois: "envoi de documents",
+  diagnostic_chantiers: "chantiers",
+  diagnostic_impayes: "trésorerie",
+};
+
+/** L'écran d'où part la demande, borné à ce que la navigation connaît. */
+const ECRANS_CONNUS = new Set([
+  "/", "/affaires", "/devis", "/factures", "/avoirs", "/prospects", "/prospection",
+  "/brief", "/chat", "/aide", "/classeur", "/analytique", "/marge", "/pointages",
+  "/rapports", "/compte-resultat", "/cabinet", "/echeancier", "/charges-recurrentes",
+  "/previsionnel-tresorerie", "/equipe", "/votre-metier", "/connecteurs",
+  "/parametres", "/parametres/envoi", "/onboarding", "/reprise",
+  "/facturation-electronique", "/journal-decisions",
+]);
+
+/**
+ * L'écran est reçu de l'interface, donc VALIDÉ contre une liste blanche.
+ *
+ * Une chaîne libre venue du client finirait dans un courriel : c'est un vecteur
+ * d'injection dans le dossier que lira l'équipe. On rend « non précisé »
+ * plutôt que de recopier n'importe quoi.
+ */
+export function ecranSur(recu: unknown): string {
+  return typeof recu === "string" && ECRANS_CONNUS.has(recu) ? recu : "non précisé";
+}
+
 export interface ContexteTransmission {
   readonly tenantId: string;
   /** L'adresse de l'utilisateur CONNECTÉ, lue dans la session. */
   readonly emailUtilisateur: string;
   readonly role: string;
   readonly historique: readonly { role: string; contenu: string }[];
+  /** Les diagnostics réellement appelés — la catégorie en découle. */
+  readonly diagnostics?: readonly string[];
+  /** Le verdict le plus grave rendu par ces diagnostics. */
+  readonly verdict?: string | null;
+  /** L'écran d'où part la demande, déjà validé par `ecranSur`. */
+  readonly ecran?: string;
 }
 
 export interface ResultatTransmission {
@@ -419,7 +467,39 @@ export async function transmettreALEquipe(
 
   const reference = `SUP-${Date.now().toString(36).toUpperCase()}`;
 
+  /*
+   * ── UN EN-TÊTE NOMMÉ, PUIS LE RÉCIT ─────────────────────────────────────
+   *
+   * Les champs d'abord, en clair, alignés. Ce qui suit est lisible par un
+   * humain comme par un agent : on peut se saisir du dossier sans reconstituer
+   * le contexte à la main, ce qui est là où se perdent les vingt minutes.
+   *
+   * La VERSION est le champ le plus important, et il manquait. Sans elle, on
+   * instruit à l'aveugle : le défaut décrit est peut-être corrigé depuis deux
+   * jours dans le dépôt et bien présent chez l'artisan — c'était exactement la
+   * situation cette semaine, avec cinq changements en attente de déploiement.
+   *
+   * Aucun contenu métier dans l'en-tête : des identifiants et des catégories.
+   * Le récit vient après, et il porte déjà ce qu'il faut (règle 6).
+   */
+  const categories = [...new Set(
+    (ctx.diagnostics ?? []).map((d) => CATEGORIE_PAR_DIAGNOSTIC[d]).filter(Boolean),
+  )];
+  const enTete = [
+    `Référence   : ${reference}`,
+    `Reçu le     : ${new Date().toISOString()}`,
+    `Version     : ${versionDeployee()}`,
+    `Tenant      : ${ctx.tenantId}`,
+    `Rôle        : ${ctx.role}`,
+    `Écran       : ${ctx.ecran ?? "non précisé"}`,
+    `Catégorie   : ${categories.length ? categories.join(", ") : "non classé"}`,
+    `Diagnostics : ${(ctx.diagnostics ?? []).join(", ") || "aucun"}`,
+    `Verdict     : ${ctx.verdict ?? "aucun diagnostic"}`,
+    ``,
+  ];
+
   const dossier = [
+    ...enTete,
     `Référence   : ${reference}`,
     `Entreprise  : ${ctx.tenantId}`,
     `Utilisateur : ${ctx.emailUtilisateur} (${ctx.role})`,

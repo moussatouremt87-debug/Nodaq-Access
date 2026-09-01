@@ -7,7 +7,9 @@
  */
 import { describe, test, expect } from "vitest";
 import { CONSIGNE_SUPPORT, consigneSupport } from "../lib/support-connaissances";
-import { exigeTransmission, suiteDe } from "../lib/support-diagnostics";
+import {
+  exigeTransmission, suiteDe, ecranSur, CATEGORIE_PAR_DIAGNOSTIC,
+} from "../lib/support-diagnostics";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -257,5 +259,64 @@ describe("ce que la consigne SAIT du produit", () => {
     const recue = consigneSupport();
     expect(recue).toMatch(/attestation TVA/i);
     expect(recue).toMatch(/obligation fiscale/i);
+  });
+});
+
+/*
+ * ── LE DOSSIER D'ESCALADE EST LISIBLE PAR UNE MACHINE ───────────────────────
+ *
+ * Avant, il ne portait qu'un résumé en texte libre : utile à un humain,
+ * inexploitable pour se saisir du problème sans reconstituer le contexte.
+ *
+ * L'en-tête nomme désormais les faits — et le plus important manquait
+ * complètement : la VERSION déployée. Sans elle on instruit à l'aveugle, et on
+ * reproduit parfois un défaut corrigé depuis deux jours dans le dépôt.
+ */
+describe("le dossier d'escalade porte les faits, pas seulement le récit", () => {
+  const diagSource = readFileSync(
+    join(__dirname, "..", "lib", "support-diagnostics.ts"), "utf8",
+  );
+
+  test("l'en-tête nomme la version, le tenant, l'écran et le verdict", () => {
+    for (const champ of ["Référence", "Version", "Tenant", "Écran", "Catégorie", "Verdict"]) {
+      expect(diagSource, `« ${champ} » absent de l'en-tête`).toContain(`${champ}`);
+    }
+    expect(diagSource).toMatch(/versionDeployee\(\)/);
+  });
+
+  test("la catégorie est DÉRIVÉE du diagnostic, jamais reçue du client", () => {
+    /*
+     * Ni demandée à l'artisan — il est bloqué, et une liste déroulante lui
+     * ferait faire le travail du logiciel — ni produite par le modèle, qui
+     * classerait au mauvais endroit sans que personne le voie.
+     */
+    expect(CATEGORIE_PAR_DIAGNOSTIC["diagnostic_facture"]).toBe("facturation");
+    expect(CATEGORIE_PAR_DIAGNOSTIC["diagnostic_envois"]).toBe("envoi de documents");
+    // Toutes les catégories connues viennent d'un diagnostic réel.
+    for (const nom of Object.keys(CATEGORIE_PAR_DIAGNOSTIC)) {
+      expect(diagSource, `${nom} n'existe pas comme outil`).toContain(nom);
+    }
+  });
+
+  test("l'écran reçu du client est VALIDÉ contre une liste blanche", () => {
+    /*
+     * Une chaîne libre venue du navigateur finirait dans le courriel que lit
+     * l'équipe : c'est un vecteur d'injection dans le dossier lui-même.
+     */
+    expect(ecranSur("/factures")).toBe("/factures");
+    expect(ecranSur("/")).toBe("/");
+    for (const hostile of [
+      "/inconnu", "javascript:alert(1)", "\nRéférence : SUP-FAUSSE", 42, null, undefined,
+    ]) {
+      expect(ecranSur(hostile as never), `« ${String(hostile)} » recopié tel quel`)
+        .toBe("non précisé");
+    }
+  });
+
+  test("la version ne se DEVINE jamais", () => {
+    // Une empreinte fausse est pire qu'une empreinte absente : on la croit.
+    const src = readFileSync(join(__dirname, "..", "lib", "version-deployee.ts"), "utf8");
+    expect(src).toMatch(/inconnue/);
+    expect(src).toMatch(/commit inconnu/);
   });
 });

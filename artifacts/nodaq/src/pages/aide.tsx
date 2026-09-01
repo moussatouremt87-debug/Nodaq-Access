@@ -52,7 +52,14 @@ export default function AidePage() {
         headers: { 'Content-Type': 'application/json' },
         // L'historique est renvoyé par l'écran : rien n'est conservé côté
         // serveur, une question d'aide contenant souvent une situation réelle.
-        body: JSON.stringify({ message: question, historique: avant.map(t => ({ role: t.role, contenu: t.contenu })) }),
+        // `ecran` : d'où part la demande. Le serveur le VALIDE contre une
+        // liste blanche — une chaîne libre finirait dans le dossier que lit
+        // l'équipe. Sans lui, le dossier dit « non précisé », et rien ne casse.
+        body: JSON.stringify({
+          message: question,
+          historique: avant.map(t => ({ role: t.role, contenu: t.contenu })),
+          ecran: window.location.pathname,
+        }),
       });
       const donnees = await res.json().catch(() => ({}));
       if (!res.ok) {
