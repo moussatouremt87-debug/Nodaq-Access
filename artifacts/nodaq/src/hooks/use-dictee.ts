@@ -11,6 +11,7 @@
  * transforme en plan.
  */
 import { useCallback, useRef, useState } from 'react';
+import { messageErreur } from '@/lib/message-erreur';
 import { useToast } from '@/hooks/use-toast';
 
 const API_BASE = '/api';
@@ -165,7 +166,10 @@ export function useDictee(onTexte: (texte: string) => void): UseDictee {
             credentials: 'include',
             body: fd,
           });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          // Le message du SERVEUR, pas le code. Il dit déjà quoi faire —
+          // « Activez votre abonnement dans Réglages » — là où « HTTP 403 »
+          // ne dit rien et fait peur.
+          if (!res.ok) throw new Error(await messageErreur(res));
           const { text } = (await res.json()) as { text: string };
           if (text.trim()) onTexte(text.trim());
         } catch (err) {
