@@ -197,6 +197,25 @@ elle en partage les rôles. Utiliser une instance séparée (un conteneur jetabl
 autre port suffit). Et `create-app-role.cjs` ne fait tourner le mot de passe que si on
 le lui demande explicitement, avec `--rotate-password`.
 
+**Cette phrase n'a pas suffi : la base de PRODUCTION a été vidée** entre le 30 et le
+31 août 2026. La cause n'a jamais été établie — aucune trace d'audit ne permettait de
+la retrouver. Le chemin le plus plausible restait ouvert : la suite de tests SUPPRIME
+(`cleanupTenants`, `cleanupUsers`, vidages entre fichiers), et rien ne l'empêchait de
+le faire sur une base distante si une variable d'environnement traînait dans le shell.
+
+Une consigne écrite ne s'exécute pas. `helpers.ts` porte donc une garde qui REFUSE de
+démarrer quand `DATABASE_URL` ou `DATABASE_URL_APP` désigne autre chose que la machine
+locale. Le critère est **l'HÔTE, pas le nom de la base** : `nodaq_test` sur un serveur
+distant reste un serveur distant, et c'est très probablement un nom rassurant qui a
+trompé quelqu'un.
+
+**Tout nouveau harnais qui exécute du code contre une base doit passer par cette même
+garde** — banc E2E, simulation UAT, script de reprise, éval. En ajouter un qui lise
+`DATABASE_URL` sans vérifier l'hôte rouvre la porte en croyant l'avoir fermée. Le banc
+`artifacts/e2e/` (branche `test/e2e-parcours-critiques`, non fusionnée au 07/09/2026)
+est dans ce cas : il lit les deux variables de l'environnement sans les contrôler, et
+devra être branché sur `exigerBaseLocale` avant d'entrer dans `main`.
+
 **Un `SET` hors transaction fuit entre requêtes** à cause du pooling. Toujours
 `set_config(..., true)` **dans** la transaction.
 
