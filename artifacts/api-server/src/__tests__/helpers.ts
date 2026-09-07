@@ -138,10 +138,59 @@ export async function arreterServeurTest(): Promise<void> {
   );
 }
 
+// ── LA SUITE NE TOUCHE JAMAIS UNE BASE DISTANTE ───────────────────────────
+//
+// Cette suite SUPPRIME : `cleanupTenants` et `cleanupUsers` effacent des
+// lignes, et plusieurs fichiers vident des tables entre deux tests. Lancée par
+// accident contre la production — une variable héritée du shell, un script mal
+// paramétré, une fenêtre de terminal oubliée — elle détruit des données
+// clientes en quelques secondes, sans rien signaler.
+//
+// La base de production a été vidée entre le 30 et le 31 août 2026. La cause
+// n'a pas été établie ; cette garde ferme le chemin le plus plausible.
+//
+// CLAUDE.md le disait déjà — « ne jamais lancer une vérification base vierge
+// sur l'instance de production ». Mais c'était une PHRASE. La règle 7 du dépôt
+// est explicite : une garde qu'on n'a jamais vue se déclencher n'est pas une
+// garde. En voici une qui se déclenche.
+//
+// Le critère est l'HÔTE, pas le nom de la base : `nodaq_test` sur un serveur
+// distant reste un serveur distant, et une base nommée `nodaq` sur la machine
+// locale est jetable. Seul le lieu compte.
+
+const HOTES_LOCAUX = new Set(["localhost", "127.0.0.1", "::1", "0.0.0.0", "host.docker.internal", ""]);
+
+function exigerBaseLocale(url: string | undefined, nom: string): string {
+  if (!url) {
+    throw new Error(
+      `${nom} n'est pas définie. La suite a besoin d'une base PostgreSQL locale et jetable.`,
+    );
+  }
+  let hote: string;
+  try {
+    hote = new URL(url).hostname;
+  } catch {
+    throw new Error(`${nom} n'est pas une URL PostgreSQL lisible.`);
+  }
+  if (!HOTES_LOCAUX.has(hote)) {
+    throw new Error(
+      `REFUS : ${nom} pointe sur « ${hote} », qui n'est pas la machine locale.\n` +
+        `Cette suite SUPPRIME des lignes — la lancer contre une base distante détruirait des données réelles.\n` +
+        `Utilisez un PostgreSQL jetable en local (voir CLAUDE.md, « base vierge »).`,
+    );
+  }
+  return url;
+}
+
+// Les deux sont vérifiées : `DATABASE_URL` porte les droits propriétaire,
+// `DATABASE_URL_APP` sert à l'application testée. L'une ou l'autre pointant
+// ailleurs suffit à faire des dégâts.
+exigerBaseLocale(process.env["DATABASE_URL_APP"], "DATABASE_URL_APP");
+
 // ── Admin pool (superuser — bypasses RLS for fixture setup/tear-down) ─────
 
 export const adminPool = new pg.Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: exigerBaseLocale(process.env.DATABASE_URL, "DATABASE_URL"),
 });
 
 // ── Cookie signing ────────────────────────────────────────────────────────
