@@ -111,6 +111,7 @@ export const ECRANS_AUDITES: readonly EcranAudite[] = [
   { chemin: '/votre-metier', charger: () => import('@/pages/votre-metier') },
   { chemin: '/connecteurs', charger: () => import('@/pages/connecteurs') },
   { chemin: '/parametres', charger: () => import('@/pages/parametres') },
+  { chemin: '/abonnement', charger: () => import('@/pages/abonnement') },
   { chemin: '/onboarding', charger: () => import('@/pages/onboarding') },
   { chemin: '/reprise', charger: () => import('@/pages/reprise') },
   {

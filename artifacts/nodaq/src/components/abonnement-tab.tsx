@@ -150,7 +150,20 @@ export function AbonnementTab() {
   const basculerModule = useBasculerModuleVocal();
   const [confirmationFondateurs, setConfirmationFondateurs] = useState<string | null>(null);
 
-  if (isLoading || !etat) {
+  /*
+   * La FORME est vérifiée, pas seulement la présence.
+   *
+   * `!etat` suffisait tant que ce composant n'était rendu que dans l'onglet
+   * Paramètres, qui s'ouvre sur « notifications » — il n'était donc jamais
+   * monté par l'audit d'accessibilité. Devenu un écran à part entière
+   * (/abonnement), il l'est, et il PLANTAIT sur `etat.plans.find` : une
+   * réponse tronquée emportait toute la page, pas seulement ce bloc.
+   *
+   * Même défaut, même correction que le panneau de valeur du cockpit. Un bloc
+   * qui ne comprend pas ce qu'on lui donne se retire ; il ne fait pas tomber
+   * l'écran qui l'héberge.
+   */
+  if (isLoading || !etat?.plan || !Array.isArray(etat.plans)) {
     return <div className="h-40 animate-pulse rounded-xl bg-muted" />;
   }
 
