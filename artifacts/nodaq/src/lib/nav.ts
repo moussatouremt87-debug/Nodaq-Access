@@ -1,4 +1,5 @@
 import {
+  CreditCard,
   LayoutDashboard,
   Briefcase,
   Repeat,
@@ -133,6 +134,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: '/equipe',       label: 'Équipe & plannings', icon: UserCog,  testId: 'nav-equipe',       requiredRoles: ['OWNER'] },
       { href: '/votre-metier', label: 'Votre métier',       icon: Hammer,   testId: 'nav-votre-metier' },
       { href: '/connecteurs',  label: 'Connecteurs',        icon: Plug2,    testId: 'nav-connecteurs',  requiredRoles: ['OWNER'] },
+      { href: '/abonnement',   label: 'Abonnement',         icon: CreditCard, testId: 'nav-abonnement', requiredRoles: ['OWNER'] },
       { href: '/parametres',   label: 'Paramètres',         icon: Settings2, testId: 'nav-parametres',  requiredRoles: ['OWNER'], essentiel: true },
       // Sous-entrée de Paramètres : l'envoi se règle une fois, on n'y revient pas.
       { href: '/parametres/envoi', label: 'Envoi des documents', icon: Send, testId: 'nav-parametres-envoi' },

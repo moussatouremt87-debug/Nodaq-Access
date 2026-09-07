@@ -34,6 +34,7 @@ import PrevisionnelTresorerie from '@/pages/previsionnel-tresorerie';
 import Equipe from '@/pages/equipe';
 import Connecteurs from '@/pages/connecteurs';
 import Parametres from '@/pages/parametres';
+import Abonnement from '@/pages/abonnement';
 import VotreMetier from '@/pages/votre-metier';
 import Onboarding from '@/pages/onboarding';
 import Reprise from '@/pages/reprise';
@@ -265,6 +266,9 @@ function ApplicationInterne() {
               <Route path="/votre-metier" component={PlatformRoute(VotreMetier)} />
               <Route path="/connecteurs" component={RoleRoute(Connecteurs, ['OWNER'])} />
               <Route path="/parametres" component={RoleRoute(Parametres, ['OWNER'])} />
+              {/* Adresse à part entière : le refus d'écriture y renvoie, et un
+                  onglet en état local ne s'atteint pas en un clic. */}
+              <Route path="/abonnement" component={RoleRoute(Abonnement, ['OWNER'])} />
               <Route path="/onboarding" component={RoleRoute(Onboarding, ['OWNER'])} />
               <Route path="/reprise" component={RoleRoute(Reprise, ['OWNER'])} />
               <Route path="/facturation-electronique" component={RoleRoute(FacturationElectronique, ['OWNER'])} />
