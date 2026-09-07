@@ -81,3 +81,11 @@ __pycache__/
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
 .claude/worktrees/
+
+# Factures et exports Scaleway — documents de travail, jamais versionnés.
+# Une facture a atterri à la racine le 07/09/2026 : `scw billing invoice
+# download` écrit dans le répertoire courant quand aucun chemin n'est donné,
+# et un `git add -A` distrait l'a emportée. Elle porte la raison sociale et
+# l'adresse de facturation.
+scaleway-invoice-*.pdf
+/*.pdf

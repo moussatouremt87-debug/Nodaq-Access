@@ -8,6 +8,7 @@ import {
   type AgentAction,
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
+import { messageErreur } from '@/lib/message-erreur';
 import { useToast } from '@/hooks/use-toast';
 import { CONTRAINTES_AUDIO } from '@/hooks/use-dictee';
 
@@ -251,7 +252,8 @@ export function useChat() {
             credentials: 'include',
             body: fd,
           });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          // Voir use-dictee.ts : on montre la phrase du serveur, pas le code.
+          if (!res.ok) throw new Error(await messageErreur(res));
           const { text } = (await res.json()) as { text: string };
 
           if (text.trim()) {
