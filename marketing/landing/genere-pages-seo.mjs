@@ -575,6 +575,12 @@ footer a{color:var(--muted);text-decoration:none}
 footer a:hover{color:var(--lime)}
 .maj{font-family:'JetBrains Mono',monospace;font-size:.75rem;color:var(--muted);margin-top:34px}
 </style>
+<!-- Mesure d'audience : Vercel Web Analytics. Sans cookie ni identifiant
+     persistant (empreinte journalière hachée côté serveur, jamais de suivi
+     inter-sites) — pas de bandeau requis. Vercel ne sert ce script qu'une
+     fois « Web Analytics » activé sur le projet ; avant, il répond 404 et la
+     page ne s'en ressent pas (defer). -->
+<script defer src="/_vercel/insights/script.js"></script>
 </head>
 <body>
 <header><div class="shell"><a class="logo" href="/">N<b>O</b>DAQ</a><a href="/#inscription" style="font-size:.85rem">Rejoindre les 1ers utilisateurs</a></div></header>

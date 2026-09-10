@@ -59,6 +59,12 @@ strong { color: var(--text); font-weight: 600; }
   border-radius: 10px; font-size: 14px; color: var(--lime-pale);
 }
 </style>
+<!-- Mesure d'audience : Vercel Web Analytics. Sans cookie ni identifiant
+     persistant (empreinte journalière hachée côté serveur, jamais de suivi
+     inter-sites) — pas de bandeau requis. Vercel ne sert ce script qu'une
+     fois « Web Analytics » activé sur le projet ; avant, il répond 404 et la
+     page ne s'en ressent pas (defer). -->
+<script defer src="/_vercel/insights/script.js"></script>
 </head>
 <body>
 <main class="shell">
