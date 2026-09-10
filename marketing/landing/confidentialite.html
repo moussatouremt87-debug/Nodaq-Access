@@ -59,13 +59,19 @@ strong { color: var(--text); font-weight: 600; }
   border-radius: 10px; font-size: 14px; color: var(--lime-pale);
 }
 </style>
+<!-- Mesure d'audience : Vercel Web Analytics. Sans cookie ni identifiant
+     persistant (empreinte journalière hachée côté serveur, jamais de suivi
+     inter-sites) — pas de bandeau requis. Vercel ne sert ce script qu'une
+     fois « Web Analytics » activé sur le projet ; avant, il répond 404 et la
+     page ne s'en ressent pas (defer). -->
+<script defer src="/_vercel/insights/script.js"></script>
 </head>
 <body>
 <main class="shell">
 <a class="retour" href="/">&#8592; Retour</a>
 
 <h1>Politique de confidentialité</h1>
-<p class="maj">Dernière mise à jour : 24 août 2026</p>
+<p class="maj">Dernière mise à jour : 10 septembre 2026</p>
 
 <h2>Responsable de traitement</h2>
 <p>
@@ -98,7 +104,15 @@ strong { color: var(--text); font-weight: 600; }
   des conversions publicitaires (Google Ads) est configurée en
   <strong>mode consentement, refus par défaut</strong> : tant que vous n’avez
   pas donné votre accord, aucun cookie publicitaire n’est déposé et seuls des
-  signaux agrégés et anonymes sont transmis. Aucun autre traceur n’est utilisé.
+  signaux agrégés et anonymes sont transmis.
+</p>
+<p>
+  La fréquentation du site est mesurée par <strong>Vercel Web Analytics</strong> :
+  aucun cookie, aucun identifiant persistant — les visites d’une même journée
+  sont regroupées par une empreinte hachée côté serveur, jamais recoupée entre
+  sites ni rattachée à une personne. Seules des statistiques agrégées (pages
+  vues, pays, type d’appareil, site d’origine) sont conservées. Aucun autre
+  traceur n’est utilisé.
 </p>
 
 <h2>Destinataires et sous-traitants</h2>
@@ -108,7 +122,7 @@ strong { color: var(--text); font-weight: 600; }
   (service de relais de formulaires, sous-traitant au sens du RGPD) vers la
   boîte email de l’éditeur — aucune donnée n’y est conservée à d’autres fins
   que ce relais. Le site est servi par <strong>Vercel</strong> (hébergeur du
-  site). En cas d’activation de la mesure publicitaire, <strong>Google</strong>
+  site et prestataire de la mesure d’audience décrite ci-dessus). En cas d’activation de la mesure publicitaire, <strong>Google</strong>
   (Google Ads) intervient comme sous-traitant de mesure, dans les conditions
   décrites à la section « Cookies et mesure publicitaire ».
   Les adresses ne sont ni vendues, ni louées, ni partagées à des fins
